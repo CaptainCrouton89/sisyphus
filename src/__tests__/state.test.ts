@@ -153,7 +153,7 @@ describe('addAgent', () => {
       status: 'running',
       spawnedAt: new Date().toISOString(),
       completedAt: null,
-      report: null,
+      reports: [],
       paneId: '%99',
     };
 
@@ -177,7 +177,7 @@ describe('addAgent', () => {
       status: 'running',
       spawnedAt: new Date().toISOString(),
       completedAt: null,
-      report: null,
+      reports: [],
       paneId: '%0',
     });
 
@@ -206,20 +206,18 @@ describe('updateAgent', () => {
       status: 'running',
       spawnedAt: new Date().toISOString(),
       completedAt: null,
-      report: null,
+      reports: [],
       paneId: '%1',
     };
 
     await addAgent(testDir, id, agent);
     await updateAgent(testDir, id, 'agent-001', {
       status: 'completed',
-      report: 'done',
       completedAt: new Date().toISOString(),
     });
 
     const session = getSession(testDir, id);
     assert.equal(session.agents[0]!.status, 'completed');
-    assert.equal(session.agents[0]!.report, 'done');
     assert.ok(session.agents[0]!.completedAt !== null);
   });
 

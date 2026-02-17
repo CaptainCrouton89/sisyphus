@@ -39,7 +39,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     status: 'running',
     spawnedAt: new Date().toISOString(),
     completedAt: null,
-    report: null,
+    reports: [],
     paneId: '%0',
     ...overrides,
   };

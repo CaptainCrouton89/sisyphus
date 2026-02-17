@@ -46,8 +46,11 @@ function formatAgent(agent: Agent): string {
   const type = `${DIM}(${agent.agentType})${RESET}`;
   const duration = formatDuration(agent.spawnedAt, agent.completedAt);
   let line = `    ${agent.id} ${name} ${type} — ${status} ${DIM}(${duration})${RESET}`;
-  if (agent.report) {
-    line += `\n      Report: ${agent.report}`;
+  if (agent.reports.length > 0) {
+    for (const r of agent.reports) {
+      const label = r.type === 'final' ? 'Final' : 'Update';
+      line += `\n      ${label}: ${r.summary}`;
+    }
   }
   if (agent.killedReason) {
     line += `\n      Reason: ${agent.killedReason}`;

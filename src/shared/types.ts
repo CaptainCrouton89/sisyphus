@@ -4,6 +4,13 @@ export type TaskStatus = 'draft' | 'pending' | 'in_progress' | 'done';
 
 export type AgentStatus = 'running' | 'completed' | 'killed' | 'crashed' | 'lost';
 
+export interface AgentReport {
+  type: 'update' | 'final';
+  filePath: string;
+  summary: string;
+  timestamp: string;
+}
+
 export interface Session {
   id: string;
   task: string;
@@ -34,7 +41,7 @@ export interface Agent {
   status: AgentStatus;
   spawnedAt: string;
   completedAt: string | null;
-  report: string | null;
+  reports: AgentReport[];
   paneId: string;
   killedReason?: string;
 }

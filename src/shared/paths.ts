@@ -44,3 +44,11 @@ export function sessionDir(cwd: string, sessionId: string): string {
 export function statePath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'state.json');
 }
+
+export function reportsDir(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'reports');
+}
+
+export function reportFilePath(cwd: string, sessionId: string, agentId: string, suffix: string): string {
+  return join(reportsDir(cwd, sessionId), `${agentId}-${suffix}.md`);
+}

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Session, Agent, Task, OrchestratorCycle, SessionStatus, TaskStatus } from '../shared/types.js';
+import type { Session, Agent, AgentReport, Task, OrchestratorCycle, SessionStatus, TaskStatus } from '../shared/types.js';
 import { statePath, sessionDir } from '../shared/paths.js';
 
 // Per-session mutex to prevent read-modify-write races
@@ -134,6 +134,16 @@ export async function completeSession(cwd: string, sessionId: string, report: st
     session.status = 'completed';
     session.completedAt = new Date().toISOString();
     session.completionReport = report;
+    saveSession(session);
+  });
+}
+
+export async function appendAgentReport(cwd: string, sessionId: string, agentId: string, entry: AgentReport): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    const agent = session.agents.find(a => a.id === agentId);
+    if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
+    agent.reports.push(entry);
     saveSession(session);
   });
 }
