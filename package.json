@@ -5,17 +5,28 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/silasrhyneer/sisyphi.git"
+    "url": "git+https://github.com/silasrhyneer/sisyphi.git"
   },
-  "keywords": ["claude", "claude-code", "multi-agent", "orchestrator", "tmux", "ai"],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "multi-agent",
+    "orchestrator",
+    "tmux",
+    "ai"
+  ],
   "engines": {
     "node": ">=22"
   },
   "type": "module",
-  "files": ["dist", "templates", "README.md"],
+  "files": [
+    "dist",
+    "templates",
+    "README.md"
+  ],
   "bin": {
-    "sisyphus": "./dist/cli.js",
-    "sisyphusd": "./dist/daemon.js"
+    "sisyphus": "dist/cli.js",
+    "sisyphusd": "dist/daemon.js"
   },
   "scripts": {
     "build": "tsup",
