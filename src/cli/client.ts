@@ -1,8 +1,9 @@
 import { connect } from 'node:net';
 import { socketPath } from '../shared/paths.js';
 import type { Request, Response } from '../shared/protocol.js';
+import { ensureDaemonInstalled, waitForDaemon } from './install.js';
 
-export async function sendRequest(request: Request): Promise<Response> {
+function rawSend(request: Request): Promise<Response> {
   const sock = socketPath();
 
   return new Promise<Response>((resolve, reject) => {
@@ -35,15 +36,29 @@ export async function sendRequest(request: Request): Promise<Response> {
 
     socket.on('error', (err) => {
       clearTimeout(timeout);
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT' || (err as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
-        reject(new Error(
-          `Sisyphus daemon is not running.\n` +
-          `  Start it with: launchctl load ~/Library/LaunchAgents/com.sisyphus.daemon.plist\n` +
-          `  Or check logs at: ~/.sisyphus/daemon.log`
-        ));
-      } else {
-        reject(err);
-      }
+      reject(err);
     });
   });
+}
+
+export async function sendRequest(request: Request): Promise<Response> {
+  try {
+    return await rawSend(request);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ECONNREFUSED') {
+      if (process.platform !== 'darwin') {
+        throw new Error(
+          `Sisyphus daemon is not running.\n` +
+          `  Start it manually: sisyphusd &\n` +
+          `  Or check logs at: ~/.sisyphus/daemon.log`
+        );
+      }
+      // Auto-install and retry once
+      await ensureDaemonInstalled();
+      await waitForDaemon(5000);
+      return rawSend(request);
+    }
+    throw err;
+  }
 }
