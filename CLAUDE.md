@@ -8,8 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run build          # Build with tsup → dist/
 npm run dev            # Build in watch mode (CLI only)
 npm run dev:daemon     # Watch + auto-restart daemon on each rebuild
-./test.sh              # Integration tests for server.js (starts server on :3456)
-pytest test_fizzbuzz.py # Python unit tests
 ```
 
 The CLI binary is at `dist/cli.js`, the daemon at `dist/daemon.js`. Both get a shebang via tsup banner config.
