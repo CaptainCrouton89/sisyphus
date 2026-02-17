@@ -80,9 +80,12 @@ export function addOrchestratorCycle(cwd: string, sessionId: string, cycle: Orch
   saveSession(session);
 }
 
-export function updateSessionStatus(cwd: string, sessionId: string, status: SessionStatus): void {
+export function updateSessionStatus(cwd: string, sessionId: string, status: SessionStatus, completionReport?: string): void {
   const session = getSession(cwd, sessionId);
   session.status = status;
+  if (completionReport !== undefined) {
+    session.completionReport = completionReport;
+  }
   saveSession(session);
 }
 
@@ -91,5 +94,21 @@ export function appendAgentToLastCycle(cwd: string, sessionId: string, agentId: 
   const cycles = session.orchestratorCycles;
   if (cycles.length === 0) return;
   cycles[cycles.length - 1]!.agentsSpawned.push(agentId);
+  saveSession(session);
+}
+
+export function completeSession(cwd: string, sessionId: string, report: string): void {
+  const session = getSession(cwd, sessionId);
+  session.status = 'completed';
+  session.completedAt = new Date().toISOString();
+  session.completionReport = report;
+  saveSession(session);
+}
+
+export function completeOrchestratorCycle(cwd: string, sessionId: string): void {
+  const session = getSession(cwd, sessionId);
+  const cycles = session.orchestratorCycles;
+  if (cycles.length === 0) return;
+  cycles[cycles.length - 1]!.completedAt = new Date().toISOString();
   saveSession(session);
 }

@@ -10,9 +10,11 @@ export interface Session {
   cwd: string;
   status: SessionStatus;
   createdAt: string;
+  completedAt?: string;
   tasks: Task[];
   agents: Agent[];
   orchestratorCycles: OrchestratorCycle[];
+  completionReport?: string;
   parentSessionId?: string;
 }
 
@@ -40,6 +42,7 @@ export interface Agent {
 export interface OrchestratorCycle {
   cycle: number;
   timestamp: string;
+  completedAt?: string;
   agentsSpawned: string[];
   paneId?: string;
 }
