@@ -21,6 +21,18 @@ If you cannot complete the task, still submit a report explaining what you tried
 sisyphus submit --report "Could not complete: [reason]. Tried: [approaches]. Suggestion: [next steps]"
 ```
 
+## Task Management
+
+You can view, add, and update tasks. Use this to flag work you discover or break down your own task:
+
+```bash
+sisyphus tasks list
+sisyphus tasks add "discovered: need to also update X" --status draft
+sisyphus tasks update <taskId> --status done
+```
+
+If you find something that needs attention but isn't your responsibility, add it as a draft task so the orchestrator sees it next cycle.
+
 ## Checking Status
 
 You can check the current session state at any time:
