@@ -5,8 +5,8 @@ export type Request =
   | { type: 'yield'; sessionId: string; agentId: string }
   | { type: 'complete'; sessionId: string; report: string }
   | { type: 'status'; sessionId?: string }
-  | { type: 'tasks_add'; sessionId: string; description: string }
-  | { type: 'tasks_update'; sessionId: string; taskId: string; status: string }
+  | { type: 'tasks_add'; sessionId: string; description: string; status?: string }
+  | { type: 'tasks_update'; sessionId: string; taskId: string; status?: string; description?: string }
   | { type: 'tasks_list'; sessionId: string }
   | { type: 'list' }
   | { type: 'resume'; sessionId: string; tmuxSession: string; tmuxWindow: string }

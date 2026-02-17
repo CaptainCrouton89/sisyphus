@@ -13,10 +13,10 @@ function getSessionId(): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: '\x1b[90m',
-  in_progress: '\x1b[33m',
-  complete: '\x1b[32m',
-  blocked: '\x1b[31m',
+  draft: '\x1b[2m',        // dim
+  pending: '\x1b[90m',     // gray
+  in_progress: '\x1b[33m', // yellow
+  done: '\x1b[32m',        // green
 };
 const RESET = '\x1b[0m';
 
@@ -29,9 +29,10 @@ export function registerTasks(program: Command): void {
     .command('add')
     .description('Add a new task')
     .argument('<description>', 'Task description')
-    .action(async (description: string) => {
+    .option('--status <status>', 'Initial status (draft|pending)', 'pending')
+    .action(async (description: string, opts: { status: string }) => {
       const sessionId = getSessionId();
-      const request: Request = { type: 'tasks_add', sessionId, description };
+      const request: Request = { type: 'tasks_add', sessionId, description, status: opts.status !== 'pending' ? opts.status : undefined };
       const response = await sendRequest(request);
       if (response.ok) {
         const taskId = response.data?.taskId as string;
@@ -44,15 +45,23 @@ export function registerTasks(program: Command): void {
 
   tasks
     .command('update')
-    .description('Update task status')
+    .description('Update a task')
     .argument('<task-id>', 'Task ID (e.g. t1)')
-    .requiredOption('--status <status>', 'New status (pending|in_progress|complete|blocked)')
-    .action(async (taskId: string, opts: { status: string }) => {
+    .option('--status <status>', 'New status (draft|pending|in_progress|done)')
+    .option('--description <description>', 'New description')
+    .action(async (taskId: string, opts: { status?: string; description?: string }) => {
+      if (!opts.status && !opts.description) {
+        console.error('Error: provide --status and/or --description');
+        process.exit(1);
+      }
       const sessionId = getSessionId();
-      const request: Request = { type: 'tasks_update', sessionId, taskId, status: opts.status };
+      const request: Request = { type: 'tasks_update', sessionId, taskId, status: opts.status, description: opts.description };
       const response = await sendRequest(request);
       if (response.ok) {
-        console.log(`Task ${taskId} updated to ${opts.status}`);
+        const parts: string[] = [];
+        if (opts.status) parts.push(`status → ${opts.status}`);
+        if (opts.description) parts.push(`description updated`);
+        console.log(`Task ${taskId}: ${parts.join(', ')}`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

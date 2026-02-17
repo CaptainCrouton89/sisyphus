@@ -128,13 +128,22 @@ export function handleComplete(sessionId: string, cwd: string, report: string): 
   orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
 }
 
-export function handleTaskAdd(cwd: string, sessionId: string, description: string): { taskId: string } {
-  const task = state.addTask(cwd, sessionId, description);
+export function handleTaskAdd(cwd: string, sessionId: string, description: string, initialStatus?: string): { taskId: string } {
+  const VALID_STATUSES: Set<string> = new Set(['draft', 'pending', 'in_progress', 'done']);
+  const status = initialStatus !== undefined && VALID_STATUSES.has(initialStatus) ? initialStatus as TaskStatus : undefined;
+  const task = state.addTask(cwd, sessionId, description, status);
   return { taskId: task.id };
 }
 
-export function handleTaskUpdate(cwd: string, sessionId: string, taskId: string, status: string): void {
-  state.updateTask(cwd, sessionId, taskId, status as TaskStatus);
+export function handleTaskUpdate(cwd: string, sessionId: string, taskId: string, status?: string, description?: string): void {
+  const VALID_STATUSES: Set<string> = new Set(['draft', 'pending', 'in_progress', 'done']);
+  const updates: { status?: TaskStatus; description?: string } = {};
+  if (status !== undefined) {
+    if (!VALID_STATUSES.has(status)) throw new Error(`Invalid status: ${status}. Valid: draft, pending, in_progress, done`);
+    updates.status = status as TaskStatus;
+  }
+  if (description !== undefined) updates.description = description;
+  state.updateTask(cwd, sessionId, taskId, updates);
 }
 
 export function handleTasksList(cwd: string, sessionId: string): { tasks: Session['tasks'] } {

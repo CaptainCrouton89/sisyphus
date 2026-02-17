@@ -1,6 +1,6 @@
 export type SessionStatus = 'active' | 'paused' | 'completed';
 
-export type TaskStatus = 'pending' | 'in_progress' | 'complete' | 'blocked';
+export type TaskStatus = 'draft' | 'pending' | 'in_progress' | 'done';
 
 export type AgentStatus = 'running' | 'completed' | 'killed' | 'crashed' | 'lost';
 

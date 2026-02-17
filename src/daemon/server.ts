@@ -79,14 +79,14 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'tasks_add': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        const result = sessionManager.handleTaskAdd(cwd, req.sessionId, req.description);
+        const result = sessionManager.handleTaskAdd(cwd, req.sessionId, req.description, req.status);
         return { ok: true, data: { taskId: result.taskId } };
       }
 
       case 'tasks_update': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        sessionManager.handleTaskUpdate(cwd, req.sessionId, req.taskId, req.status);
+        sessionManager.handleTaskUpdate(cwd, req.sessionId, req.taskId, req.status, req.description);
         return { ok: true };
       }
 

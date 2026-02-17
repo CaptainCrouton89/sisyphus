@@ -39,24 +39,25 @@ function saveSession(session: Session): void {
   atomicWrite(statePath(session.cwd, session.id), JSON.stringify(session, null, 2));
 }
 
-export function addTask(cwd: string, sessionId: string, description: string): Task {
+export function addTask(cwd: string, sessionId: string, description: string, initialStatus?: TaskStatus): Task {
   const session = getSession(cwd, sessionId);
   const nextNum = session.tasks.length + 1;
   const task: Task = {
     id: `t${nextNum}`,
     description,
-    status: 'pending',
+    status: initialStatus !== undefined ? initialStatus : 'pending',
   };
   session.tasks.push(task);
   saveSession(session);
   return task;
 }
 
-export function updateTask(cwd: string, sessionId: string, taskId: string, status: TaskStatus): void {
+export function updateTask(cwd: string, sessionId: string, taskId: string, updates: { status?: TaskStatus; description?: string }): void {
   const session = getSession(cwd, sessionId);
   const task = session.tasks.find(t => t.id === taskId);
   if (!task) throw new Error(`Task ${taskId} not found in session ${sessionId}`);
-  task.status = status;
+  if (updates.status) task.status = updates.status;
+  if (updates.description) task.description = updates.description;
   saveSession(session);
 }
 

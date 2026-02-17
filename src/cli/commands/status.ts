@@ -11,10 +11,10 @@ const STATUS_COLORS: Record<string, string> = {
   killed: '\x1b[31m',    // red
   crashed: '\x1b[31m',   // red
   lost: '\x1b[90m',      // gray
+  draft: '\x1b[2m',      // dim
   pending: '\x1b[90m',   // gray
   in_progress: '\x1b[33m', // yellow
-  complete: '\x1b[32m',  // green
-  blocked: '\x1b[31m',   // red
+  done: '\x1b[32m',      // green
 };
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';

@@ -120,7 +120,7 @@ describe('updateTask', () => {
     createSession(id, 'update task', testDir);
     addTask(testDir, id, 'a task');
 
-    updateTask(testDir, id, 't1', 'in_progress');
+    updateTask(testDir, id, 't1', { status: 'in_progress' });
     const session = getSession(testDir, id);
     assert.equal(session.tasks[0]!.status, 'in_progress');
   });
@@ -130,7 +130,7 @@ describe('updateTask', () => {
     createSession(id, 'bad task', testDir);
 
     assert.throws(
-      () => updateTask(testDir, id, 'nonexistent', 'complete'),
+      () => updateTask(testDir, id, 'nonexistent', { status: 'done' }),
       /not found/i,
     );
   });
@@ -345,7 +345,7 @@ describe('atomicWrite', () => {
     // Perform several mutations
     addTask(testDir, id, 'one');
     addTask(testDir, id, 'two');
-    updateTask(testDir, id, 't1', 'in_progress');
+    updateTask(testDir, id, 't1', { status: 'in_progress' });
 
     const dir = sessionDir(testDir, id);
     const files = readdirSync(dir);
