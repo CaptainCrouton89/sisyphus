@@ -1,3 +1,12 @@
+```
+ _____ _____ _______   _______ _   _ _   _ _____
+/  ___|_   _/  ___\ \ / / ___ \ | | | | | /  ___|
+\ `--.  | | \ `--. \ V /| |_/ / |_| | | | \ `--.
+ `--. \ | |  `--. \ \ / |  __/|  _  | | | |`--. \
+/\__/ /_| |_/\__/ / | | | |   | | | | |_| /\__/ /
+\____/ \___/\____/  \_/ \_|   \_| |_/\___/\____/
+```
+
 # sisyphi
 
 A tmux-integrated orchestration daemon for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) multi-agent workflows.

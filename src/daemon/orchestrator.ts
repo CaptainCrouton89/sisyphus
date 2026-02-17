@@ -133,7 +133,10 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   sessionOrchestratorPane.set(sessionId, paneId);
   tmux.setPaneTitle(paneId, `orchestrator (${sessionId.slice(0, 8)})`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
-  tmux.sendKeys(paneId, `${envExports} && ${claudeCmd}`);
+
+  const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
+  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
+  tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}`);
 
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,

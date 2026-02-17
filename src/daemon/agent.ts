@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
@@ -53,6 +53,9 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const suffixFilePath = `${sessionDir(cwd, sessionId)}/${agentId}-system.md`;
   writeFileSync(suffixFilePath, suffix, 'utf-8');
 
+  const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
+  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
+
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='${agentId}'`,
@@ -60,7 +63,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
   const claudeCmd = `claude --dangerously-skip-permissions${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-  tmux.sendKeys(paneId, `${envExports} && ${claudeCmd}`);
+  tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}`);
 
   const agent: Agent = {
     id: agentId,
