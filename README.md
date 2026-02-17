@@ -52,6 +52,16 @@ This gives you two commands:
 - `sisyphus` — the CLI for interacting with sessions
 - `sisyphusd` — the background daemon
 
+### Claude Code Plugin (optional)
+
+The companion plugin on the [crouton-kit](https://github.com/CaptainCrouton89/crouton-kit) marketplace adds 11 specialized agent types and an orchestration skill with task breakdown patterns for common workflows (bug fixes, feature builds, refactors, reviews, etc.).
+
+```bash
+claude plugins install CaptainCrouton89/crouton-kit sisyphus
+```
+
+This makes `sisyphus:debug`, `sisyphus:implement`, `sisyphus:plan`, and other agent types available for `sisyphus spawn --agent-type`.
+
 ## Quick Start
 
 ### 1. Start the daemon
