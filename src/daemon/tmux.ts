@@ -78,7 +78,7 @@ export function sendSignal(paneTarget: string, signal: string): void {
   }
 }
 
-export function selectLayout(windowTarget: string, layout: string = 'tiled'): void {
+export function selectLayout(windowTarget: string, layout: string = 'even-horizontal'): void {
   execSafe(`tmux select-layout -t "${windowTarget}" ${layout}`);
 }
 
