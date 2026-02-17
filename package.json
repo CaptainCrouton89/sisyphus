@@ -1,15 +1,28 @@
 {
-  "name": "sisyphus",
+  "name": "sisyphi",
   "version": "0.1.0",
+  "description": "tmux-integrated orchestration daemon for Claude Code multi-agent workflows",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silasrhyneer/sisyphi.git"
+  },
+  "keywords": ["claude", "claude-code", "multi-agent", "orchestrator", "tmux", "ai"],
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
+  "files": ["dist", "templates", "README.md"],
   "bin": {
-    "sisyphus": "./dist/cli.js"
+    "sisyphus": "./dist/cli.js",
+    "sisyphusd": "./dist/daemon.js"
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "dev:daemon": "tsup --watch --onSuccess 'node dist/daemon.js'",
-    "test": "node --import tsx --test src/__tests__/*.test.ts"
+    "test": "node --import tsx --test src/__tests__/*.test.ts",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "commander": "^13.1.0",
