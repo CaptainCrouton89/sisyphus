@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:net';
-import { unlinkSync, existsSync } from 'node:fs';
-import { socketPath } from '../shared/paths.js';
+import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { socketPath, globalDir } from '../shared/paths.js';
+import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
 import * as sessionManager from './session-manager.js';
 
@@ -21,15 +22,40 @@ export function getSessionTmux(sessionId: string): string | undefined {
   return sessionTmuxMap.get(sessionId);
 }
 
+function registryPath(): string {
+  return join(globalDir(), 'session-registry.json');
+}
+
+function persistSessionRegistry(): void {
+  const dir = globalDir();
+  mkdirSync(dir, { recursive: true });
+  const registry: Record<string, string> = {};
+  for (const [id, cwd] of sessionCwdMap) {
+    registry[id] = cwd;
+  }
+  writeFileSync(registryPath(), JSON.stringify(registry, null, 2), 'utf-8');
+}
+
+export function loadSessionRegistry(): Record<string, string> {
+  const p = registryPath();
+  if (!existsSync(p)) return {};
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 export function registerSessionCwd(sessionId: string, cwd: string): void {
   sessionCwdMap.set(sessionId, cwd);
+  persistSessionRegistry();
 }
 
 async function handleRequest(req: Request): Promise<Response> {
   try {
     switch (req.type) {
       case 'start': {
-        const session = sessionManager.startSession(req.task, req.cwd, req.tmuxSession, req.tmuxWindow);
+        const session = await sessionManager.startSession(req.task, req.cwd, req.tmuxSession, req.tmuxWindow);
         registerSessionCwd(session.id, req.cwd);
         sessionTmuxMap.set(session.id, req.tmuxSession);
         sessionWindowMap.set(session.id, req.tmuxWindow);
@@ -39,7 +65,7 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'spawn': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        const result = sessionManager.handleSpawn(req.sessionId, cwd, req.agentType, req.name, req.instruction);
+        const result = await sessionManager.handleSpawn(req.sessionId, cwd, req.agentType, req.name, req.instruction);
         return { ok: true, data: { agentId: result.agentId } };
       }
 
@@ -48,21 +74,21 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
         const windowId = sessionWindowMap.get(req.sessionId);
         if (!windowId) return { ok: false, error: `No tmux window found for session: ${req.sessionId}` };
-        sessionManager.handleSubmit(cwd, req.sessionId, req.agentId, req.report, windowId);
+        await sessionManager.handleSubmit(cwd, req.sessionId, req.agentId, req.report, windowId);
         return { ok: true };
       }
 
       case 'yield': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        sessionManager.handleYield(req.sessionId, cwd);
+        await sessionManager.handleYield(req.sessionId, cwd);
         return { ok: true };
       }
 
       case 'complete': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        sessionManager.handleComplete(req.sessionId, cwd, req.report);
+        await sessionManager.handleComplete(req.sessionId, cwd, req.report);
         return { ok: true };
       }
 
@@ -79,14 +105,14 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'tasks_add': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        const result = sessionManager.handleTaskAdd(cwd, req.sessionId, req.description, req.status);
+        const result = await sessionManager.handleTaskAdd(cwd, req.sessionId, req.description, req.status);
         return { ok: true, data: { taskId: result.taskId } };
       }
 
       case 'tasks_update': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        sessionManager.handleTaskUpdate(cwd, req.sessionId, req.taskId, req.status, req.description);
+        await sessionManager.handleTaskUpdate(cwd, req.sessionId, req.taskId, req.status, req.description);
         return { ok: true };
       }
 
@@ -115,15 +141,26 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}. Use 'start' for new sessions.` };
         sessionTmuxMap.set(req.sessionId, req.tmuxSession);
         sessionWindowMap.set(req.sessionId, req.tmuxWindow);
-        const session = sessionManager.resumeSession(req.sessionId, cwd, req.tmuxSession, req.tmuxWindow);
+        const session = await sessionManager.resumeSession(req.sessionId, cwd, req.tmuxSession, req.tmuxWindow);
         return { ok: true, data: { sessionId: session.id, status: session.status } };
       }
 
       case 'register_claude_session': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        sessionManager.handleRegisterClaudeSession(cwd, req.sessionId, req.agentId, req.claudeSessionId);
+        await sessionManager.handleRegisterClaudeSession(cwd, req.sessionId, req.agentId, req.claudeSessionId);
         return { ok: true };
+      }
+
+      case 'kill': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        const killedAgents = await sessionManager.handleKill(req.sessionId, cwd);
+        sessionCwdMap.delete(req.sessionId);
+        sessionTmuxMap.delete(req.sessionId);
+        sessionWindowMap.delete(req.sessionId);
+        persistSessionRegistry();
+        return { ok: true, data: { killedAgents, sessionId: req.sessionId } };
       }
 
       default:

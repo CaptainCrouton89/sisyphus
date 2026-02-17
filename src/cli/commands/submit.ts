@@ -5,7 +5,7 @@ import type { Request } from '../../shared/protocol.js';
 export function registerSubmit(program: Command): void {
   program
     .command('submit')
-    .description('Submit agent work report and mark as completed')
+    .description('Submit work report and exit (agent only)')
     .requiredOption('--report <report>', 'Work report')
     .action(async (opts: { report: string }) => {
       const sessionId = process.env.SISYPHUS_SESSION_ID;
@@ -19,6 +19,7 @@ export function registerSubmit(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Report submitted successfully');
+        console.log('Your pane will close. The orchestrator resumes when all agents finish.');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

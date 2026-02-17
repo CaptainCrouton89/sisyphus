@@ -5,8 +5,8 @@ import type { Request } from '../../shared/protocol.js';
 export function registerSpawn(program: Command): void {
   program
     .command('spawn')
-    .description('Spawn a new agent in the current session')
-    .option('--agent-type <type>', 'Agent type', 'worker')
+    .description('Spawn a new agent (orchestrator only)')
+    .option('--agent-type <type>', 'Agent role label (default: worker)', 'worker')
     .requiredOption('--name <name>', 'Agent name')
     .requiredOption('--instruction <instruction>', 'Task instruction for the agent')
     .action(async (opts: { agentType: string; name: string; instruction: string }) => {
@@ -27,8 +27,10 @@ export function registerSpawn(program: Command): void {
       if (response.ok) {
         const agentId = response.data?.agentId as string;
         console.log(`Agent spawned: ${agentId}`);
+        console.log("Run `sisyphus yield` when done spawning agents.");
       } else {
         console.error(`Error: ${response.error}`);
+        if (response.error?.includes("Unknown session")) console.error("Hint: run `sisyphus list` to see active sessions.");
         process.exit(1);
       }
     });

@@ -15,11 +15,9 @@ export function setRespawnCallback(cb: RespawnCallback): void {
 export function startMonitor(pollIntervalMs: number = 1000): void {
   if (monitorInterval) return;
   monitorInterval = setInterval(() => {
-    try {
-      pollAllSessions();
-    } catch (err) {
+    pollAllSessions().catch(err => {
       console.error('[sisyphus] Pane monitor error:', err);
-    }
+    });
   }, pollIntervalMs);
 }
 
@@ -48,15 +46,15 @@ export function untrackSession(sessionId: string): void {
   trackedSessions.delete(sessionId);
 }
 
-function pollAllSessions(): void {
+async function pollAllSessions(): Promise<void> {
   for (const { id: sessionId, cwd, windowId } of trackedSessions.values()) {
     if (windowId) {
-      pollSession(sessionId, cwd, windowId);
+      await pollSession(sessionId, cwd, windowId);
     }
   }
 }
 
-function pollSession(sessionId: string, cwd: string, windowId: string): void {
+async function pollSession(sessionId: string, cwd: string, windowId: string): Promise<void> {
   let session;
   try {
     session = state.getSession(cwd, sessionId);
@@ -75,7 +73,7 @@ function pollSession(sessionId: string, cwd: string, windowId: string): void {
   for (const agent of session.agents) {
     if (agent.status !== 'running') continue;
     if (!livePaneIds.has(agent.paneId)) {
-      const allDone = handleAgentKilled(cwd, sessionId, agent.id, 'pane closed by user');
+      const allDone = await handleAgentKilled(cwd, sessionId, agent.id, 'pane closed by user');
       if (allDone && onAllAgentsDone) {
         onAllAgentsDone(sessionId, cwd, windowId);
       }
@@ -89,7 +87,7 @@ function pollSession(sessionId: string, cwd: string, windowId: string): void {
     const runningAgents = session.agents.filter(a => a.status === 'running');
     if (runningAgents.length === 0) {
       // No agents running and orchestrator gone — pause
-      state.updateSessionStatus(cwd, sessionId, 'paused');
+      await state.updateSessionStatus(cwd, sessionId, 'paused');
       console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane disappeared`);
     }
   }

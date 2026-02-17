@@ -5,7 +5,7 @@ import type { Request } from '../../shared/protocol.js';
 export function registerYield(program: Command): void {
   program
     .command('yield')
-    .description('Orchestrator yields control, waiting for agents to complete')
+    .description('Yield control back to daemon (orchestrator only)')
     .action(async () => {
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {

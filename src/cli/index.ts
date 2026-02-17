@@ -8,6 +8,7 @@ import { registerStatus } from './commands/status.js';
 import { registerTasks } from './commands/tasks.js';
 import { registerList } from './commands/list.js';
 import { registerResume } from './commands/resume.js';
+import { registerKill } from './commands/kill.js';
 
 const program = new Command();
 
@@ -25,6 +26,7 @@ registerStatus(program);
 registerTasks(program);
 registerList(program);
 registerResume(program);
+registerKill(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

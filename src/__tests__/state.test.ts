@@ -83,27 +83,27 @@ describe('getSession', () => {
 // addTask
 // ---------------------------------------------------------------------------
 describe('addTask', () => {
-  it('adds task with sequential IDs (t1, t2, t3)', () => {
+  it('adds task with sequential IDs (t1, t2, t3)', async () => {
     const id = randomUUID();
     createSession(id, 'tasks test', testDir);
 
-    const t1 = addTask(testDir, id, 'first task');
+    const t1 = await addTask(testDir, id, 'first task');
     assert.equal(t1.id, 't1');
     assert.equal(t1.description, 'first task');
     assert.equal(t1.status, 'pending');
 
-    const t2 = addTask(testDir, id, 'second task');
+    const t2 = await addTask(testDir, id, 'second task');
     assert.equal(t2.id, 't2');
 
-    const t3 = addTask(testDir, id, 'third task');
+    const t3 = await addTask(testDir, id, 'third task');
     assert.equal(t3.id, 't3');
   });
 
-  it('persists tasks to disk', () => {
+  it('persists tasks to disk', async () => {
     const id = randomUUID();
     createSession(id, 'persist test', testDir);
 
-    addTask(testDir, id, 'persisted');
+    await addTask(testDir, id, 'persisted');
     const session = getSession(testDir, id);
     assert.equal(session.tasks.length, 1);
     assert.equal(session.tasks[0]!.id, 't1');
@@ -115,21 +115,21 @@ describe('addTask', () => {
 // updateTask
 // ---------------------------------------------------------------------------
 describe('updateTask', () => {
-  it('changes task status', () => {
+  it('changes task status', async () => {
     const id = randomUUID();
     createSession(id, 'update task', testDir);
-    addTask(testDir, id, 'a task');
+    await addTask(testDir, id, 'a task');
 
-    updateTask(testDir, id, 't1', { status: 'in_progress' });
+    await updateTask(testDir, id, 't1', { status: 'in_progress' });
     const session = getSession(testDir, id);
     assert.equal(session.tasks[0]!.status, 'in_progress');
   });
 
-  it('throws on unknown taskId', () => {
+  it('throws on unknown taskId', async () => {
     const id = randomUUID();
     createSession(id, 'bad task', testDir);
 
-    assert.throws(
+    await assert.rejects(
       () => updateTask(testDir, id, 'nonexistent', { status: 'done' }),
       /not found/i,
     );
@@ -140,7 +140,7 @@ describe('updateTask', () => {
 // addAgent
 // ---------------------------------------------------------------------------
 describe('addAgent', () => {
-  it('appends agent and persists', () => {
+  it('appends agent and persists', async () => {
     const id = randomUUID();
     createSession(id, 'agents', testDir);
 
@@ -157,14 +157,14 @@ describe('addAgent', () => {
       paneId: '%99',
     };
 
-    addAgent(testDir, id, agent);
+    await addAgent(testDir, id, agent);
     const session = getSession(testDir, id);
     assert.equal(session.agents.length, 1);
     assert.equal(session.agents[0]!.id, 'agent-001');
     assert.equal(session.agents[0]!.name, 'tester');
   });
 
-  it('appends multiple agents', () => {
+  it('appends multiple agents', async () => {
     const id = randomUUID();
     createSession(id, 'multi agents', testDir);
 
@@ -181,8 +181,8 @@ describe('addAgent', () => {
       paneId: '%0',
     });
 
-    addAgent(testDir, id, makeAgent('agent-001'));
-    addAgent(testDir, id, makeAgent('agent-002'));
+    await addAgent(testDir, id, makeAgent('agent-001'));
+    await addAgent(testDir, id, makeAgent('agent-002'));
 
     const session = getSession(testDir, id);
     assert.equal(session.agents.length, 2);
@@ -193,7 +193,7 @@ describe('addAgent', () => {
 // updateAgent
 // ---------------------------------------------------------------------------
 describe('updateAgent', () => {
-  it('updates fields via Object.assign', () => {
+  it('updates fields via Object.assign', async () => {
     const id = randomUUID();
     createSession(id, 'update agent', testDir);
 
@@ -210,8 +210,8 @@ describe('updateAgent', () => {
       paneId: '%1',
     };
 
-    addAgent(testDir, id, agent);
-    updateAgent(testDir, id, 'agent-001', {
+    await addAgent(testDir, id, agent);
+    await updateAgent(testDir, id, 'agent-001', {
       status: 'completed',
       report: 'done',
       completedAt: new Date().toISOString(),
@@ -223,11 +223,11 @@ describe('updateAgent', () => {
     assert.ok(session.agents[0]!.completedAt !== null);
   });
 
-  it('throws on unknown agentId', () => {
+  it('throws on unknown agentId', async () => {
     const id = randomUUID();
     createSession(id, 'bad agent', testDir);
 
-    assert.throws(
+    await assert.rejects(
       () => updateAgent(testDir, id, 'ghost', { status: 'completed' }),
       /not found/i,
     );
@@ -238,7 +238,7 @@ describe('updateAgent', () => {
 // addOrchestratorCycle
 // ---------------------------------------------------------------------------
 describe('addOrchestratorCycle', () => {
-  it('appends cycle with correct fields', () => {
+  it('appends cycle with correct fields', async () => {
     const id = randomUUID();
     createSession(id, 'cycles', testDir);
 
@@ -249,7 +249,7 @@ describe('addOrchestratorCycle', () => {
       paneId: '%10',
     };
 
-    addOrchestratorCycle(testDir, id, cycle);
+    await addOrchestratorCycle(testDir, id, cycle);
     const session = getSession(testDir, id);
     assert.equal(session.orchestratorCycles.length, 1);
     assert.equal(session.orchestratorCycles[0]!.cycle, 1);
@@ -261,30 +261,30 @@ describe('addOrchestratorCycle', () => {
 // appendAgentToLastCycle
 // ---------------------------------------------------------------------------
 describe('appendAgentToLastCycle', () => {
-  it('adds agentId to last cycle agentsSpawned', () => {
+  it('adds agentId to last cycle agentsSpawned', async () => {
     const id = randomUUID();
     createSession(id, 'append agent', testDir);
 
-    addOrchestratorCycle(testDir, id, {
+    await addOrchestratorCycle(testDir, id, {
       cycle: 1,
       timestamp: new Date().toISOString(),
       agentsSpawned: [],
     });
 
-    appendAgentToLastCycle(testDir, id, 'agent-001');
-    appendAgentToLastCycle(testDir, id, 'agent-002');
+    await appendAgentToLastCycle(testDir, id, 'agent-001');
+    await appendAgentToLastCycle(testDir, id, 'agent-002');
 
     const session = getSession(testDir, id);
     const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1]!;
     assert.deepStrictEqual(lastCycle.agentsSpawned, ['agent-001', 'agent-002']);
   });
 
-  it('is a no-op when there are no cycles', () => {
+  it('is a no-op when there are no cycles', async () => {
     const id = randomUUID();
     createSession(id, 'no cycles', testDir);
 
     // Should not throw
-    appendAgentToLastCycle(testDir, id, 'agent-001');
+    await appendAgentToLastCycle(testDir, id, 'agent-001');
     const session = getSession(testDir, id);
     assert.equal(session.orchestratorCycles.length, 0);
   });
@@ -294,21 +294,21 @@ describe('appendAgentToLastCycle', () => {
 // updateSessionStatus
 // ---------------------------------------------------------------------------
 describe('updateSessionStatus', () => {
-  it('changes status field', () => {
+  it('changes status field', async () => {
     const id = randomUUID();
     createSession(id, 'status test', testDir);
 
-    updateSessionStatus(testDir, id, 'completed', 'all done');
+    await updateSessionStatus(testDir, id, 'completed', 'all done');
     const session = getSession(testDir, id);
     assert.equal(session.status, 'completed');
     assert.equal(session.completionReport, 'all done');
   });
 
-  it('works without completionReport', () => {
+  it('works without completionReport', async () => {
     const id = randomUUID();
     createSession(id, 'paused', testDir);
 
-    updateSessionStatus(testDir, id, 'paused');
+    await updateSessionStatus(testDir, id, 'paused');
     const session = getSession(testDir, id);
     assert.equal(session.status, 'paused');
     assert.equal(session.completionReport, undefined);
@@ -338,18 +338,33 @@ describe('atomicWrite', () => {
     assert.equal(parsed.id, id);
   });
 
-  it('no temp files remain after multiple writes', () => {
+  it('no temp files remain after multiple writes', async () => {
     const id = randomUUID();
     createSession(id, 'multi write', testDir);
 
     // Perform several mutations
-    addTask(testDir, id, 'one');
-    addTask(testDir, id, 'two');
-    updateTask(testDir, id, 't1', { status: 'in_progress' });
+    await addTask(testDir, id, 'one');
+    await addTask(testDir, id, 'two');
+    await updateTask(testDir, id, 't1', { status: 'in_progress' });
 
     const dir = sessionDir(testDir, id);
     const files = readdirSync(dir);
     const tmpFiles = files.filter(f => f.endsWith('.tmp'));
     assert.equal(tmpFiles.length, 0, 'no temp files should remain after multiple writes');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// concurrent mutations (per-session mutex)
+// ---------------------------------------------------------------------------
+describe('concurrent mutations', () => {
+  it('concurrent mutations do not lose data', async () => {
+    const id = randomUUID();
+    createSession(id, 'concurrent test', testDir);
+    // Fire 5 addTask calls concurrently
+    const promises = Array.from({ length: 5 }, (_, i) => addTask(testDir, id, `task ${i + 1}`));
+    await Promise.all(promises);
+    const session = getSession(testDir, id);
+    assert.equal(session.tasks.length, 5);
   });
 });

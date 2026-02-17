@@ -36,9 +36,10 @@ export function registerTasks(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         const taskId = response.data?.taskId as string;
-        console.log(`Task added: ${taskId}`);
+        console.log(`Task added: ${taskId} [${opts.status}]`);
       } else {
         console.error(`Error: ${response.error}`);
+        if (response.error?.includes("Unknown session")) console.error("Hint: run `sisyphus list` to see active sessions.");
         process.exit(1);
       }
     });
@@ -64,6 +65,8 @@ export function registerTasks(program: Command): void {
         console.log(`Task ${taskId}: ${parts.join(', ')}`);
       } else {
         console.error(`Error: ${response.error}`);
+        if (response.error?.includes("not found")) console.error("Hint: run `sisyphus tasks list` to see current tasks.");
+        if (response.error?.includes("Unknown session")) console.error("Hint: run `sisyphus list` to see active sessions.");
         process.exit(1);
       }
     });
@@ -87,6 +90,7 @@ export function registerTasks(program: Command): void {
         }
       } else {
         console.error(`Error: ${response.error}`);
+        if (response.error?.includes("Unknown session")) console.error("Hint: run `sisyphus list` to see active sessions.");
         process.exit(1);
       }
     });

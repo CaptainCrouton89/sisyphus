@@ -6,10 +6,14 @@ import * as tmux from './tmux.js';
 import { getNextColor } from './colors.js';
 import { sessionDir } from '../shared/paths.js';
 
-let agentCounter = 0;
+const agentCounters = new Map<string, number>();
 
-export function resetAgentCounter(value: number = 0): void {
-  agentCounter = value;
+export function resetAgentCounter(sessionId: string, value: number = 0): void {
+  agentCounters.set(sessionId, value);
+}
+
+export function clearAgentCounter(sessionId: string): void {
+  agentCounters.delete(sessionId);
 }
 
 function renderAgentSuffix(sessionId: string, instruction: string): string {
@@ -34,10 +38,11 @@ export interface SpawnAgentOpts {
   windowId: string;
 }
 
-export function spawnAgent(opts: SpawnAgentOpts): Agent {
+export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const { sessionId, cwd, agentType, name, instruction, windowId } = opts;
-  agentCounter++;
-  const agentId = `agent-${String(agentCounter).padStart(3, '0')}`;
+  const count = (agentCounters.get(sessionId) ?? 0) + 1;
+  agentCounters.set(sessionId, count);
+  const agentId = `agent-${String(count).padStart(3, '0')}`;
   const color = getNextColor(sessionId);
 
   const paneId = tmux.createPane(windowId);
@@ -71,17 +76,17 @@ export function spawnAgent(opts: SpawnAgentOpts): Agent {
     paneId,
   };
 
-  state.addAgent(cwd, sessionId, agent);
+  await state.addAgent(cwd, sessionId, agent);
   return agent;
 }
 
-export function handleAgentSubmit(
+export async function handleAgentSubmit(
   cwd: string,
   sessionId: string,
   agentId: string,
   report: string,
-): boolean {
-  state.updateAgent(cwd, sessionId, agentId, {
+): Promise<boolean> {
+  await state.updateAgent(cwd, sessionId, agentId, {
     status: 'completed',
     report,
     completedAt: new Date().toISOString(),
@@ -96,13 +101,13 @@ export function handleAgentSubmit(
   return allAgentsDone(session);
 }
 
-export function handleAgentKilled(
+export async function handleAgentKilled(
   cwd: string,
   sessionId: string,
   agentId: string,
   reason: string,
-): boolean {
-  state.updateAgent(cwd, sessionId, agentId, {
+): Promise<boolean> {
+  await state.updateAgent(cwd, sessionId, agentId, {
     status: 'killed',
     killedReason: reason,
     completedAt: new Date().toISOString(),

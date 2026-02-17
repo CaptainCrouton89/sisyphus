@@ -1,7 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
-import { globalDir, daemonPidPath } from '../shared/paths.js';
+import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { globalDir, daemonPidPath, statePath } from '../shared/paths.js';
 import { loadConfig } from '../shared/config.js';
-import { startServer, stopServer } from './server.js';
+import { startServer, stopServer, registerSessionCwd, loadSessionRegistry } from './server.js';
 import { startMonitor, stopMonitor, setRespawnCallback } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 
@@ -41,7 +41,33 @@ function releasePidLock(): void {
 }
 
 function recoverSessions(): void {
-  console.log('[sisyphus] Daemon started, waiting for commands');
+  const registry = loadSessionRegistry();
+  const entries = Object.entries(registry);
+
+  if (entries.length === 0) {
+    console.log('[sisyphus] No sessions to recover');
+    return;
+  }
+
+  let recovered = 0;
+  for (const [sessionId, cwd] of entries) {
+    const stateFile = statePath(cwd, sessionId);
+    if (!existsSync(stateFile)) {
+      continue;
+    }
+
+    try {
+      const session = JSON.parse(readFileSync(stateFile, 'utf-8')) as { status: string };
+      if (session.status === 'active' || session.status === 'paused') {
+        registerSessionCwd(sessionId, cwd);
+        recovered++;
+      }
+    } catch {
+      console.error(`[sisyphus] Failed to read session state for ${sessionId}, skipping`);
+    }
+  }
+
+  console.log(`[sisyphus] Recovered ${recovered} session(s) from registry`);
 }
 
 async function main(): Promise<void> {

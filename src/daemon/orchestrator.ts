@@ -80,7 +80,7 @@ function formatStateForOrchestrator(session: Session): string {
   ].join('\n');
 }
 
-export function spawnOrchestrator(sessionId: string, cwd: string, windowId: string): void {
+export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string): Promise<void> {
   const session = state.getSession(cwd, sessionId);
   const basePrompt = loadOrchestratorPrompt(cwd);
   const formattedState = formatStateForOrchestrator(session);
@@ -107,7 +107,7 @@ export function spawnOrchestrator(sessionId: string, cwd: string, windowId: stri
   tmux.sendKeys(paneId, `${envExports} && ${claudeCmd}`);
   tmux.selectLayout(windowId, 'tiled');
 
-  state.addOrchestratorCycle(cwd, sessionId, {
+  await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,
     timestamp: new Date().toISOString(),
     agentsSpawned: [],
@@ -123,14 +123,14 @@ function resolveOrchestratorPane(sessionId: string, cwd: string): string | undef
   return lastCycle?.paneId ?? undefined;
 }
 
-export function handleOrchestratorYield(sessionId: string, cwd: string): void {
+export async function handleOrchestratorYield(sessionId: string, cwd: string): Promise<void> {
   const paneId = resolveOrchestratorPane(sessionId, cwd);
   if (paneId) {
     tmux.killPane(paneId);
     sessionOrchestratorPane.delete(sessionId);
   }
 
-  state.completeOrchestratorCycle(cwd, sessionId);
+  await state.completeOrchestratorCycle(cwd, sessionId);
 
   const session = state.getSession(cwd, sessionId);
   const runningAgents = session.agents.filter(a => a.status === 'running');
@@ -139,11 +139,11 @@ export function handleOrchestratorYield(sessionId: string, cwd: string): void {
   }
 }
 
-export function handleOrchestratorComplete(sessionId: string, cwd: string, report: string): void {
+export async function handleOrchestratorComplete(sessionId: string, cwd: string, report: string): Promise<void> {
   const paneId = resolveOrchestratorPane(sessionId, cwd);
 
-  state.completeOrchestratorCycle(cwd, sessionId);
-  state.completeSession(cwd, sessionId, report);
+  await state.completeOrchestratorCycle(cwd, sessionId);
+  await state.completeSession(cwd, sessionId, report);
 
   if (paneId) {
     tmux.killPane(paneId);

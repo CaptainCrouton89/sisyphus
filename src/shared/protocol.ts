@@ -10,7 +10,8 @@ export type Request =
   | { type: 'tasks_list'; sessionId: string }
   | { type: 'list' }
   | { type: 'resume'; sessionId: string; tmuxSession: string; tmuxWindow: string }
-  | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string };
+  | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }
+  | { type: 'kill'; sessionId: string };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }

@@ -5,7 +5,7 @@ import type { Request } from '../../shared/protocol.js';
 export function registerComplete(program: Command): void {
   program
     .command('complete')
-    .description('Mark the current session as completed')
+    .description('Mark session as completed (orchestrator only)')
     .requiredOption('--report <report>', 'Final completion report')
     .action(async (opts: { report: string }) => {
       const sessionId = process.env.SISYPHUS_SESSION_ID;
@@ -18,6 +18,7 @@ export function registerComplete(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Session completed.');
+        console.log('All panes will close.');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);
