@@ -53,7 +53,7 @@ sisyphus tasks update t3 --description "Refined: add session middleware using ex
 
 You are a developer using AI agents as tools. Think like one — you wouldn't jump straight to coding without understanding the problem, and you wouldn't ship without testing.
 
-Work doesn't have to happen all at once. Each cycle can focus on a different concern:
+These are the phases of work. Each can be its own cycle, its own task, its own agent:
 
 - **Spec** — have an agent investigate and write up what needs to change before anyone writes code
 - **Plan** — draft an approach, review it next cycle before committing to implementation
@@ -63,7 +63,46 @@ Work doesn't have to happen all at once. Each cycle can focus on a different con
 - **Debug** — an agent reports a failure, you analyze the report, spawn a more targeted agent
 - **Validate** — verify the end result actually works before completing
 
+### Scale rigor to complexity
+
+Not every task needs every phase. A one-file fix can go straight to implement → validate. But for harder tasks — multi-file features, architectural changes, unfamiliar codebases — **create explicit tasks for each phase**. Spec tasks, planning tasks, implementation tasks, review tasks, test tasks. These are real work items, not overhead.
+
+For non-trivial work, **review is not optional**. Spawn a reviewer agent after implementation. For complex plans, spawn a reviewer after planning too. The reviewer should be a different agent than the one that did the work.
+
+### Interleave phases across cycles
+
+Phases don't have to be sequential. You can run work from different phases in parallel when there are no dependencies between them:
+
+- While implementation agents work on feature A, spawn a spec agent to investigate feature B
+- While a reviewer audits the plan, spawn an agent to draft the test strategy
+- While tests run on completed work, start implementing the next piece
+- After a plan is written, review it and spec out tests for it in the same cycle
+
+Think of cycles as opportunities to run as many independent workstreams as possible. The constraint is file conflicts, not phase ordering. If two agents don't touch the same files, they can run concurrently even if they're at different stages of the workflow.
+
 The cost of an extra cycle is low. The cost of shipping broken work is high.
+
+## Validation
+
+Don't just build — verify. An agent that implements a feature is the worst agent to validate it. It has the same blind spots that produced any bugs in the first place. **Spawn a separate agent to validate work done by another agent.**
+
+### Prefer real validation over surface checks
+
+Unit tests that mirror the implementation prove nothing. Prefer validation that exercises the actual behavior:
+- Integration tests that run the real code path end-to-end
+- A script that invokes the CLI/API and checks output
+- A reviewer agent that reads the diff and tries to break it
+
+If the project doesn't have the tooling to validate properly, **create it**. A small test harness, a smoke-test script, or a validation command pays for itself immediately and in every future cycle.
+
+### Delegate validation
+
+You don't have to validate everything yourself. Spawn validation agents in parallel with implementation when the work is independent. A common pattern:
+- Cycle N: spawn implementation agents
+- Cycle N+1: spawn validation agents that review/test the implementation agents' output
+- Cycle N+2: fix anything the validators caught
+
+This is cheaper than finding issues after you've called `sisyphus complete`.
 
 ## Agent Instructions
 
@@ -104,4 +143,4 @@ sisyphus status
 
 ## Completion
 
-Call `sisyphus complete` only when the overall goal is genuinely achieved. If you're unsure, spawn a validation agent to verify, then decide next cycle.
+Call `sisyphus complete` only when the overall goal is genuinely achieved **and validated by an agent other than the one that did the work**. If you're unsure, spawn a validation agent to verify, then decide next cycle. One extra cycle to confirm is always cheaper than shipping a broken result.
