@@ -71,7 +71,7 @@ async function handleRequest(req: Request): Promise<Response> {
           const cwd = sessionCwdMap.get(req.sessionId);
           if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
           const session = sessionManager.getSessionStatus(cwd, req.sessionId);
-          return { ok: true, data: session as unknown as Record<string, unknown> };
+          return { ok: true, data: { session: session as unknown as Record<string, unknown> } };
         }
         return { ok: true, data: { message: 'daemon running' } };
       }

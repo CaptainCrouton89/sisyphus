@@ -51,12 +51,12 @@ export function getSessionStatus(cwd: string, sessionId: string): Session {
   return state.getSession(cwd, sessionId);
 }
 
-export function listSessions(cwd: string): Array<{ id: string; task: string; status: string; createdAt: string }> {
+export function listSessions(cwd: string): Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number }> {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];
 
   const entries = readdirSync(dir, { withFileTypes: true });
-  const sessions: Array<{ id: string; task: string; status: string; createdAt: string }> = [];
+  const sessions: Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number }> = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -67,6 +67,7 @@ export function listSessions(cwd: string): Array<{ id: string; task: string; sta
         task: session.task,
         status: session.status,
         createdAt: session.createdAt,
+        agentCount: session.agents.length,
       });
     } catch (err) {
       console.error(`[sisyphus] Failed to read session ${entry.name}:`, err);
