@@ -70,7 +70,12 @@ export function setPaneTitle(paneTarget: string, title: string): void {
 }
 
 export function setPaneStyle(paneTarget: string, color: string): void {
-  execSafe(`tmux select-pane -t "${paneTarget}" -P "border-style=fg=${color}"`);
+  // pane-border-style is window-level in tmux 3.6 (last-write-wins across all panes).
+  // pane-border-format IS truly per-pane, so we colorize the border status text instead.
+  const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]#{pane_current_path} #[default]`;
+  execSafe(`tmux set -p -t "${paneTarget}" pane-border-format ${shellQuote(fmt)}`);
+  execSafe(`tmux set -p -t "${paneTarget}" pane-border-style "fg=${color}"`);
+  execSafe(`tmux set -p -t "${paneTarget}" pane-active-border-style "fg=${color}"`);
 }
 
 export function sendSignal(paneTarget: string, signal: string): void {

@@ -124,8 +124,8 @@ export async function handleReport(cwd: string, sessionId: string, agentId: stri
   await handleAgentReport(cwd, sessionId, agentId, content);
 }
 
-export async function handleYield(sessionId: string, cwd: string): Promise<void> {
-  await orchestrator.handleOrchestratorYield(sessionId, cwd);
+export async function handleYield(sessionId: string, cwd: string, nextPrompt?: string): Promise<void> {
+  await orchestrator.handleOrchestratorYield(sessionId, cwd, nextPrompt);
 }
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {

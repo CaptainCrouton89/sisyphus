@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Session, Agent, AgentReport, Task, OrchestratorCycle, SessionStatus, TaskStatus } from '../shared/types.js';
-import { statePath, sessionDir } from '../shared/paths.js';
+import { statePath, sessionDir, contextDir } from '../shared/paths.js';
 
 // Per-session mutex to prevent read-modify-write races
 const sessionLocks = new Map<string, Promise<void>>();
@@ -30,6 +30,7 @@ function atomicWrite(filePath: string, data: string): void {
 export function createSession(id: string, task: string, cwd: string): Session {
   const dir = sessionDir(cwd, id);
   mkdirSync(dir, { recursive: true });
+  mkdirSync(contextDir(cwd, id), { recursive: true });
 
   const session: Session = {
     id,
@@ -148,12 +149,14 @@ export async function appendAgentReport(cwd: string, sessionId: string, agentId:
   });
 }
 
-export async function completeOrchestratorCycle(cwd: string, sessionId: string): Promise<void> {
+export async function completeOrchestratorCycle(cwd: string, sessionId: string, nextPrompt?: string): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
     const cycles = session.orchestratorCycles;
     if (cycles.length === 0) return;
-    cycles[cycles.length - 1]!.completedAt = new Date().toISOString();
+    const cycle = cycles[cycles.length - 1]!;
+    cycle.completedAt = new Date().toISOString();
+    if (nextPrompt) cycle.nextPrompt = nextPrompt;
     saveSession(session);
   });
 }

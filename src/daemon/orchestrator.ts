@@ -1,9 +1,9 @@
-import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
-import { projectOrchestratorPromptPath, sessionDir } from '../shared/paths.js';
+import { projectOrchestratorPromptPath, sessionDir, contextDir } from '../shared/paths.js';
 import type { Session, Agent } from '../shared/types.js';
 
 function shellQuote(s: string): string {
@@ -42,6 +42,15 @@ function formatStateForOrchestrator(session: Session): string {
     ? session.tasks.map(t => `- ${t.id}: [${t.status}] ${t.description}`).join('\n')
     : '  (none)';
 
+  const ctxDir = contextDir(session.cwd, session.id);
+  let contextLines: string;
+  if (existsSync(ctxDir)) {
+    const files = readdirSync(ctxDir);
+    contextLines = files.length > 0 ? files.map(f => `- ${f}`).join('\n') : '  (none)';
+  } else {
+    contextLines = '  (none)';
+  }
+
   const agentLines = session.agents.length > 0
     ? session.agents.map((a: Agent) => {
         const header = `- ${a.id} (${a.name}): ${a.status} — ${a.reports.length} report(s)`;
@@ -71,6 +80,9 @@ function formatStateForOrchestrator(session: Session): string {
     '## Tasks',
     taskLines,
     '',
+    '## Context Files',
+    contextLines,
+    '',
     '## Agents',
     agentLines,
     '',
@@ -84,11 +96,11 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const session = state.getSession(cwd, sessionId);
   const basePrompt = loadOrchestratorPrompt(cwd);
   const formattedState = formatStateForOrchestrator(session);
-  const fullPrompt = `${basePrompt}\n\n${formattedState}`;
 
+  // System prompt: template only (no state)
   const cycleNum = session.orchestratorCycles.length + 1;
   const promptFilePath = `${sessionDir(cwd, sessionId)}/orchestrator-prompt-${cycleNum}.md`;
-  writeFileSync(promptFilePath, fullPrompt, 'utf-8');
+  writeFileSync(promptFilePath, basePrompt, 'utf-8');
 
   sessionWindowMap.set(sessionId, windowId);
 
@@ -97,13 +109,24 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     `export SISYPHUS_AGENT_ID='orchestrator'`,
   ].join(' && ');
 
-  const userPrompt = message
-    ? `The user resumed this session with new instructions: ${message}`
-    : 'Review the current session state and execute the next cycle of work.';
+  // User message: state block + contextual prompt
+  let userPrompt: string;
+  if (message) {
+    userPrompt = `${formattedState}\n\nThe user resumed this session with new instructions: ${message}`;
+  } else {
+    // Check last completed cycle for a stored nextPrompt
+    const lastCycle = [...session.orchestratorCycles].reverse().find(c => c.completedAt);
+    const storedPrompt = lastCycle?.nextPrompt;
+    if (storedPrompt) {
+      userPrompt = `${formattedState}\n\n${storedPrompt}`;
+    } else {
+      userPrompt = `${formattedState}\n\nReview the current session state and execute the next cycle of work.`;
+    }
+  }
+
   const userPromptFilePath = `${sessionDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
   writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
   const claudeCmd = `claude --dangerously-skip-permissions --append-system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
-
 
   const paneId = tmux.createPane(windowId, cwd);
 
@@ -128,14 +151,14 @@ function resolveOrchestratorPane(sessionId: string, cwd: string): string | undef
   return lastCycle?.paneId ?? undefined;
 }
 
-export async function handleOrchestratorYield(sessionId: string, cwd: string): Promise<void> {
+export async function handleOrchestratorYield(sessionId: string, cwd: string, nextPrompt?: string): Promise<void> {
   const paneId = resolveOrchestratorPane(sessionId, cwd);
   if (paneId) {
     tmux.killPane(paneId);
     sessionOrchestratorPane.delete(sessionId);
   }
 
-  await state.completeOrchestratorCycle(cwd, sessionId);
+  await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt);
 
   const session = state.getSession(cwd, sessionId);
   const runningAgents = session.agents.filter(a => a.status === 'running');

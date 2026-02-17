@@ -52,4 +52,5 @@ export interface OrchestratorCycle {
   completedAt?: string;
   agentsSpawned: string[];
   paneId?: string;
+  nextPrompt?: string;
 }

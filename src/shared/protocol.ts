@@ -3,7 +3,7 @@ export type Request =
   | { type: 'spawn'; sessionId: string; agentType: string; name: string; instruction: string }
   | { type: 'submit'; sessionId: string; agentId: string; report: string }
   | { type: 'report'; sessionId: string; agentId: string; content: string }
-  | { type: 'yield'; sessionId: string; agentId: string }
+  | { type: 'yield'; sessionId: string; agentId: string; nextPrompt?: string }
   | { type: 'complete'; sessionId: string; report: string }
   | { type: 'status'; sessionId?: string }
   | { type: 'tasks_add'; sessionId: string; description: string; status?: string }
