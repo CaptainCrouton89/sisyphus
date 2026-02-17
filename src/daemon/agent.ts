@@ -1,9 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Agent } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getNextColor } from './colors.js';
+import { sessionDir } from '../shared/paths.js';
 
 let agentCounter = 0;
 
@@ -45,6 +46,8 @@ export function spawnAgent(opts: SpawnAgentOpts): Agent {
   tmux.selectLayout(windowId, 'tiled');
 
   const suffix = renderAgentSuffix(sessionId, instruction);
+  const suffixFilePath = `${sessionDir(cwd, sessionId)}/${agentId}-system.md`;
+  writeFileSync(suffixFilePath, suffix, 'utf-8');
 
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
@@ -52,7 +55,7 @@ export function spawnAgent(opts: SpawnAgentOpts): Agent {
   ].join(' && ');
 
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
-  const claudeCmd = `claude --dangerously-skip-permissions${agentFlag} --append-system-prompt ${shellQuote(suffix)} ${shellQuote(instruction)}`;
+  const claudeCmd = `claude --dangerously-skip-permissions${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   tmux.sendKeys(paneId, `${envExports} && ${claudeCmd}`);
 
   const agent: Agent = {
