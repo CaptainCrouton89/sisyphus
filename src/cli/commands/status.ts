@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
-import type { Session, Agent, Task } from '../../shared/types.js';
+import type { Session, Agent, Task, OrchestratorCycle } from '../../shared/types.js';
 
 const STATUS_COLORS: Record<string, string> = {
   active: '\x1b[32m',    // green
@@ -25,11 +25,27 @@ function colorize(text: string, status: string): string {
   return `${color}${text}${RESET}`;
 }
 
+function formatDuration(startIso: string, endIso?: string | null): string {
+  const start = new Date(startIso).getTime();
+  const end = endIso ? new Date(endIso).getTime() : Date.now();
+  const totalSeconds = Math.floor((end - start) / 1000);
+  if (totalSeconds < 0) return '0s';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+  return parts.join(' ');
+}
+
 function formatAgent(agent: Agent): string {
   const status = colorize(agent.status, agent.status);
   const name = `${BOLD}${agent.name}${RESET}`;
   const type = `${DIM}(${agent.agentType})${RESET}`;
-  let line = `    ${agent.id} ${name} ${type} — ${status}`;
+  const duration = formatDuration(agent.spawnedAt, agent.completedAt);
+  let line = `    ${agent.id} ${name} ${type} — ${status} ${DIM}(${duration})${RESET}`;
   if (agent.report) {
     line += `\n      Report: ${agent.report}`;
   }
@@ -44,14 +60,33 @@ function formatTask(task: Task): string {
   return `    ${task.id}: ${task.description} [${status}]`;
 }
 
+function formatCycle(cycle: OrchestratorCycle): string {
+  const duration = cycle.completedAt
+    ? ` ${DIM}(${formatDuration(cycle.timestamp, cycle.completedAt)})${RESET}`
+    : ` ${DIM}(running)${RESET}`;
+  const agents = cycle.agentsSpawned.length > 0
+    ? ` — agents: ${cycle.agentsSpawned.join(', ')}`
+    : '';
+  return `    Cycle ${cycle.cycle}${duration}${agents}`;
+}
+
 function printSession(session: Session): void {
   const status = colorize(session.status, session.status);
+  const sessionDuration = formatDuration(session.createdAt, session.completedAt);
   console.log(`\n${BOLD}Session: ${session.id}${RESET}`);
   console.log(`  Status: ${status}`);
   console.log(`  Task: ${session.task}`);
   console.log(`  CWD: ${session.cwd}`);
   console.log(`  Created: ${session.createdAt}`);
+  console.log(`  Duration: ${sessionDuration}${session.completedAt ? '' : ' (ongoing)'}`);
   console.log(`  Orchestrator cycles: ${session.orchestratorCycles.length}`);
+
+  if (session.orchestratorCycles.length > 0) {
+    console.log(`\n  ${BOLD}Cycles:${RESET}`);
+    for (const cycle of session.orchestratorCycles) {
+      console.log(formatCycle(cycle));
+    }
+  }
 
   if (session.tasks.length > 0) {
     console.log(`\n  ${BOLD}Tasks:${RESET}`);
