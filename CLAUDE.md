@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run build          # Build with tsup → dist/
 npm run dev            # Build in watch mode (CLI only)
 npm run dev:daemon     # Watch + auto-restart daemon on each rebuild
+npm test               # Node native test runner (src/__tests__/*.test.ts)
 ```
 
 The CLI binary is at `dist/cli.js`, the daemon at `dist/daemon.js`. Both get a shebang via tsup banner config.
@@ -26,27 +27,9 @@ A tmux-integrated orchestration daemon for Claude Code multi-agent workflows. A 
 CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
 ```
 
-### Daemon (`src/daemon/`)
-
-- **server.ts** — Unix socket server, routes requests to SessionManager
-- **session-manager.ts** — Session lifecycle: start, resume, spawn, submit, yield, complete
-- **orchestrator.ts** — Spawns orchestrator Claude with prompt template + session state JSON. Respawned fresh each cycle
-- **agent.ts** — Spawns agent Claude instances. Tracks per-session agent counter (`agent-001`, `agent-002`, etc.)
-- **pane-monitor.ts** — Polls tmux panes at interval to detect killed agents/orchestrator
-- **state.ts** — Atomic JSON state persistence (temp file + rename)
-- **tmux.ts** — tmux CLI wrapper (create panes, kill panes, send keys, set styles)
-
-### CLI (`src/cli/`)
-
-- **client.ts** — Connects to daemon Unix socket
-- **commands/** — `start`, `spawn`, `submit`, `yield`, `complete`, `status`, `tasks`, `list`, `resume`
-
-### Shared (`src/shared/`)
-
-- **types.ts** — Session, Agent, Task, OrchestratorCycle types
-- **protocol.ts** — Request/response message types for the socket protocol
-- **paths.ts** — File paths: `~/.sisyphus/` (global), `.sisyphus/` (project), `.sisyphus/sessions/{id}/state.json`
-- **config.ts** — Layered config: defaults → global → project
+- **CLI** — Commander.js program. `client.ts` handles socket communication (10s timeout). Each command in `commands/` maps to a protocol request type.
+- **Daemon** — `server.ts` routes socket requests to `session-manager.ts`, which delegates to `orchestrator.ts`, `agent.ts`, `pane-monitor.ts`. State mutations go through `state.ts` (atomic writes via temp file + rename).
+- **Shared** — Types, protocol message definitions, path helpers, layered config (defaults → global → project).
 
 ## Session Lifecycle
 
@@ -59,16 +42,27 @@ CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
 
 Orchestrator and agents receive `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID` environment variables.
 
+## How Prompts Are Delivered
+
+Prompts are written to files in the session directory to avoid shell quoting/newline issues with tmux send-keys:
+
+- **Orchestrator**: `orchestrator-prompt-{N}.md` — contains the orchestrator template + a `<state>` block with concise session state (tasks, agents, cycle history). Passed via `--append-system-prompt "$(cat 'file')"` with a short user prompt.
+- **Agents**: `{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt "$(cat 'file')"` with the instruction as the user prompt.
+
+The `<state>` block is a human-readable summary (not raw JSON) with tasks, agent reports (truncated to 120 chars), and cycle history.
+
 ## Templates
 
-- `templates/orchestrator.md` — Orchestrator prompt (instructions + CLI reference)
-- `templates/agent-suffix.md` — Appended to agent instructions, uses `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders
+- `templates/orchestrator.md` — Orchestrator system prompt (role, strategy, CLI reference, workflow)
+- `templates/agent-suffix.md` — Agent system prompt suffix with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders
+- `.sisyphus/orchestrator.md` (project) — Optional override for orchestrator prompt
 
 ## Key Conventions
 
 - **IDs**: Sessions are UUIDs, agents are `agent-NNN` (zero-padded), tasks are `t1`, `t2`, etc.
 - **Colors**: Orchestrator is always yellow. Agents rotate through `[blue, green, magenta, cyan, red, white]`
 - **State files**: `.sisyphus/sessions/{sessionId}/state.json` — atomically written JSON
+- **Pane layout**: All panes use `split-window -h` (columns) with `even-horizontal` layout
 - **Config**: `~/.sisyphus/config.json` (global) and `.sisyphus/config.json` (project) with options: `model`, `orchestratorPrompt`, `pollIntervalMs`
 - **Daemon**: Intended to run via launchd (`launchd/com.sisyphus.daemon.plist`), logs to `~/.sisyphus/daemon.log`
 - **TypeScript**: Strict mode, ESM (`"type": "module"`), Node 22 target
