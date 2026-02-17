@@ -78,6 +78,13 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true };
       }
 
+      case 'report': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        await sessionManager.handleReport(cwd, req.sessionId, req.agentId, req.content);
+        return { ok: true };
+      }
+
       case 'yield': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
@@ -137,11 +144,20 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'resume': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}. Use 'start' for new sessions.` };
+        let cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) {
+          // Session not in memory — try to recover from disk using the cwd provided by CLI
+          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
+          if (existsSync(stateFile)) {
+            cwd = req.cwd;
+            registerSessionCwd(req.sessionId, cwd);
+          } else {
+            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}` };
+          }
+        }
         sessionTmuxMap.set(req.sessionId, req.tmuxSession);
         sessionWindowMap.set(req.sessionId, req.tmuxWindow);
-        const session = await sessionManager.resumeSession(req.sessionId, cwd, req.tmuxSession, req.tmuxWindow);
+        const session = await sessionManager.resumeSession(req.sessionId, cwd, req.tmuxSession, req.tmuxWindow, req.message);
         return { ok: true, data: { sessionId: session.id, status: session.status } };
       }
 

@@ -1,10 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Agent } from '../shared/types.js';
+import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getNextColor } from './colors.js';
-import { sessionDir } from '../shared/paths.js';
+import { sessionDir, reportsDir, reportFilePath } from '../shared/paths.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -45,10 +45,9 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const agentId = `agent-${String(count).padStart(3, '0')}`;
   const color = getNextColor(sessionId);
 
-  const paneId = tmux.createPane(windowId);
+  const paneId = tmux.createPane(windowId, cwd);
   tmux.setPaneTitle(paneId, `${name} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
-  tmux.selectLayout(windowId, 'tiled');
 
   const suffix = renderAgentSuffix(sessionId, instruction);
   const suffixFilePath = `${sessionDir(cwd, sessionId)}/${agentId}-system.md`;
@@ -72,12 +71,44 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     status: 'running',
     spawnedAt: new Date().toISOString(),
     completedAt: null,
-    report: null,
+    reports: [],
     paneId,
   };
 
   await state.addAgent(cwd, sessionId, agent);
   return agent;
+}
+
+function nextReportNumber(cwd: string, sessionId: string, agentId: string): string {
+  const dir = reportsDir(cwd, sessionId);
+  try {
+    const files = readdirSync(dir).filter(f => f.startsWith(`${agentId}-`) && !f.endsWith('-final.md'));
+    return String(files.length + 1).padStart(3, '0');
+  } catch {
+    return '001';
+  }
+}
+
+export async function handleAgentReport(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+  content: string,
+): Promise<void> {
+  const dir = reportsDir(cwd, sessionId);
+  mkdirSync(dir, { recursive: true });
+
+  const num = nextReportNumber(cwd, sessionId, agentId);
+  const filePath = reportFilePath(cwd, sessionId, agentId, num);
+  writeFileSync(filePath, content, 'utf-8');
+
+  const entry: AgentReport = {
+    type: 'update',
+    filePath,
+    summary: content.slice(0, 200),
+    timestamp: new Date().toISOString(),
+  };
+  await state.appendAgentReport(cwd, sessionId, agentId, entry);
 }
 
 export async function handleAgentSubmit(
@@ -86,9 +117,22 @@ export async function handleAgentSubmit(
   agentId: string,
   report: string,
 ): Promise<boolean> {
+  const dir = reportsDir(cwd, sessionId);
+  mkdirSync(dir, { recursive: true });
+
+  const filePath = reportFilePath(cwd, sessionId, agentId, 'final');
+  writeFileSync(filePath, report, 'utf-8');
+
+  const entry: AgentReport = {
+    type: 'final',
+    filePath,
+    summary: report.slice(0, 200),
+    timestamp: new Date().toISOString(),
+  };
+  await state.appendAgentReport(cwd, sessionId, agentId, entry);
+
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'completed',
-    report,
     completedAt: new Date().toISOString(),
   });
 
@@ -117,6 +161,9 @@ export async function handleAgentKilled(
   return allAgentsDone(session);
 }
 
+// Note: this checks ALL running agents in the session, not just orchestrator-spawned ones.
+// Agents can also call `sisyphus spawn`, and those child agents are included here —
+// the orchestrator won't respawn until every agent (including agent-spawned ones) finishes.
 function allAgentsDone(session: import('../shared/types.js').Session): boolean {
   const running = session.agents.filter(a => a.status === 'running');
   return running.length === 0 && session.agents.length > 0;

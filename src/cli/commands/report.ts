@@ -3,12 +3,12 @@ import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { readStdin } from '../stdin.js';
 
-export function registerSubmit(program: Command): void {
+export function registerReport(program: Command): void {
   program
-    .command('submit')
-    .description('Submit work report and exit (agent only)')
-    .option('--report <report>', 'Work report (or pipe via stdin)')
-    .action(async (opts: { report?: string }) => {
+    .command('report')
+    .description('Send a progress report without exiting (agent only)')
+    .option('--message <message>', 'Progress report content')
+    .action(async (opts: { message?: string }) => {
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       const agentId = process.env.SISYPHUS_AGENT_ID;
       if (!sessionId || !agentId) {
@@ -16,17 +16,16 @@ export function registerSubmit(program: Command): void {
         process.exit(1);
       }
 
-      const report = opts.report ?? await readStdin();
-      if (!report) {
-        console.error('Error: provide --report or pipe content via stdin');
+      const content = opts.message ?? await readStdin();
+      if (!content) {
+        console.error('Error: provide --message or pipe content via stdin');
         process.exit(1);
       }
 
-      const request: Request = { type: 'submit', sessionId, agentId, report };
+      const request: Request = { type: 'report', sessionId, agentId, content };
       const response = await sendRequest(request);
       if (response.ok) {
-        console.log('Report submitted successfully');
-        console.log('Your pane will close. The orchestrator resumes when all agents finish.');
+        console.log('Progress report recorded');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import type { Task } from '../../shared/types.js';
+import { readStdin } from '../stdin.js';
 
 function getSessionId(): string {
   const sessionId = process.env.SISYPHUS_SESSION_ID;
@@ -28,9 +29,14 @@ export function registerTasks(program: Command): void {
   tasks
     .command('add')
     .description('Add a new task')
-    .argument('<description>', 'Task description')
+    .argument('[description]', 'Task description (or pipe via stdin)')
     .option('--status <status>', 'Initial status (draft|pending)', 'pending')
-    .action(async (description: string, opts: { status: string }) => {
+    .action(async (descriptionArg: string | undefined, opts: { status: string }) => {
+      const description = descriptionArg ?? await readStdin();
+      if (!description) {
+        console.error('Error: provide a description argument or pipe via stdin');
+        process.exit(1);
+      }
       const sessionId = getSessionId();
       const request: Request = { type: 'tasks_add', sessionId, description, status: opts.status !== 'pending' ? opts.status : undefined };
       const response = await sendRequest(request);

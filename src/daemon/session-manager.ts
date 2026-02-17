@@ -3,8 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
-import { spawnAgent, resetAgentCounter, clearAgentCounter } from './agent.js';
-import { handleAgentSubmit } from './agent.js';
+import { spawnAgent, resetAgentCounter, clearAgentCounter, handleAgentSubmit, handleAgentReport } from './agent.js';
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionsDir } from '../shared/paths.js';
@@ -21,7 +20,7 @@ export async function startSession(task: string, cwd: string, tmuxSession: strin
   return session;
 }
 
-export async function resumeSession(sessionId: string, cwd: string, tmuxSession: string, windowId: string): Promise<Session> {
+export async function resumeSession(sessionId: string, cwd: string, tmuxSession: string, windowId: string, message?: string): Promise<Session> {
   const session = state.getSession(cwd, sessionId);
 
   // Mark any "running" agents as "lost"
@@ -42,7 +41,7 @@ export async function resumeSession(sessionId: string, cwd: string, tmuxSession:
   resetColors(sessionId);
 
   trackSession(sessionId, cwd, tmuxSession);
-  await orchestrator.spawnOrchestrator(sessionId, cwd, windowId);
+  await orchestrator.spawnOrchestrator(sessionId, cwd, windowId, message);
   updateTrackedWindow(sessionId, windowId);
 
   return state.getSession(cwd, sessionId);
@@ -119,6 +118,10 @@ export async function handleSubmit(cwd: string, sessionId: string, agentId: stri
   if (allDone) {
     onAllAgentsDone(sessionId, cwd, windowId);
   }
+}
+
+export async function handleReport(cwd: string, sessionId: string, agentId: string, content: string): Promise<void> {
+  await handleAgentReport(cwd, sessionId, agentId, content);
 }
 
 export async function handleYield(sessionId: string, cwd: string): Promise<void> {

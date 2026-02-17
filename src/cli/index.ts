@@ -7,6 +7,7 @@ import { registerComplete } from './commands/complete.js';
 import { registerStatus } from './commands/status.js';
 import { registerTasks } from './commands/tasks.js';
 import { registerList } from './commands/list.js';
+import { registerReport } from './commands/report.js';
 import { registerResume } from './commands/resume.js';
 import { registerKill } from './commands/kill.js';
 
@@ -20,6 +21,7 @@ program
 registerStart(program);
 registerSpawn(program);
 registerSubmit(program);
+registerReport(program);
 registerYield(program);
 registerComplete(program);
 registerStatus(program);
