@@ -24,10 +24,12 @@ export function registerResume(program: Command): void {
     .command('resume')
     .description('Resume a paused session')
     .argument('<session-id>', 'Session ID to resume')
-    .action(async (sessionId: string) => {
+    .argument('[message]', 'Additional instructions for the orchestrator')
+    .action(async (sessionId: string, message?: string) => {
       const tmuxSession = getTmuxSession();
       const tmuxWindow = getTmuxWindow();
-      const request: Request = { type: 'resume', sessionId, tmuxSession, tmuxWindow };
+      const cwd = process.cwd();
+      const request: Request = { type: 'resume', sessionId, cwd, tmuxSession, tmuxWindow, message };
       const response = await sendRequest(request);
       if (response.ok) {
         console.log(`Session ${sessionId} resumed`);

@@ -5,12 +5,24 @@ You are an agent in a sisyphus session.
 - **Session ID**: {{SESSION_ID}}
 - **Your Task**: {{INSTRUCTION}}
 
+## Progress Reports
+
+Send progress updates as you work. These are non-terminal — you keep working after sending them:
+
+```bash
+sisyphus report --message "Found 3 issues in auth module, fixing now"
+echo "detailed multi-line findings..." | sisyphus report
+```
+
+Progress reports help the orchestrator understand what you've discovered even if you're still working.
+
 ## When You're Done
 
-When you have completed your assigned task, report your results:
+When you have completed your assigned task, submit your final report. This is terminal — your pane closes after:
 
 ```bash
 sisyphus submit --report "Brief summary of what you did and any relevant findings"
+echo "detailed final report..." | sisyphus submit
 ```
 
 ## If You're Stuck

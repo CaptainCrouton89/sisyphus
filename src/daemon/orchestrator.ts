@@ -4,7 +4,11 @@ import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import { projectOrchestratorPromptPath, sessionDir } from '../shared/paths.js';
-import type { Session, Agent, OrchestratorCycle } from '../shared/types.js';
+import type { Session, Agent } from '../shared/types.js';
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
 
 const sessionWindowMap = new Map<string, string>();
 const sessionOrchestratorPane = new Map<string, string>();
@@ -30,11 +34,6 @@ function loadOrchestratorPrompt(cwd: string): string {
   return readFileSync(bundledPath, 'utf-8');
 }
 
-function truncate(s: string | null, maxLen: number): string {
-  if (!s) return '';
-  return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
-}
-
 function formatStateForOrchestrator(session: Session): string {
   const shortId = session.id.slice(0, 8);
   const cycleNum = session.orchestratorCycles.length;
@@ -45,21 +44,22 @@ function formatStateForOrchestrator(session: Session): string {
 
   const agentLines = session.agents.length > 0
     ? session.agents.map((a: Agent) => {
-        const report = a.report ? ` — "${truncate(a.report, 120)}"` : '';
-        return `- ${a.id} (${a.name}): ${a.status}${report}`;
+        const header = `- ${a.id} (${a.name}): ${a.status} — ${a.reports.length} report(s)`;
+        if (a.reports.length === 0) return header;
+        let updateNum = 0;
+        const reportLines = a.reports.map(r => {
+          const label = r.type === 'final' ? '[final]' : `[update ${String(++updateNum).padStart(3, '0')}]`;
+          return `  ${label} "${r.summary}" → ${r.filePath}`;
+        });
+        return [header, ...reportLines].join('\n');
       }).join('\n')
     : '  (none)';
 
   const cycleLines = session.orchestratorCycles.length > 0
-    ? session.orchestratorCycles.map((c: OrchestratorCycle) => {
-        const agentReports = c.agentsSpawned.map(agentId => {
-          const agent = session.agents.find(a => a.id === agentId);
-          const report = agent?.report ? `"${truncate(agent.report, 120)}"` : '(no report)';
-          return `  - ${agentId}: ${report}`;
-        }).join('\n');
+    ? session.orchestratorCycles.map(c => {
         const spawnedList = c.agentsSpawned.length > 0 ? c.agentsSpawned.join(', ') : '(none)';
-        return `Cycle ${c.cycle}: Spawned ${spawnedList}\n${agentReports}`;
-      }).join('\n\n')
+        return `Cycle ${c.cycle}: Spawned ${spawnedList}`;
+      }).join('\n')
     : '  (none)';
 
   return [
@@ -80,7 +80,7 @@ function formatStateForOrchestrator(session: Session): string {
   ].join('\n');
 }
 
-export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string): Promise<void> {
+export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
   const session = state.getSession(cwd, sessionId);
   const basePrompt = loadOrchestratorPrompt(cwd);
   const formattedState = formatStateForOrchestrator(session);
@@ -97,15 +97,20 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     `export SISYPHUS_AGENT_ID='orchestrator'`,
   ].join(' && ');
 
-  const claudeCmd = `claude --dangerously-skip-permissions --append-system-prompt "$(cat '${promptFilePath}')" "Review the current session state and execute the next cycle of work."`;
+  const userPrompt = message
+    ? `The user resumed this session with new instructions: ${message}`
+    : 'Review the current session state and execute the next cycle of work.';
+  const userPromptFilePath = `${sessionDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
+  writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
+  const claudeCmd = `claude --dangerously-skip-permissions --append-system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
-  const paneId = tmux.createPane(windowId);
+
+  const paneId = tmux.createPane(windowId, cwd);
 
   sessionOrchestratorPane.set(sessionId, paneId);
   tmux.setPaneTitle(paneId, `orchestrator (${sessionId.slice(0, 8)})`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
   tmux.sendKeys(paneId, `${envExports} && ${claudeCmd}`);
-  tmux.selectLayout(windowId, 'tiled');
 
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,

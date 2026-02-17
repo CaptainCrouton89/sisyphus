@@ -23,13 +23,17 @@ export function getCurrentTmuxSession(): string {
   return exec('tmux display-message -p "#{session_name}"');
 }
 
-export function createWindow(sessionName: string, windowName: string): string {
-  exec(`tmux new-window -t "${sessionName}" -n "${windowName}" -P -F "#{window_id}"`);
+export function createWindow(sessionName: string, windowName: string, cwd?: string): string {
+  const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
+  exec(`tmux new-window -t "${sessionName}" -n "${windowName}"${cwdFlag} -P -F "#{window_id}"`);
   return exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{window_id}"`);
 }
 
-export function createPane(windowTarget: string): string {
-  return exec(`tmux split-window -h -t "${windowTarget}" -P -F "#{pane_id}"`);
+export function createPane(windowTarget: string, cwd?: string): string {
+  const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
+  const paneId = exec(`tmux split-window -h -t "${windowTarget}"${cwdFlag} -P -F "#{pane_id}"`);
+  execSafe(`tmux select-layout -t "${windowTarget}" even-horizontal`);
+  return paneId;
 }
 
 export function sendKeys(paneTarget: string, command: string): void {
