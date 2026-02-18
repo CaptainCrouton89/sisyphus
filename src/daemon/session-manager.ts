@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
-import { spawnAgent, resetAgentCounter, clearAgentCounter, handleAgentSubmit, handleAgentReport } from './agent.js';
+import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport } from './agent.js';
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionsDir } from '../shared/paths.js';
@@ -37,7 +37,7 @@ export async function resumeSession(sessionId: string, cwd: string, tmuxSession:
   await state.updateSessionStatus(cwd, sessionId, 'active');
 
   // Reset counters based on existing agents
-  resetAgentCounter(sessionId, session.agents.length);
+  resetAgentCounterFromState(sessionId, session.agents);
   resetColors(sessionId);
 
   trackSession(sessionId, cwd, tmuxSession);

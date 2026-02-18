@@ -1,10 +1,10 @@
-import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { contextDir, logsPath, planPath, projectOrchestratorPromptPath, sessionDir } from '../shared/paths.js';
+import type { Agent, Session } from '../shared/types.js';
+import { ORCHESTRATOR_COLOR } from './colors.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
-import { ORCHESTRATOR_COLOR } from './colors.js';
-import { projectOrchestratorPromptPath, sessionDir, contextDir } from '../shared/paths.js';
-import type { Session, Agent } from '../shared/types.js';
 
 function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
@@ -51,6 +51,12 @@ function formatStateForOrchestrator(session: Session): string {
     contextLines = '  (none)';
   }
 
+  const planFile = planPath(session.cwd, session.id);
+  const planContent = existsSync(planFile) ? readFileSync(planFile, 'utf-8').trim() : '(empty)';
+
+  const logsFile = logsPath(session.cwd, session.id);
+  const logsContent = existsSync(logsFile) ? readFileSync(logsFile, 'utf-8').trim() : '(empty)';
+
   const agentLines = session.agents.length > 0
     ? session.agents.map((a: Agent) => {
         const header = `- ${a.id} (${a.name}): ${a.status} — ${a.reports.length} report(s)`;
@@ -76,6 +82,12 @@ function formatStateForOrchestrator(session: Session): string {
     `session: ${shortId} (cycle ${cycleNum})`,
     `task: ${session.task}`,
     `status: ${session.status}`,
+    '',
+    '## Plan',
+    planContent,
+    '',
+    '## Logs',
+    logsContent,
     '',
     '## Tasks',
     taskLines,
@@ -120,13 +132,15 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     if (storedPrompt) {
       userPrompt = `${formattedState}\n\n${storedPrompt}`;
     } else {
-      userPrompt = `${formattedState}\n\nReview the current session state and execute the next cycle of work.`;
+      userPrompt = `${formattedState}\n\nReview the current session and delegate the next cycle of work.`;
     }
   }
 
   const userPromptFilePath = `${sessionDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
   writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
-  const claudeCmd = `claude --dangerously-skip-permissions --append-system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const pluginPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
+  const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
+  const claudeCmd = `claude --dangerously-skip-permissions --settings "${settingsPath}" --plugin-dir "${pluginPath}" --append-system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd);
 
@@ -161,6 +175,9 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
     sessionOrchestratorPane.delete(sessionId);
   }
 
+  const windowId = sessionWindowMap.get(sessionId);
+  if (windowId) tmux.selectLayout(windowId);
+
   await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt);
 
   const session = state.getSession(cwd, sessionId);
@@ -180,6 +197,9 @@ export async function handleOrchestratorComplete(sessionId: string, cwd: string,
     tmux.killPane(paneId);
     sessionOrchestratorPane.delete(sessionId);
   }
+
+  const windowId = sessionWindowMap.get(sessionId);
+  if (windowId) tmux.selectLayout(windowId);
 
   sessionWindowMap.delete(sessionId);
 

@@ -70,12 +70,14 @@ export function setPaneTitle(paneTarget: string, title: string): void {
 }
 
 export function setPaneStyle(paneTarget: string, color: string): void {
-  // pane-border-style is window-level in tmux 3.6 (last-write-wins across all panes).
-  // pane-border-format IS truly per-pane, so we colorize the border status text instead.
   const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]#{pane_current_path} #[default]`;
   execSafe(`tmux set -p -t "${paneTarget}" pane-border-format ${shellQuote(fmt)}`);
-  execSafe(`tmux set -p -t "${paneTarget}" pane-border-style "fg=${color}"`);
-  execSafe(`tmux set -p -t "${paneTarget}" pane-active-border-style "fg=${color}"`);
+  // Store color as a per-pane user variable. The window-level border styles use a
+  // format string that resolves #{@pane_color} per-pane at render time, giving each
+  // pane its own border color (pane-border-style itself is window-level / last-write-wins).
+  execSafe(`tmux set -p -t "${paneTarget}" @pane_color "${color}"`);
+  execSafe(`tmux set -w -t "${paneTarget}" pane-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
+  execSafe(`tmux set -w -t "${paneTarget}" pane-active-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
 }
 
 export function sendSignal(paneTarget: string, signal: string): void {

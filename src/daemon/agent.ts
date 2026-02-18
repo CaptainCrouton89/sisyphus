@@ -4,12 +4,22 @@ import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getNextColor } from './colors.js';
+import { getWindowId } from './orchestrator.js';
 import { sessionDir, reportsDir, reportFilePath } from '../shared/paths.js';
 
 const agentCounters = new Map<string, number>();
 
 export function resetAgentCounter(sessionId: string, value: number = 0): void {
   agentCounters.set(sessionId, value);
+}
+
+export function resetAgentCounterFromState(sessionId: string, agents: { id: string }[]): void {
+  let max = 0;
+  for (const a of agents) {
+    const match = a.id.match(/^agent-(\d+)$/);
+    if (match) max = Math.max(max, parseInt(match[1]!, 10));
+  }
+  agentCounters.set(sessionId, max);
 }
 
 export function clearAgentCounter(sessionId: string): void {
@@ -61,8 +71,10 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     `export SISYPHUS_AGENT_ID='${agentId}'`,
   ].join(' && ');
 
+  const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
+  const settingsPath = resolve(import.meta.dirname, '../templates/agent-settings.json');
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
-  const claudeCmd = `claude --dangerously-skip-permissions${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+  const claudeCmd = `claude --dangerously-skip-permissions --settings "${settingsPath}" --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}`);
 
   const agent: Agent = {
@@ -140,10 +152,14 @@ export async function handleAgentSubmit(
   });
 
   const session = state.getSession(cwd, sessionId);
-  const agent = session.agents.find(a => a.id === agentId);
+  const agentArr = session.agents;
+  const agent = agentArr.slice().reverse().find(a => a.id === agentId);
   if (agent) {
     tmux.killPane(agent.paneId);
   }
+
+  const windowId = getWindowId(sessionId);
+  if (windowId) tmux.selectLayout(windowId);
 
   return allAgentsDone(session);
 }

@@ -70,15 +70,19 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
 
   const livePaneIds = new Set(livePanes.map(p => p.paneId));
 
+  let paneRemoved = false;
   for (const agent of session.agents) {
     if (agent.status !== 'running') continue;
     if (!livePaneIds.has(agent.paneId)) {
+      paneRemoved = true;
       const allDone = await handleAgentKilled(cwd, sessionId, agent.id, 'pane closed by user');
       if (allDone && onAllAgentsDone) {
         onAllAgentsDone(sessionId, cwd, windowId);
       }
     }
   }
+
+  if (paneRemoved) tmux.selectLayout(windowId);
 
   // Check orchestrator pane
   const orchPaneId = getOrchestratorPaneId(sessionId);
