@@ -1,6 +1,6 @@
 import * as state from './state.js';
 import * as tmux from './tmux.js';
-import { getOrchestratorPaneId } from './orchestrator.js';
+import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
@@ -60,6 +60,24 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
     session = state.getSession(cwd, sessionId);
   } catch (err) {
     console.error(`[sisyphus] Failed to read state for session ${sessionId}:`, err);
+    return;
+  }
+
+  if (session.status === 'completed') {
+    const orchPaneId = getOrchestratorPaneId(sessionId);
+    if (orchPaneId) {
+      const livePanes = tmux.listPanes(windowId);
+      const livePaneIds = new Set(livePanes.map(p => p.paneId));
+      if (!livePaneIds.has(orchPaneId)) {
+        cleanupSessionMaps(sessionId);
+        untrackSession(sessionId);
+        console.log(`[sisyphus] Session ${sessionId} cleaned up: orchestrator pane closed by user`);
+      }
+    } else {
+      // No orchestrator pane tracked — clean up immediately
+      cleanupSessionMaps(sessionId);
+      untrackSession(sessionId);
+    }
     return;
   }
 

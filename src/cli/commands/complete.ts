@@ -20,7 +20,6 @@ export function registerComplete(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Session completed.');
-        console.log('All panes will close.');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

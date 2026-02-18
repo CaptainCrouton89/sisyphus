@@ -185,20 +185,13 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
 }
 
 export async function handleOrchestratorComplete(sessionId: string, cwd: string, report: string): Promise<void> {
-  const paneId = resolveOrchestratorPane(sessionId, cwd);
-
   await state.completeOrchestratorCycle(cwd, sessionId);
   await state.completeSession(cwd, sessionId, report);
 
-  if (paneId) {
-    tmux.killPane(paneId);
-    sessionOrchestratorPane.delete(sessionId);
-  }
-
-  const windowId = sessionWindowMap.get(sessionId);
-  if (windowId) tmux.selectLayout(windowId);
-
-  sessionWindowMap.delete(sessionId);
-
   console.log(`[sisyphus] Session ${sessionId} completed: ${report}`);
+}
+
+export function cleanupSessionMaps(sessionId: string): void {
+  sessionOrchestratorPane.delete(sessionId);
+  sessionWindowMap.delete(sessionId);
 }

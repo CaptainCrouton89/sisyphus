@@ -131,7 +131,6 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 }
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {
-  untrackSession(sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
 }
 
