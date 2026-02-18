@@ -4,17 +4,18 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 
 ## Module Responsibilities
 
+- **index.ts** — Daemon entry point: acquires PID lock to prevent duplicate instances, starts server + monitor, recovers active/paused sessions from registry on startup, handles graceful shutdown (SIGTERM/SIGINT)
 - **server.ts** — Listens on `~/.sisyphus/daemon.sock`, parses JSON line-delimited requests, routes to SessionManager. Maintains in-memory session tracking maps and persists registry to disk for recovery.
 - **session-manager.ts** — Entry point for all session operations: lifecycle methods delegate to orchestrator/agent/monitor modules
 - **orchestrator.ts** — Spawns/respawns orchestrator Claude each cycle with formatted session state. Caches window/pane IDs in memory.
 - **agent.ts** — Spawns agent Claude instances; auto-increments per-session counter (`agent-001`, `agent-002`, …). Renders agent system prompts from template.
 - **pane-monitor.ts** — Background poller detects killed tmux panes; triggers cleanup on orchestrator or agent death
 - **state.ts** — Atomic JSON writes: temp file → rename pattern to prevent corruption on crash
-- **tmux.ts** — tmux CLI wrapper (create/kill panes, send keys, apply styles)
+- **tmux.ts** — tmux CLI wrapper (create/kill panes, send keys, apply styles via per-pane user variables)
 
 ## Key Patterns
 
-**Session tracking**: Server maintains three in-memory maps (`sessionCwdMap`, `sessionTmuxMap`, `sessionWindowMap`) to route requests. Maps are synced to disk registry (`~/.sisyphus/session-registry.json`) after mutations. On daemon restart, registry is loaded to recover active sessions.
+**Session tracking**: Server maintains three in-memory maps (`sessionCwdMap`, `sessionTmuxMap`, `sessionWindowMap`) to route requests. Maps are synced to disk registry (`~/.sisyphus/session-registry.json`) after mutations. On daemon restart, registry is loaded and sessions with `active` or `paused` status are recovered into memory.
 
 **State flow**: Immutable session state (`.sisyphus/sessions/{id}/state.json`) is read, modified, and atomically rewritten after each operation. Session manager owns all mutations.
 
@@ -24,7 +25,9 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 
 **Orchestrator prompt**: System prompt is loaded from project override (`.sisyphus/orchestrator.md`) or bundled template, appended with `<state>` block (formatted task/agent/cycle summary), written to temp file, then passed to Claude via `--append-system-prompt`.
 
-**Colors**: Orchestrator always yellow; agents cycle `[blue, green, magenta, cyan, red, white]` deterministically per counter mod 6.
+**Colors**: Orchestrator always yellow; agents cycle `[blue, green, magenta, cyan, red, white]` deterministically per counter mod 6. Per-pane tmux user variables (`@pane_color`) enable each pane to render its own border color independently via format strings.
+
+**Daemon lifecycle**: PID lock (`~/.sisyphus/daemon.pid`) prevents duplicate daemons — startup checks if one is already running. Session recovery loads the registry and re-registers active/paused sessions on restart. Graceful shutdown responds to SIGTERM/SIGINT, stops server + monitor, and releases the PID lock.
 
 ## Constraints
 
@@ -33,3 +36,4 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 - Pane monitor is best-effort polling; fast kills may not be caught — rely on socket timeout or CLI retry
 - Environment variables (`SISYPHUS_SESSION_ID`, `SISYPHUS_AGENT_ID`) must be set before spawning Claude
 - tmux errors (pane not found, session closed) are fatal — propagate via rejection, don't swallow
+- Do not bypass PID lock; always use daemon lifecycle commands (`sisyphusd start/stop/restart`)
