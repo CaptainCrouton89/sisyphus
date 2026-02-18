@@ -131,14 +131,31 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'list': {
-        // List sessions across all known cwds
         const allSessions: Array<Record<string, unknown>> = [];
-        const seenCwds = new Set<string>();
-        for (const cwd of sessionCwdMap.values()) {
-          if (seenCwds.has(cwd)) continue;
-          seenCwds.add(cwd);
-          const sessions = sessionManager.listSessions(cwd);
-          allSessions.push(...sessions.map(s => s as unknown as Record<string, unknown>));
+        if (req.all) {
+          // List sessions across all known cwds
+          const seenCwds = new Set<string>();
+          for (const cwd of sessionCwdMap.values()) {
+            if (seenCwds.has(cwd)) continue;
+            seenCwds.add(cwd);
+            const sessions = sessionManager.listSessions(cwd);
+            allSessions.push(...sessions.map(s => ({ ...s, cwd } as unknown as Record<string, unknown>)));
+          }
+        } else {
+          // List sessions for the requesting cwd only
+          const sessions = sessionManager.listSessions(req.cwd);
+          allSessions.push(...sessions.map(s => ({ ...s, cwd: req.cwd } as unknown as Record<string, unknown>)));
+          // Count total across all cwds for the hint
+          let totalCount = allSessions.length;
+          const seenCwds = new Set<string>([req.cwd]);
+          for (const cwd of sessionCwdMap.values()) {
+            if (seenCwds.has(cwd)) continue;
+            seenCwds.add(cwd);
+            totalCount += sessionManager.listSessions(cwd).length;
+          }
+          if (totalCount > allSessions.length) {
+            return { ok: true, data: { sessions: allSessions, totalCount, filtered: true } };
+          }
         }
         return { ok: true, data: { sessions: allSessions } };
       }

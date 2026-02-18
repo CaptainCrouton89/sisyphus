@@ -9,7 +9,7 @@ export type Request =
   | { type: 'tasks_add'; sessionId: string; description: string; status?: string }
   | { type: 'tasks_update'; sessionId: string; taskId: string; status?: string; description?: string }
   | { type: 'tasks_list'; sessionId: string }
-  | { type: 'list' }
+  | { type: 'list'; cwd: string; all?: boolean }
   | { type: 'resume'; sessionId: string; cwd: string; tmuxSession: string; tmuxWindow: string; message?: string }
   | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }
   | { type: 'kill'; sessionId: string };
