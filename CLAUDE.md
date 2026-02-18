@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Sisyphus Is
 
-**sisyphi** (command: `sisyphus` / `sisyphusd`) is a tmux-integrated orchestration daemon for Claude Code multi-agent workflows.
+**Sisyphus** (npm package: `sisyphi`, commands: `sisyphus` / `sisyphusd`) is a tmux-integrated orchestration daemon for Claude Code multi-agent workflows.
 
 A background daemon manages sessions where an **orchestrator** Claude instance breaks tasks into subtasks, spawns **agent** Claude instances in tmux panes, and coordinates their lifecycle through cycles. Agents work in parallel, submit reports, and the orchestrator respawns each cycle with fresh context to review progress and plan next steps.
 
@@ -17,6 +17,9 @@ npm run build          # Build with tsup → dist/
 npm run dev            # Build in watch mode (rebuilds on file change)
 npm run dev:daemon     # Watch + auto-restart daemon on each rebuild
 npm test               # Node native test runner (src/__tests__/*.test.ts)
+
+# Run a single test file
+node --import tsx --test src/__tests__/state.test.ts
 ```
 
 Binaries:
@@ -51,9 +54,11 @@ CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
 - Entry point: `dist/daemon.js` (becomes `sisyphusd` command, runs as background service)
 
 ### Shared Layer (`src/shared/`)
-- **Types** — Protocol message definitions (`ProtocolRequest`, `ProtocolResponse`)
-- **Path helpers** — Resolves session directories (`~/.sisyphus/sessions/{sessionId}`)
+- **Types** — Protocol message definitions (`Request`, `Response`) and domain types (`Session`, `Agent`, `OrchestratorCycle`)
+- **Path helpers** — Resolves session directories (project-relative: `.sisyphus/sessions/{sessionId}/`)
 - **Config resolution** — Layered: defaults → global (`~/.sisyphus/config.json`) → project (`.sisyphus/config.json`)
+
+Each layer has its own `CLAUDE.md` with deeper context on conventions and constraints.
 
 ## Session Lifecycle
 
@@ -110,10 +115,15 @@ Use with `sisyphus spawn --agent-type sisyphus:debug "investigate login failure"
 - **Agents**: Rotate through `[blue, green, magenta, cyan, red, white]`
 
 ### State & Persistence
-- **State file**: `.sisyphus/sessions/{sessionId}/state.json` — atomically written JSON
-- **Session root**: Relative to project directory where `sisyphus start` was run
-- **Daemon socket**: `~/.sisyphus/daemon.sock` (global, per-user)
-- **Logs**: `~/.sisyphus/daemon.log`
+- **Project-local** (relative to cwd where `sisyphus start` was run):
+  - `.sisyphus/sessions/{sessionId}/state.json` — atomically written JSON
+  - `.sisyphus/sessions/{sessionId}/plan.md`, `logs.md`, `reports/`, `context/`
+  - `.sisyphus/config.json` — project config override
+- **Global** (`~/.sisyphus/`):
+  - `daemon.sock` — Unix socket
+  - `daemon.pid` — PID lock file
+  - `daemon.log` — daemon logs
+  - `config.json` — global config
 
 ### Tmux Layout
 - All panes use `split-window -h` (columns, not rows)
