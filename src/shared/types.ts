@@ -1,7 +1,5 @@
 export type SessionStatus = 'active' | 'paused' | 'completed';
 
-export type TaskStatus = 'draft' | 'pending' | 'in_progress' | 'done';
-
 export type AgentStatus = 'running' | 'completed' | 'killed' | 'crashed' | 'lost';
 
 export interface AgentReport {
@@ -18,17 +16,12 @@ export interface Session {
   status: SessionStatus;
   createdAt: string;
   completedAt?: string;
-  tasks: Task[];
   agents: Agent[];
   orchestratorCycles: OrchestratorCycle[];
   completionReport?: string;
   parentSessionId?: string;
-}
-
-export interface Task {
-  id: string;
-  description: string;
-  status: TaskStatus;
+  tmuxSessionName?: string;
+  tmuxWindowId?: string;
 }
 
 export interface Agent {

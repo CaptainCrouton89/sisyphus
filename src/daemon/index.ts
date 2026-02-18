@@ -1,10 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { globalDir, daemonPidPath, statePath } from '../shared/paths.js';
 import { loadConfig } from '../shared/config.js';
-import { startServer, stopServer, registerSessionCwd, loadSessionRegistry } from './server.js';
-import { startMonitor, stopMonitor, setRespawnCallback } from './pane-monitor.js';
+import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry } from './server.js';
+import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrackedWindow } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 import { resetAgentCounterFromState } from './agent.js';
+import { setWindowId, setOrchestratorPaneId } from './orchestrator.js';
+import { listPanes } from './tmux.js';
+import * as stateModule from './state.js';
+import type { Session } from '../shared/types.js';
 
 function ensureDirs(): void {
   mkdirSync(globalDir(), { recursive: true });
@@ -84,7 +88,7 @@ function stopDaemon(): boolean {
   return true;
 }
 
-function recoverSessions(): void {
+async function recoverSessions(): Promise<void> {
   const registry = loadSessionRegistry();
   const entries = Object.entries(registry);
 
@@ -101,10 +105,36 @@ function recoverSessions(): void {
     }
 
     try {
-      const session = JSON.parse(readFileSync(stateFile, 'utf-8')) as { status: string; agents?: { id: string }[] };
+      const session = JSON.parse(readFileSync(stateFile, 'utf-8')) as Session;
       if (session.status === 'active' || session.status === 'paused') {
         registerSessionCwd(sessionId, cwd);
         resetAgentCounterFromState(sessionId, session.agents ?? []);
+
+        // Reconnect to tmux panes if info was persisted
+        if (session.tmuxSessionName && session.tmuxWindowId) {
+          const livePanes = listPanes(session.tmuxWindowId);
+          if (livePanes.length > 0) {
+            registerSessionTmux(sessionId, session.tmuxSessionName, session.tmuxWindowId);
+            setWindowId(sessionId, session.tmuxWindowId);
+            trackSession(sessionId, cwd, session.tmuxSessionName);
+            updateTrackedWindow(sessionId, session.tmuxWindowId);
+
+            // Recover orchestrator pane from last incomplete cycle
+            const lastIncompleteCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt && c.paneId);
+            if (lastIncompleteCycle?.paneId) {
+              setOrchestratorPaneId(sessionId, lastIncompleteCycle.paneId);
+            }
+
+            console.log(`[sisyphus] Reconnected session ${sessionId} to tmux window ${session.tmuxWindowId}`);
+          } else {
+            // Window gone — pause the session so user can `sisyphus resume`
+            if (session.status === 'active') {
+              await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
+              console.log(`[sisyphus] Session ${sessionId} paused: tmux window no longer exists`);
+            }
+          }
+        }
+
         recovered++;
       }
     } catch {
@@ -127,7 +157,7 @@ async function startDaemon(): Promise<void> {
   await startServer();
   startMonitor(config.pollIntervalMs);
 
-  recoverSessions();
+  await recoverSessions();
 
   const shutdown = async () => {
     console.log('[sisyphus] Shutting down...');

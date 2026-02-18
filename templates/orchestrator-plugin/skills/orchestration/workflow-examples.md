@@ -10,14 +10,16 @@ End-to-end examples showing how the orchestrator structures cycles for real scen
 
 ### Cycle 1 — Diagnosis
 ```
-Tasks added:
-  t1: Diagnose message loss during WebSocket reconnection
-  t2: Fix root cause
-  t3: Validate fix under concurrent load
-  t4: Review fix
+plan.md:
+  ## Bug Fix: WebSocket message loss during reconnection
+
+  - [ ] Diagnose message loss during WebSocket reconnection
+  - [ ] Fix root cause
+  - [ ] Validate fix under concurrent load
+  - [ ] Review fix
 
 Agents spawned:
-  debug agent → t1: "Diagnose why WebSocket messages are lost during reconnection.
+  debug agent → "Diagnose why WebSocket messages are lost during reconnection.
     Focus on src/ws/client.ts and src/ws/reconnect.ts.
     Check for race conditions between disconnect handler and message queue.
     Look at git blame for recent changes to reconnection logic."
@@ -31,11 +33,14 @@ Agent report: "Root cause: reconnect() clears the message queue before the new s
   but should be deferred until onReconnect confirms the new socket is live.
   Confidence: High."
 
-Tasks updated:
-  t1: complete
+plan.md updated:
+  - [x] ~~Diagnose message loss during WebSocket reconnection~~
+  - [ ] Fix root cause — queue.clear() at L47 of reconnect.ts runs too early
+  - [ ] Validate fix under concurrent load
+  - [ ] Review fix
 
 Agents spawned:
-  implement agent → t2: "Fix race condition in src/ws/reconnect.ts.
+  implement agent → "Fix race condition in src/ws/reconnect.ts.
     Root cause: queue.clear() at line 47 runs on disconnect, dropping pending messages.
     Fix: defer queue drain until reconnect confirms new socket. Buffer messages during
     reconnection window. See existing buffer pattern in src/ws/buffer.ts."
@@ -46,11 +51,14 @@ Agents spawned:
 Agent report: "Fixed. Moved queue.clear() to onReconnect callback after socket.readyState
   confirms OPEN. Added message buffer during reconnection window. 2 files changed."
 
-Tasks updated:
-  t2: complete
+plan.md updated:
+  - [x] ~~Diagnose message loss~~
+  - [x] ~~Fix root cause~~
+  - [ ] Validate fix under concurrent load
+  - [ ] Review fix
 
 Agents spawned:
-  validate agent → t3: "Verify WebSocket reconnection fix. Run existing tests in
+  validate agent → "Verify WebSocket reconnection fix. Run existing tests in
     src/__tests__/ws/. Manually verify: disconnect simulation should not lose queued
     messages. Check that buffer drains correctly on reconnect."
 ```
@@ -59,11 +67,12 @@ Agents spawned:
 ```
 Validation: PASS. Existing tests pass, reconnection preserves messages.
 
-Tasks updated:
-  t3: complete
+plan.md updated:
+  - [x] ~~Diagnose~~, [x] ~~Fix~~, [x] ~~Validate~~
+  - [ ] Review fix
 
 Agents spawned:
-  review agent → t4: "Review changes in src/ws/reconnect.ts and src/ws/buffer.ts.
+  review agent → "Review changes in src/ws/reconnect.ts and src/ws/buffer.ts.
     Focus on: thread safety of the new buffer, memory leak potential if reconnect
     never succeeds, edge case of rapid disconnect/reconnect cycles."
 ```
@@ -73,8 +82,7 @@ Agents spawned:
 Review: Clean. One medium finding — buffer should have a max size to prevent
   memory issues if reconnect fails indefinitely. Not blocking.
 
-Tasks updated:
-  t4: complete
+All plan.md items complete.
 
 Action: complete — "Fixed WebSocket message loss during reconnection. Messages now
   buffered during reconnection window and drained on successful reconnect."
@@ -88,18 +96,25 @@ Action: complete — "Fixed WebSocket message loss during reconnection. Messages
 
 ### Cycle 1 — Spec
 ```
-Tasks added:
-  t1: Draft spec for API rate limiting
-  t2: Plan implementation
-  t3: Review plan
-  t4: Implement rate limiting middleware
-  t5: Implement rate limit configuration
-  t6: Implement rate limit headers and error responses
-  t7: Validate implementation
-  t8: Review implementation
+plan.md:
+  ## Feature: API Rate Limiting
+
+  ### Spec & Planning
+  - [ ] Draft spec for API rate limiting
+  - [ ] Plan implementation
+  - [ ] Review plan
+
+  ### Implementation
+  - [ ] Implement rate limiting middleware
+  - [ ] Implement rate limit configuration
+  - [ ] Implement rate limit headers and error responses
+
+  ### Validation
+  - [ ] Validate implementation
+  - [ ] Review implementation
 
 Agents spawned:
-  spec-draft agent → t1: "Investigate codebase and draft spec for per-user API rate
+  spec-draft agent → "Investigate codebase and draft spec for per-user API rate
     limiting. Check existing middleware patterns in src/api/middleware/.
     Questions to resolve: storage backend (Redis vs in-memory), limit granularity
     (per-endpoint vs global), response format for rate-limited requests."
@@ -112,21 +127,23 @@ Agent report: "Spec saved to context/spec-rate-limiting.md.
   Standard 429 response with Retry-After header. Config via environment variables.
   Open questions resolved with user: Redis is already in stack, use it."
 
-Tasks updated:
-  t1: complete
+plan.md updated (spec item marked done):
+  - [x] ~~Draft spec for API rate limiting~~
+  - [ ] Plan implementation
+  ...
 
 Agents spawned:
-  plan agent → t2: "Create implementation plan from spec at context/spec-rate-limiting.md"
-  test-spec agent → (new task): "Define behavioral properties for rate limiting from spec"
+  plan agent → "Create implementation plan from spec at context/spec-rate-limiting.md"
+  test-spec agent → "Define behavioral properties for rate limiting from spec"
 ```
 
 ### Cycle 3 — Review plan
 ```
 Both agents complete. Plan at context/plan-rate-limiting.md.
-Plan has 3 phases: middleware (t4), config (t5), response format (t6).
+Plan has 3 phases: middleware, config, response format.
 
 Agents spawned:
-  review-plan agent → t3: "Validate plan at context/plan-rate-limiting.md
+  review-plan agent → "Validate plan at context/plan-rate-limiting.md
     against spec at context/spec-rate-limiting.md"
 ```
 
@@ -134,13 +151,16 @@ Agents spawned:
 ```
 Plan review: PASS.
 
-Tasks updated:
-  t3: complete
+plan.md updated (plan review done, starting implementation):
+  - [x] ~~Draft spec~~, [x] ~~Plan~~, [x] ~~Review plan~~
+  - [ ] Implement rate limiting middleware
+  - [ ] Implement rate limit configuration
+  ...
 
 Agents spawned:
-  implement agent → t4: "Implement Phase 1 from context/plan-rate-limiting.md —
+  implement agent → "Implement Phase 1 from context/plan-rate-limiting.md —
     rate limiting middleware in src/api/middleware/rate-limit.ts"
-  implement agent → t5: "Implement Phase 2 from context/plan-rate-limiting.md —
+  implement agent → "Implement Phase 2 from context/plan-rate-limiting.md —
     rate limit configuration in src/config/rate-limits.ts"
 ```
 
@@ -154,20 +174,22 @@ Agents spawned:
 
 ### Cycle 1 — Plan + baseline
 ```
-Tasks added:
-  t1: Plan auth refactor — extract token service
-  t2: Capture behavioral baseline (run all auth tests)
-  t3: Create TokenService class with extracted logic
-  t4: Update route handlers to use TokenService
-  t5: Update tests to use new service interface
-  t6: Validate all auth tests still pass
-  t7: Review for dead code and missed references
+plan.md:
+  ## Refactor: Extract Token Service
+
+  - [ ] Plan auth refactor — extract token service
+  - [ ] Capture behavioral baseline (run all auth tests)
+  - [ ] Create TokenService class with extracted logic
+  - [ ] Update route handlers to use TokenService
+  - [ ] Update tests to use new service interface
+  - [ ] Validate all auth tests still pass
+  - [ ] Review for dead code and missed references
 
 Agents spawned (parallel):
-  plan agent → t1: "Plan refactor: extract token creation, validation, and refresh
+  plan agent → "Plan refactor: extract token creation, validation, and refresh
     logic from src/api/routes/auth.ts into a new src/services/token-service.ts.
     Map all token-related functions, their callers, and the extraction plan."
-  validate agent → t2: "Run all tests in src/__tests__/auth/ and record results.
+  validate agent → "Run all tests in src/__tests__/auth/ and record results.
     This is the behavioral baseline — these must all pass after refactor."
 ```
 
@@ -175,8 +197,14 @@ Agents spawned (parallel):
 ```
 Plan complete, baseline captured (47 tests passing).
 
+plan.md updated:
+  - [x] ~~Plan auth refactor~~
+  - [x] ~~Capture behavioral baseline~~ (47 tests passing)
+  - [ ] Create TokenService class with extracted logic
+  ...
+
 Agents spawned:
-  implement agent → t3: "Execute Phase 1 of refactor plan: create TokenService class
+  implement agent → "Execute Phase 1 of refactor plan: create TokenService class
     at src/services/token-service.ts. Extract validateToken, createToken, refreshToken
     from src/api/routes/auth.ts. Export the class. Do NOT modify route handlers yet."
 ```
@@ -186,23 +214,24 @@ Agents spawned:
 TokenService created.
 
 Agents spawned:
-  implement agent → t4: "Update route handlers in src/api/routes/auth.ts to import
+  implement agent → "Update route handlers in src/api/routes/auth.ts to import
     and use TokenService instead of inline token logic. Remove extracted functions."
-  implement agent → t5: "Update tests in src/__tests__/auth/ to use TokenService
+  implement agent → "Update tests in src/__tests__/auth/ to use TokenService
     where they directly tested extracted functions."
 ```
 
 ### Cycle 4 — Validate + review
 ```
 Agents spawned (parallel):
-  validate agent → t6: "Run all auth tests. Compare against baseline of 47 passing.
+  validate agent → "Run all auth tests. Compare against baseline of 47 passing.
     Every test must still pass."
-  review agent → t7: "Review src/api/routes/auth.ts and src/services/token-service.ts.
+  review agent → "Review src/api/routes/auth.ts and src/services/token-service.ts.
     Check for: dead code left behind, missed references to old functions, broken imports."
 ```
 
 ### Cycle 5 — Complete
 ```
 All 47 tests passing. Review clean.
+All plan.md items complete.
 Complete — "Extracted token logic into TokenService. All existing tests pass."
 ```

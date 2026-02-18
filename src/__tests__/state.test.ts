@@ -7,8 +7,6 @@ import { randomUUID } from 'node:crypto';
 import {
   createSession,
   getSession,
-  addTask,
-  updateTask,
   addAgent,
   updateAgent,
   addOrchestratorCycle,
@@ -56,8 +54,6 @@ describe('createSession', () => {
     assert.equal(session.task, 'build it');
     assert.equal(session.cwd, testDir);
     assert.equal(session.status, 'active');
-    assert.ok(Array.isArray(session.tasks));
-    assert.equal(session.tasks.length, 0);
     assert.ok(Array.isArray(session.agents));
     assert.equal(session.agents.length, 0);
     assert.ok(Array.isArray(session.orchestratorCycles));
@@ -76,63 +72,6 @@ describe('getSession', () => {
     const retrieved = getSession(testDir, id);
 
     assert.deepStrictEqual(retrieved, original);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// addTask
-// ---------------------------------------------------------------------------
-describe('addTask', () => {
-  it('adds task with sequential IDs (t1, t2, t3)', async () => {
-    const id = randomUUID();
-    createSession(id, 'tasks test', testDir);
-
-    const t1 = await addTask(testDir, id, 'first task');
-    assert.equal(t1.id, 't1');
-    assert.equal(t1.description, 'first task');
-    assert.equal(t1.status, 'pending');
-
-    const t2 = await addTask(testDir, id, 'second task');
-    assert.equal(t2.id, 't2');
-
-    const t3 = await addTask(testDir, id, 'third task');
-    assert.equal(t3.id, 't3');
-  });
-
-  it('persists tasks to disk', async () => {
-    const id = randomUUID();
-    createSession(id, 'persist test', testDir);
-
-    await addTask(testDir, id, 'persisted');
-    const session = getSession(testDir, id);
-    assert.equal(session.tasks.length, 1);
-    assert.equal(session.tasks[0]!.id, 't1');
-    assert.equal(session.tasks[0]!.description, 'persisted');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// updateTask
-// ---------------------------------------------------------------------------
-describe('updateTask', () => {
-  it('changes task status', async () => {
-    const id = randomUUID();
-    createSession(id, 'update task', testDir);
-    await addTask(testDir, id, 'a task');
-
-    await updateTask(testDir, id, 't1', { status: 'in_progress' });
-    const session = getSession(testDir, id);
-    assert.equal(session.tasks[0]!.status, 'in_progress');
-  });
-
-  it('throws on unknown taskId', async () => {
-    const id = randomUUID();
-    createSession(id, 'bad task', testDir);
-
-    await assert.rejects(
-      () => updateTask(testDir, id, 'nonexistent', { status: 'done' }),
-      /not found/i,
-    );
   });
 });
 
@@ -340,10 +279,22 @@ describe('atomicWrite', () => {
     const id = randomUUID();
     createSession(id, 'multi write', testDir);
 
-    // Perform several mutations
-    await addTask(testDir, id, 'one');
-    await addTask(testDir, id, 'two');
-    await updateTask(testDir, id, 't1', { status: 'in_progress' });
+    const makeAgent = (agentId: string): Agent => ({
+      id: agentId,
+      name: agentId,
+      agentType: 'default',
+      color: 'blue',
+      instruction: 'work',
+      status: 'running',
+      spawnedAt: new Date().toISOString(),
+      completedAt: null,
+      reports: [],
+      paneId: '%0',
+    });
+
+    await addAgent(testDir, id, makeAgent('agent-001'));
+    await addAgent(testDir, id, makeAgent('agent-002'));
+    await updateAgent(testDir, id, 'agent-001', { status: 'completed' });
 
     const dir = sessionDir(testDir, id);
     const files = readdirSync(dir);
@@ -359,10 +310,23 @@ describe('concurrent mutations', () => {
   it('concurrent mutations do not lose data', async () => {
     const id = randomUUID();
     createSession(id, 'concurrent test', testDir);
-    // Fire 5 addTask calls concurrently
-    const promises = Array.from({ length: 5 }, (_, i) => addTask(testDir, id, `task ${i + 1}`));
+
+    const makeAgent = (agentId: string): Agent => ({
+      id: agentId,
+      name: agentId,
+      agentType: 'default',
+      color: 'blue',
+      instruction: 'work',
+      status: 'running',
+      spawnedAt: new Date().toISOString(),
+      completedAt: null,
+      reports: [],
+      paneId: '%0',
+    });
+
+    const promises = Array.from({ length: 5 }, (_, i) => addAgent(testDir, id, makeAgent(`agent-00${i + 1}`)));
     await Promise.all(promises);
     const session = getSession(testDir, id);
-    assert.equal(session.tasks.length, 5);
+    assert.equal(session.agents.length, 5);
   });
 });

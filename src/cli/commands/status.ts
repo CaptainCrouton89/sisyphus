@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
-import type { Session, Agent, Task, OrchestratorCycle } from '../../shared/types.js';
+import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
 
 const STATUS_COLORS: Record<string, string> = {
   active: '\x1b[32m',    // green
@@ -11,10 +11,6 @@ const STATUS_COLORS: Record<string, string> = {
   killed: '\x1b[31m',    // red
   crashed: '\x1b[31m',   // red
   lost: '\x1b[90m',      // gray
-  draft: '\x1b[2m',      // dim
-  pending: '\x1b[90m',   // gray
-  in_progress: '\x1b[33m', // yellow
-  done: '\x1b[32m',      // green
 };
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
@@ -58,11 +54,6 @@ function formatAgent(agent: Agent): string {
   return line;
 }
 
-function formatTask(task: Task): string {
-  const status = colorize(task.status, task.status);
-  return `    ${task.id}: ${task.description} [${status}]`;
-}
-
 function formatCycle(cycle: OrchestratorCycle): string {
   const duration = cycle.completedAt
     ? ` ${DIM}(${formatDuration(cycle.timestamp, cycle.completedAt)})${RESET}`
@@ -88,13 +79,6 @@ function printSession(session: Session): void {
     console.log(`\n  ${BOLD}Cycles:${RESET}`);
     for (const cycle of session.orchestratorCycles) {
       console.log(formatCycle(cycle));
-    }
-  }
-
-  if (session.tasks.length > 0) {
-    console.log(`\n  ${BOLD}Tasks:${RESET}`);
-    for (const task of session.tasks) {
-      console.log(formatTask(task));
     }
   }
 

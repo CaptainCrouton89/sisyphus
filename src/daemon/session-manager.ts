@@ -7,11 +7,12 @@ import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentS
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionsDir } from '../shared/paths.js';
-import type { Session, TaskStatus } from '../shared/types.js';
+import type { Session } from '../shared/types.js';
 
 export async function startSession(task: string, cwd: string, tmuxSession: string, windowId: string): Promise<Session> {
   const sessionId = uuidv4();
   const session = state.createSession(sessionId, task, cwd);
+  await state.updateSessionTmux(cwd, sessionId, tmuxSession, windowId);
 
   trackSession(sessionId, cwd, tmuxSession);
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId);
@@ -35,6 +36,7 @@ export async function resumeSession(sessionId: string, cwd: string, tmuxSession:
   }
 
   await state.updateSessionStatus(cwd, sessionId, 'active');
+  await state.updateSessionTmux(cwd, sessionId, tmuxSession, windowId);
 
   // Reset counters based on existing agents
   resetAgentCounterFromState(sessionId, session.agents);
@@ -131,29 +133,6 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {
   untrackSession(sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
-}
-
-export async function handleTaskAdd(cwd: string, sessionId: string, description: string, initialStatus?: string): Promise<{ taskId: string }> {
-  const VALID_STATUSES: Set<string> = new Set(['draft', 'pending', 'in_progress', 'done']);
-  const status = initialStatus !== undefined && VALID_STATUSES.has(initialStatus) ? initialStatus as TaskStatus : undefined;
-  const task = await state.addTask(cwd, sessionId, description, status);
-  return { taskId: task.id };
-}
-
-export async function handleTaskUpdate(cwd: string, sessionId: string, taskId: string, status?: string, description?: string): Promise<void> {
-  const VALID_STATUSES: Set<string> = new Set(['draft', 'pending', 'in_progress', 'done']);
-  const updates: { status?: TaskStatus; description?: string } = {};
-  if (status !== undefined) {
-    if (!VALID_STATUSES.has(status)) throw new Error(`Invalid status: ${status}. Valid: draft, pending, in_progress, done`);
-    updates.status = status as TaskStatus;
-  }
-  if (description !== undefined) updates.description = description;
-  await state.updateTask(cwd, sessionId, taskId, updates);
-}
-
-export function handleTasksList(cwd: string, sessionId: string): { tasks: Session['tasks'] } {
-  const session = state.getSession(cwd, sessionId);
-  return { tasks: session.tasks };
 }
 
 export async function handleRegisterClaudeSession(

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Session, Agent } from '../shared/types.js';
-import { createSession, addAgent, getSession, addTask } from '../daemon/state.js';
+import { createSession, addAgent, getSession } from '../daemon/state.js';
 import { resetAgentCounter, clearAgentCounter } from '../daemon/agent.js';
 import { getNextColor, resetColors } from '../daemon/colors.js';
 
@@ -92,38 +92,6 @@ describe('allAgentsDone', () => {
 
     const updated = getSession(testDir, id);
     assert.equal(allAgentsDone(updated), true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Task ID generation (sequential t1, t2, t3)
-// ---------------------------------------------------------------------------
-describe('task ID generation', () => {
-  it('generates sequential IDs: t1, t2, t3', async () => {
-    const id = randomUUID();
-    createSession(id, 'task ids', testDir);
-
-    const ids: string[] = [];
-    for (let i = 0; i < 5; i++) {
-      const task = await addTask(testDir, id, `task ${i + 1}`);
-      ids.push(task.id);
-    }
-
-    assert.deepStrictEqual(ids, ['t1', 't2', 't3', 't4', 't5']);
-  });
-
-  it('ID is based on current tasks.length, not a global counter', async () => {
-    // Two separate sessions should each start at t1
-    const id1 = randomUUID();
-    const id2 = randomUUID();
-    createSession(id1, 'session A', testDir);
-    createSession(id2, 'session B', testDir);
-
-    const taskA = await addTask(testDir, id1, 'A task');
-    const taskB = await addTask(testDir, id2, 'B task');
-
-    assert.equal(taskA.id, 't1');
-    assert.equal(taskB.id, 't1');
   });
 });
 

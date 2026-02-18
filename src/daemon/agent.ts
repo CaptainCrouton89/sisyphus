@@ -72,9 +72,8 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   ].join(' && ');
 
   const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
-  const settingsPath = resolve(import.meta.dirname, '../templates/agent-settings.json');
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
-  const claudeCmd = `claude --dangerously-skip-permissions --settings "${settingsPath}" --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+  const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}`);
 
   const agent: Agent = {

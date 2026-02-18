@@ -23,7 +23,7 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 
 **Agent naming**: Per-session counter starts at 1, increments on each spawn. Format: `agent-NNN` (zero-padded to 3 digits).
 
-**Orchestrator prompt**: System prompt is loaded from project override (`.sisyphus/orchestrator.md`) or bundled template, appended with `<state>` block (formatted task/agent/cycle summary), written to temp file, then passed to Claude via `--append-system-prompt`.
+**Orchestrator prompt**: System prompt is loaded from project override (`.sisyphus/orchestrator.md`) or bundled template, appended with `<state>` block (formatted agent/cycle summary with plan.md and logs.md references), written to temp file, then passed to Claude via `--append-system-prompt`.
 
 **Colors**: Orchestrator always yellow; agents cycle `[blue, green, magenta, cyan, red, white]` deterministically per counter mod 6. Per-pane tmux user variables (`@pane_color`) enable each pane to render its own border color independently via format strings.
 

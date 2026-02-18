@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Session, Agent, AgentReport, Task, OrchestratorCycle, SessionStatus, TaskStatus } from '../shared/types.js';
+import type { Session, Agent, AgentReport, OrchestratorCycle, SessionStatus } from '../shared/types.js';
 import { statePath, sessionDir, contextDir, planPath, logsPath } from '../shared/paths.js';
 
 const PLAN_SEED = `<!-- plan.md — What still needs to happen -->
@@ -55,7 +55,6 @@ export function createSession(id: string, task: string, cwd: string): Session {
     cwd,
     status: 'active',
     createdAt: new Date().toISOString(),
-    tasks: [],
     agents: [],
     orchestratorCycles: [],
   };
@@ -71,32 +70,6 @@ export function getSession(cwd: string, sessionId: string): Session {
 
 function saveSession(session: Session): void {
   atomicWrite(statePath(session.cwd, session.id), JSON.stringify(session, null, 2));
-}
-
-export async function addTask(cwd: string, sessionId: string, description: string, initialStatus?: TaskStatus): Promise<Task> {
-  return withSessionLock(sessionId, () => {
-    const session = getSession(cwd, sessionId);
-    const nextNum = session.tasks.length + 1;
-    const task: Task = {
-      id: `t${nextNum}`,
-      description,
-      status: initialStatus !== undefined ? initialStatus : 'pending',
-    };
-    session.tasks.push(task);
-    saveSession(session);
-    return task;
-  });
-}
-
-export async function updateTask(cwd: string, sessionId: string, taskId: string, updates: { status?: TaskStatus; description?: string }): Promise<void> {
-  return withSessionLock(sessionId, () => {
-    const session = getSession(cwd, sessionId);
-    const task = session.tasks.find(t => t.id === taskId);
-    if (!task) throw new Error(`Task ${taskId} not found in session ${sessionId}`);
-    if (updates.status) task.status = updates.status;
-    if (updates.description) task.description = updates.description;
-    saveSession(session);
-  });
 }
 
 export async function addAgent(cwd: string, sessionId: string, agent: Agent): Promise<void> {
@@ -162,6 +135,15 @@ export async function appendAgentReport(cwd: string, sessionId: string, agentId:
     const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
     agent.reports.push(entry);
+    saveSession(session);
+  });
+}
+
+export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSessionName: string, tmuxWindowId: string): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    session.tmuxSessionName = tmuxSessionName;
+    session.tmuxWindowId = tmuxWindowId;
     saveSession(session);
   });
 }

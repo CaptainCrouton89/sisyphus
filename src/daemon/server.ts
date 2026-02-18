@@ -51,6 +51,11 @@ export function registerSessionCwd(sessionId: string, cwd: string): void {
   persistSessionRegistry();
 }
 
+export function registerSessionTmux(sessionId: string, tmuxSession: string, windowId: string): void {
+  sessionTmuxMap.set(sessionId, tmuxSession);
+  sessionWindowMap.set(sessionId, windowId);
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   try {
     switch (req.type) {
@@ -107,27 +112,6 @@ async function handleRequest(req: Request): Promise<Response> {
           return { ok: true, data: { session: session as unknown as Record<string, unknown> } };
         }
         return { ok: true, data: { message: 'daemon running' } };
-      }
-
-      case 'tasks_add': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        const result = await sessionManager.handleTaskAdd(cwd, req.sessionId, req.description, req.status);
-        return { ok: true, data: { taskId: result.taskId } };
-      }
-
-      case 'tasks_update': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        await sessionManager.handleTaskUpdate(cwd, req.sessionId, req.taskId, req.status, req.description);
-        return { ok: true };
-      }
-
-      case 'tasks_list': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        const result = sessionManager.handleTasksList(cwd, req.sessionId);
-        return { ok: true, data: { tasks: result.tasks as unknown as Record<string, unknown> } };
       }
 
       case 'list': {

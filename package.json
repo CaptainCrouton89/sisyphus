@@ -31,7 +31,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "dev:daemon": "tsup --watch --onSuccess 'node dist/daemon.js'",
+    "dev:daemon": "tsup --watch --onSuccess 'node dist/daemon.js restart'",
     "test": "node --import tsx --test src/__tests__/*.test.ts",
     "prepublishOnly": "npm run build && npm test"
   },

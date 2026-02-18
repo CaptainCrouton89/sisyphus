@@ -58,7 +58,7 @@ CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
 ## Session Lifecycle
 
 1. `sisyphus start "task"` → daemon creates session, spawns orchestrator Claude in tmux pane
-2. Orchestrator adds tasks (`sisyphus tasks add`), spawns agents (`sisyphus spawn`), then yields (`sisyphus yield`)
+2. Orchestrator updates plan.md, spawns agents (`sisyphus spawn`), then yields (`sisyphus yield`)
 3. Daemon kills orchestrator pane, monitors agent panes via polling
 4. Agents work in parallel, each calls `sisyphus submit --report "..."` when done
 5. When all agents finish, daemon respawns orchestrator with updated state (next cycle)
@@ -70,10 +70,10 @@ Orchestrator and agents receive `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID` en
 
 Prompts are written to files in the session directory to avoid shell quoting/newline issues with tmux send-keys:
 
-- **Orchestrator**: `orchestrator-prompt-{N}.md` — contains the orchestrator template + a `<state>` block with concise session state (tasks, agents, cycle history). Passed via `--append-system-prompt "$(cat 'file')"` with a short user prompt.
+- **Orchestrator**: `orchestrator-prompt-{N}.md` — contains the orchestrator template + a `<state>` block with concise session state (agents, cycle history, plan/logs references). Passed via `--append-system-prompt "$(cat 'file')"` with a short user prompt.
 - **Agents**: `{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt "$(cat 'file')"` with the instruction as the user prompt.
 
-The `<state>` block is a human-readable summary (not raw JSON) with tasks, agent reports (truncated to 120 chars), and cycle history.
+The `<state>` block is a human-readable summary (not raw JSON) with agent reports (truncated to 120 chars), cycle history, and plan.md/logs.md references.
 
 ## Templates
 
@@ -104,7 +104,6 @@ Use with `sisyphus spawn --agent-type sisyphus:debug "investigate login failure"
 ### Naming & IDs
 - **Sessions**: UUIDs (e.g., `550e8400-e29b-41d4-a716-446655440000`)
 - **Agents**: `agent-001`, `agent-002`, etc. (zero-padded)
-- **Tasks**: `t1`, `t2`, etc. (simple numeric prefix in state)
 
 ### Colors
 - **Orchestrator**: Always yellow
@@ -154,7 +153,6 @@ npm run dev:daemon        # Terminal 1: daemon in watch mode
 tmux new-session          # Terminal 2: start a tmux session
 sisyphus start "test"     # Inside tmux: spawn orchestrator
 sisyphus status           # Check status
-sisyphus tasks list       # View task breakdown
 ```
 
 The orchestrator will spawn in a yellow pane. Agents appear in other colors as the orchestrator spawns them. Watch the daemon logs in Terminal 1 for debugging:

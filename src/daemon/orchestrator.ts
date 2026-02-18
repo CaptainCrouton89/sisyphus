@@ -25,6 +25,10 @@ export function getOrchestratorPaneId(sessionId: string): string | undefined {
   return sessionOrchestratorPane.get(sessionId);
 }
 
+export function setOrchestratorPaneId(sessionId: string, paneId: string): void {
+  sessionOrchestratorPane.set(sessionId, paneId);
+}
+
 function loadOrchestratorPrompt(cwd: string): string {
   const projectPath = projectOrchestratorPromptPath(cwd);
   if (existsSync(projectPath)) {
@@ -38,10 +42,6 @@ function formatStateForOrchestrator(session: Session): string {
   const shortId = session.id.slice(0, 8);
   const cycleNum = session.orchestratorCycles.length;
 
-  const taskLines = session.tasks.length > 0
-    ? session.tasks.map(t => `- ${t.id}: [${t.status}] ${t.description}`).join('\n')
-    : '  (none)';
-
   const ctxDir = contextDir(session.cwd, session.id);
   let contextLines: string;
   if (existsSync(ctxDir)) {
@@ -52,10 +52,10 @@ function formatStateForOrchestrator(session: Session): string {
   }
 
   const planFile = planPath(session.cwd, session.id);
-  const planContent = existsSync(planFile) ? readFileSync(planFile, 'utf-8').trim() : '(empty)';
+  const planRef = existsSync(planFile) ? `@${planFile}` : '(empty)';
 
   const logsFile = logsPath(session.cwd, session.id);
-  const logsContent = existsSync(logsFile) ? readFileSync(logsFile, 'utf-8').trim() : '(empty)';
+  const logsRef = existsSync(logsFile) ? `@${logsFile}` : '(empty)';
 
   const agentLines = session.agents.length > 0
     ? session.agents.map((a: Agent) => {
@@ -84,13 +84,10 @@ function formatStateForOrchestrator(session: Session): string {
     `status: ${session.status}`,
     '',
     '## Plan',
-    planContent,
+    planRef,
     '',
     '## Logs',
-    logsContent,
-    '',
-    '## Tasks',
-    taskLines,
+    logsRef,
     '',
     '## Context Files',
     contextLines,
