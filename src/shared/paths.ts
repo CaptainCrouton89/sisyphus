@@ -56,3 +56,11 @@ export function reportFilePath(cwd: string, sessionId: string, agentId: string, 
 export function contextDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'context');
 }
+
+export function planPath(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'plan.md');
+}
+
+export function logsPath(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'logs.md');
+}

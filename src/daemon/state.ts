@@ -2,7 +2,21 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Session, Agent, AgentReport, Task, OrchestratorCycle, SessionStatus, TaskStatus } from '../shared/types.js';
-import { statePath, sessionDir, contextDir } from '../shared/paths.js';
+import { statePath, sessionDir, contextDir, planPath, logsPath } from '../shared/paths.js';
+
+const PLAN_SEED = `<!-- plan.md — What still needs to happen -->
+<!-- This is a living document. Write your remaining work plan here: phases, -->
+<!-- next steps, file references, open questions. Remove or collapse items as -->
+<!-- they're completed so this file only reflects outstanding work. The -->
+<!-- orchestrator sees this every cycle — keep it focused and current. -->
+`;
+
+const LOGS_SEED = `<!-- logs.md — Session memory -->
+<!-- Record important observations, decisions, and findings here. This is your -->
+<!-- persistent memory across cycles: things you tried, what worked/failed, -->
+<!-- design decisions and their rationale, gotchas discovered during -->
+<!-- implementation. Unlike plan.md, entries here accumulate — they're a log. -->
+`;
 
 // Per-session mutex to prevent read-modify-write races
 const sessionLocks = new Map<string, Promise<void>>();
@@ -31,6 +45,9 @@ export function createSession(id: string, task: string, cwd: string): Session {
   const dir = sessionDir(cwd, id);
   mkdirSync(dir, { recursive: true });
   mkdirSync(contextDir(cwd, id), { recursive: true });
+
+  writeFileSync(planPath(cwd, id), PLAN_SEED, 'utf-8');
+  writeFileSync(logsPath(cwd, id), LOGS_SEED, 'utf-8');
 
   const session: Session = {
     id,
@@ -93,7 +110,7 @@ export async function addAgent(cwd: string, sessionId: string, agent: Agent): Pr
 export async function updateAgent(cwd: string, sessionId: string, agentId: string, updates: Partial<Agent>): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
-    const agent = session.agents.find(a => a.id === agentId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
     Object.assign(agent, updates);
     saveSession(session);
@@ -142,7 +159,7 @@ export async function completeSession(cwd: string, sessionId: string, report: st
 export async function appendAgentReport(cwd: string, sessionId: string, agentId: string, entry: AgentReport): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
-    const agent = session.agents.find(a => a.id === agentId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
     agent.reports.push(entry);
     saveSession(session);

@@ -58,9 +58,41 @@ Right-sized:
 - `"Create POST /api/login route in src/routes/auth.ts — validate against users table, set session"`
 - `"Add requireAuth middleware to src/middleware/auth.ts, apply to /api/protected/* in src/routes/index.ts"`
 
+## plan.md and logs.md
+
+Two files are auto-created in the session directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/`) and inlined in `<state>` every cycle. **You own these files** — read and edit them directly.
+
+### plan.md — What still needs to happen
+
+Your working scratchpad of remaining work. Write what you still need to do: phases, next steps, open questions, file references, dependencies. **Remove or collapse items as they're completed** so this file only reflects outstanding work. This keeps your context lean across cycles — a 50-task project shouldn't have 50 tasks listed when 45 are done.
+
+Good plan.md content:
+- Remaining phases with concrete next steps
+- File paths that need to be created or modified
+- Open design questions or unknowns to investigate
+- Dependencies between pieces of work
+- What to delegate vs. what to explore yourself
+
+### logs.md — Session memory
+
+Your persistent memory across cycles. Unlike plan.md, entries here **accumulate** — they're a log, not a scratchpad. Write things you'd want your future self (respawned fresh next cycle) to know.
+
+Good logs.md content:
+- Decisions made and their rationale
+- Things you tried that failed (and why)
+- Gotchas discovered during exploration or implementation
+- Key findings from agent reports worth preserving
+- Corrections to earlier assumptions
+
+### Workflow
+
+- **Cycle 0**: Explore the codebase, then write your initial plan.md. Don't rush to spawn agents.
+- **Each cycle**: Read plan.md and logs.md from `<state>`. Update plan.md (prune done items, refine next steps). Append to logs.md with anything important from this cycle. Then spawn agents and yield.
+- **Keep both current**: If you discover something that changes the plan, update plan.md immediately. If you learn something worth remembering, log it immediately.
+
 ## Context Directory
 
-The context directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/`) is for persistent artifacts too large for task descriptions: specs, plans, exploration findings, test strategies.
+The context directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/`) is for persistent artifacts too large for task descriptions or logs: specs, detailed plans, exploration findings, test strategies.
 
 The `<state>` block lists context dir contents each cycle. Read files when you need full detail.
 
@@ -159,4 +191,4 @@ sisyphus status
 
 ## Completion
 
-Call `sisyphus complete` only when the overall goal is genuinely achieved **and validated by an agent other than the one that did the work**. If unsure, spawn a validation agent first.
+Call `sisyphus complete` only when the overall goal is genuinely achieved **and validated by an agent other than the one that did the work**. If unsure, spawn a validation agent first. Remember, use sisyphus spawn, not Task() tool.
