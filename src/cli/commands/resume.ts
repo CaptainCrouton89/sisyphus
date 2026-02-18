@@ -1,23 +1,7 @@
 import type { Command } from 'commander';
-import { execSync } from 'node:child_process';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
-
-function getTmuxSession(): string {
-  try {
-    return execSync('tmux display-message -p "#{session_name}"', { encoding: 'utf8' }).trim();
-  } catch {
-    throw new Error('Not running inside tmux');
-  }
-}
-
-function getTmuxWindow(): string {
-  try {
-    return execSync('tmux display-message -p "#{window_id}"', { encoding: 'utf8' }).trim();
-  } catch {
-    throw new Error('Not running inside tmux');
-  }
-}
+import { getTmuxSession, getTmuxWindow } from '../tmux.js';
 
 export function registerResume(program: Command): void {
   program

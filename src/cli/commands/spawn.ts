@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
+import { assertTmux } from '../tmux.js';
 
 export function registerSpawn(program: Command): void {
   program
@@ -10,6 +11,7 @@ export function registerSpawn(program: Command): void {
     .requiredOption('--name <name>', 'Agent name')
     .requiredOption('--instruction <instruction>', 'Task instruction for the agent')
     .action(async (opts: { agentType: string; name: string; instruction: string }) => {
+      assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
         console.error('Error: SISYPHUS_SESSION_ID environment variable not set');

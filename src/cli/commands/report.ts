@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { readStdin } from '../stdin.js';
+import { assertTmux } from '../tmux.js';
 
 export function registerReport(program: Command): void {
   program
@@ -9,6 +10,7 @@ export function registerReport(program: Command): void {
     .description('Send a progress report without exiting (agent only)')
     .option('--message <message>', 'Progress report content')
     .action(async (opts: { message?: string }) => {
+      assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       const agentId = process.env.SISYPHUS_AGENT_ID;
       if (!sessionId || !agentId) {

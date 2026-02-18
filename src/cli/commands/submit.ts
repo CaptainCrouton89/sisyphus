@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { readStdin } from '../stdin.js';
+import { assertTmux } from '../tmux.js';
 
 export function registerSubmit(program: Command): void {
   program
@@ -9,6 +10,7 @@ export function registerSubmit(program: Command): void {
     .description('Submit work report and exit (agent only)')
     .option('--report <report>', 'Work report (or pipe via stdin)')
     .action(async (opts: { report?: string }) => {
+      assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       const agentId = process.env.SISYPHUS_AGENT_ID;
       if (!sessionId || !agentId) {
