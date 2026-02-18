@@ -73,10 +73,10 @@ Orchestrator and agents receive `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID` en
 
 ## How Prompts Are Delivered
 
-Prompts are written to files in the session directory to avoid shell quoting/newline issues with tmux send-keys:
+Prompts are written to the `prompts/` subdirectory within the session directory to avoid shell quoting/newline issues with tmux send-keys:
 
-- **Orchestrator**: `orchestrator-prompt-{N}.md` — contains the orchestrator template + a `<state>` block with concise session state (agents, cycle history, plan/logs references). Passed via `--append-system-prompt "$(cat 'file')"` with a short user prompt.
-- **Agents**: `{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt "$(cat 'file')"` with the instruction as the user prompt.
+- **Orchestrator**: `prompts/orchestrator-system-{N}.md` — contains the orchestrator template. `prompts/orchestrator-user-{N}.md` — contains the `<state>` block with concise session state + contextual instruction. Passed via `--append-system-prompt "$(cat 'file')"` with the user prompt file.
+- **Agents**: `prompts/{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt "$(cat 'file')"` with the instruction as the user prompt.
 
 The `<state>` block is a human-readable summary (not raw JSON) with agent reports (truncated to 120 chars), cycle history, and plan.md/logs.md references.
 
@@ -117,7 +117,9 @@ Use with `sisyphus spawn --agent-type sisyphus:debug "investigate login failure"
 ### State & Persistence
 - **Project-local** (relative to cwd where `sisyphus start` was run):
   - `.sisyphus/sessions/{sessionId}/state.json` — atomically written JSON
-  - `.sisyphus/sessions/{sessionId}/plan.md`, `logs.md`, `reports/`, `context/`
+  - `.sisyphus/sessions/{sessionId}/plan.md`, `logs.md`
+  - `.sisyphus/sessions/{sessionId}/prompts/` — orchestrator + agent prompt files
+  - `.sisyphus/sessions/{sessionId}/reports/`, `context/`
   - `.sisyphus/config.json` — project config override
 - **Global** (`~/.sisyphus/`):
   - `daemon.sock` — Unix socket

@@ -8,6 +8,7 @@ import { trackSession, untrackSession, updateTrackedWindow } from './pane-monito
 import { resetColors } from './colors.js';
 import { sessionsDir } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
+import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 
 export async function startSession(task: string, cwd: string, tmuxSession: string, windowId: string): Promise<Session> {
   const sessionId = uuidv4();
@@ -83,6 +84,19 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
   const session = state.getSession(cwd, sessionId);
   if (session.status !== 'active') return;
 
+  // Merge any worktree agents before respawning orchestrator
+  const worktreeAgents = session.agents.filter(a => a.worktreePath && a.mergeStatus === 'pending');
+  if (worktreeAgents.length > 0) {
+    const results = mergeWorktrees(cwd, worktreeAgents);
+    for (const result of results) {
+      const mergeStatus = result.status === 'conflict' ? 'conflict' as const : 'merged' as const;
+      state.updateAgent(cwd, sessionId, result.agentId, {
+        mergeStatus,
+        mergeDetails: result.conflictDetails,
+      }).catch((err: unknown) => console.error(`[sisyphus] Failed to update merge status for ${result.agentId}:`, err));
+    }
+  }
+
   // Delay to let /exit finish quitting the previous Claude session
   setTimeout(() => {
     orchestrator.spawnOrchestrator(sessionId, cwd, windowId)
@@ -97,6 +111,7 @@ export async function handleSpawn(
   agentType: string,
   name: string,
   instruction: string,
+  worktree?: boolean,
 ): Promise<{ agentId: string }> {
   const windowId = orchestrator.getWindowId(sessionId);
   if (!windowId) throw new Error(`No tmux window found for session ${sessionId}`);
@@ -108,6 +123,7 @@ export async function handleSpawn(
     name,
     instruction,
     windowId,
+    worktree,
   });
 
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
@@ -157,6 +173,13 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
         completedAt: new Date().toISOString(),
       });
       killedAgents++;
+    }
+  }
+
+  // Clean up worktrees for agents that had them
+  for (const agent of session.agents) {
+    if (agent.worktreePath && agent.branchName) {
+      cleanupWorktree(cwd, agent.worktreePath, agent.branchName);
     }
   }
 

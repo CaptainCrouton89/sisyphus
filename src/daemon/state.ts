@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Session, Agent, AgentReport, OrchestratorCycle, SessionStatus } from '../shared/types.js';
-import { statePath, sessionDir, contextDir, planPath, logsPath } from '../shared/paths.js';
+import { statePath, sessionDir, contextDir, promptsDir, planPath, logsPath } from '../shared/paths.js';
 
 const PLAN_SEED = `<!-- plan.md — What still needs to happen -->
 <!-- This is a living document. Write your remaining work plan here: phases, -->
@@ -45,6 +45,7 @@ export function createSession(id: string, task: string, cwd: string): Session {
   const dir = sessionDir(cwd, id);
   mkdirSync(dir, { recursive: true });
   mkdirSync(contextDir(cwd, id), { recursive: true });
+  mkdirSync(promptsDir(cwd, id), { recursive: true });
 
   writeFileSync(planPath(cwd, id), PLAN_SEED, 'utf-8');
   writeFileSync(logsPath(cwd, id), LOGS_SEED, 'utf-8');

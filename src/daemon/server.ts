@@ -70,7 +70,7 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'spawn': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        const result = await sessionManager.handleSpawn(req.sessionId, cwd, req.agentType, req.name, req.instruction);
+        const result = await sessionManager.handleSpawn(req.sessionId, cwd, req.agentType, req.name, req.instruction, req.worktree);
         return { ok: true, data: { agentId: result.agentId } };
       }
 

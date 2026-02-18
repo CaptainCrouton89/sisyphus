@@ -10,7 +10,8 @@ export function registerSpawn(program: Command): void {
     .option('--agent-type <type>', 'Agent role label (default: worker)', 'worker')
     .requiredOption('--name <name>', 'Agent name')
     .requiredOption('--instruction <instruction>', 'Task instruction for the agent')
-    .action(async (opts: { agentType: string; name: string; instruction: string }) => {
+    .option('--worktree', 'Spawn agent in an isolated git worktree')
+    .action(async (opts: { agentType: string; name: string; instruction: string; worktree?: boolean }) => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -24,6 +25,7 @@ export function registerSpawn(program: Command): void {
         agentType: opts.agentType,
         name: opts.name,
         instruction: opts.instruction,
+        ...(opts.worktree ? { worktree: true } : {}),
       };
       const response = await sendRequest(request);
       if (response.ok) {

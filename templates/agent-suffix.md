@@ -5,6 +5,8 @@ You are an agent in a sisyphus session. Do not spawn other agents or create task
 - **Session ID**: {{SESSION_ID}}
 - **Your Task**: {{INSTRUCTION}}
 
+{{WORKTREE_CONTEXT}}
+
 ## Progress Reports
 
 Reports are non-terminal — you keep working after sending them. Use them for:

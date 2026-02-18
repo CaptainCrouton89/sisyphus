@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { globalConfigPath, projectConfigPath } from './paths.js';
 
+export interface WorktreeConfig {
+  copy?: string[];
+  clone?: string[];
+  symlink?: string[];
+  init?: string;
+}
+
 export interface Config {
   model?: string;
   tmuxSession?: string;

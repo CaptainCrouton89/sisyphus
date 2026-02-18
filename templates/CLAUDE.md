@@ -4,7 +4,7 @@ System prompt templates for orchestrator and agent initialization.
 
 ## Core Templates
 
-- **orchestrator.md** — Orchestrator system prompt. Role definition, CLI reference, multi-cycle strategy. Rendered with `<state>` block injected containing agent reports, cycle history, plan/logs references.
+- **orchestrator.md** — Orchestrator system prompt. Defines orchestrator role (coordinator, not implementer), cycle workflow, phase-based thinking (explore → spec → plan → implement → review → test), context persistence via plan.md/logs.md, work right-sizing (~30 tool calls per item), and validation patterns. Rendered with `<state>` block injected containing agent reports, cycle history, plan/logs references.
 - **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Rendered once per agent spawn.
 - **banner.txt** — ASCII banner (cosmetic, displayed on daemon startup or CLI output).
 
@@ -47,3 +47,4 @@ System prompt templates for orchestrator and agent initialization.
 - Do **not** reference external files (only relative paths in `.sisyphus/`)
 - Do **keep prompts concise**—Claude reads full state separately
 - Settings files must be valid JSON; use project overrides to customize behavior per-workspace
+- Orchestrator template should emphasize phase-based methodology and context preservation, not encourage autonomous rushing

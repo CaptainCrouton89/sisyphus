@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { contextDir, logsPath, planPath, projectOrchestratorPromptPath, sessionDir } from '../shared/paths.js';
+import { contextDir, logsPath, planPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import * as state from './state.js';
@@ -77,28 +77,48 @@ function formatStateForOrchestrator(session: Session): string {
       }).join('\n')
     : '  (none)';
 
-  return [
-    '<state>',
-    `session: ${shortId} (cycle ${cycleNum})`,
-    `task: ${session.task}`,
-    `status: ${session.status}`,
-    '',
-    '## Plan',
-    planRef,
-    '',
-    '## Logs',
-    logsRef,
-    '',
-    '## Context Files',
-    contextLines,
-    '',
-    '## Agents',
-    agentLines,
-    '',
-    '## Previous Cycles',
-    cycleLines,
-    '</state>',
-  ].join('\n');
+  // Worktree status — only if any agents have worktree info
+  const worktreeAgents = session.agents.filter(a => a.worktreePath);
+  let worktreeSection = '';
+  if (worktreeAgents.length > 0) {
+    const wtLines = worktreeAgents.map((a: Agent) => {
+      if (a.mergeStatus === 'conflict') {
+        return `- ${a.id}: conflict — ${a.mergeDetails ?? 'unknown'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}`;
+      }
+      const status = a.mergeStatus ?? 'pending';
+      return `- ${a.id}: ${status} (branch ${a.branchName})`;
+    }).join('\n');
+    worktreeSection = `\n\n## Worktrees\n${wtLines}`;
+  }
+
+  // Worktree hint
+  const worktreeHint = existsSync(worktreeConfigPath(session.cwd))
+    ? 'Worktree config active (`.sisyphus/worktree.json`). Use `--worktree` flag with `sisyphus spawn` to isolate agents in their own worktrees. Recommended for feature work, especially with potential file overlap.'
+    : 'No worktree configuration found. If this session involves parallel work where agents may edit overlapping files, use the `git-management` skill to set up `.sisyphus/worktree.json` and enable worktree isolation.';
+
+  return `<state>
+session: ${shortId} (cycle ${cycleNum})
+task: ${session.task}
+status: ${session.status}
+
+## Plan
+${planRef}
+
+## Logs
+${logsRef}
+
+## Agents
+${agentLines}${worktreeSection}
+
+## Previous Cycles
+${cycleLines}
+
+## Context Files
+${contextLines}
+
+## Git Worktrees
+${worktreeHint}
+</state>`;
 }
 
 export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
@@ -108,7 +128,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   // System prompt: template only (no state)
   const cycleNum = session.orchestratorCycles.length + 1;
-  const promptFilePath = `${sessionDir(cwd, sessionId)}/orchestrator-prompt-${cycleNum}.md`;
+  const promptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-system-${cycleNum}.md`;
   writeFileSync(promptFilePath, basePrompt, 'utf-8');
 
   sessionWindowMap.set(sessionId, windowId);
@@ -133,7 +153,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     }
   }
 
-  const userPromptFilePath = `${sessionDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
+  const userPromptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
   writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
   const pluginPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');

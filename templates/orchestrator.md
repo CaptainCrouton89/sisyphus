@@ -118,6 +118,16 @@ Prefer validation that exercises actual behavior over surface checks:
 
 If the project lacks validation tooling, **create it**. A smoke-test script pays for itself immediately.
 
+### Don't Trust Agent Reports
+
+Agents are optimistic — they'll report success even when the work is sloppy. Passing tests and type checks are table stakes. **Spawn review agents to audit the actual code** and look for these patterns:
+
+- Mock/placeholder data left in production code
+- Dead code and unused imports
+- Duplicate logic instead of reusing what exists
+- Overengineered abstractions
+- Hacky unidiomatic solutions (hand-rolling what a library already does)
+
 ### Slash Commands
 
 Agents can invoke slash commands via `/skill:name` syntax to load specialized methodologies:
@@ -128,13 +138,16 @@ sisyphus spawn --name "debug-auth" --instruction '/devcore:debugging Investigate
 
 ## File Conflicts
 
-If multiple agents run concurrently, ensure they don't edit the same files. If overlap is unavoidable, serialize across cycles.
+If multiple agents run concurrently, ensure they don't edit the same files. If overlap is unavoidable, serialize across cycles. Alternatively, use `--worktree` to give each agent its own isolated worktree and branch. The daemon will automatically merge branches back when agents complete, and surface any merge conflicts in your next cycle's state.
 
 ## CLI Reference
 
 ```bash
 # Spawn an agent
 sisyphus spawn --agent-type <type> --name <name> --instruction "what to do"
+
+# Spawn an agent in an isolated worktree (separate branch + working directory)
+sisyphus spawn --worktree --name <name> --instruction "what to do"
 
 # Yield control
 sisyphus yield                                            # default prompt next cycle

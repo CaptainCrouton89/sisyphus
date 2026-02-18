@@ -5,7 +5,8 @@ import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getNextColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
-import { sessionDir, reportsDir, reportFilePath } from '../shared/paths.js';
+import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
+import { createWorktree, countWorktreeAgents } from './worktree.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -26,7 +27,13 @@ export function clearAgentCounter(sessionId: string): void {
   agentCounters.delete(sessionId);
 }
 
-function renderAgentSuffix(sessionId: string, instruction: string): string {
+interface WorktreeContext {
+  offset: number;
+  total: number;
+  branchName: string;
+}
+
+function renderAgentSuffix(sessionId: string, instruction: string, worktreeContext?: WorktreeContext): string {
   const templatePath = resolve(import.meta.dirname, '../templates/agent-suffix.md');
   let template: string;
   try {
@@ -34,9 +41,20 @@ function renderAgentSuffix(sessionId: string, instruction: string): string {
   } catch {
     template = `# Sisyphus Agent\nSession: {{SESSION_ID}}\nTask: {{INSTRUCTION}}`;
   }
+
+  let worktreeBlock = '';
+  if (worktreeContext) {
+    worktreeBlock = [
+      '## Worktree Context',
+      `You are working in worktree ${worktreeContext.offset} of ${worktreeContext.total} concurrent worktrees on branch \`${worktreeContext.branchName}\`.`,
+      `If you start any services that require ports, add ${worktreeContext.offset} to the default port.`,
+    ].join('\n');
+  }
+
   return template
     .replace(/\{\{SESSION_ID\}\}/g, sessionId)
-    .replace(/\{\{INSTRUCTION\}\}/g, instruction);
+    .replace(/\{\{INSTRUCTION\}\}/g, instruction)
+    .replace(/\{\{WORKTREE_CONTEXT\}\}/g, worktreeBlock);
 }
 
 export interface SpawnAgentOpts {
@@ -46,6 +64,7 @@ export interface SpawnAgentOpts {
   name: string;
   instruction: string;
   windowId: string;
+  worktree?: boolean;
 }
 
 export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
@@ -55,12 +74,28 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const agentId = `agent-${String(count).padStart(3, '0')}`;
   const color = getNextColor(sessionId);
 
-  const paneId = tmux.createPane(windowId, cwd);
+  let paneCwd = cwd;
+  let worktreePath: string | undefined;
+  let branchName: string | undefined;
+  let worktreeContext: WorktreeContext | undefined;
+
+  if (opts.worktree) {
+    const wt = createWorktree(cwd, sessionId, agentId);
+    worktreePath = wt.worktreePath;
+    branchName = wt.branchName;
+    paneCwd = worktreePath;
+
+    const session = state.getSession(cwd, sessionId);
+    const portOffset = countWorktreeAgents(session.agents) + 1;
+    worktreeContext = { offset: portOffset, total: portOffset, branchName };
+  }
+
+  const paneId = tmux.createPane(windowId, paneCwd);
   tmux.setPaneTitle(paneId, `${name} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
 
-  const suffix = renderAgentSuffix(sessionId, instruction);
-  const suffixFilePath = `${sessionDir(cwd, sessionId)}/${agentId}-system.md`;
+  const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
+  const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
   writeFileSync(suffixFilePath, suffix, 'utf-8');
 
   const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
@@ -69,6 +104,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='${agentId}'`,
+    ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
   ].join(' && ');
 
   const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
@@ -87,6 +123,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     completedAt: null,
     reports: [],
     paneId,
+    ...(worktreePath ? { worktreePath, branchName, mergeStatus: 'pending' as const } : {}),
   };
 
   await state.addAgent(cwd, sessionId, agent);

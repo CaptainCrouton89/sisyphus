@@ -37,6 +37,10 @@ export interface Agent {
   reports: AgentReport[];
   paneId: string;
   killedReason?: string;
+  worktreePath?: string;
+  branchName?: string;
+  mergeStatus?: 'pending' | 'merged' | 'conflict';
+  mergeDetails?: string;
 }
 
 export interface OrchestratorCycle {

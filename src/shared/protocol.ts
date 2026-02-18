@@ -1,6 +1,6 @@
 export type Request =
   | { type: 'start'; task: string; cwd: string; tmuxSession: string; tmuxWindow: string }
-  | { type: 'spawn'; sessionId: string; agentType: string; name: string; instruction: string }
+  | { type: 'spawn'; sessionId: string; agentType: string; name: string; instruction: string; worktree?: boolean }
   | { type: 'submit'; sessionId: string; agentId: string; report: string }
   | { type: 'report'; sessionId: string; agentId: string; content: string }
   | { type: 'yield'; sessionId: string; agentId: string; nextPrompt?: string }

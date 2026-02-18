@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 export function globalDir(): string {
   return join(homedir(), '.sisyphus');
@@ -53,6 +53,10 @@ export function reportFilePath(cwd: string, sessionId: string, agentId: string, 
   return join(reportsDir(cwd, sessionId), `${agentId}-${suffix}.md`);
 }
 
+export function promptsDir(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'prompts');
+}
+
 export function contextDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'context');
 }
@@ -63,4 +67,12 @@ export function planPath(cwd: string, sessionId: string): string {
 
 export function logsPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'logs.md');
+}
+
+export function worktreeConfigPath(cwd: string): string {
+  return join(projectDir(cwd), 'worktree.json');
+}
+
+export function worktreeBaseDir(cwd: string): string {
+  return join(cwd, '..', `${basename(cwd)}-sisyphus-wt`);
 }
