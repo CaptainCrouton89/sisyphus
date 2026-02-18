@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Todos</h1>
+
+    <div id="error-banner" class="error-banner" hidden></div>
+
+    <form id="todo-form" class="todo-form">
+      <input
+        type="text"
+        id="todo-input"
+        class="todo-input"
+        placeholder="What needs to be done?"
+        autocomplete="off"
+        required
+      >
+      <button type="submit" class="add-btn">Add</button>
+    </form>
+
+    <ul id="todo-list" class="todo-list"></ul>
+
+    <footer id="todo-footer" class="todo-footer" hidden>
+      <span id="todo-count" class="todo-count"></span>
+      <nav class="filters" aria-label="Filter todos">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="active">Active</button>
+        <button class="filter-btn" data-filter="completed">Completed</button>
+      </nav>
+    </footer>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
