@@ -94,9 +94,15 @@ export function listSessions(cwd: string): Array<{ id: string; task: string; sta
   return sessions;
 }
 
+const pendingRespawns = new Set<string>();
+
 export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string): void {
+  if (pendingRespawns.has(sessionId)) return;
+
   const session = state.getSession(cwd, sessionId);
   if (session.status !== 'active') return;
+
+  pendingRespawns.add(sessionId);
 
   // Merge any worktree agents before respawning orchestrator
   const worktreeAgents = session.agents.filter(a => a.worktreePath && a.mergeStatus === 'pending');
@@ -113,6 +119,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
 
   // Delay to let /exit finish quitting the previous Claude session
   setTimeout(() => {
+    pendingRespawns.delete(sessionId);
     orchestrator.spawnOrchestrator(sessionId, cwd, windowId)
       .then(() => updateTrackedWindow(sessionId, windowId))
       .catch((err: unknown) => console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err));
@@ -157,7 +164,22 @@ export async function handleReport(cwd: string, sessionId: string, agentId: stri
 }
 
 export async function handleYield(sessionId: string, cwd: string, nextPrompt?: string): Promise<void> {
+  // Re-activate paused sessions so respawn can proceed
+  const pre = state.getSession(cwd, sessionId);
+  if (pre.status === 'paused') {
+    await state.updateSessionStatus(cwd, sessionId, 'active');
+  }
+
   await orchestrator.handleOrchestratorYield(sessionId, cwd, nextPrompt);
+
+  const session = state.getSession(cwd, sessionId);
+  const hasRunningAgents = session.agents.some(a => a.status === 'running');
+  if (!hasRunningAgents) {
+    const windowId = orchestrator.getWindowId(sessionId);
+    if (windowId) {
+      onAllAgentsDone(sessionId, cwd, windowId);
+    }
+  }
 }
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {

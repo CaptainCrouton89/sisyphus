@@ -200,7 +200,7 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
   const session = state.getSession(cwd, sessionId);
   const runningAgents = session.agents.filter(a => a.status === 'running');
   if (runningAgents.length === 0) {
-    console.error(`[sisyphus] WARNING: Orchestrator yielded but no agents are running for session ${sessionId}`);
+    console.log(`[sisyphus] Orchestrator yielded with no running agents for session ${sessionId}`);
   }
 }
 
