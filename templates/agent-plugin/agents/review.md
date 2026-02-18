@@ -1,6 +1,6 @@
 ---
 name: review
-description: Code review. Spawns parallel subagents by concern area. Read-only.
+description: Use after implementation to catch bugs, security issues, and over-engineering before merging. Read-only — reviews diffs or specific files, validates findings to filter noise, and reports only confirmed issues. Good as a quality gate before completing a feature.
 model: opus
 color: orange
 ---

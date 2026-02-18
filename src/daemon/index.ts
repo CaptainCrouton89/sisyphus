@@ -5,7 +5,7 @@ import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadS
 import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrackedWindow } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 import { resetAgentCounterFromState } from './agent.js';
-import { setWindowId, setOrchestratorPaneId } from './orchestrator.js';
+import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
 import { listPanes } from './tmux.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
@@ -126,6 +126,20 @@ async function recoverSessions(): Promise<void> {
             }
 
             console.log(`[sisyphus] Reconnected session ${sessionId} to tmux window ${session.tmuxWindowId}`);
+
+            // Detect sessions stuck in "all agents done, no orchestrator" state
+            if (session.status === 'active' && session.agents.length > 0) {
+              const hasRunningAgents = session.agents.some(a => a.status === 'running');
+              if (!hasRunningAgents) {
+                const livePaneIds = new Set(livePanes.map(p => p.paneId));
+                const orchestratorPaneId = getOrchestratorPaneId(sessionId);
+                const orchestratorAlive = orchestratorPaneId && livePaneIds.has(orchestratorPaneId);
+                if (!orchestratorAlive) {
+                  console.log(`[sisyphus] Detected stuck session ${sessionId} on recovery: triggering orchestrator respawn`);
+                  await onAllAgentsDone(sessionId, cwd, session.tmuxWindowId!);
+                }
+              }
+            }
           } else {
             // Window gone — pause the session so user can `sisyphus resume`
             if (session.status === 'active') {

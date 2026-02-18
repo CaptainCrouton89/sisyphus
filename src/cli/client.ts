@@ -42,23 +42,41 @@ function rawSend(request: Request): Promise<Response> {
 }
 
 export async function sendRequest(request: Request): Promise<Response> {
-  try {
-    return await rawSend(request);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ECONNREFUSED') {
-      if (process.platform !== 'darwin') {
-        throw new Error(
-          `Sisyphus daemon is not running.\n` +
-          `  Start it manually: sisyphusd &\n` +
-          `  Or check logs at: ~/.sisyphus/daemon.log`
-        );
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const MAX_ATTEMPTS = 5;
+  const RETRY_DELAY_MS = 2000;
+  let installedDaemon = false;
+  let lastErr: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await rawSend(request);
+    } catch (err) {
+      lastErr = err;
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ECONNREFUSED') {
+        throw err;
       }
-      // Auto-install and retry once
-      await ensureDaemonInstalled();
-      await waitForDaemon(5000);
-      return rawSend(request);
+
+      if (attempt === MAX_ATTEMPTS) break;
+
+      if (process.platform === 'darwin' && !installedDaemon) {
+        installedDaemon = true;
+        await ensureDaemonInstalled();
+        await waitForDaemon(5000);
+      } else {
+        process.stderr.write(`Daemon not ready, retrying (${attempt}/${MAX_ATTEMPTS - 1})...\n`);
+        await sleep(RETRY_DELAY_MS);
+      }
     }
-    throw err;
   }
+
+  if (process.platform !== 'darwin') {
+    throw new Error(
+      `Sisyphus daemon is not running.\n` +
+      `  Start it manually: sisyphusd &\n` +
+      `  Or check logs at: ~/.sisyphus/daemon.log`
+    );
+  }
+  throw lastErr;
 }

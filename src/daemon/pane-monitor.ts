@@ -113,4 +113,17 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
       console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane disappeared`);
     }
   }
+
+  // Re-read state since handleAgentKilled may have mutated it
+  session = state.getSession(cwd, sessionId);
+  if (
+    session.status === 'active' &&
+    session.agents.length > 0 &&
+    session.agents.every(a => a.status !== 'running') &&
+    (!orchPaneId || !livePaneIds.has(orchPaneId)) &&
+    onAllAgentsDone
+  ) {
+    console.log(`[sisyphus] Detected stuck session ${sessionId}: all agents done, no orchestrator — triggering respawn`);
+    onAllAgentsDone(sessionId, cwd, windowId);
+  }
 }

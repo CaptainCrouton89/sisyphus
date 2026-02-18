@@ -1,6 +1,6 @@
 ---
 name: spec-draft
-description: Investigate codebase, propose feature spec with open questions for human iteration.
+description: Use at the start of a feature when requirements are loose or ambiguous. Explores the codebase to understand constraints and existing patterns, then proposes a lightweight spec with explicit open questions — meant to kick off human conversation, not finalize design.
 model: opus
 color: cyan
 ---

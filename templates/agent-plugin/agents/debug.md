@@ -1,6 +1,6 @@
 ---
 name: debug
-description: Systematic bug diagnosis. Investigate only — no code changes.
+description: Use when something is broken and the root cause is unclear. Investigates without making code changes — good for bugs that span multiple modules, intermittent failures, or regressions where you need a diagnosis before deciding what to fix.
 model: opus
 color: red
 ---

@@ -25,14 +25,28 @@ export async function startSession(task: string, cwd: string, tmuxSession: strin
 export async function resumeSession(sessionId: string, cwd: string, tmuxSession: string, windowId: string, message?: string): Promise<Session> {
   const session = state.getSession(cwd, sessionId);
 
-  // Mark any "running" agents as "lost"
-  for (const agent of session.agents) {
-    if (agent.status === 'running') {
-      await state.updateAgent(cwd, sessionId, agent.id, {
-        status: 'lost',
-        completedAt: new Date().toISOString(),
-        killedReason: 'session resumed — agent was still running',
-      });
+  if (session.status !== 'active') {
+    // Determine which agents still have live panes
+    const livePaneIds = new Set<string>();
+    if (session.tmuxWindowId) {
+      const panes = tmux.listPanes(session.tmuxWindowId);
+      for (const pane of panes) {
+        livePaneIds.add(pane.paneId);
+      }
+    }
+
+    // Mark running agents as "lost" only if their pane is gone (or no window ID to check)
+    for (const agent of session.agents) {
+      if (agent.status === 'running') {
+        const isAlive = agent.paneId != null && livePaneIds.has(agent.paneId);
+        if (!isAlive) {
+          await state.updateAgent(cwd, sessionId, agent.id, {
+            status: 'lost',
+            completedAt: new Date().toISOString(),
+            killedReason: 'session resumed — agent was still running',
+          });
+        }
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 # Sisyphus Agent Context
 
-You are an agent in a sisyphus session. Do not spawn other agents or create tasks — only the orchestrator does that.
+You are an agent in a sisyphus session.
 
 - **Session ID**: {{SESSION_ID}}
 - **Your Task**: {{INSTRUCTION}}

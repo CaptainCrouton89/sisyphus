@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Create implementation plan from spec. File-level detail, phased for team execution.
+description: Use after a spec is finalized to turn it into a concrete implementation plan. Produces file-level detail with phased task breakdowns ready for parallel agent execution — resolves all design decisions so implementers can start coding without ambiguity.
 model: opus
 color: yellow
 ---

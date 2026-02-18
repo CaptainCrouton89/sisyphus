@@ -1,6 +1,6 @@
 ---
 name: test-spec
-description: Define behavioral test properties — what must be provably true after implementation.
+description: Use after a spec and plan exist to define what must be provably true when implementation is done. Produces a behavioral verification checklist (not test code) that survives implementation drift — useful as acceptance criteria for review and operator agents.
 model: opus
 color: magenta
 ---

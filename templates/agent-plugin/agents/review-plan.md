@@ -1,6 +1,6 @@
 ---
 name: review-plan
-description: Validate plan against spec. Check coverage, flag blocking ambiguities.
+description: Use after a plan has been written to verify it fully covers the spec. Catches missing requirements, vague sections that would stall implementers, and unresolved decisions — acts as a gate before handing a plan off to implementation agents.
 model: opus
 color: orange
 ---
