@@ -6,34 +6,34 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 
 - **index.ts** — Daemon entry point: acquires PID lock to prevent duplicate instances, starts server + monitor, recovers active/paused sessions from registry on startup, handles graceful shutdown (SIGTERM/SIGINT)
 - **server.ts** — Listens on `~/.sisyphus/daemon.sock`, parses JSON line-delimited requests, routes to SessionManager. Maintains in-memory session tracking maps and persists registry to disk for recovery.
-- **session-manager.ts** — Entry point for all session operations: lifecycle methods delegate to orchestrator/agent/monitor modules
-- **orchestrator.ts** — Spawns/respawns orchestrator Claude each cycle with formatted session state. Caches window/pane IDs in memory.
+- **session-manager.ts** — Entry point for all session operations: delegates to orchestrator/agent/monitor, coordinates cleanup (agent counter reset, pane untracking)
+- **orchestrator.ts** — Spawns/respawns orchestrator Claude each cycle with formatted session state. Caches window/pane IDs. Writes system + user prompts separately to disk.
 - **agent.ts** — Spawns agent Claude instances; auto-increments per-session counter (`agent-001`, `agent-002`, …). Renders agent system prompts from template.
-- **pane-monitor.ts** — Background poller detects killed tmux panes; triggers cleanup on orchestrator or agent death
+- **pane-monitor.ts** — Background poller detects killed tmux panes; triggers cleanup. Explicitly tracks sessions with `trackSession/updateTrackedWindow/untrackSession` lifecycle
 - **state.ts** — Atomic JSON writes: temp file → rename pattern to prevent corruption on crash
 - **tmux.ts** — tmux CLI wrapper (create/kill panes, send keys, apply styles via per-pane user variables)
 
 ## Key Patterns
 
-**Session tracking**: Server maintains three in-memory maps (`sessionCwdMap`, `sessionTmuxMap`, `sessionWindowMap`) to route requests. Maps are synced to disk registry (`~/.sisyphus/session-registry.json`) after mutations. On daemon restart, registry is loaded and sessions with `active` or `paused` status are recovered into memory.
+**Session tracking**: Server maintains in-memory maps to route requests; synced to disk registry after mutations. Pane monitor tracks sessions separately via `trackSession/updateTrackedWindow/untrackSession` to detect user-closes. On daemon restart, registry loads and `active`/`paused` sessions recover.
 
-**State flow**: Immutable session state (`.sisyphus/sessions/{id}/state.json`) is read, modified, and atomically rewritten after each operation. Session manager owns all mutations.
+**State formatting**: `formatStateForOrchestrator()` builds human-readable `<state>` block with task, status, agent summaries (with report counts/timestamps), plan/logs file references, context files list, and cycle history. Avoids raw JSON.
 
-**Pane lifecycle**: Orchestrator pane is created at session start and respawned at each cycle boundary. Agent panes are created on-demand via `spawn`, killed on `submit`. Monitor polls tmux to detect unexpected pane kills.
+**Prompts**: System prompt (template only) and user prompt (state block + contextual instruction) written to separate files. Both passed via Claude flags to avoid tmux send-keys quoting issues.
 
-**Agent naming**: Per-session counter starts at 1, increments on each spawn. Format: `agent-NNN` (zero-padded to 3 digits).
+**Pane lifecycle**: Orchestrator pane created at session start, respawned after all agents complete (2s delay via monitor callback). Agent panes created on-demand, killed on submit. Monitor polls to detect unexpected kills.
 
-**Orchestrator prompt**: System prompt is loaded from project override (`.sisyphus/orchestrator.md`) or bundled template, appended with `<state>` block (formatted agent/cycle summary with plan.md and logs.md references), written to temp file, then passed to Claude via `--append-system-prompt`.
+**Agent naming**: Per-session counter starts at 1, zero-padded to 3 digits. Counter resets on new sessions; on resume, reset from existing agents to preserve ID sequence.
 
-**Colors**: Orchestrator always yellow; agents cycle `[blue, green, magenta, cyan, red, white]` deterministically per counter mod 6. Per-pane tmux user variables (`@pane_color`) enable each pane to render its own border color independently via format strings.
+**Colors**: Orchestrator always yellow; agents cycle deterministically per counter mod 6 via shared color map. Tmux user variables per-pane.
 
-**Daemon lifecycle**: PID lock (`~/.sisyphus/daemon.pid`) prevents duplicate daemons — startup checks if one is already running. Session recovery loads the registry and re-registers active/paused sessions on restart. Graceful shutdown responds to SIGTERM/SIGINT, stops server + monitor, and releases the PID lock.
+**Daemon lifecycle**: PID lock prevents duplicate daemons. Registry recovery on startup. Graceful shutdown (SIGTERM/SIGINT) stops server + monitor, releases lock.
 
 ## Constraints
 
-- Do not write state directly to `.sisyphus/sessions/{id}/state.json` — use `state.ts` atomic write
-- Session maps must be persisted after mutations; use `registerSessionCwd()` to keep registry in sync
-- Pane monitor is best-effort polling; fast kills may not be caught — rely on socket timeout or CLI retry
-- Environment variables (`SISYPHUS_SESSION_ID`, `SISYPHUS_AGENT_ID`) must be set before spawning Claude
-- tmux errors (pane not found, session closed) are fatal — propagate via rejection, don't swallow
-- Do not bypass PID lock; always use daemon lifecycle commands (`sisyphusd start/stop/restart`)
+- Do not write state directly — use `state.ts` atomic writes
+- Always untrack sessions from pane monitor when killing/completing
+- Reset agent counters on new sessions; preserve + reset-from-state on resume
+- Prompt files must be on disk; avoid shell quoting via tmux send-keys
+- tmux errors are fatal — propagate, don't swallow
+- Pane monitor is best-effort polling; fast kills may miss
