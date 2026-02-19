@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { get } from 'node:https';
+import { daemonUpdatingPath } from '../shared/paths.js';
 
 function isNewer(latest: string, current: string): boolean {
   const a = latest.split('.').map(Number);
@@ -89,18 +90,30 @@ export function applyUpdate(expectedVersion: string): boolean {
   }
 }
 
+function markUpdating(version: string): void {
+  try { writeFileSync(daemonUpdatingPath(), version, 'utf-8'); } catch {}
+}
+
+function clearUpdating(): void {
+  try { unlinkSync(daemonUpdatingPath()); } catch {}
+}
+
 export async function checkAndApply(): Promise<void> {
+  clearUpdating(); // clean up stale marker from previous run
   try {
     const update = await checkForUpdate();
     if (!update) return;
 
     console.log(`[sisyphus] Update available: ${update.current} → ${update.latest}`);
+    markUpdating(update.latest);
     const success = applyUpdate(update.latest);
     if (success) {
       console.log(`[sisyphus] Updated to ${update.latest}, restarting daemon...`);
       process.exit(0); // launchd respawns with new code
     }
+    clearUpdating();
   } catch (err) {
+    clearUpdating();
     console.error('[sisyphus] Auto-update check failed:', err);
   }
 }

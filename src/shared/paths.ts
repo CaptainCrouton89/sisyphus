@@ -21,6 +21,10 @@ export function daemonPidPath(): string {
   return join(globalDir(), 'daemon.pid');
 }
 
+export function daemonUpdatingPath(): string {
+  return join(globalDir(), 'updating');
+}
+
 export function projectDir(cwd: string): string {
   return join(cwd, '.sisyphus');
 }

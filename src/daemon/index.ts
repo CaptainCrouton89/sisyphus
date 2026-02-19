@@ -216,6 +216,8 @@ async function startDaemon(): Promise<void> {
   process.on('SIGINT', shutdown);
 }
 
+process.title = 'sisyphusd';
+
 const command = process.argv[2];
 
 (async () => {

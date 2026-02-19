@@ -1,10 +1,10 @@
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { daemonLogPath, globalDir, socketPath } from '../shared/paths.js';
+import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -114,7 +114,24 @@ function sleep(ms: number): Promise<void> {
 
 export async function waitForDaemon(maxWaitMs = 6000): Promise<void> {
   const start = Date.now();
+  let updatingLogged = false;
+
   while (Date.now() - start < maxWaitMs) {
+    // Extend timeout if daemon is updating
+    const updatingPath = daemonUpdatingPath();
+    if (existsSync(updatingPath)) {
+      if (!updatingLogged) {
+        try {
+          const version = readFileSync(updatingPath, 'utf-8').trim();
+          console.log(`Updating sisyphus to ${version}...`);
+        } catch {
+          console.log('Updating sisyphus...');
+        }
+        updatingLogged = true;
+      }
+      maxWaitMs = Math.max(maxWaitMs, 30000);
+    }
+
     if (existsSync(socketPath())) {
       try {
         await testConnection();
