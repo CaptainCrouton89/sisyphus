@@ -53,12 +53,23 @@ export function checkForUpdate(): Promise<{ current: string; latest: string } | 
   });
 }
 
-export function applyUpdate(): boolean {
+export function applyUpdate(expectedVersion: string): boolean {
   try {
     // launchd gives a minimal PATH — ensure node/npm directory is on PATH
     const nodeDir = resolve(process.execPath, '..');
     const env = { ...process.env, PATH: `${nodeDir}:${process.env.PATH ?? ''}` };
     execSync('npm install -g sisyphi', { timeout: 15000, stdio: 'pipe', env });
+
+    // Verify the install actually landed the expected version
+    const result = execSync('npm ls -g sisyphi --json --depth=0', {
+      timeout: 5000, encoding: 'utf-8', env,
+    });
+    const info = JSON.parse(result) as { dependencies?: { sisyphi?: { version?: string } } };
+    const installed = info.dependencies?.sisyphi?.version;
+    if (installed !== expectedVersion) {
+      console.error(`[sisyphus] Update installed ${installed} but expected ${expectedVersion}`);
+      return false;
+    }
     return true;
   } catch (err) {
     console.error('[sisyphus] Auto-update failed:', err);
@@ -72,7 +83,7 @@ export async function checkAndApply(): Promise<void> {
     if (!update) return;
 
     console.log(`[sisyphus] Update available: ${update.current} → ${update.latest}`);
-    const success = applyUpdate();
+    const success = applyUpdate(update.latest);
     if (success) {
       console.log(`[sisyphus] Updated to ${update.latest}, restarting daemon...`);
       process.exit(0); // launchd respawns with new code
