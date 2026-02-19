@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { writeFileSync } from 'node:fs';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { readStdin } from '../stdin.js';
@@ -22,6 +23,7 @@ export function registerYield(program: Command): void {
       const request: Request = { type: 'yield', sessionId, agentId: 'orchestrator', nextPrompt };
       const response = await sendRequest(request);
       if (response.ok) {
+        writeFileSync(`/tmp/sisyphus-exit-${sessionId}`, '');
         console.log('Yielded. Waiting for agents to complete.');
       } else {
         console.error(`Error: ${response.error}`);

@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { writeFileSync } from 'node:fs';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { assertTmux } from '../tmux.js';
@@ -19,6 +20,7 @@ export function registerComplete(program: Command): void {
       const request: Request = { type: 'complete', sessionId, report: opts.report };
       const response = await sendRequest(request);
       if (response.ok) {
+        writeFileSync(`/tmp/sisyphus-exit-${sessionId}`, '');
         console.log('Session completed.');
       } else {
         console.error(`Error: ${response.error}`);
