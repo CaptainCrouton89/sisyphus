@@ -3,6 +3,18 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { get } from 'node:https';
 
+function isNewer(latest: string, current: string): boolean {
+  const a = latest.split('.').map(Number);
+  const b = current.split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av > bv) return true;
+    if (av < bv) return false;
+  }
+  return false;
+}
+
 function readPackageVersion(): string {
   // Bundled: dist/daemon.js → ../package.json
   // Source (tsx): src/daemon/updater.ts → ../../package.json
@@ -35,7 +47,7 @@ export function checkForUpdate(): Promise<{ current: string; latest: string } | 
         clearTimeout(timeout);
         try {
           const { version: latest } = JSON.parse(data) as { version: string };
-          if (latest && latest !== currentVersion) {
+          if (latest && isNewer(latest, currentVersion)) {
             resolve({ current: currentVersion, latest });
           } else {
             resolve(null);
