@@ -109,7 +109,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
   if (worktreeAgents.length > 0) {
     const results = mergeWorktrees(cwd, worktreeAgents);
     for (const result of results) {
-      const mergeStatus = result.status === 'conflict' ? 'conflict' as const : 'merged' as const;
+      const mergeStatus = result.status as 'merged' | 'no-changes' | 'conflict';
       state.updateAgent(cwd, sessionId, result.agentId, {
         mergeStatus,
         mergeDetails: result.conflictDetails,

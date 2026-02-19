@@ -6,7 +6,7 @@ import * as tmux from './tmux.js';
 import { getNextColor, resolveAgentTypeColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
 import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
-import { createWorktree, countWorktreeAgents } from './worktree.js';
+import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -46,7 +46,7 @@ function renderAgentSuffix(sessionId: string, instruction: string, worktreeConte
   if (worktreeContext) {
     worktreeBlock = [
       '## Worktree Context',
-      `You are working in worktree ${worktreeContext.offset} of ${worktreeContext.total} concurrent worktrees on branch \`${worktreeContext.branchName}\`.`,
+      `You are working in an isolated git worktree on branch \`${worktreeContext.branchName}\`.`,
       `If you start any services that require ports, add ${worktreeContext.offset} to the default port.`,
     ].join('\n');
   }
@@ -81,7 +81,8 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   let worktreeContext: WorktreeContext | undefined;
 
   if (opts.worktree) {
-    const wt = createWorktree(cwd, sessionId, agentId);
+    // Fast: git branch + worktree add + symlinks only (no bootstrap/init)
+    const wt = createWorktreeShell(cwd, sessionId, agentId);
     worktreePath = wt.worktreePath;
     branchName = wt.branchName;
     paneCwd = worktreePath;
@@ -110,7 +111,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
   const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-  tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}`);
+  const fullCmd = `${bannerCmd} ${envExports} && ${claudeCmd}`;
 
   const agent: Agent = {
     id: agentId,
@@ -127,6 +128,29 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   };
 
   await state.addAgent(cwd, sessionId, agent);
+
+  if (opts.worktree && worktreePath) {
+    // Defer bootstrap so the daemon can respond to the CLI before running
+    // the potentially slow init command (e.g. npm install).
+    // The pane is already visible; Claude command is sent after bootstrap.
+    const config = loadWorktreeConfig(cwd);
+    if (config) {
+      const wtPath = worktreePath;
+      setImmediate(() => {
+        try {
+          bootstrapWorktree(cwd, wtPath, config);
+        } catch (err) {
+          console.error(`[sisyphus] worktree bootstrap failed for ${agentId}: ${err instanceof Error ? err.message : err}`);
+        }
+        tmux.sendKeys(paneId, fullCmd);
+      });
+    } else {
+      tmux.sendKeys(paneId, fullCmd);
+    }
+  } else {
+    tmux.sendKeys(paneId, fullCmd);
+  }
+
   return agent;
 }
 

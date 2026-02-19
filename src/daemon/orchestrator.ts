@@ -83,7 +83,10 @@ function formatStateForOrchestrator(session: Session): string {
   if (worktreeAgents.length > 0) {
     const wtLines = worktreeAgents.map((a: Agent) => {
       if (a.mergeStatus === 'conflict') {
-        return `- ${a.id}: conflict — ${a.mergeDetails ?? 'unknown'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}`;
+        return `- ${a.id}: CONFLICT — ${a.mergeDetails ?? 'unknown'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}`;
+      }
+      if (a.mergeStatus === 'no-changes') {
+        return `- ${a.id}: NO CHANGES — agent did not commit any work to branch ${a.branchName}`;
       }
       const status = a.mergeStatus ?? 'pending';
       return `- ${a.id}: ${status} (branch ${a.branchName})`;

@@ -39,7 +39,7 @@ export interface Agent {
   killedReason?: string;
   worktreePath?: string;
   branchName?: string;
-  mergeStatus?: 'pending' | 'merged' | 'conflict';
+  mergeStatus?: 'pending' | 'merged' | 'no-changes' | 'conflict';
   mergeDetails?: string;
 }
 

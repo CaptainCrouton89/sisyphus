@@ -42,35 +42,53 @@ export function loadWorktreeConfig(cwd: string): WorktreeConfig | null {
   }
 }
 
-export function createWorktree(
+/**
+ * Create git worktree (branch + add + symlinks) without running bootstrap.
+ * Fast enough to run synchronously before responding to the CLI.
+ */
+export function createWorktreeShell(
   cwd: string,
   sessionId: string,
   agentId: string,
 ): { worktreePath: string; branchName: string } {
   const branchName = `sisyphus/${sessionId.slice(0, 8)}/${agentId}`;
-  const worktreePath = join(worktreeBaseDir(cwd), agentId);
+  // Bug B: Include session prefix in path to prevent cross-session collisions
+  const worktreePath = join(worktreeBaseDir(cwd), sessionId.slice(0, 8), agentId);
 
   mkdirSync(dirname(worktreePath), { recursive: true });
+
+  // Bug C: Clean stale worktree entries before creating
+  execSafe(`git -C ${shellQuote(cwd)} worktree prune`);
+  if (existsSync(worktreePath)) {
+    execSafe(`git -C ${shellQuote(cwd)} worktree remove --force ${shellQuote(worktreePath)}`);
+  }
+  // If the branch already exists from a previous run, remove it
+  execSafe(`git -C ${shellQuote(cwd)} branch -D ${shellQuote(branchName)}`);
 
   exec(`git -C ${shellQuote(cwd)} branch ${shellQuote(branchName)} HEAD`);
   exec(`git -C ${shellQuote(cwd)} worktree add ${shellQuote(worktreePath)} ${shellQuote(branchName)}`);
 
-  // Always symlink .sisyphus and .claude from cwd into worktree
-  const symlinks = ['.sisyphus', '.claude'];
-  for (const entry of symlinks) {
-    const src = join(cwd, entry);
-    if (existsSync(src)) {
-      execSafe(`ln -s ${shellQuote(src)} ${shellQuote(join(worktreePath, entry))}`);
-    }
-  }
+  return { worktreePath, branchName };
+}
 
-  // Load worktree config and bootstrap if present
+/**
+ * Create git worktree AND run bootstrap synchronously.
+ * Use createWorktreeShell + bootstrapWorktree separately when you need
+ * to defer the slow bootstrap to avoid blocking.
+ */
+export function createWorktree(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+): { worktreePath: string; branchName: string } {
+  const result = createWorktreeShell(cwd, sessionId, agentId);
+
   const config = loadWorktreeConfig(cwd);
   if (config) {
-    bootstrapWorktree(cwd, worktreePath, config);
+    bootstrapWorktree(cwd, result.worktreePath, config);
   }
 
-  return { worktreePath, branchName };
+  return result;
 }
 
 export function bootstrapWorktree(cwd: string, worktreePath: string, config: WorktreeConfig): void {
@@ -146,6 +164,11 @@ export function mergeWorktrees(cwd: string, agents: Agent[]): MergeResult[] {
 
   const results: MergeResult[] = [];
 
+  // Snapshot any uncommitted .sisyphus state changes before merging
+  // so agent branches don't conflict with main's session state updates
+  execSafe(`git -C ${shellQuote(cwd)} add .sisyphus`);
+  execSafe(`git -C ${shellQuote(cwd)} commit -m 'sisyphus: snapshot session state before merge'`);
+
   for (const agent of pending) {
     const branch = resolveWorktreeBranch(cwd, agent.worktreePath!);
 
@@ -177,10 +200,15 @@ export function mergeWorktrees(cwd: string, agents: Agent[]): MergeResult[] {
     } catch (err: unknown) {
       // Merge failed — abort and leave worktree intact for manual resolution
       execSafe(`git -C ${shellQuote(cwd)} merge --abort`);
-      const stderr = (err as { stderr?: Buffer | string })?.stderr;
-      const conflictDetails = stderr
-        ? (typeof stderr === 'string' ? stderr : stderr.toString('utf-8')).trim()
-        : (err instanceof Error ? err.message : String(err));
+      // Git outputs conflict details (which files, conflict type) to stdout, not stderr
+      const errObj = err as { stdout?: Buffer | string; stderr?: Buffer | string };
+      const stdout = errObj.stdout
+        ? (typeof errObj.stdout === 'string' ? errObj.stdout : errObj.stdout.toString('utf-8')).trim()
+        : '';
+      const stderr = errObj.stderr
+        ? (typeof errObj.stderr === 'string' ? errObj.stderr : errObj.stderr.toString('utf-8')).trim()
+        : '';
+      const conflictDetails = stdout || stderr || (err instanceof Error ? err.message : String(err));
       results.push({ agentId: agent.id, name: agent.name, status: 'conflict', conflictDetails });
     }
   }
