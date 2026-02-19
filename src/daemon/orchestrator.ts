@@ -167,7 +167,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
-  tmux.setPaneTitle(paneId, `orchestrator (${sessionId.slice(0, 8)})`);
+  tmux.setPaneTitle(paneId, `Sisyphus (${sessionId.slice(0, 8)})`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
   const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
