@@ -18,8 +18,9 @@ function plistPath(): string {
 }
 
 function daemonBinPath(): string {
+  // In bundled output, cli.js and daemon.js are siblings in dist/
   const installDir = dirname(fileURLToPath(import.meta.url));
-  return resolve(installDir, '..', 'daemon.js');
+  return resolve(installDir, 'daemon.js');
 }
 
 function generatePlist(nodePath: string, daemonPath: string, logPath: string): string {
