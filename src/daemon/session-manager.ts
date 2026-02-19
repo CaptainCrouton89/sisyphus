@@ -1,12 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
 import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport } from './agent.js';
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
-import { sessionsDir } from '../shared/paths.js';
+import { sessionDir, sessionsDir } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 
@@ -19,7 +19,54 @@ export async function startSession(task: string, cwd: string, tmuxSession: strin
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId);
   updateTrackedWindow(sessionId, windowId);
 
+  pruneOldSessions(cwd);
+
   return session;
+}
+
+const PRUNE_KEEP_COUNT = 10;
+const PRUNE_KEEP_DAYS = 7;
+
+function pruneOldSessions(cwd: string): void {
+  try {
+    const dir = sessionsDir(cwd);
+    if (!existsSync(dir)) return;
+
+    const entries = readdirSync(dir, { withFileTypes: true });
+    const candidates: Array<{ id: string; createdAt: number }> = [];
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const session = state.getSession(cwd, entry.name);
+        if (session.status === 'active' || session.status === 'paused') continue;
+        candidates.push({ id: session.id, createdAt: new Date(session.createdAt).getTime() });
+      } catch {
+        // Unreadable session dir — skip, don't delete
+      }
+    }
+
+    if (candidates.length <= PRUNE_KEEP_COUNT) return;
+
+    candidates.sort((a, b) => b.createdAt - a.createdAt);
+
+    const cutoff = Date.now() - PRUNE_KEEP_DAYS * 24 * 60 * 60 * 1000;
+    const keep = new Set<string>();
+
+    for (let i = 0; i < Math.min(PRUNE_KEEP_COUNT, candidates.length); i++) {
+      keep.add(candidates[i]!.id);
+    }
+    for (const c of candidates) {
+      if (c.createdAt >= cutoff) keep.add(c.id);
+    }
+
+    for (const c of candidates) {
+      if (keep.has(c.id)) continue;
+      rmSync(sessionDir(cwd, c.id), { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error('[sisyphus] Session pruning failed:', err);
+  }
 }
 
 export async function resumeSession(sessionId: string, cwd: string, tmuxSession: string, windowId: string, message?: string): Promise<Session> {
