@@ -13,6 +13,7 @@ export interface Config {
   tmuxSession?: string;
   orchestratorPrompt?: string;
   pollIntervalMs?: number;
+  autoUpdate?: boolean;
 }
 
 const DEFAULT_CONFIG: Config = {
