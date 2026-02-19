@@ -95,7 +95,11 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   const paneId = tmux.createPane(windowId, paneCwd);
   registerPane(paneId, sessionId, 'agent', agentId);
-  tmux.setPaneTitle(paneId, `${name} (${agentId})`);
+  const shortType = agentType && agentType !== 'worker'
+    ? agentType.replace(/^sisyphus:/, '')
+    : '';
+  const paneLabel = shortType ? `${name}-${shortType}` : name;
+  tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
 
   const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
@@ -112,7 +116,9 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   ].join(' && ');
 
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
-  const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+  const agentNameFlag = ` --agent-name ${shellQuote(paneLabel)}`;
+  const teamFlag = ` --agent-id ${shellQuote(agentId)} --team-name sisyphus-${sessionId.slice(0, 8)}`;
+  const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag}${agentNameFlag}${teamFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   const notifyCmd = `sisyphus notify pane-exited --pane-id ${paneId}`;
   const fullCmd = `${bannerCmd} ${envExports} && ${claudeCmd}; ${notifyCmd}`;
 
