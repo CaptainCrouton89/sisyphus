@@ -197,6 +197,12 @@ switch (command) {
     // Small delay to let socket release
     const wait = Date.now() + 500;
     while (Date.now() < wait) { /* spin */ }
+    // Check if a process manager (e.g. launchd) already respawned the daemon
+    const respawnedPid = readPid();
+    if (respawnedPid) {
+      console.log(`[sisyphus] Daemon restarted (pid ${respawnedPid}) by process manager`);
+      break;
+    }
     startDaemon().catch((err) => {
       console.error('[sisyphus] Fatal error:', err);
       process.exit(1);
@@ -212,8 +218,20 @@ switch (command) {
     });
     break;
 
+  case 'help':
+  case '--help':
+  case '-h':
+    console.log('Usage: sisyphusd [command]');
+    console.log('');
+    console.log('Commands:');
+    console.log('  start     Start the daemon (default if no command given)');
+    console.log('  stop      Stop the running daemon');
+    console.log('  restart   Stop and restart the daemon');
+    console.log('  help      Show this help message');
+    break;
+
   default:
     console.error(`[sisyphus] Unknown command: ${command}`);
-    console.error('Usage: sisyphusd [start|stop|restart]');
+    console.error('Usage: sisyphusd [start|stop|restart|help]');
     process.exit(1);
 }

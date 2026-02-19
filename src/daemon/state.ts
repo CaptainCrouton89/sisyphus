@@ -1,15 +1,12 @@
-import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Session, Agent, AgentReport, OrchestratorCycle, SessionStatus } from '../shared/types.js';
-import { statePath, sessionDir, contextDir, promptsDir, planPath, logsPath } from '../shared/paths.js';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { contextDir, logsPath, planPath, promptsDir, sessionDir, statePath } from '../shared/paths.js';
+import type { Agent, AgentReport, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const PLAN_SEED = `---
 description: >
-  Living document of what still needs to happen. Write your remaining work plan
-  here: phases, next steps, file references, open questions. Remove or collapse
-  items as they're completed so this file only reflects outstanding work. The
-  orchestrator sees this every cycle — keep it focused and current.
+  Living document of what still needs to happen. Write out ne
 ---
 `;
 
@@ -18,7 +15,7 @@ description: >
   Session memory. Record important observations, decisions, and findings here.
   This is your persistent memory across cycles: things you tried, what
   worked/failed, design decisions and their rationale, gotchas discovered during
-  implementation. Unlike plan.md, entries here accumulate — they're a log.
+  implementation.
 ---
 `;
 
