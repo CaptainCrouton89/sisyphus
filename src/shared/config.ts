@@ -16,7 +16,7 @@ export interface Config {
 }
 
 const DEFAULT_CONFIG: Config = {
-  pollIntervalMs: 1000,
+  pollIntervalMs: 5000,
 };
 
 function readJsonFile(filePath: string): Partial<Config> {

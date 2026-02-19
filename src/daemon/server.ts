@@ -4,6 +4,7 @@ import { socketPath, globalDir } from '../shared/paths.js';
 import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
 import * as sessionManager from './session-manager.js';
+import { lookupPane, unregisterPane } from './pane-registry.js';
 
 let server: Server | null = null;
 
@@ -178,6 +179,19 @@ async function handleRequest(req: Request): Promise<Response> {
         sessionWindowMap.delete(req.sessionId);
         persistSessionRegistry();
         return { ok: true, data: { killedAgents, sessionId: req.sessionId } };
+      }
+
+      case 'pane-exited': {
+        const entry = lookupPane(req.paneId);
+        if (!entry) return { ok: true }; // Already handled or unknown
+        const cwd = sessionCwdMap.get(entry.sessionId);
+        if (!cwd) {
+          unregisterPane(req.paneId);
+          return { ok: true };
+        }
+        unregisterPane(req.paneId);
+        await sessionManager.handlePaneExited(req.paneId, cwd, entry.sessionId, entry.role, entry.agentId);
+        return { ok: true };
       }
 
       default:

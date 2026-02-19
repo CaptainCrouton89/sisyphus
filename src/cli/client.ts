@@ -3,7 +3,7 @@ import { socketPath } from '../shared/paths.js';
 import type { Request, Response } from '../shared/protocol.js';
 import { ensureDaemonInstalled, waitForDaemon } from './install.js';
 
-function rawSend(request: Request): Promise<Response> {
+export function rawSend(request: Request): Promise<Response> {
   const sock = socketPath();
 
   return new Promise<Response>((resolve, reject) => {

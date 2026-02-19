@@ -12,7 +12,7 @@ export function setRespawnCallback(cb: RespawnCallback): void {
   onAllAgentsDone = cb;
 }
 
-export function startMonitor(pollIntervalMs: number = 1000): void {
+export function startMonitor(pollIntervalMs: number = 5000): void {
   if (monitorInterval) return;
   monitorInterval = setInterval(() => {
     pollAllSessions().catch(err => {

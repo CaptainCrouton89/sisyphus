@@ -3,10 +3,11 @@ import { existsSync, readdirSync, rmSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
-import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport } from './agent.js';
+import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionDir, sessionsDir } from '../shared/paths.js';
+import { unregisterSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 
@@ -164,13 +165,13 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     }
   }
 
-  // Delay to let /exit finish quitting the previous Claude session
-  setTimeout(() => {
+  // Respawn on next tick — agents already finished, no delay needed
+  setImmediate(() => {
     pendingRespawns.delete(sessionId);
     orchestrator.spawnOrchestrator(sessionId, cwd, windowId)
       .then(() => updateTrackedWindow(sessionId, windowId))
       .catch((err: unknown) => console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err));
-  }, 2000);
+  });
 }
 
 export async function handleSpawn(
@@ -275,8 +276,9 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   // Mark session as completed
   await state.updateSessionStatus(cwd, sessionId, 'completed');
 
-  // Untrack from pane monitor
+  // Untrack from pane monitor and pane registry
   untrackSession(sessionId);
+  unregisterSessionPanes(sessionId);
 
   // Kill the entire tmux window
   if (windowId) {
@@ -287,4 +289,42 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   clearAgentCounter(sessionId);
 
   return killedAgents;
+}
+
+export async function handlePaneExited(
+  paneId: string,
+  cwd: string,
+  sessionId: string,
+  role: 'orchestrator' | 'agent',
+  agentId?: string,
+): Promise<void> {
+  const session = state.getSession(cwd, sessionId);
+  if (session.status !== 'active') return;
+
+  if (role === 'agent' && agentId) {
+    const agent = session.agents.find(a => a.id === agentId);
+    if (!agent || agent.status !== 'running') return;
+
+    const allDone = await handleAgentKilled(cwd, sessionId, agentId, 'pane exited');
+    if (allDone) {
+      const windowId = orchestrator.getWindowId(sessionId);
+      if (windowId) {
+        onAllAgentsDone(sessionId, cwd, windowId);
+      }
+    }
+  } else if (role === 'orchestrator') {
+    // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
+    const hasRunningAgents = session.agents.some(a => a.status === 'running');
+    if (!hasRunningAgents && session.agents.length > 0) {
+      const windowId = orchestrator.getWindowId(sessionId);
+      if (windowId) {
+        console.log(`[sisyphus] Orchestrator pane exited for session ${sessionId}, all agents done — triggering respawn`);
+        onAllAgentsDone(sessionId, cwd, windowId);
+      }
+    } else if (!hasRunningAgents) {
+      // No agents at all — pause session
+      await state.updateSessionStatus(cwd, sessionId, 'paused');
+      console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane exited with no agents`);
+    }
+  }
 }

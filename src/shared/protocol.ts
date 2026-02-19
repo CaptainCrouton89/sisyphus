@@ -9,7 +9,8 @@ export type Request =
   | { type: 'list'; cwd: string; all?: boolean }
   | { type: 'resume'; sessionId: string; cwd: string; tmuxSession: string; tmuxWindow: string; message?: string }
   | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }
-  | { type: 'kill'; sessionId: string };
+  | { type: 'kill'; sessionId: string }
+  | { type: 'pane-exited'; paneId: string };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }

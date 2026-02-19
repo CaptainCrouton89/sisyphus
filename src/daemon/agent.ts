@@ -7,6 +7,7 @@ import { getNextColor, resolveAgentTypeColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
 import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
 import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
+import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -93,6 +94,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   }
 
   const paneId = tmux.createPane(windowId, paneCwd);
+  registerPane(paneId, sessionId, 'agent', agentId);
   tmux.setPaneTitle(paneId, `${name} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
 
@@ -111,7 +113,8 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
   const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-  const fullCmd = `${bannerCmd} ${envExports} && ${claudeCmd}`;
+  const notifyCmd = `sisyphus notify pane-exited --pane-id ${paneId}`;
+  const fullCmd = `${bannerCmd} ${envExports} && ${claudeCmd}; ${notifyCmd}`;
 
   const agent: Agent = {
     id: agentId,
@@ -215,6 +218,7 @@ export async function handleAgentSubmit(
   const agentArr = session.agents;
   const agent = agentArr.slice().reverse().find(a => a.id === agentId);
   if (agent) {
+    unregisterPane(agent.paneId);
     tmux.killPane(agent.paneId);
   }
 
@@ -230,6 +234,7 @@ export async function handleAgentKilled(
   agentId: string,
   reason: string,
 ): Promise<boolean> {
+  unregisterAgentPane(sessionId, agentId);
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'killed',
     killedReason: reason,

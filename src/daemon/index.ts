@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { globalDir, daemonPidPath, statePath } from '../shared/paths.js';
 import { loadConfig } from '../shared/config.js';
 import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry } from './server.js';
@@ -7,6 +8,7 @@ import { onAllAgentsDone } from './session-manager.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
 import { listPanes } from './tmux.js';
+import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
 
@@ -123,6 +125,20 @@ async function recoverSessions(): Promise<void> {
             const lastIncompleteCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt && c.paneId);
             if (lastIncompleteCycle?.paneId) {
               setOrchestratorPaneId(sessionId, lastIncompleteCycle.paneId);
+              const livePaneIds = new Set(livePanes.map(p => p.paneId));
+              if (livePaneIds.has(lastIncompleteCycle.paneId)) {
+                registerPane(lastIncompleteCycle.paneId, sessionId, 'orchestrator');
+              }
+            }
+
+            // Register live agent panes
+            for (const agent of session.agents) {
+              if (agent.status === 'running' && agent.paneId) {
+                const livePaneIds = new Set(livePanes.map(p => p.paneId));
+                if (livePaneIds.has(agent.paneId)) {
+                  registerPane(agent.paneId, sessionId, 'agent', agent.id);
+                }
+              }
             }
 
             console.log(`[sisyphus] Reconnected session ${sessionId} to tmux window ${session.tmuxWindowId}`);
@@ -187,51 +203,49 @@ async function startDaemon(): Promise<void> {
 
 const command = process.argv[2];
 
-switch (command) {
-  case 'stop':
-    stopDaemon();
-    break;
+(async () => {
+  switch (command) {
+    case 'stop':
+      stopDaemon();
+      break;
 
-  case 'restart': {
-    stopDaemon();
-    // Small delay to let socket release
-    const wait = Date.now() + 500;
-    while (Date.now() < wait) { /* spin */ }
-    // Check if a process manager (e.g. launchd) already respawned the daemon
-    const respawnedPid = readPid();
-    if (respawnedPid) {
-      console.log(`[sisyphus] Daemon restarted (pid ${respawnedPid}) by process manager`);
+    case 'restart': {
+      stopDaemon();
+      // Small delay to let PID lock release
+      await sleep(500);
+      // Check if a process manager (e.g. launchd) already respawned the daemon
+      const respawnedPid = readPid();
+      if (respawnedPid) {
+        console.log(`[sisyphus] Daemon restarted (pid ${respawnedPid}) by process manager`);
+        break;
+      }
+      await startDaemon();
       break;
     }
-    startDaemon().catch((err) => {
-      console.error('[sisyphus] Fatal error:', err);
+
+    case 'start':
+    case undefined:
+      await startDaemon();
+      break;
+
+    case 'help':
+    case '--help':
+    case '-h':
+      console.log('Usage: sisyphusd [command]');
+      console.log('');
+      console.log('Commands:');
+      console.log('  start     Start the daemon (default if no command given)');
+      console.log('  stop      Stop the running daemon');
+      console.log('  restart   Stop and restart the daemon');
+      console.log('  help      Show this help message');
+      break;
+
+    default:
+      console.error(`[sisyphus] Unknown command: ${command}`);
+      console.error('Usage: sisyphusd [start|stop|restart|help]');
       process.exit(1);
-    });
-    break;
   }
-
-  case 'start':
-  case undefined:
-    startDaemon().catch((err) => {
-      console.error('[sisyphus] Fatal error:', err);
-      process.exit(1);
-    });
-    break;
-
-  case 'help':
-  case '--help':
-  case '-h':
-    console.log('Usage: sisyphusd [command]');
-    console.log('');
-    console.log('Commands:');
-    console.log('  start     Start the daemon (default if no command given)');
-    console.log('  stop      Stop the running daemon');
-    console.log('  restart   Stop and restart the daemon');
-    console.log('  help      Show this help message');
-    break;
-
-  default:
-    console.error(`[sisyphus] Unknown command: ${command}`);
-    console.error('Usage: sisyphusd [start|stop|restart|help]');
-    process.exit(1);
-}
+})().catch((err) => {
+  console.error('[sisyphus] Fatal error:', err);
+  process.exit(1);
+});

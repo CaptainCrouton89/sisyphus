@@ -5,6 +5,7 @@ import type { Agent, Session } from '../shared/types.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
+import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 
 function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
@@ -165,12 +166,14 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const paneId = tmux.createPane(windowId, cwd);
 
   sessionOrchestratorPane.set(sessionId, paneId);
+  registerPane(paneId, sessionId, 'orchestrator');
   tmux.setPaneTitle(paneId, `orchestrator (${sessionId.slice(0, 8)})`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
   const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
   const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
-  tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}`);
+  const notifyCmd = `sisyphus notify pane-exited --pane-id ${paneId}`;
+  tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}; ${notifyCmd}`);
 
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,
@@ -192,6 +195,7 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
   const paneId = resolveOrchestratorPane(sessionId, cwd);
   if (paneId) {
     tmux.killPane(paneId);
+    unregisterPane(paneId);
     sessionOrchestratorPane.delete(sessionId);
   }
 
@@ -217,4 +221,5 @@ export async function handleOrchestratorComplete(sessionId: string, cwd: string,
 export function cleanupSessionMaps(sessionId: string): void {
   sessionOrchestratorPane.delete(sessionId);
   sessionWindowMap.delete(sessionId);
+  unregisterSessionPanes(sessionId);
 }
