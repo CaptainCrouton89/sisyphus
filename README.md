@@ -29,39 +29,21 @@
 
 A tmux-integrated orchestration daemon for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) multi-agent workflows.
 
-A background daemon manages sessions where an **orchestrator** Claude instance breaks tasks into subtasks, spawns **agent** Claude instances in tmux panes, and coordinates their lifecycle through cycles. Agents work in parallel, submit reports, and the orchestrator respawns each cycle with fresh context to review progress and plan next steps.
+## What this is
 
-## How It Works
+Sisyphus is a thin orchestration layer on top of Claude Code. It doesn't replace Claude Code or wrap it in some abstraction — it just runs multiple Claude Code instances in tmux panes and coordinates them. Every agent is a real `claude` process with full access to your codebase, your tools, your CLAUDE.md, your hooks. You keep all the steerability of Claude Code; sisyphus just handles the "run N of them in parallel and loop until done" part.
 
-```
-You ──► sisyphus start "build auth system"
-              │
-              ▼
-        ┌─────────────┐
-        │ Orchestrator │  ◄── Reads state, plans work, spawns agents
-        └──────┬──────┘
-               │ sisyphus spawn (×N)
-               ▼
-     ┌─────┐ ┌─────┐ ┌─────┐
-     │ A-1 │ │ A-2 │ │ A-3 │  ◄── Parallel Claude agents in tmux panes
-     └──┬──┘ └──┬──┘ └──┬──┘
-        │       │       │
-        ▼       ▼       ▼
-   sisyphus submit (each agent reports back)
-              │
-              ▼
-        ┌─────────────┐
-        │ Orchestrator │  ◄── Respawned with updated state (next cycle)
-        └─────────────┘
-```
+If you're familiar with the [Ralph Wiggum loop](https://ghuntley.com/ralph/) — `while true; do claude --prompt task.md; done` — sisyphus is that idea taken further. Instead of one agent in a loop, you get an orchestrator that decomposes work into parallel agents, each looping independently, with structured state that persists across cycles. The orchestrator itself is in a Ralph loop: it plans, spawns agents, gets killed, and respawns fresh with all the results. Same principle, more leverage.
 
-1. **You** run `sisyphus start` with a high-level task
-2. **Orchestrator** decomposes it, spawns agents, yields
-3. **Agents** work in parallel tmux panes, send progress reports, submit when done
-4. **Daemon** detects completion, respawns orchestrator with updated state
-5. **Orchestrator** reviews reports, spawns more agents or completes the session
+## How it works
 
-The orchestrator is stateless — it's killed after yielding and respawned fresh each cycle with the full session state. This means it never runs out of context, no matter how many cycles a session takes.
+Most hard tasks aren't hard because any single piece is difficult — they're hard because there are many pieces and context gets lost between them. A developer working a 12-file refactor holds it all in their head until they don't, then makes a mistake three files from the end because they forgot a constraint from the beginning.
+
+Sisyphus solves this structurally. An **orchestrator** Claude instance reads the full task, breaks it into subtasks, and spawns parallel **agent** Claude instances — each in its own tmux pane with a focused instruction. Agents work simultaneously, submit reports when they're done, and the orchestrator respawns to review progress and plan the next round.
+
+The key mechanism: **the orchestrator is stateless**. After it spawns agents and yields, it gets killed. When all agents finish, the daemon respawns a fresh orchestrator with the complete session state — every agent report, every cycle's history, the running plan. This means the orchestrator never degrades. Cycle 1 and cycle 15 get the same quality of reasoning, because each cycle starts with a full context window and a clean slate. The boulder rolls back down; Sisyphus walks back down after it, picks it up, and pushes again — but this time he remembers everything from every previous push.
+
+The daemon handles the lifecycle: spawning panes, detecting when agents finish, persisting state to disk, respawning the orchestrator. You just describe what you want built and watch it work.
 
 ## Requirements
 
@@ -75,189 +57,64 @@ The orchestrator is stateless — it's killed after yielding and respawned fresh
 npm install -g sisyphi
 ```
 
-This gives you two commands:
-- `sisyphus` — the CLI for interacting with sessions
-- `sisyphusd` — the background daemon
+The daemon starts automatically on first use via launchd. It auto-updates when new versions are published.
 
-### Claude Code Plugin (optional)
+## Usage
 
-The companion plugin on the [crouton-kit](https://github.com/CaptainCrouton89/crouton-kit) marketplace adds specialized agent types and an orchestration skill with task breakdown patterns for common workflows (bug fixes, feature builds, refactors, reviews, etc.).
+Sisyphus is a CLI that Claude Code calls for you. You tell Claude to use it, and Claude handles the rest — calling `sisyphus start`, writing the task description, and kicking off the orchestration loop.
 
-```bash
-claude plugins install CaptainCrouton89/crouton-kit sisyphus
-```
+In Claude Code, just say something like:
 
-This makes `sisyphus:debug`, `sisyphus:implement`, `sisyphus:plan`, and other agent types available for `sisyphus spawn --agent-type`.
+> Use sisyphus to migrate our REST API from Express to Hono. The API lives in src/api/ with 14 route files...
 
-## Quick Start
+Claude will call `sisyphus start` with a detailed task description, and tmux panes will start appearing with parallel agents working on your codebase.
 
-### 1. Start the daemon
+### Setting up a slash command (recommended)
 
-```bash
-sisyphusd
-```
+Create a file at `.claude/commands/sisyphus-begin.md` in your project:
 
-The daemon also supports `sisyphusd stop` and `sisyphusd restart` subcommands.
-
-To run it persistently on macOS, use launchd — create `~/Library/LaunchAgents/com.sisyphus.daemon.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.sisyphus.daemon</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>sisyphusd</string>
-  </array>
-  <key>KeepAlive</key>
-  <true/>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>~/.sisyphus/daemon.log</string>
-  <key>StandardErrorPath</key>
-  <string>~/.sisyphus/daemon.log</string>
-</dict>
-</plist>
-```
-
-Then load it:
+~~~markdown
+Run `sisyphus start` with a detailed task description:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.sisyphus.daemon.plist
+sisyphus start "your task description"
 ```
 
-To unload and clean up:
+**Write a thorough task description.** Include what needs to be built or fixed, where relevant code lives, what done looks like, constraints or preferences, and adjacent concerns (don't break X, keep Y working). More context produces better results — the orchestrator figures out how to break it down.
+
+**Example:**
+```bash
+sisyphus start "Rip out our hand-rolled RBAC system and replace it with a proper policy engine. Current implementation is scattered across 20+ middleware files in src/middleware/auth/ that each do their own role checks with hardcoded string comparisons. Replace with a centralized policy engine in src/auth/policies/ using a declarative permission model — define resources, actions, and role mappings in a single config, then write one middleware that evaluates policies. Migrate every route that currently calls requireRole() or checkPermission() to the new system. The admin panel (src/routes/admin/) has the most complex rules including org-scoped permissions and delegated access — those need to work exactly as before. Add integration tests that cover the full matrix: superadmin, org-admin, member, and guest across every protected endpoint. Don't break the public API routes in src/routes/v1/public/. The existing test suite (npm test) must pass when you're done."
+```
+~~~
+
+Then in Claude Code, type `/sisyphus-begin` followed by your task and Claude will use sisyphus to orchestrate it.
+
+Alternatively, add a note to your `CLAUDE.md`:
+
+```markdown
+## Sisyphus
+For large tasks, use the `sisyphus` CLI to orchestrate parallel agents.
+Run `sisyphus start "detailed task description"` inside tmux.
+```
+
+### Monitoring and stopping
 
 ```bash
-sisyphus uninstall          # Unload from launchd
-sisyphus uninstall --purge  # Also remove ~/.sisyphus data
+sisyphus status              # Check session state
+sisyphus kill <session-id>   # Stop everything
 ```
-
-### 2. Start a session (inside tmux)
-
-```bash
-sisyphus start "Refactor the authentication module to use JWT tokens"
-```
-
-The orchestrator spawns in a yellow tmux pane and begins planning.
-
-### 3. Watch it work
-
-```bash
-sisyphus status              # Check session state and agents
-sisyphus list                # List sessions in current project
-sisyphus list --all          # List sessions across all projects
-```
-
-Agent panes appear as the orchestrator spawns them, color-coded by role. Agent types from the crouton-kit plugin define their own colors via frontmatter; otherwise agents rotate through blue, green, magenta, cyan, red, and white.
-
-### 4. Resume or complete
-
-```bash
-sisyphus resume <session-id>                    # Resume a paused session
-sisyphus resume <session-id> "focus on tests"   # Resume with new instructions
-sisyphus kill <session-id>                      # Kill a session and all agents
-```
-
-## CLI Reference
-
-```bash
-# Session lifecycle
-sisyphus start "task description"           # Create session, launch orchestrator
-sisyphus status [session-id]                # Session state (defaults to active session)
-sisyphus list [-a, --all]                   # List sessions (--all for cross-project)
-sisyphus resume <id> [message]              # Resume paused session
-sisyphus kill <id>                          # Kill session and all agents
-sisyphus uninstall [--purge] [-y]           # Unload daemon from launchd
-
-# Daemon management
-sisyphusd                                   # Start the daemon
-sisyphusd stop                              # Stop the daemon
-sisyphusd restart                           # Restart the daemon
-
-# Used by the orchestrator/agents (not typically run manually):
-sisyphus spawn --agent-type <t> --name <n> --instruction "..."
-sisyphus spawn --agent-type <t> --name <n> --instruction "..." --worktree
-sisyphus yield [--prompt "next cycle context"]
-sisyphus complete --report "summary"        # Mark session done
-sisyphus submit --report "findings"         # Agent submits final report
-sisyphus report --message "progress"        # Agent sends progress update
-```
-
-Both `yield`, `submit`, and `report` support stdin piping for long content:
-
-```bash
-echo "detailed report" | sisyphus submit
-echo "progress update" | sisyphus report
-```
-
-## Git Worktree Isolation
-
-Agents can work in isolated git worktrees to avoid conflicts when multiple agents edit files in parallel:
-
-```bash
-sisyphus spawn --agent-type sisyphus:implement --name "auth" \
-  --instruction "implement auth module" --worktree
-```
-
-With `--worktree`, the daemon:
-1. Creates a new branch (`sisyphus/{session}/{agent-id}`) and worktree
-2. Symlinks `.sisyphus` and `.claude` directories into the worktree
-3. Runs bootstrap commands from `.sisyphus/worktree.json` (copy files, install deps, etc.)
-4. Automatically merges the agent's branch back when the agent submits
-
-Configure worktree bootstrap in `.sisyphus/worktree.json`:
-
-```json
-{
-  "symlink": [".env", "node_modules"],
-  "copy": ["package.json"],
-  "init": "npm install"
-}
-```
-
-## Architecture
-
-Three layers communicating over a Unix socket (`~/.sisyphus/daemon.sock`):
-
-- **CLI** (`sisyphus`) — Commander.js program that sends JSON requests to the daemon
-- **Daemon** (`sisyphusd`) — Manages sessions, spawns/monitors tmux panes, tracks state
-- **Shared** — Types, protocol definitions, config resolution
-
-### State & Persistence
-
-State is persisted as JSON at `.sisyphus/sessions/{id}/state.json` (project-relative), written atomically via temp file + rename.
-
-Each session directory contains:
-```
-.sisyphus/sessions/{id}/
-├── state.json        # Session state (atomic writes)
-├── plan.md           # Orchestrator memory — outstanding work
-├── logs.md           # Orchestrator memory — session log
-├── prompts/          # Rendered system + user prompt files
-├── reports/          # Agent report files
-└── context/          # Persistent artifacts (specs, plans, explorations)
-```
-
-The orchestrator maintains `plan.md` and `logs.md` across cycles as persistent memory — these survive orchestrator respawns and give each new cycle continuity with previous work.
 
 ## Configuration
 
-Config is layered: project (`.sisyphus/config.json`) overrides global (`~/.sisyphus/config.json`).
+Project (`.sisyphus/config.json`) overrides global (`~/.sisyphus/config.json`):
 
 ```json
 {
   "model": "sonnet",
-  "pollIntervalMs": 1000,
-  "tmuxSession": "my-session"
+  "autoUpdate": true
 }
 ```
-
-You can also override the orchestrator prompt per-project by placing a file at `.sisyphus/orchestrator.md`.
 
 ## License
 
