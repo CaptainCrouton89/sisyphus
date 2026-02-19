@@ -9,19 +9,20 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 - **session-manager.ts** — Entry point for all session operations: delegates to orchestrator/agent/monitor, coordinates cleanup (agent counter reset, pane untracking, worktree merging). Handles worktree merge callbacks before respawning orchestrator.
 - **orchestrator.ts** — Spawns/respawns orchestrator Claude each cycle with formatted session state. Caches window/pane IDs. Writes system + user prompts to `prompts/` subdir. Includes worktree status and merge conflict hints in state block.
 - **agent.ts** — Spawns agent Claude instances; auto-increments per-session counter (`agent-001`, `agent-002`, …). Supports worktree isolation: creates isolated git worktrees, renders agent system prompts with worktree context + port offset. Exports `SISYPHUS_PORT_OFFSET` env var.
-- **pane-monitor.ts** — Background poller detects killed tmux panes; triggers cleanup. Explicitly tracks sessions with `trackSession/updateTrackedWindow/untrackSession` lifecycle
+- **pane-monitor.ts** — Background poller (5s interval) detects unexpected pane kills; triggers cleanup via `handlePaneExited()`. Tracks sessions with `trackSession/untrackSession` lifecycle.
+- **pane-registry.ts** — Central registry mapping paneId → {sessionId, role, agentId}. Enables fast pane lookup and exit notification routing. Unregistered when pane exits.
 - **state.ts** — Atomic JSON writes: temp file → rename pattern to prevent corruption on crash
-- **tmux.ts** — tmux CLI wrapper (create/kill panes, send keys, apply styles via per-pane user variables)
-- **worktree.ts** — Git worktree management: create isolated worktrees per agent (when `--worktree` flag set), track branch names, merge back to main branch, detect/report conflicts. Called by agent spawn + session cleanup.
-- **colors.ts** — Color cycling for panes: orchestrator always yellow, agents rotate through 6 colors deterministically.
+- **tmux.ts** — tmux CLI wrapper (new-window, send-keys, split-window, etc.)
+- **worktree.ts** — Git worktree management: create isolated worktrees per agent, track branches, merge back to main, detect conflicts.
+- **colors.ts** — Color cycling for panes: orchestrator always yellow, agents rotate deterministically.
 
 ## Key Patterns
 
-**Session recovery on startup**: On daemon restart, registry loads and `active`/`paused` sessions recover. Reconnects to live tmux panes, restores orchestrator pane ID from last incomplete cycle, and **detects stuck sessions** (all agents done but no live orchestrator) — if found, immediately triggers orchestrator respawn.
+**Pane lifecycle tracking**: Panes registered in `pane-registry` on spawn (orchestrator.ts, agent.ts). Pane monitor polls (5s interval) and detects exits; calls `handlePaneExited()` with paneId. Registry lookup maps paneId → {sessionId, role, agentId}. Unregistered on exit.
 
-**Stuck session detection**: Pane monitor continuously checks if all agents are non-running and orchestrator pane is gone. If both true, triggers `onAllAgentsDone()`. Also detected during startup recovery.
+**Respawn on all-agents-done**: When pane monitor detects all agents finished or pane exits unexpectedly, triggers `onAllAgentsDone()` via `setImmediate` (no delay). Merges any pending worktrees, then respawns orchestrator immediately.
 
-**Session tracking**: Server maintains in-memory maps to route requests; synced to disk registry after mutations. Pane monitor tracks sessions separately via `trackSession/updateTrackedWindow/untrackSession` to detect user-closes and stuck states.
+**Session recovery on startup**: Registry loads; `active`/`paused` sessions recover. Detects stuck sessions (all agents done, orchestrator pane gone) and immediately triggers respawn.
 
 **State formatting**: `formatStateForOrchestrator()` builds human-readable `<state>` block with task, status, agent summaries (report counts/timestamps), plan/logs/context references, cycle history, and **worktree status** (only if agents have worktrees). Includes git worktree hints (config active vs. disabled).
 
@@ -31,24 +32,17 @@ Unix socket server layer managing session lifecycle, tmux panes, and Claude orch
 
 **Worktrees**: When `spawnAgent()` called with `opts.worktree=true`, creates isolated git worktree via `createWorktree()`. Agent receives `SISYPHUS_PORT_OFFSET` (computed from existing worktree count) and worktree context in system prompt. On session kill, `cleanupWorktree()` removes worktrees.
 
-**Pane lifecycle**: Orchestrator pane created at session start, respawned after all agents complete (2s delay via monitor callback). Agent panes created on-demand, killed on submit. Monitor polls to detect unexpected kills.
+**Agent naming**: Per-session counter starts at 1, zero-padded to 3 digits. Reset on new sessions; on resume, reset from existing agents to preserve ID sequence.
 
-**Agent naming**: Per-session counter starts at 1, zero-padded to 3 digits. Counter resets on new sessions; on resume, reset from existing agents to preserve ID sequence.
+**State formatting**: `formatStateForOrchestrator()` builds human-readable state block with task, status, agent summaries, plan/logs/context references, cycle history, and worktree status.
 
-**Colors**: Orchestrator always yellow; agents cycle deterministically per counter mod 6. Tmux user variables per-pane.
-
-**Session tracking lifecycle**: `trackSession()` registers session (windowId nullable initially), `updateTrackedWindow()` sets windowId after orchestrator spawn, `untrackSession()` removes on kill/completion.
-
-**Daemon lifecycle**: PID lock prevents duplicate daemons. Registry recovery on startup with stuck-session detection. Graceful shutdown (SIGTERM/SIGINT) stops server + monitor, releases lock. CLI commands: `sisyphusd start|stop|restart`.
+**Worktree merging**: Before orchestrator respawn, merges pending worktrees back to main, capturing conflict status. Conflicts reported in next cycle's state block.
 
 ## Constraints
 
 - Do not write state directly — use `state.ts` atomic writes
-- Always untrack sessions from pane monitor when killing/completing
+- Always unregister panes from pane-registry and pane-monitor when killing/completing
 - Always clean up worktrees in `handleKill()` — don't leave dangling branches
-- Reset agent counters on new sessions; preserve + reset-from-state on resume
 - Prompt files must be on disk in `prompts/` subdir; avoid shell quoting via tmux send-keys
 - tmux errors are fatal — propagate, don't swallow
-- Pane monitor is best-effort polling; fast kills may miss
-- Worktree isolation is opt-in via `--worktree` flag; config file controls availability
 - Session recovery must detect and recover stuck sessions immediately on startup

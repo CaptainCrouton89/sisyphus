@@ -10,15 +10,8 @@ import { sessionDir, sessionsDir } from '../shared/paths.js';
 import { unregisterSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
-import { checkAndApply } from './updater.js';
-import { loadConfig } from '../shared/config.js';
 
 export async function startSession(task: string, cwd: string, tmuxSession: string, windowId: string): Promise<Session> {
-  const config = loadConfig(cwd);
-  if (config.autoUpdate !== false) {
-    await checkAndApply(); // may exit process if update found
-  }
-
   const sessionId = uuidv4();
   const session = state.createSession(sessionId, task, cwd);
   await state.updateSessionTmux(cwd, sessionId, tmuxSession, windowId);

@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { globalDir, daemonPidPath, statePath } from '../shared/paths.js';
 import { loadConfig } from '../shared/config.js';
@@ -11,6 +12,7 @@ import { listPanes } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
+import { checkAndApply } from './updater.js';
 
 function ensureDirs(): void {
   mkdirSync(globalDir(), { recursive: true });
@@ -42,6 +44,15 @@ function acquirePidLock(): void {
     process.exit(0);
   }
   writeFileSync(daemonPidPath(), String(process.pid), 'utf-8');
+}
+
+function isLaunchdManaged(): boolean {
+  try {
+    execSync('launchctl list com.sisyphus.daemon', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function releasePidLock(): void {
@@ -178,9 +189,13 @@ async function recoverSessions(): Promise<void> {
 async function startDaemon(): Promise<void> {
   console.log('[sisyphus] Starting daemon...');
   ensureDirs();
-  acquirePidLock();
 
   const config = loadConfig(process.cwd());
+  if (config.autoUpdate !== false) {
+    await checkAndApply(); // may exit process if update found
+  }
+
+  acquirePidLock();
 
   setRespawnCallback(onAllAgentsDone);
 
@@ -211,14 +226,21 @@ const command = process.argv[2];
 
     case 'restart': {
       stopDaemon();
-      // Small delay to let PID lock release
-      await sleep(500);
-      // Check if a process manager (e.g. launchd) already respawned the daemon
-      const respawnedPid = readPid();
-      if (respawnedPid) {
-        console.log(`[sisyphus] Daemon restarted (pid ${respawnedPid}) by process manager`);
-        break;
+      // If launchd is managing the daemon, just exit — it will respawn via KeepAlive
+      if (isLaunchdManaged()) {
+        // Brief poll so we can report the new PID
+        for (let i = 0; i < 6; i++) {
+          await sleep(500);
+          const respawnedPid = readPid();
+          if (respawnedPid) {
+            console.log(`[sisyphus] Daemon restarted (pid ${respawnedPid}) by process manager`);
+            process.exit(0);
+          }
+        }
+        console.log('[sisyphus] Daemon will be restarted by process manager');
+        process.exit(0);
       }
+      // No process manager — start in-process
       await startDaemon();
       break;
     }
