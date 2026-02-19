@@ -12,6 +12,11 @@ export async function commandName(client: SessionClient, args: ParsedArgs): Prom
 - **Session lookup**: Commands requiring session ID use `args.session` or error if missing
 - **Output**: Use `console.log()` for success output; structured JSON via `--json` flag (client handles)
 - **Validation**: Early validation of required args; avoid side effects before confirming validity
+- **Environment vars**: Agent-spawned commands check `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID`
+
+## Key Constraints
+
+- **submit.ts** — Blocks if git worktree has uncommitted changes (automatic merge on submit would lose them). Agent must commit first.
 
 ## Key Interactions
 
