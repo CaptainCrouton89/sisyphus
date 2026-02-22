@@ -115,7 +115,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
   ].join(' && ');
 
-  const agentFlag = agentType ? ` --agent ${shellQuote(agentType)}` : '';
+  const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
   const agentNameFlag = ` --agent-name ${shellQuote(paneLabel)}`;
   const teamFlag = ` --agent-id ${shellQuote(agentId)} --team-name sisyphus-${sessionId.slice(0, 8)}`;
   const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag}${agentNameFlag}${teamFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
