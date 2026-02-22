@@ -16,9 +16,13 @@ export function registerStart(program: Command): void {
       if (response.ok) {
         const sessionId = response.data?.sessionId as string;
         console.log(`Session started: ${sessionId}`);
-        if (response.data?.tmuxWindow) {
-          console.log(`Orchestrator spawned in tmux window: ${response.data.tmuxWindow}`);
-        }
+
+        console.log(`\nMonitor:`);
+        console.log(`  sisyphus status ${sessionId}    # agents, cycles, reports`);
+        console.log(`  tail -f ~/.sisyphus/daemon.log   # daemon activity`);
+        console.log(`\nControl:`);
+        console.log(`  sisyphus resume ${sessionId} "new instructions"  # respawn with follow-up`);
+        console.log(`  sisyphus kill ${sessionId}        # stop all agents and orchestrator`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

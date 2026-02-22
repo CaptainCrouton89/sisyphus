@@ -185,6 +185,13 @@ export async function handleSpawn(
   const windowId = orchestrator.getWindowId(sessionId);
   if (!windowId) throw new Error(`No tmux window found for session ${sessionId}`);
 
+  // Re-activate completed sessions so the cycle can resume
+  const session = state.getSession(cwd, sessionId);
+  if (session.status === 'completed') {
+    await state.updateSessionStatus(cwd, sessionId, 'active');
+    trackSession(sessionId, cwd, session.tmuxSessionName!);
+  }
+
   const agent = await spawnAgent({
     sessionId,
     cwd,

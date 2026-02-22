@@ -19,6 +19,11 @@ description: >
 ---
 `;
 
+const CONTEXT_CLAUDE_MD = `# context/
+
+Agents save exploration findings, architectural notes, and reference material here for use across cycles.
+`;
+
 // Per-session mutex to prevent read-modify-write races
 const sessionLocks = new Map<string, Promise<void>>();
 
@@ -50,6 +55,7 @@ export function createSession(id: string, task: string, cwd: string): Session {
 
   writeFileSync(planPath(cwd, id), PLAN_SEED, 'utf-8');
   writeFileSync(logsPath(cwd, id), LOGS_SEED, 'utf-8');
+  writeFileSync(join(contextDir(cwd, id), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
 
   const session: Session = {
     id,
