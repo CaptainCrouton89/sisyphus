@@ -29,9 +29,14 @@ export function createWindow(sessionName: string, windowName: string, cwd?: stri
   return exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{window_id}"`);
 }
 
-export function createPane(windowTarget: string, cwd?: string): string {
+export function createPane(windowTarget: string, cwd?: string, position: 'left' | 'right' = 'right'): string {
   const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
-  const paneId = exec(`tmux split-window -h -t "${windowTarget}"${cwdFlag} -P -F "#{pane_id}"`);
+  // Target the first/last pane in the window to ensure absolute left/right placement
+  const panes = listPanes(windowTarget);
+  const target = position === 'left' ? panes[0]?.paneId : panes[panes.length - 1]?.paneId;
+  const targetFlag = target ? ` -t "${target}"` : ` -t "${windowTarget}"`;
+  const beforeFlag = position === 'left' ? 'b' : '';
+  const paneId = exec(`tmux split-window -h${beforeFlag}${targetFlag}${cwdFlag} -P -F "#{pane_id}"`);
   execSafe(`tmux select-layout -t "${windowTarget}" even-horizontal`);
   return paneId;
 }

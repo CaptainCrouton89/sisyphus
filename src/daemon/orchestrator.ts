@@ -163,7 +163,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const claudeCmd = `claude --dangerously-skip-permissions --settings "${settingsPath}" --plugin-dir "${pluginPath}" --append-system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
-  const paneId = tmux.createPane(windowId, cwd);
+  const paneId = tmux.createPane(windowId, cwd, 'left');
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
