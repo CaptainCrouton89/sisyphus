@@ -133,34 +133,39 @@ Agents are optimistic — they'll report success even when the work is sloppy. P
 Agents can invoke slash commands via `/skill:name` syntax to load specialized methodologies:
 
 ```bash
-sisyphus spawn --name "debug-auth" --instruction '/devcore:debugging Investigate why session tokens expire prematurely. Check src/middleware/auth.ts and src/session/store.ts.'
+sisyphus spawn --name "debug-auth" --agent-type sisyphus:debug "/devcore:debugging Investigate why session tokens expire prematurely. Check src/middleware/auth.ts and src/session/store.ts."
 ```
 
 ## File Conflicts
 
 If multiple agents run concurrently, ensure they don't edit the same files. If overlap is unavoidable, serialize across cycles. Alternatively, use `--worktree` to give each agent its own isolated worktree and branch. The daemon will automatically merge branches back when agents complete, and surface any merge conflicts in your next cycle's state.
 
+## Spawning Agents
+
+Use the `sisyphus spawn` CLI to create agents:
+
+```bash
+# Basic spawn
+sisyphus spawn --name "impl-auth" --agent-type sisyphus:implement "Add session middleware to src/server.ts"
+
+# Pipe instruction via stdin (for long/multiline instructions)
+echo "Investigate the login bug..." | sisyphus spawn --name "debug-login" --agent-type sisyphus:debug
+
+# With worktree isolation
+sisyphus spawn --name "feat-api" --agent-type sisyphus:implement --worktree "Add REST endpoints"
+```
+
+Agent types: `sisyphus:implement`, `sisyphus:debug`, `sisyphus:plan`, `sisyphus:review`, or `worker` (default).
+
 ## CLI Reference
 
 ```bash
-# Spawn an agent (--instruction flag or pipe via stdin)
-sisyphus spawn --agent-type <type> --name <name> --instruction "what to do"
-sisyphus spawn --worktree --name <name> --instruction "what to do"
-cat <<'EOF' | sisyphus spawn --name <name>
-Multi-line instruction here.
-EOF
-
-# Yield control (--prompt flag or pipe via stdin)
 sisyphus yield
 sisyphus yield --prompt "focus on auth middleware next"
-
-# Complete the session
 sisyphus complete --report "summary of what was accomplished"
-
-# Check status
 sisyphus status
 ```
 
 ## Completion
 
-Call `sisyphus complete` only when the overall goal is genuinely achieved **and validated by an agent other than the one that did the work**. If unsure, spawn a validation agent first. Remember, use sisyphus spawn, not Task() tool.
+Call `sisyphus complete` only when the overall goal is genuinely achieved **and validated by an agent other than the one that did the work**. If unsure, spawn a validation agent first. Remember, use `sisyphus spawn`, not the Task tool.

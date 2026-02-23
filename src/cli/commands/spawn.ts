@@ -8,11 +8,12 @@ export function registerSpawn(program: Command): void {
   program
     .command('spawn')
     .description('Spawn a new agent (orchestrator only)')
+    .argument('[instruction]', 'Task instruction for the agent')
     .option('--agent-type <type>', 'Agent role label (default: worker)', 'worker')
     .requiredOption('--name <name>', 'Agent name')
     .option('--instruction <instruction>', 'Task instruction for the agent (or pipe via stdin)')
     .option('--worktree', 'Spawn agent in an isolated git worktree')
-    .action(async (opts: { agentType: string; name: string; instruction?: string; worktree?: boolean }) => {
+    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; worktree?: boolean }) => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -20,7 +21,7 @@ export function registerSpawn(program: Command): void {
         process.exit(1);
       }
 
-      const instruction = opts.instruction ?? await readStdin();
+      const instruction = opts.instruction ?? positionalInstruction ?? await readStdin();
       if (!instruction) {
         console.error('Error: --instruction is required (or pipe via stdin)');
         process.exit(1);
