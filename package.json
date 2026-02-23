@@ -1,6 +1,6 @@
 {
   "name": "sisyphi",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "tmux-integrated orchestration daemon for Claude Code multi-agent workflows",
   "license": "MIT",
   "repository": {
