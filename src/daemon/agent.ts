@@ -3,11 +3,12 @@ import { resolve } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
-import { getNextColor, resolveAgentTypeColor } from './colors.js';
+import { getNextColor, normalizeTmuxColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
 import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
 import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
+import { resolveAgentConfig, detectProvider } from './frontmatter.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -74,7 +75,11 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   agentCounters.set(sessionId, count);
   const agentId = `agent-${String(count).padStart(3, '0')}`;
   const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
-  const color = resolveAgentTypeColor(agentType, pluginPath, cwd) ?? getNextColor(sessionId);
+
+  // Resolve agent config for frontmatter (color, model, provider)
+  const agentConfig = resolveAgentConfig(agentType, pluginPath, cwd);
+  const provider = detectProvider(agentConfig?.frontmatter.model);
+  const color = (agentConfig?.frontmatter.color ? normalizeTmuxColor(agentConfig.frontmatter.color) : null) ?? getNextColor(sessionId);
 
   let paneCwd = cwd;
   let worktreePath: string | undefined;
@@ -115,15 +120,43 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
   ].join(' && ');
 
-  const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
-  const claudeCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   const notifyCmd = `sisyphus notify pane-exited --pane-id ${paneId}`;
-  const fullCmd = `${bannerCmd} ${envExports} && ${claudeCmd}; ${notifyCmd}`;
+
+  let mainCmd: string;
+
+  if (provider === 'openai') {
+    // Build combined prompt for codex
+    const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
+    const parts: string[] = [];
+
+    // 1. Agent type body (stripped of frontmatter)
+    if (agentConfig?.body) {
+      parts.push(agentConfig.body);
+    }
+
+    // 2. Rendered agent-suffix template
+    parts.push(suffix);
+
+    // 3. The instruction itself
+    parts.push(`## Task\n\n${instruction}`);
+
+    writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
+
+    const model = agentConfig?.frontmatter.model ?? 'codex-mini';
+    mainCmd = `codex exec -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
+  } else {
+    // Anthropic (current behavior)
+    const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
+    mainCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+  }
+
+  const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
 
   const agent: Agent = {
     id: agentId,
     name,
     agentType,
+    provider,
     color,
     instruction,
     status: 'running',
