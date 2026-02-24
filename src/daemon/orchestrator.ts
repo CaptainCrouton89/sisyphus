@@ -100,11 +100,15 @@ function formatStateForOrchestrator(session: Session): string {
     ? 'Worktree config active (`.sisyphus/worktree.json`). Use `--worktree` flag with `sisyphus spawn` to isolate agents in their own worktrees. Recommended for feature work, especially with potential file overlap.'
     : 'No worktree configuration found. If this session involves parallel work where agents may edit overlapping files, use the `git-management` skill to set up `.sisyphus/worktree.json` and enable worktree isolation.';
 
+  const contextSection = session.context
+    ? `\n## Background Context\n${session.context}\n`
+    : '';
+
   return `<state>
 session: ${shortId} (cycle ${cycleNum})
 task: ${session.task}
 status: ${session.status}
-
+${contextSection}
 ## Plan
 ${planRef}
 

@@ -70,6 +70,10 @@ function printSession(session: Session): void {
   console.log(`\n${BOLD}Session: ${session.id}${RESET}`);
   console.log(`  Status: ${status}`);
   console.log(`  Task: ${session.task}`);
+  if (session.context) {
+    const truncated = session.context.length > 120 ? session.context.slice(0, 120) + '...' : session.context;
+    console.log(`  Context: ${truncated}`);
+  }
   console.log(`  CWD: ${session.cwd}`);
   console.log(`  Created: ${session.createdAt}`);
   console.log(`  Duration: ${sessionDuration}${session.completedAt ? '' : ' (ongoing)'}`);

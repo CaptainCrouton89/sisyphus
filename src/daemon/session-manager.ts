@@ -11,9 +11,9 @@ import { unregisterSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 
-export async function startSession(task: string, cwd: string, tmuxSession: string, windowId: string): Promise<Session> {
+export async function startSession(task: string, cwd: string, tmuxSession: string, windowId: string, context?: string): Promise<Session> {
   const sessionId = uuidv4();
-  const session = state.createSession(sessionId, task, cwd);
+  const session = state.createSession(sessionId, task, cwd, context);
   await state.updateSessionTmux(cwd, sessionId, tmuxSession, windowId);
 
   trackSession(sessionId, cwd, tmuxSession);

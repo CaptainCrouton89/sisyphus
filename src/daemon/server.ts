@@ -61,7 +61,7 @@ async function handleRequest(req: Request): Promise<Response> {
   try {
     switch (req.type) {
       case 'start': {
-        const session = await sessionManager.startSession(req.task, req.cwd, req.tmuxSession, req.tmuxWindow);
+        const session = await sessionManager.startSession(req.task, req.cwd, req.tmuxSession, req.tmuxWindow, req.context);
         registerSessionCwd(session.id, req.cwd);
         sessionTmuxMap.set(session.id, req.tmuxSession);
         sessionWindowMap.set(session.id, req.tmuxWindow);

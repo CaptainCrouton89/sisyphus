@@ -8,10 +8,11 @@ export function registerStart(program: Command): void {
     .command('start')
     .description('Start a new sisyphus session')
     .argument('<task>', 'Task description for the orchestrator')
-    .action(async (task: string) => {
+    .option('-c, --context <context>', 'Background context for the orchestrator')
+    .action(async (task: string, opts: { context?: string }) => {
       const tmuxSession = getTmuxSession();
       const tmuxWindow = getTmuxWindow();
-      const request: Request = { type: 'start', task, cwd: process.cwd(), tmuxSession, tmuxWindow };
+      const request: Request = { type: 'start', task, context: opts.context, cwd: process.cwd(), tmuxSession, tmuxWindow };
       const response = await sendRequest(request);
       if (response.ok) {
         const sessionId = response.data?.sessionId as string;

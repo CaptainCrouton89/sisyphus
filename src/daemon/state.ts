@@ -47,7 +47,7 @@ function atomicWrite(filePath: string, data: string): void {
   renameSync(tmpPath, filePath);
 }
 
-export function createSession(id: string, task: string, cwd: string): Session {
+export function createSession(id: string, task: string, cwd: string, context?: string): Session {
   const dir = sessionDir(cwd, id);
   mkdirSync(dir, { recursive: true });
   mkdirSync(contextDir(cwd, id), { recursive: true });
@@ -60,6 +60,7 @@ export function createSession(id: string, task: string, cwd: string): Session {
   const session: Session = {
     id,
     task,
+    ...(context ? { context } : {}),
     cwd,
     status: 'active',
     createdAt: new Date().toISOString(),

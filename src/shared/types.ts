@@ -1,3 +1,5 @@
+export type Provider = 'anthropic' | 'openai';
+
 export type SessionStatus = 'active' | 'paused' | 'completed';
 
 export type AgentStatus = 'running' | 'completed' | 'killed' | 'crashed' | 'lost';
@@ -12,6 +14,7 @@ export interface AgentReport {
 export interface Session {
   id: string;
   task: string;
+  context?: string;
   cwd: string;
   status: SessionStatus;
   createdAt: string;
@@ -28,6 +31,7 @@ export interface Agent {
   id: string;
   name: string;
   agentType: string;
+  provider?: Provider;
   claudeSessionId?: string;
   color: string;
   instruction: string;
