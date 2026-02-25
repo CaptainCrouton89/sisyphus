@@ -143,7 +143,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
 
     const model = agentConfig?.frontmatter.model ?? 'codex-mini';
-    mainCmd = `codex exec -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
+    mainCmd = `codex -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
   } else {
     // Anthropic (current behavior)
     const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';

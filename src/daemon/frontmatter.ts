@@ -16,7 +16,7 @@ export { type Provider } from '../shared/types.js';
 
 export function detectProvider(model: string | undefined): Provider {
   if (!model) return 'anthropic';
-  if (/^(gpt-|o\d+-|codex-)/.test(model)) return 'openai';
+  if (/^(gpt-|codex-)/.test(model)) return 'openai';
   return 'anthropic';
 }
 
