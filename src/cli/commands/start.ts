@@ -16,7 +16,8 @@ export function registerStart(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         const sessionId = response.data?.sessionId as string;
-        console.log(`Session started: ${sessionId}`);
+        console.log(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
+        console.log(`The orchestrator and its agents will handle this task autonomously — no further action needed from you.`);
 
         console.log(`\nMonitor:`);
         console.log(`  sisyphus status ${sessionId}    # agents, cycles, reports`);

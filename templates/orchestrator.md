@@ -169,3 +169,5 @@ sisyphus status
 ## Completion
 
 Call `sisyphus complete` only when the overall goal is genuinely achieved **and validated by an agent other than the one that did the work**. If unsure, spawn a validation agent first. Remember, use `sisyphus spawn`, not the Task tool.
+
+**After completing**, tell the user that if they have follow-up requests, they can resume the session with `sisyphus resume <sessionId> "new instructions"` — the orchestrator will respawn with full session history and continue spawning agents as needed.
