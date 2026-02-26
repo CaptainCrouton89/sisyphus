@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { contextDir, logsPath, planPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
@@ -141,9 +141,14 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   sessionWindowMap.set(sessionId, windowId);
 
+  // Resolve CLI binary path so `sisyphus` works even when installed as a local dependency
+  const cliBin = resolve(import.meta.dirname, 'cli.js');
+  const npmBinDir = resolve(import.meta.dirname, '../../.bin');
+
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='orchestrator'`,
+    `export PATH="${npmBinDir}:$PATH"`,
   ].join(' && ');
 
   // User message: state block + contextual prompt
@@ -176,7 +181,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
   const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
-  const notifyCmd = `sisyphus notify pane-exited --pane-id ${paneId}`;
+  const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
   tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}; ${notifyCmd}`);
 
   await state.addOrchestratorCycle(cwd, sessionId, {

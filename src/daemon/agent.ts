@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
@@ -114,13 +114,18 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
   const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
 
+  // Resolve CLI binary path so `sisyphus` works even when installed as a local dependency
+  const cliBin = resolve(import.meta.dirname, 'cli.js');
+  const npmBinDir = resolve(import.meta.dirname, '../../.bin');
+
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='${agentId}'`,
     ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
+    `export PATH="${npmBinDir}:$PATH"`,
   ].join(' && ');
 
-  const notifyCmd = `sisyphus notify pane-exited --pane-id ${paneId}`;
+  const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
 
   let mainCmd: string;
 
