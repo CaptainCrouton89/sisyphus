@@ -1,28 +1,31 @@
 # CLI Commands
 
-Each file exports a command handler following this pattern:
+Each file exports a command registration function following this pattern:
 
 ```ts
-export async function commandName(client: SessionClient, args: ParsedArgs): Promise<void>
+export function register{Command}(program: Command): void {
+  program.command('{command}').action(async (args, opts) => { ... });
+}
 ```
 
 ## Conventions
 
-- **Error handling**: Commands throw on invalid args or daemon errors; CLI wrapper catches and formats
-- **Session lookup**: Commands requiring session ID use `args.session` or error if missing
-- **Output**: Use `console.log()` for success output; structured JSON via `--json` flag (client handles)
+- **Registration**: Each command file exports `register{Command}()` called in `index.ts`
+- **Communication**: Commands use `sendRequest()` to send protocol requests via Unix socket
+- **Error handling**: Throw on invalid args or daemon errors; exit with code 1 and error message
+- **Session lookup**: Commands requiring session ID use `process.env.SISYPHUS_SESSION_ID` or error if missing
+- **Output**: Use `console.log()` for success; `console.error()` for errors
 - **Validation**: Early validation of required args; avoid side effects before confirming validity
-- **Environment vars**: Agent-spawned commands check `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID`
+- **Stdin support**: Use `readStdin()` for optional input piping (e.g., `spawn`, `yield`)
 
 ## Key Constraints
 
-- **submit.ts** — Blocks if git worktree has uncommitted changes (automatic merge on submit would lose them). Agent must commit first.
+- **submit.ts** — Blocks if git worktree has uncommitted changes. Agent must commit first.
+- **yield.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID` environment variable
 
 ## Key Interactions
 
 - `start.ts` — Creates new session, returns session ID
 - `spawn.ts`, `submit.ts`, `yield.ts`, `complete.ts` — Lifecycle commands; require active session
-- `status.ts`, `tasks.ts` — Query commands; read-only
-- `list.ts`, `resume.ts` — Session management; don't require active session
-
-All commands connect via `SessionClient` (src/cli/client.ts) which handles Unix socket protocol.
+- `status.ts` — Query command; read-only
+- `list.ts`, `resume.ts`, `kill.ts` — Session management; don't require active session

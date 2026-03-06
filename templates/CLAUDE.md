@@ -4,9 +4,11 @@ System prompt templates for orchestrator and agent initialization.
 
 ## Core Templates
 
-- **orchestrator.md** — Orchestrator system prompt. Defines orchestrator role (coordinator, not implementer), cycle workflow, phase-based thinking (explore → spec → plan → implement → review → test), context persistence via plan.md/logs.md, work right-sizing (~30 tool calls per item), and validation patterns. Rendered with `<state>` block injected containing agent reports, cycle history, plan/logs references.
-- **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Rendered once per agent spawn.
-- **banner.txt** — ASCII banner (cosmetic, displayed on daemon startup or CLI output).
+- **orchestrator-base.md** — Core orchestrator system prompt. Defines orchestrator role (coordinator, not implementer), cycle workflow, context persistence via plan.md/logs.md, and validation patterns. Rendered as foundation for all orchestrator prompts.
+- **orchestrator-planning.md** — Planning-phase orchestrator guidance. Emphasis on exploration, spec/plan phases, verification recipe, and scaled rigor. Appended when `--mode planning` (default).
+- **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, verification patterns, and worktree preferences. Appended when `--mode implementation`.
+- **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}`, `{{INSTRUCTION}}`, and `{{WORKTREE_CONTEXT}}` placeholders. Rendered once per agent spawn.
+- **banner.txt** — ASCII banner (cosmetic).
 
 ## Configuration Files
 
@@ -21,30 +23,29 @@ System prompt templates for orchestrator and agent initialization.
 ## Rendering Rules
 
 **Orchestrator prompt**:
-1. Read `orchestrator.md` (or project override `.sisyphus/orchestrator.md`)
-2. Load settings from `orchestrator-settings.json` (or project override)
-3. Append `<state>` block with: agent reports, cycle count, history, plan.md and logs.md references
-4. Pass to Claude via `--append-system-prompt` flag
-5. User prompt: concise cycle instruction ("review reports, delegate next phase")
+1. Load orchestrator-base.md
+2. Append phase-specific guidance: orchestrator-planning.md (default) or orchestrator-impl.md (when `--mode implementation`)
+3. Inject `<state>` block with agent reports, cycle count, plan.md/logs.md references
+4. Load settings from `orchestrator-settings.json` (or project override)
+5. Pass via `--append-system-prompt` flag
 
 **Agent prompt**:
 1. Read `agent-suffix.md`
-2. Load settings from `agent-settings.json` (or project override)
-3. Replace `{{SESSION_ID}}` with session UUID
-4. Replace `{{INSTRUCTION}}` with task instruction (e.g., "implement login feature")
-5. Pass via `--append-system-prompt` flag
-6. User prompt: instruction again (for clarity)
+2. Replace `{{SESSION_ID}}` with session UUID
+3. Replace `{{INSTRUCTION}}` with task instruction
+4. Replace `{{WORKTREE_CONTEXT}}` with branch/worktree info (if `--worktree` used)
+5. Load settings from `agent-settings.json` (or project override)
+6. Pass via `--append-system-prompt` flag
 
 **Plugin prompts** (`agent-plugin/*.md`):
 - Used only when agent spawned with `--agent-type sisyphus:{type}`
 - Replaces default agent-suffix.md rendering
 - Same placeholder substitution rules apply
 
-## Important Boundaries
+## Key Patterns
 
-- Do **not** hardcode session IDs or agent names—use placeholders
-- Do **not** include raw JSON in prompts—use human-readable `<state>` formatting
-- Do **not** reference external files (only relative paths in `.sisyphus/`)
-- Do **keep prompts concise**—Claude reads full state separately
-- Settings files must be valid JSON; use project overrides to customize behavior per-workspace
-- Orchestrator template should emphasize phase-based methodology and context preservation, not encourage autonomous rushing
+- **Phase modes**: `--mode planning` (default) uses orchestrator-base.md + orchestrator-planning.md; `--mode implementation` uses orchestrator-base.md + orchestrator-impl.md
+- **Context files**: agents save findings to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` and pass references to downstream agents
+- **Worktree context**: `{{WORKTREE_CONTEXT}}` is auto-populated with isolated branch/worktree info when agent spawned with `--worktree`
+- **Placeholders**: always use `{{SESSION_ID}}`, `{{INSTRUCTION}}`, `{{WORKTREE_CONTEXT}}`—never hardcode values
+- Settings files are valid JSON; use project overrides to customize per-workspace
