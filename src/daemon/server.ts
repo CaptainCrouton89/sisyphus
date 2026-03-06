@@ -94,7 +94,7 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'yield': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
-        await sessionManager.handleYield(req.sessionId, cwd, req.nextPrompt);
+        await sessionManager.handleYield(req.sessionId, cwd, req.nextPrompt, req.mode);
         return { ok: true };
       }
 

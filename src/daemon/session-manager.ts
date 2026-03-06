@@ -218,14 +218,14 @@ export async function handleReport(cwd: string, sessionId: string, agentId: stri
   await handleAgentReport(cwd, sessionId, agentId, content);
 }
 
-export async function handleYield(sessionId: string, cwd: string, nextPrompt?: string): Promise<void> {
+export async function handleYield(sessionId: string, cwd: string, nextPrompt?: string, mode?: string): Promise<void> {
   // Re-activate paused sessions so respawn can proceed
   const pre = state.getSession(cwd, sessionId);
   if (pre.status === 'paused') {
     await state.updateSessionStatus(cwd, sessionId, 'active');
   }
 
-  await orchestrator.handleOrchestratorYield(sessionId, cwd, nextPrompt);
+  await orchestrator.handleOrchestratorYield(sessionId, cwd, nextPrompt, mode);
 
   const session = state.getSession(cwd, sessionId);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');

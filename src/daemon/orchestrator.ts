@@ -30,13 +30,23 @@ export function setOrchestratorPaneId(sessionId: string, paneId: string): void {
   sessionOrchestratorPane.set(sessionId, paneId);
 }
 
-function loadOrchestratorPrompt(cwd: string): string {
+function loadOrchestratorPrompt(cwd: string, mode: string): string {
   const projectPath = projectOrchestratorPromptPath(cwd);
   if (existsSync(projectPath)) {
     return readFileSync(projectPath, 'utf-8');
   }
-  const bundledPath = resolve(import.meta.dirname, '../templates/orchestrator.md');
-  return readFileSync(bundledPath, 'utf-8');
+
+  const basePath = resolve(import.meta.dirname, '../templates/orchestrator-base.md');
+  const base = readFileSync(basePath, 'utf-8');
+
+  if (mode === 'implementation') {
+    const implPath = resolve(import.meta.dirname, '../templates/orchestrator-impl.md');
+    return base + '\n\n' + readFileSync(implPath, 'utf-8');
+  }
+
+  // Default: planning mode
+  const planningPath = resolve(import.meta.dirname, '../templates/orchestrator-planning.md');
+  return base + '\n\n' + readFileSync(planningPath, 'utf-8');
 }
 
 function formatStateForOrchestrator(session: Session): string {
@@ -131,7 +141,12 @@ ${worktreeHint}
 
 export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
   const session = state.getSession(cwd, sessionId);
-  const basePrompt = loadOrchestratorPrompt(cwd);
+
+  // Read mode and nextPrompt from last completed cycle
+  const lastCycle = [...session.orchestratorCycles].reverse().find(c => c.completedAt);
+  const mode = lastCycle?.mode ?? 'planning';
+
+  const basePrompt = loadOrchestratorPrompt(cwd, mode);
   const formattedState = formatStateForOrchestrator(session);
 
   // System prompt: template only (no state)
@@ -156,8 +171,6 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   if (message) {
     userPrompt = `${formattedState}\n\nThe user resumed this session with new instructions: ${message}`;
   } else {
-    // Check last completed cycle for a stored nextPrompt
-    const lastCycle = [...session.orchestratorCycles].reverse().find(c => c.completedAt);
     const storedPrompt = lastCycle?.nextPrompt;
     if (storedPrompt) {
       userPrompt = `${formattedState}\n\n${storedPrompt}`;
@@ -200,7 +213,7 @@ function resolveOrchestratorPane(sessionId: string, cwd: string): string | undef
   return lastCycle?.paneId ?? undefined;
 }
 
-export async function handleOrchestratorYield(sessionId: string, cwd: string, nextPrompt?: string): Promise<void> {
+export async function handleOrchestratorYield(sessionId: string, cwd: string, nextPrompt?: string, mode?: string): Promise<void> {
   const paneId = resolveOrchestratorPane(sessionId, cwd);
   if (paneId) {
     tmux.killPane(paneId);
@@ -211,7 +224,7 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
   const windowId = sessionWindowMap.get(sessionId);
   if (windowId) tmux.selectLayout(windowId);
 
-  await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt);
+  await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt, mode);
 
   const session = state.getSession(cwd, sessionId);
   const runningAgents = session.agents.filter(a => a.status === 'running');

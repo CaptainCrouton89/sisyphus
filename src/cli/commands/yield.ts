@@ -9,7 +9,8 @@ export function registerYield(program: Command): void {
     .command('yield')
     .description('Yield control back to daemon (orchestrator only)')
     .option('--prompt <text>', 'Instructions for the next orchestrator cycle (or pipe via stdin)')
-    .action(async (opts: { prompt?: string }) => {
+    .option('--mode <mode>', 'System prompt mode for next cycle (planning, implementation)')
+    .action(async (opts: { prompt?: string; mode?: string }) => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -19,7 +20,7 @@ export function registerYield(program: Command): void {
 
       const nextPrompt = opts.prompt ?? await readStdin() ?? undefined;
 
-      const request: Request = { type: 'yield', sessionId, agentId: 'orchestrator', nextPrompt };
+      const request: Request = { type: 'yield', sessionId, agentId: 'orchestrator', nextPrompt, mode: opts.mode };
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Yielded. Waiting for agents to complete.');

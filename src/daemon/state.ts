@@ -157,7 +157,7 @@ export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSess
   });
 }
 
-export async function completeOrchestratorCycle(cwd: string, sessionId: string, nextPrompt?: string): Promise<void> {
+export async function completeOrchestratorCycle(cwd: string, sessionId: string, nextPrompt?: string, mode?: string): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
     const cycles = session.orchestratorCycles;
@@ -165,6 +165,7 @@ export async function completeOrchestratorCycle(cwd: string, sessionId: string, 
     const cycle = cycles[cycles.length - 1]!;
     cycle.completedAt = new Date().toISOString();
     if (nextPrompt) cycle.nextPrompt = nextPrompt;
+    if (mode) cycle.mode = mode;
     saveSession(session);
   });
 }
