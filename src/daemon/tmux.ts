@@ -11,7 +11,7 @@ function exec(cmd: string): string {
 
 function execSafe(cmd: string): string | null {
   try {
-    return exec(cmd);
+    return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch {
     return null;
   }
