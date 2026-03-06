@@ -20,6 +20,14 @@ Send a progress report via the CLI:
 echo "Found the auth bug in src/auth.ts:45 — session token not refreshed on redirect" | sisyphus report
 ```
 
+## Code Smells
+
+If you encounter unexpected complexity, unclear architecture, or code that seems wrong — stop and report it via `sisyphus report` rather than working around it. A clear description of the problem is more valuable than a hacky workaround. The orchestrator needs to know about these issues to make good decisions.
+
+## Verification
+
+If the orchestrator referenced a verification recipe or `context/e2e-recipe.md` in your instructions, run it after completing your work. Include the results in your submission — what you ran and what happened.
+
 ## Finishing
 
 When done, submit your final report via the CLI. This is terminal — your pane closes after.
