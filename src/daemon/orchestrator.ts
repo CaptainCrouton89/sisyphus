@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { contextDir, logsPath, planPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
+import { loadConfig } from '../shared/config.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
@@ -183,7 +184,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
   const pluginPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
-  const claudeCmd = `claude --dangerously-skip-permissions --settings "${settingsPath}" --plugin-dir "${pluginPath}" --append-system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const config = loadConfig(cwd);
+  const effort = config.orchestratorEffort ?? 'high';
+  const claudeCmd = `claude --dangerously-skip-permissions --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 

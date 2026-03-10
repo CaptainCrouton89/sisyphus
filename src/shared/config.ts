@@ -8,16 +8,22 @@ export interface WorktreeConfig {
   init?: string;
 }
 
+export type EffortLevel = 'low' | 'medium' | 'high';
+
 export interface Config {
   model?: string;
   tmuxSession?: string;
   orchestratorPrompt?: string;
   pollIntervalMs?: number;
   autoUpdate?: boolean;
+  orchestratorEffort?: EffortLevel;
+  agentEffort?: EffortLevel;
 }
 
 const DEFAULT_CONFIG: Config = {
   pollIntervalMs: 5000,
+  orchestratorEffort: 'high',
+  agentEffort: 'medium',
 };
 
 function readJsonFile(filePath: string): Partial<Config> {
