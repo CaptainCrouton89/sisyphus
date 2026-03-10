@@ -23,6 +23,7 @@ description: >
   Brief description of agent role and capabilities
 model: opus
 color: teal
+effort: high
 skills: [capture]
 permissionMode: bypassPermissions
 ```
@@ -32,6 +33,7 @@ Frontmatter properties:
 - `description` — One-line summary for plugin discovery
 - `model` — Claude model (`opus`, `sonnet`, etc.)
 - `color` — Tmux pane color
+- `effort` — Complexity estimate (`low`, `medium`, `high`)
 - `skills` — Claude Code skills array (e.g., `[capture]`)
 - `permissionMode` — Permission mode (`bypassPermissions`, `default`, etc.)
 
