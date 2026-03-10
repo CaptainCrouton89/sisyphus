@@ -9,6 +9,7 @@ import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
 import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 import { resolveAgentConfig, detectProvider } from './frontmatter.js';
+import { loadConfig } from '../shared/config.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -152,7 +153,9 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   } else {
     // Anthropic (current behavior)
     const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
-    mainCmd = `claude --dangerously-skip-permissions --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    const config = loadConfig(cwd);
+    const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
   const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
