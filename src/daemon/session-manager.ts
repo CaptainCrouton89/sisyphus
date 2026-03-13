@@ -255,6 +255,10 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
 }
 
+export async function handleContinue(sessionId: string, cwd: string): Promise<void> {
+  await state.continueSession(cwd, sessionId);
+}
+
 export async function handleRegisterClaudeSession(
   cwd: string,
   sessionId: string,

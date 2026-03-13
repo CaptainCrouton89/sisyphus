@@ -21,7 +21,8 @@ export function registerComplete(program: Command): void {
       if (response.ok) {
         console.log('Session completed.');
         console.log(`\nFollow up:`);
-        console.log(`  sisyphus resume ${sessionId} "new instructions"  # respawn orchestrator with follow-up`);
+        console.log(`  sisyphus continue                                # reactivate and keep working`);
+        console.log(`  sisyphus resume ${sessionId} "new instructions"   # respawn orchestrator externally`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

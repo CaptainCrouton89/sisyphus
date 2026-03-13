@@ -1,15 +1,19 @@
 import { createServer, type Server } from 'node:net';
 import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
-import { socketPath, globalDir } from '../shared/paths.js';
+import { socketPath, globalDir, messagesDir } from '../shared/paths.js';
 import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
+import type { MessageSource } from '../shared/types.js';
 import * as sessionManager from './session-manager.js';
+import * as state from './state.js';
 import { lookupPane, unregisterPane } from './pane-registry.js';
 
 let server: Server | null = null;
 
 // Track the cwd for each session so we can route requests
 const sessionCwdMap = new Map<string, string>();
+// Monotonic message counter per session
+const sessionMessageCounters = new Map<string, number>();
 // Track the originating tmux session for each sisyphus session
 const sessionTmuxMap = new Map<string, string>();
 // Track the originating tmux window for each sisyphus session
@@ -105,6 +109,13 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true };
       }
 
+      case 'continue': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        await sessionManager.handleContinue(req.sessionId, cwd);
+        return { ok: true };
+      }
+
       case 'status': {
         if (req.sessionId) {
           const cwd = sessionCwdMap.get(req.sessionId);
@@ -191,6 +202,36 @@ async function handleRequest(req: Request): Promise<Response> {
         }
         unregisterPane(req.paneId);
         await sessionManager.handlePaneExited(req.paneId, cwd, entry.sessionId, entry.role, entry.agentId);
+        return { ok: true };
+      }
+
+      case 'message': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+
+        const counter = (sessionMessageCounters.get(req.sessionId) ?? 0) + 1;
+        sessionMessageCounters.set(req.sessionId, counter);
+        const id = `msg-${String(counter).padStart(3, '0')}`;
+
+        const source: MessageSource = req.source ?? { type: 'user' };
+        const summary = req.content.length > 200 ? req.content.slice(0, 200) + '...' : req.content;
+
+        let filePath: string | undefined;
+        if (req.content.length > 200) {
+          const dir = messagesDir(cwd, req.sessionId);
+          mkdirSync(dir, { recursive: true });
+          filePath = join(dir, `${id}.md`);
+          writeFileSync(filePath, req.content, 'utf-8');
+        }
+
+        await state.appendMessage(cwd, req.sessionId, {
+          id,
+          source,
+          content: req.content,
+          summary,
+          ...(filePath ? { filePath } : {}),
+          timestamp: new Date().toISOString(),
+        });
         return { ok: true };
       }
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { contextDir, logsPath, planPath, promptsDir, sessionDir, statePath } from '../shared/paths.js';
-import type { Agent, AgentReport, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
+import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const PLAN_SEED = `---
 description: >
@@ -66,6 +66,7 @@ export function createSession(id: string, task: string, cwd: string, context?: s
     createdAt: new Date().toISOString(),
     agents: [],
     orchestratorCycles: [],
+    messages: [],
   };
 
   atomicWrite(statePath(cwd, id), JSON.stringify(session, null, 2));
@@ -138,6 +139,24 @@ export async function completeSession(cwd: string, sessionId: string, report: st
   });
 }
 
+export async function continueSession(cwd: string, sessionId: string): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    if (session.status !== 'completed') {
+      throw new Error(`Session ${sessionId} is not completed (status: ${session.status})`);
+    }
+    session.status = 'active';
+    session.completedAt = undefined;
+    session.completionReport = undefined;
+    const cycles = session.orchestratorCycles;
+    if (cycles.length > 0) {
+      cycles[cycles.length - 1]!.completedAt = undefined;
+    }
+    saveSession(session);
+    writeFileSync(planPath(cwd, sessionId), '', 'utf-8');
+  });
+}
+
 export async function appendAgentReport(cwd: string, sessionId: string, agentId: string, entry: AgentReport): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
@@ -153,6 +172,15 @@ export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSess
     const session = getSession(cwd, sessionId);
     session.tmuxSessionName = tmuxSessionName;
     session.tmuxWindowId = tmuxWindowId;
+    saveSession(session);
+  });
+}
+
+export async function appendMessage(cwd: string, sessionId: string, message: Message): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    if (!session.messages) session.messages = [];
+    session.messages.push(message);
     saveSession(session);
   });
 }
