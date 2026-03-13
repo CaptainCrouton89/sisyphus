@@ -57,6 +57,10 @@ export function reportFilePath(cwd: string, sessionId: string, agentId: string, 
   return join(reportsDir(cwd, sessionId), `${agentId}-${suffix}.md`);
 }
 
+export function messagesDir(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'messages');
+}
+
 export function promptsDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'prompts');
 }

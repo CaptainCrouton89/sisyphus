@@ -2,6 +2,20 @@ export type Provider = 'anthropic' | 'openai';
 
 export type SessionStatus = 'active' | 'paused' | 'completed';
 
+export type MessageSource =
+  | { type: 'agent'; agentId: string }
+  | { type: 'user' }
+  | { type: 'system'; detail?: string };
+
+export interface Message {
+  id: string;
+  source: MessageSource;
+  content: string;
+  summary: string;
+  filePath?: string;
+  timestamp: string;
+}
+
 export type AgentStatus = 'running' | 'completed' | 'killed' | 'crashed' | 'lost';
 
 export interface AgentReport {
@@ -21,6 +35,7 @@ export interface Session {
   completedAt?: string;
   agents: Agent[];
   orchestratorCycles: OrchestratorCycle[];
+  messages: Message[];
   completionReport?: string;
   parentSessionId?: string;
   tmuxSessionName?: string;

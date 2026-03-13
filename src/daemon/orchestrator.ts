@@ -115,6 +115,19 @@ function formatStateForOrchestrator(session: Session): string {
     ? `\n## Background Context\n${session.context}\n`
     : '';
 
+  const messages = session.messages ?? [];
+  const messageLines = messages.length > 0
+    ? messages.map(m => {
+        const sourceLabel = m.source.type === 'agent'
+          ? `agent:${m.source.agentId}`
+          : m.source.type === 'system' && m.source.detail
+            ? `system:${m.source.detail}`
+            : m.source.type;
+        const fileRef = m.filePath ? ` → ${m.filePath}` : '';
+        return `- [${sourceLabel} @ ${m.timestamp}] "${m.summary}"${fileRef}`;
+      }).join('\n')
+    : '  (none)';
+
   return `<state>
 session: ${shortId} (cycle ${cycleNum})
 task: ${session.task}
@@ -134,6 +147,9 @@ ${cycleLines}
 
 ## Context Files
 ${contextLines}
+
+## Messages
+${messageLines}
 
 ## Git Worktrees
 ${worktreeHint}
