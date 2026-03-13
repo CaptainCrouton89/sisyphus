@@ -104,6 +104,7 @@ export async function resumeSession(sessionId: string, cwd: string, tmuxSession:
   // Reset counters based on existing agents
   resetAgentCounterFromState(sessionId, session.agents);
   resetColors(sessionId);
+  orchestratorDone.delete(sessionId);
 
   trackSession(sessionId, cwd, tmuxSession);
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId, message);
@@ -143,14 +144,24 @@ export function listSessions(cwd: string): Array<{ id: string; task: string; sta
 }
 
 const pendingRespawns = new Set<string>();
+// Track sessions where the orchestrator has exited (yielded, crashed, etc.)
+// Prevents respawning a new orchestrator while the current one is still running
+const orchestratorDone = new Set<string>();
 
 export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string): void {
   if (pendingRespawns.has(sessionId)) return;
+
+  // Don't respawn while the orchestrator is still running — wait for yield
+  if (!orchestratorDone.has(sessionId)) {
+    console.log(`[sisyphus] All agents done for session ${sessionId}, waiting for orchestrator to yield`);
+    return;
+  }
 
   const session = state.getSession(cwd, sessionId);
   if (session.status !== 'active') return;
 
   pendingRespawns.add(sessionId);
+  orchestratorDone.delete(sessionId);
 
   // Merge any worktree agents before respawning orchestrator
   const worktreeAgents = session.agents.filter(a => a.worktreePath && a.mergeStatus === 'pending');
@@ -227,6 +238,9 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 
   await orchestrator.handleOrchestratorYield(sessionId, cwd, nextPrompt, mode);
 
+  // Mark orchestrator as done for this cycle — unblocks respawn
+  orchestratorDone.add(sessionId);
+
   const session = state.getSession(cwd, sessionId);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
   if (!hasRunningAgents) {
@@ -294,6 +308,7 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
 
   // Clean up agent counter
   clearAgentCounter(sessionId);
+  orchestratorDone.delete(sessionId);
 
   return killedAgents;
 }
@@ -321,6 +336,7 @@ export async function handlePaneExited(
     }
   } else if (role === 'orchestrator') {
     // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
+    orchestratorDone.add(sessionId);
     const hasRunningAgents = session.agents.some(a => a.status === 'running');
     if (!hasRunningAgents && session.agents.length > 0) {
       const windowId = orchestrator.getWindowId(sessionId);
