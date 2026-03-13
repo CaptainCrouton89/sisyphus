@@ -21,7 +21,7 @@ For significant features, spec refinement is iterative:
 - Seek user alignment on the high-level approach and any decisions that set direction
 - Refine based on feedback before planning
 
-For smaller changes, a spec might just be a few sentences in plan.md — use judgment about how much formality the task warrants.
+Not every stage needs a standalone spec document — a well-defined stage might just be a detailed section in plan.md. Use judgment about how much formality each stage warrants.
 
 ## E2E Verification Recipe
 

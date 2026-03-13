@@ -79,7 +79,7 @@ The fix agents should use `/simplify` to systematically review their own changes
 
 ### Repeat until clean
 
-Spawn reviewers again on the refined code. If they come back with new issues, fix those too. **The gate is "reviewers find nothing significant" — not "good enough."** In practice this is usually 1-2 rounds. If it's taking more, the implementation was shaky and you should consider whether the approach needs rethinking.
+Spawn reviewers again on the refined code. If they come back with new issues, fix those too. Genuinely nitpicky findings — stylistic preferences, irrelevant edge cases — can be skipped. But if a finding is actually correct, it gets done. **"I don't want to" is not a reason to skip a valid finding.** The distinction is between false positives and laziness. In practice this is usually 1-2 rounds. If it's taking more, the implementation was shaky and you should consider whether the approach needs rethinking rather than patching.
 
 ## E2E Validation
 
