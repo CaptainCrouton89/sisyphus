@@ -29,3 +29,8 @@ Currently the orchestrator only wakes up when ALL agents finish. Instead, agents
 - `orchestrator.ts` `handleOrchestratorYield()` — check for unseen reports, respawn immediately if any
 - `state.ts` — add report watermark to session state
 - `orchestrator.ts` `formatStateForOrchestrator()` — annotate reports as NEW vs. seen
+
+## Other Ideas
+- What if the agent made tasks for itself, and marking them complete had haiku determine if it was "actually done" or smth?
+- Dynamic goals?
+
