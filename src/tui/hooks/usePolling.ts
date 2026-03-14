@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { send } from '../lib/client.js';
 import { readFileSync, existsSync } from 'node:fs';
-import { planPath } from '../../shared/paths.js';
+import { goalPath, logsPath, planPath } from '../../shared/paths.js';
 import { windowExists } from '../lib/tmux.js';
 import type { Session } from '../../shared/types.js';
 
@@ -11,12 +11,15 @@ export interface SessionSummary {
   status: string;
   agentCount: number;
   createdAt: string;
+  tmuxWindowId?: string;
 }
 
 export interface PollingState {
   sessions: SessionSummary[];
   selectedSession: Session | null;
   planContent: string;
+  goalContent: string;
+  logsContent: string;
   paneAlive: boolean;
   error: string | null;
 }
@@ -30,6 +33,8 @@ export function usePolling(
     sessions: [],
     selectedSession: null,
     planContent: '',
+    goalContent: '',
+    logsContent: '',
     paneAlive: true,
     error: null,
   });
@@ -49,6 +54,8 @@ export function usePolling(
 
       let selectedSession: Session | null = null;
       let planContent = '';
+      let goalContent = '';
+      let logsContent = '';
       let paneAlive = true;
 
       if (selectedIdRef.current) {
@@ -74,10 +81,28 @@ export function usePolling(
         } catch {
           // plan.md may not exist yet
         }
+
+        try {
+          const gp = goalPath(cwd, selectedIdRef.current);
+          if (existsSync(gp)) {
+            goalContent = readFileSync(gp, 'utf-8');
+          }
+        } catch {
+          // goal.md may not exist yet
+        }
+
+        try {
+          const lp = logsPath(cwd, selectedIdRef.current);
+          if (existsSync(lp)) {
+            logsContent = readFileSync(lp, 'utf-8');
+          }
+        } catch {
+          // logs.md may not exist yet
+        }
       }
 
       if (mountedRef.current) {
-        setState({ sessions, selectedSession, planContent, paneAlive, error: null });
+        setState({ sessions, selectedSession, planContent, goalContent, logsContent, paneAlive, error: null });
       }
     } catch (err) {
       if (mountedRef.current) {

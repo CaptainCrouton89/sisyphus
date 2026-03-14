@@ -133,3 +133,40 @@ export function agentStatusIcon(status: string): string {
 export function divider(width: number, char: string = '─'): string {
   return char.repeat(Math.max(0, width));
 }
+
+/** Strip YAML frontmatter (--- ... ---) from markdown content */
+export function stripFrontmatter(content: string): string {
+  if (!content.startsWith('---')) return content;
+  const end = content.indexOf('\n---', 3);
+  if (end === -1) return content;
+  return content.slice(end + 4).trimStart();
+}
+
+/** Clean inline markdown syntax for terminal display */
+export function cleanMarkdown(line: string): string {
+  return line
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1');
+}
+
+export function wrapText(text: string, width: number): string[] {
+  const result: string[] = [];
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.length <= width) {
+      result.push(rawLine);
+      continue;
+    }
+    let remaining = rawLine;
+    while (remaining.length > width) {
+      let breakAt = remaining.lastIndexOf(' ', width);
+      if (breakAt <= 0) breakAt = width;
+      result.push(remaining.slice(0, breakAt));
+      remaining = remaining.slice(breakAt).trimStart();
+    }
+    if (remaining) result.push(remaining);
+  }
+  return result;
+}
