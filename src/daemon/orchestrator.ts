@@ -1,9 +1,10 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { contextDir, logsPath, planPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
+import { resolve, dirname, join } from 'node:path';
+import { contextDir, goalPath, logsPath, planPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
+import { discoverAgentTypes } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
@@ -51,73 +52,33 @@ function loadOrchestratorPrompt(cwd: string, mode: string): string {
 }
 
 function formatStateForOrchestrator(session: Session): string {
-  const shortId = session.id.slice(0, 8);
   const cycleNum = session.orchestratorCycles.length;
 
   const ctxDir = contextDir(session.cwd, session.id);
-  let contextLines: string;
-  if (existsSync(ctxDir)) {
-    const files = readdirSync(ctxDir);
-    contextLines = files.length > 0 ? files.map(f => `- ${f}`).join('\n') : '  (none)';
-  } else {
-    contextLines = '  (none)';
-  }
-
   const planFile = planPath(session.cwd, session.id);
-  const planRef = existsSync(planFile) ? `@${planFile}` : '(empty)';
-
   const logsFile = logsPath(session.cwd, session.id);
-  const logsRef = existsSync(logsFile) ? `@${logsFile}` : '(empty)';
 
-  const agentLines = session.agents.length > 0
-    ? session.agents.map((a: Agent) => {
-        const header = `- ${a.id} (${a.name}): ${a.status} — ${a.reports.length} report(s)`;
-        if (a.reports.length === 0) return header;
-        let updateNum = 0;
-        const reportLines = a.reports.map(r => {
-          const label = r.type === 'final' ? '[final]' : `[update ${String(++updateNum).padStart(3, '0')}]`;
-          return `  ${label} "${r.summary}" → ${r.filePath}`;
-        });
-        return [header, ...reportLines].join('\n');
-      }).join('\n')
-    : '  (none)';
-
-  const cycleLines = session.orchestratorCycles.length > 0
-    ? session.orchestratorCycles.map(c => {
-        const spawnedList = c.agentsSpawned.length > 0 ? c.agentsSpawned.join(', ') : '(none)';
-        return `Cycle ${c.cycle}: Spawned ${spawnedList}`;
-      }).join('\n')
-    : '  (none)';
-
-  // Worktree status — only if any agents have worktree info
-  const worktreeAgents = session.agents.filter(a => a.worktreePath);
-  let worktreeSection = '';
-  if (worktreeAgents.length > 0) {
-    const wtLines = worktreeAgents.map((a: Agent) => {
-      if (a.mergeStatus === 'conflict') {
-        return `- ${a.id}: CONFLICT — ${a.mergeDetails ?? 'unknown'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}`;
-      }
-      if (a.mergeStatus === 'no-changes') {
-        return `- ${a.id}: NO CHANGES — agent did not commit any work to branch ${a.branchName}`;
-      }
-      const status = a.mergeStatus ?? 'pending';
-      return `- ${a.id}: ${status} (branch ${a.branchName})`;
-    }).join('\n');
-    worktreeSection = `\n\n## Worktrees\n${wtLines}`;
+  // Context section: first cycle shows background context text; subsequent cycles show context dir files
+  let contextSection = '';
+  if (cycleNum === 0) {
+    if (session.context) {
+      contextSection = `\n## Context\n\n${session.context}\n`;
+    }
+  } else {
+    let ctxFiles: string[] = [];
+    if (existsSync(ctxDir)) {
+      ctxFiles = readdirSync(ctxDir).filter(f => f !== 'CLAUDE.md');
+    }
+    if (ctxFiles.length > 0) {
+      const ctxLines = ctxFiles.map(f => `- ${join(ctxDir, f)}`).join('\n');
+      contextSection = `\n## Context\n\n${ctxLines}\n`;
+    }
   }
 
-  // Worktree hint
-  const worktreeHint = existsSync(worktreeConfigPath(session.cwd))
-    ? 'Worktree config active (`.sisyphus/worktree.json`). Use `--worktree` flag with `sisyphus spawn` to isolate agents in their own worktrees. Recommended for feature work, especially with potential file overlap.'
-    : 'No worktree configuration found. If this session involves parallel work where agents may edit overlapping files, use the `git-management` skill to set up `.sisyphus/worktree.json` and enable worktree isolation.';
-
-  const contextSection = session.context
-    ? `\n## Background Context\n${session.context}\n`
-    : '';
-
+  // Messages section
   const messages = session.messages ?? [];
-  const messageLines = messages.length > 0
-    ? messages.map(m => {
+  const messagesSection = messages.length > 0
+    ? '\n### Messages\n\n' + messages.map(m => {
         const sourceLabel = m.source.type === 'agent'
           ? `agent:${m.source.agentId}`
           : m.source.type === 'system' && m.source.detail
@@ -125,34 +86,113 @@ function formatStateForOrchestrator(session: Session): string {
             : m.source.type;
         const fileRef = m.filePath ? ` → ${m.filePath}` : '';
         return `- [${sourceLabel} @ ${m.timestamp}] "${m.summary}"${fileRef}`;
+      }).join('\n') + '\n'
+    : '';
+
+  // Logs section
+  const logsRef = existsSync(logsFile) ? `@${logsFile}` : '(empty)';
+
+  // Previous cycles: all except last, compact format
+  let previousCyclesSection = '';
+  if (session.orchestratorCycles.length > 1) {
+    const previousCycles = session.orchestratorCycles.slice(0, -1);
+    const agentMap = new Map(session.agents.map((a: Agent) => [a.id, a]));
+    const lines = previousCycles.map(c => {
+      const agentDescs = c.agentsSpawned.map(id => {
+        const agent = agentMap.get(id);
+        return agent ? `${id} (${agent.name})` : id;
+      }).join(', ');
+      return `Cycle ${c.cycle}: ${agentDescs || '(none)'}`;
+    });
+    previousCyclesSection = `\n### Previous Cycles\n\n${lines.join('\n')}\n`;
+  }
+
+  // Most recent cycle: full report content
+  let mostRecentCycleSection = '';
+  const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+  if (lastCycle && lastCycle.agentsSpawned.length > 0) {
+    const agentMap = new Map(session.agents.map((a: Agent) => [a.id, a]));
+    const agentBlocks = lastCycle.agentsSpawned.map(id => {
+      const agent = agentMap.get(id);
+      if (!agent) return `<agent-${id} status="unknown">\n(no agent data)\n</agent-${id}>`;
+
+      // Prefer 'final' report, fall back to last report
+      const finalReport = agent.reports.find(r => r.type === 'final');
+      const reportToUse = finalReport ?? agent.reports[agent.reports.length - 1];
+
+      let reportContent = '(no reports)';
+      if (reportToUse) {
+        try {
+          reportContent = readFileSync(reportToUse.filePath, 'utf-8');
+        } catch {
+          reportContent = `(could not read report: ${reportToUse.filePath})`;
+        }
+      }
+
+      return `<agent-${id} name="${agent.name}" status="${agent.status}">\n${reportContent}\n</agent-${id}>`;
+    }).join('\n');
+
+    mostRecentCycleSection = `\n### Most Recent Cycle\n\n<last-cycle>\n${agentBlocks}\n</last-cycle>\n`;
+  }
+
+  // Plan section
+  const planRef = existsSync(planFile) ? `@${planFile}` : '(empty)';
+
+  // Worktree status — only if any agents have worktree info or worktree config exists
+  const worktreeAgents = session.agents.filter(a => a.worktreePath);
+  let worktreeSection = '';
+  if (worktreeAgents.length > 0 || existsSync(worktreeConfigPath(session.cwd))) {
+    let wtLines = '';
+    if (worktreeAgents.length > 0) {
+      wtLines = '\n' + worktreeAgents.map((a: Agent) => {
+        if (a.mergeStatus === 'conflict') {
+          return `- ${a.id}: CONFLICT — ${a.mergeDetails ?? 'unknown'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}`;
+        }
+        if (a.mergeStatus === 'no-changes') {
+          return `- ${a.id}: NO CHANGES — agent did not commit any work to branch ${a.branchName}`;
+        }
+        const status = a.mergeStatus ?? 'pending';
+        return `- ${a.id}: ${status} (branch ${a.branchName})`;
+      }).join('\n');
+    }
+    const worktreeHint = existsSync(worktreeConfigPath(session.cwd))
+      ? 'Worktree config active (`.sisyphus/worktree.json`). Use `--worktree` flag with `sisyphus spawn` to isolate agents in their own worktrees. Recommended for feature work, especially with potential file overlap.'
+      : 'No worktree configuration found. If this session involves parallel work where agents may edit overlapping files, use the `git-management` skill to set up `.sisyphus/worktree.json` and enable worktree isolation.';
+    worktreeSection = `\n\n## Git Worktrees\n\n${worktreeHint}${wtLines}`;
+  }
+
+  // Discover available agent types
+  const agentPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
+  const agentTypes = discoverAgentTypes(agentPluginPath, session.cwd);
+  const agentTypeLines = agentTypes.length > 0
+    ? agentTypes.map(t => {
+        const modelTag = t.model ? ` (${t.model})` : '';
+        const desc = t.description ? ` — ${t.description}` : '';
+        return `- \`${t.qualifiedName}\`${modelTag}${desc}`;
       }).join('\n')
     : '  (none)';
 
+  // Goal section: read from goal.md, fall back to session.task
+  const goalFile = goalPath(session.cwd, session.id);
+  const goalContent = existsSync(goalFile) ? readFileSync(goalFile, 'utf-8').trim() : session.task;
+
   return `<state>
-session: ${shortId} (cycle ${cycleNum})
-task: ${session.task}
-status: ${session.status}
-${contextSection}
-## Plan
-${planRef}
+## Goal
 
-## Logs
+${goalContent}
+${contextSection}${messagesSection}
+### Logs
+
 ${logsRef}
+${previousCyclesSection}${mostRecentCycleSection}
+## Plan
 
-## Agents
-${agentLines}${worktreeSection}
+${planRef}
+${worktreeSection}
 
-## Previous Cycles
-${cycleLines}
+## Available Agent Types
 
-## Context Files
-${contextLines}
-
-## Messages
-${messageLines}
-
-## Git Worktrees
-${worktreeHint}
+${agentTypeLines}
 </state>`;
 }
 
@@ -184,16 +224,13 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   ].join(' && ');
 
   // User message: state block + contextual prompt
-  let userPrompt: string;
+  let userPrompt = formattedState;
   if (message) {
-    userPrompt = `${formattedState}\n\nThe user resumed this session with new instructions: ${message}`;
+    userPrompt += `\n\n## Continuation Instructions\n\nThe user resumed this session with new instructions: ${message}`;
   } else {
     const storedPrompt = lastCycle?.nextPrompt;
-    if (storedPrompt) {
-      userPrompt = `${formattedState}\n\n${storedPrompt}`;
-    } else {
-      userPrompt = `${formattedState}\n\nReview the current session and delegate the next cycle of work.`;
-    }
+    const continuationText = storedPrompt ? storedPrompt : 'Review the current session and delegate the next cycle of work.';
+    userPrompt += `\n\n## Continuation Instructions\n\n${continuationText}`;
   }
 
   const userPromptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
@@ -202,7 +239,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'high';
-  const claudeCmd = `claude --dangerously-skip-permissions --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 
