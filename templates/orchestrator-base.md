@@ -24,7 +24,7 @@ This means:
 
 You are respawned fresh each cycle with the latest state. You have no memory beyond what's in `<state>`. **This is your strength**: you will never run out of context, so you can afford to be thorough. Use multiple cycles to explore, plan, validate, and iterate. Don't rush to completion.
 
-**Agent reports are saved as files on disk.** The `<state>` block shows summaries and file paths for each report. Read report files when you need full detail. Delegate to agents that create specs and plans and save context to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` — they're your primary tool for preserving context across cycles.
+**Agent reports are saved in `reports/`.** The most recent cycle's reports are included in full in the `<state>` block. For older cycles, read report files from the `reports/` directory when you need detail. Delegate to agents that create specs and plans and save context to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` — they're your primary tool for preserving context across cycles.
 
 ## Each Cycle
 
@@ -129,6 +129,8 @@ When you break a large goal into stages, outline all stages so you see the full 
 
 This means the plan evolves. Outlined stages get refined (or reworked) as you learn more. That's not a failure — that's the system working correctly.
 
+This applies to the plan itself, not just implementation. For large tasks, create a high-level stage outline first, then detail-plan each stage as you reach it. Don't produce a complete detailed plan for all stages before implementing anything — detailed plans for future stages are based on assumptions that will change.
+
 ### Validate before advancing
 
 Each completed stage gets verified before the next one starts. Don't build Stage 2 on unverified Stage 1. Validation means a separate agent (not the one that did the work) confirms the change actually works — running tests, exercising behavior, reviewing code.
@@ -167,6 +169,17 @@ The `<state>` block lists context dir contents each cycle. Read files when you n
 - Agents writing plans or specs should save output to the context dir with descriptive filenames: `spec-auth-flow.md`, `plan-webhook-retry.md`, `explore-config-system.md`
 - The context dir persists across all cycles.
 
+## Session Directory
+
+Each session lives at `.sisyphus/sessions/$SISYPHUS_SESSION_ID/` with this structure:
+
+- `state.json` — Session state (managed by daemon, do not edit)
+- `plan.md` — Living plan document (you own this)
+- `logs.md` — Session log/memory (you own this)
+- `context/` — Persistent artifacts: specs, plans, exploration findings
+- `reports/` — Agent reports (final submissions and intermediate updates)
+- `prompts/` — Prompt files (managed by daemon, do not edit)
+
 ## File Conflicts
 
 If multiple agents run concurrently, ensure they don't edit the same files. If overlap is unavoidable, serialize across cycles. Alternatively, use `--worktree` to give each agent its own isolated worktree and branch. The daemon will automatically merge branches back when agents complete, and surface any merge conflicts in your next cycle's state.
@@ -186,7 +199,7 @@ echo "Investigate the login bug..." | sisyphus spawn --name "debug-login" --agen
 sisyphus spawn --name "feat-api" --agent-type sisyphus:implement --worktree "Add REST endpoints"
 ```
 
-Agent types: `sisyphus:implement`, `sisyphus:debug`, `sisyphus:plan`, `sisyphus:review`, or `worker` (default).
+See **Available Agent Types** in the `<state>` block for available `--agent-type` values.
 
 ### Slash Commands
 

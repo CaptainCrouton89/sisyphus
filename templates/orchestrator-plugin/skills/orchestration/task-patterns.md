@@ -106,45 +106,44 @@ Phases without dependencies can run in parallel. Types/interfaces (Phase 1) must
 ## Feature Build (Large — 10+ files)
 
 ### When to use
-Cross-cutting feature, multiple domains, needs team coordination.
+Cross-cutting feature, multiple domains, needs team coordination. Uses **progressive planning** — high-level outline first, then detail-plan each stage as it's reached.
 
 ### Plan structure
 ```
 ## Feature: [description]
 
-### Spec & Planning
+### Spec
 - [ ] Draft spec
-- [ ] Create master implementation plan
-- [ ] Review plan against spec
-- [ ] Define behavioral test properties
+- [ ] Review spec
 
-### Implementation
-- [ ] Phase 1 — [domain A foundation]
-- [ ] Phase 2 — [domain B foundation]
-- [ ] Phase 3 — [domain A implementation]
-- [ ] Phase 4 — [domain B implementation]
-- [ ] Phase 5 — [integration layer]
+### Stage Outline (high-level only — no file-level detail yet)
+1. [domain A foundation] — no deps — ~N cycles
+2. [domain B foundation] — no deps — ~N cycles
+3. [domain A implementation] — depends on 1 — ~N cycles
+4. [domain B implementation] — depends on 2 — ~N cycles
+5. [integration layer] — depends on 3, 4 — ~N cycles
+6. [integration tests] — depends on all — ~N cycles
 
-### Validation
-- [ ] Validate full implementation
-- [ ] Review implementation
-- [ ] Adversarial validation against test spec
+### Current Stage: [whichever is active]
+See context/plan-stage-N-{name}.md for detail plan.
+- [ ] [task-level items from detail plan]
 ```
 
 ### Cycle plan
 - **Cycle 1**: Spawn `sisyphus:spec-draft` for spec. Yield.
-- **Cycle 2**: Spawn `sisyphus:plan` for plan + `sisyphus:test-spec` for test properties (parallel). Yield.
-- **Cycle 3**: Spawn `sisyphus:review-plan` for review. Yield.
-- **Cycle 4**: Spawn `sisyphus:implement` for Phase 1 + Phase 2 (parallel — independent domains). Yield.
-- **Cycle 5**: Validate Phase 1 + Phase 2, then spawn Phase 3 + Phase 4 (parallel). Yield.
-- **Cycle 6+**: Integration, validation, review.
+- **Cycle 2**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Do not detail any stage — no file-level specifics." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
+- **Cycle 3**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). Output to `context/plan-stage-1-{name}.md`. Yield.
+- **Cycle 4**: Spawn `sisyphus:implement` for stage 1. If stage 2 is independent, spawn `sisyphus:plan` to detail-plan stage 2 in parallel. Yield.
+- **Cycle 5**: Validate stage 1. Spawn `sisyphus:implement` for stage 2 (if detail-planned). Detail-plan stage 3 in parallel if independent. Yield.
+- **Cycle 6+**: Continue pattern — implement current stage, validate previous, detail-plan next. Each stage follows implement → critique → refine → validate.
 
 ### Failure modes
+- **Detail-plan agent can't produce quality output**: The stage is still too large. Break it into sub-stages in the outline and detail-plan each sub-stage individually.
 - **Integration failures**: Often means contracts between domains don't match. Spawn debug agent targeting the integration seam.
-- **Test spec violations**: Feed specific property failures back to implement.
+- **Stage N implementation invalidates stage N+1 outline**: Update the high-level outline. This is expected — it's why you don't detail-plan everything upfront.
 
 ### Parallelization
-Maximize. Independent domains run in parallel. Foundation phases complete before implementation phases in the same domain. Integration waits for all domain implementations.
+Maximize within the progressive pattern. Independent stages run in parallel. Detail-planning the next stage runs alongside implementing the current one. Foundation stages complete before dependent stages. Integration waits for all domain implementations.
 
 ---
 

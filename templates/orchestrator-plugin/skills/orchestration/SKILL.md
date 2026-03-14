@@ -20,21 +20,9 @@ How to structure sisyphus sessions for common task types. This skill helps the o
 
 5. **Reports are handoffs.** Agent reports should contain everything the next cycle's orchestrator needs — what was done, what was found, what's unresolved, where artifacts were saved.
 
-## Agent Types Quick Reference
+## Agent Types
 
-| Agent | Model | Use For |
-|-------|-------|---------|
-| `sisyphus:general` | sonnet | Ad-hoc tasks, summarization, simple questions |
-| `sisyphus:debug` | opus | Bug diagnosis and root cause analysis |
-| `sisyphus:spec-draft` | opus | Feature investigation and spec drafting |
-| `sisyphus:plan` | opus | Implementation planning from spec |
-| `sisyphus:review-plan` | opus | Validate plan covers spec completely |
-| `sisyphus:test-spec` | opus | Define behavioral properties to verify |
-| `sisyphus:implement` | sonnet | Execute plan phases, write code |
-| `sisyphus:validate` | opus | Verify implementation matches plan |
-| `sisyphus:review` | opus | Code review with parallel concern subagents |
-| `sisyphus:tactician` | opus | Track plan progress, dispatch next task |
-| `sisyphus:triage` | sonnet | Classify tickets by type/size |
+Available agent types are listed in the `<state>` block under **Available Agent Types**. Use `--agent-type` with `sisyphus spawn`.
 
 For task breakdown patterns per workflow type, see [task-patterns.md](task-patterns.md).
 For end-to-end workflow examples, see [workflow-examples.md](workflow-examples.md).

@@ -25,16 +25,18 @@ node --import tsx --test src/__tests__/state.test.ts
 Binaries:
 - **CLI**: `dist/cli.js` — entry point for `sisyphus` command
 - **Daemon**: `dist/daemon.js` — entry point for `sisyphusd` command
-- Both get shebang (#!) via tsup banner config
+- **TUI**: `dist/tui.js` — React/Ink-based terminal UI for monitoring and control
+- All get shebang (#!) via tsup banner config
 
-**Critical for daemon development**: The daemon runs the built `dist/daemon.js` in-process, so code changes aren't picked up until restart. Use `npm run dev:daemon` during development to handle this automatically via nodemon. For CLI changes only, `npm run dev` is sufficient.
+**Critical for daemon development**: The daemon runs the built `dist/daemon.js` in-process, so code changes aren't picked up until restart. `npm run dev:daemon` watches and auto-restarts via `node dist/daemon.js restart`.
 
 ## Architecture
 
-**Three layers** communicating over a Unix socket (`~/.sisyphus/daemon.sock`) with JSON line-delimited protocol:
+**Four layers** communicating over a Unix socket (`~/.sisyphus/daemon.sock`) with JSON line-delimited protocol:
 
 ```
-CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
+CLI (src/cli/)  ←→  Daemon (src/daemon/)  ↔  Shared (src/shared/)
+TUI (src/tui/)  ←→
 ```
 
 ### CLI Layer (`src/cli/`)
@@ -44,7 +46,7 @@ CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
 - Entry point: `dist/cli.js` (gets shebang, becomes `sisyphus` command)
 
 ### Daemon Layer (`src/daemon/`)
-- **`server.ts`** — Listens on Unix socket, routes requests
+- **`server.ts`** — Listens on Unix socket, routes requests from CLI and TUI
 - **`session-manager.ts`** — Manages active sessions (creation, state tracking, lifecycle)
 - **`orchestrator.ts`** — Spawns and manages the orchestrator tmux pane
 - **`agent.ts`** — Spawns individual agent panes
@@ -52,6 +54,13 @@ CLI (src/cli/)  ←→  Daemon (src/daemon/)  ←→  Shared (src/shared/)
 - **`state.ts`** — Atomic state mutations via temp file + rename (prevents corruption)
 - **`tmux.ts`** — Wrapper around tmux commands (new-window, send-keys, split-window, etc.)
 - Entry point: `dist/daemon.js` (becomes `sisyphusd` command, runs as background service)
+
+### TUI Layer (`src/tui/`)
+- **React + Ink** — Terminal UI components for interactive session monitoring and control
+- Communicates with daemon via the same Unix socket protocol as CLI
+- Uses `@r-cli/sdk` for Claude Code integration
+- Provides real-time pane output, session state, and interactive controls
+- Entry point: `dist/tui.js`
 
 ### Shared Layer (`src/shared/`)
 - **Types** — Protocol message definitions (`Request`, `Response`) and domain types (`Session`, `Agent`, `OrchestratorCycle`)
@@ -75,8 +84,8 @@ Orchestrator and agents receive `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID` en
 
 Prompts are written to the `prompts/` subdirectory within the session directory to avoid shell quoting/newline issues with tmux send-keys:
 
-- **Orchestrator**: `prompts/orchestrator-system-{N}.md` — contains the orchestrator template. `prompts/orchestrator-user-{N}.md` — contains the `<state>` block with concise session state + contextual instruction. Passed via `--append-system-prompt "$(cat 'file')"` with the user prompt file.
-- **Agents**: `prompts/{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt "$(cat 'file')"` with the instruction as the user prompt.
+- **Orchestrator**: `prompts/orchestrator-system-{N}.md` — orchestrator template. `prompts/orchestrator-user-{N}.md` — session state block with concise context + instruction. Passed via `--append-system-prompt`.
+- **Agents**: `prompts/{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt`.
 
 The `<state>` block is a human-readable summary (not raw JSON) with agent reports (truncated to 120 chars), cycle history, and plan.md/logs.md references.
 
@@ -88,21 +97,15 @@ The `<state>` block is a human-readable summary (not raw JSON) with agent report
 
 ## Claude Code Plugin: Crouton Kit
 
-The companion [crouton-kit](https://github.com/CaptainCrouton89/crouton-kit) plugin adds 11 specialized agent types and orchestration workflows:
+The companion [crouton-kit](https://github.com/CaptainCrouton89/crouton-kit) plugin adds specialized agent types and orchestration workflows:
 
 ```bash
 claude plugins install CaptainCrouton89/crouton-kit sisyphus
 ```
 
-**Available agent types**:
-- `sisyphus:debug` — Debug-focused investigation agent
-- `sisyphus:implement` — Implementation-focused agent
-- `sisyphus:plan` — Planning & design agent
-- Others for reviews, refactors, tests, docs, etc.
+Without the plugin, spawn generic Claude instances with `sisyphus spawn --name "agent-name" --instruction "..."`.
 
-Use with `sisyphus spawn --agent-type sisyphus:debug "investigate login failure"`. Without the plugin, you can still spawn generic Claude instances with `sisyphus spawn --name "agent-name" --instruction "..."`.
-
-**Note**: The plugin provides specialized system prompts tailored to each agent role, improving task completion quality for common workflows.
+The plugin provides specialized system prompts tailored to different agent roles, improving task completion quality for common workflows.
 
 ## Key Conventions
 
@@ -143,7 +146,8 @@ Use with `sisyphus spawn --agent-type sisyphus:debug "investigate login failure"
 ### TypeScript & Build
 - **Mode**: Strict, ESM (`"type": "module"`)
 - **Target**: Node.js 22
-- **Builder**: tsup (bundles + adds shebang)
+- **Builder**: tsup (bundles all three entry points + copies `templates/` → `dist/templates/`)
+- **Templates copied**: Built into dist to keep templates with deployed binaries
 
 ## Common Patterns
 
@@ -167,8 +171,7 @@ sisyphus start "test"     # Inside tmux: spawn orchestrator
 sisyphus status           # Check status
 ```
 
-The orchestrator will spawn in a yellow pane. Agents appear in other colors as the orchestrator spawns them. Watch the daemon logs in Terminal 1 for debugging:
-
+Watch daemon logs for debugging:
 ```bash
 tail -f ~/.sisyphus/daemon.log
 ```

@@ -1,15 +1,1 @@
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/block-task.sh\""
-          }
-        ]
-      }
-    ]
-  }
-}
+{"hooks":{}}
