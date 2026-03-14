@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { truncate } from '../lib/format.js';
+import { truncate, wrapText, stripFrontmatter, cleanMarkdown } from '../lib/format.js';
 
 interface Props {
   content: string;
@@ -8,79 +8,112 @@ interface Props {
   width: number;
 }
 
-interface Header {
-  level: number;
+interface PlanLine {
   text: string;
+  bold?: boolean;
+  dim?: boolean;
+  color?: string;
 }
 
-function parseHeaders(content: string): Header[] {
-  const headers: Header[] = [];
-  for (const line of content.split('\n')) {
-    const match = line.match(/^(#{1,6})\s+(.+)/);
-    if (match) {
-      headers.push({
-        level: match[1]!.length,
-        text: match[2]!
-          .replace(/\*\*(.+?)\*\*/g, '$1')
-          .replace(/\*(.+?)\*/g, '$1')
-          .replace(/~~(.+?)~~/g, '$1')
-          .replace(/`(.+?)`/g, '$1')
-          .trim(),
+function buildPlanLines(content: string, maxLines: number, width: number): PlanLine[] {
+  const clean = stripFrontmatter(content);
+  if (!clean.trim()) return [];
+
+  const contentWidth = width - 4;
+  const lines: PlanLine[] = [];
+  const rawLines = clean.split('\n');
+
+  for (const rawLine of rawLines) {
+    if (lines.length >= maxLines) break;
+
+    const trimmed = rawLine.trim();
+
+    // Skip frontmatter artifacts
+    if (trimmed === '---') continue;
+
+    // Headers — bold, with level-based indentation
+    const headerMatch = rawLine.match(/^(#{1,6})\s+(.+)/);
+    if (headerMatch) {
+      const level = headerMatch[1]!.length;
+      const headerText = cleanMarkdown(headerMatch[2]!);
+      const indent = '  '.repeat(Math.max(0, level - 1));
+      if (lines.length > 0) lines.push({ text: '' }); // breathing room before headers
+      lines.push({
+        text: `    ${indent}${headerText}`,
+        bold: true,
+        color: level <= 2 ? 'white' : undefined,
       });
+      continue;
+    }
+
+    // Empty lines — pass through (but collapse multiples)
+    if (!trimmed) {
+      if (lines.length > 0 && lines[lines.length - 1]!.text !== '') {
+        lines.push({ text: '' });
+      }
+      continue;
+    }
+
+    // Numbered list items — clean markdown, preserve numbering
+    const listMatch = trimmed.match(/^(\d+)[.)]\s+(.+)/);
+    if (listMatch) {
+      const cleaned = `${listMatch[1]}. ${cleanMarkdown(listMatch[2]!)}`;
+      const wrapped = wrapText(cleaned, contentWidth - 6);
+      for (const wl of wrapped) {
+        if (lines.length >= maxLines) break;
+        lines.push({ text: `    ${wl}`, dim: true });
+      }
+      continue;
+    }
+
+    // Bullet items
+    const bulletMatch = trimmed.match(/^[-*+]\s+(.+)/);
+    if (bulletMatch) {
+      const cleaned = `· ${cleanMarkdown(bulletMatch[1]!)}`;
+      const wrapped = wrapText(cleaned, contentWidth - 6);
+      for (const wl of wrapped) {
+        if (lines.length >= maxLines) break;
+        lines.push({ text: `    ${wl}`, dim: true });
+      }
+      continue;
+    }
+
+    // Regular content — clean and wrap
+    const cleaned = cleanMarkdown(trimmed);
+    const wrapped = wrapText(cleaned, contentWidth - 4);
+    for (const wl of wrapped) {
+      if (lines.length >= maxLines) break;
+      lines.push({ text: `    ${wl}`, dim: true });
     }
   }
-  return headers;
+
+  // Truncation indicator
+  const totalContentLines = rawLines.filter((l) => l.trim()).length;
+  if (lines.length >= maxLines && totalContentLines > maxLines) {
+    lines[lines.length - 1] = { text: '    … [p] open in editor', dim: true };
+  }
+
+  return lines;
 }
 
 export function PlanView({ content, maxLines, width }: Props) {
-  if (!content.trim()) {
+  const lines = buildPlanLines(content, maxLines, width);
+
+  if (lines.length === 0) {
     return (
       <Box>
-        <Text dimColor italic>  No plan yet</Text>
+        <Text dimColor italic>    No plan yet</Text>
       </Box>
     );
   }
-
-  const headers = parseHeaders(content);
-
-  if (headers.length === 0) {
-    // Fallback: first few non-empty lines
-    const rawLines = content
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .slice(0, maxLines);
-
-    return (
-      <Box flexDirection="column">
-        {rawLines.map((line, i) => (
-          <Text key={i} dimColor>  {truncate(line, width - 4)}</Text>
-        ))}
-      </Box>
-    );
-  }
-
-  // Find the minimum heading level to normalize indentation
-  const minLevel = Math.min(...headers.map((h) => h.level));
-  const visible = headers.slice(0, maxLines);
-  const remaining = headers.length - visible.length;
 
   return (
     <Box flexDirection="column">
-      {visible.map((h, i) => {
-        const indent = '  '.repeat(h.level - minLevel);
-        const isTopLevel = h.level === minLevel;
-        const maxText = width - 4 - indent.length - 2;
-
-        return (
-          <Text key={i} bold={isTopLevel} dimColor={!isTopLevel}>
-            {'  '}{indent}{isTopLevel ? '▸' : '·'} {truncate(h.text, maxText)}
-          </Text>
-        );
-      })}
-      {remaining > 0 && (
-        <Text dimColor>  … {remaining} more sections  [p] open in editor</Text>
-      )}
+      {lines.map((line, i) => (
+        <Text key={i} bold={line.bold} dimColor={line.dim} color={line.color}>
+          {line.text}
+        </Text>
+      ))}
     </Box>
   );
 }

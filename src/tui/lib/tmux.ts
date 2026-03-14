@@ -36,10 +36,6 @@ export function selectPane(paneId: string): void {
   execSafe(`tmux select-pane -t "${paneId}"`);
 }
 
-export function paneExists(paneId: string): boolean {
-  return execSafe(`tmux display-message -t "${paneId}" -p "#{pane_id}"`) !== null;
-}
-
 export function windowExists(windowId: string): boolean {
   return execSafe(`tmux display-message -t "${windowId}" -p "#{window_id}"`) !== null;
 }
@@ -65,11 +61,12 @@ export function openCompanionPopup(cwd: string): void {
 
 const TERMINAL_EDITORS = new Set(['nvim', 'vim', 'vi', 'nano', 'emacs', 'micro', 'helix', 'hx', 'joe', 'ne', 'kak']);
 
-export function openEditorPopup(cwd: string, editor: string, filePath: string): void {
+export function openEditorPopup(cwd: string, editor: string, filePath: string, size?: { w: string; h: string }): void {
+  const { w = '90%', h = '90%' } = size ?? {};
   const editorBin = editor.split(/\s+/)[0]!.split('/').pop()!;
   if (TERMINAL_EDITORS.has(editorBin)) {
     execSync(
-      `tmux display-popup -E -w 90% -h 90% -d ${shellQuote(cwd)} ${shellQuote(`${editor} ${shellQuote(filePath)}`)}`,
+      `tmux display-popup -E -w ${w} -h ${h} -d ${shellQuote(cwd)} ${shellQuote(`${editor} ${shellQuote(filePath)}`)}`,
       { stdio: 'inherit', env: EXEC_ENV },
     );
   } else {

@@ -1,49 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 
-export type InputMode = 'navigate' | 'message' | 'new-session' | 'report-detail' | 'resume' | 'continue';
+export type InputMode = 'navigate' | 'message' | 'new-session' | 'report-detail' | 'resume' | 'continue' | 'rollback';
 
 interface Props {
   mode: InputMode;
-  onSubmitMessage: (text: string) => void;
-  onSubmitNewSession: (task: string) => void;
-  onSubmitResume: (message: string) => void;
-  onSubmitContinue: (message: string) => void;
+  defaultText?: string;
+  onSubmit: (text: string) => void;
   onCancel: () => void;
 }
 
-const INPUT_MODES = new Set<InputMode>(['message', 'new-session', 'resume', 'continue']);
+const INPUT_MODES = new Set<InputMode>(['message', 'new-session', 'resume', 'continue', 'rollback']);
 
 const PROMPTS: Partial<Record<InputMode, string>> = {
   message: 'message',
   'new-session': 'new session task',
   resume: 'resume instructions (optional)',
   continue: 'new direction (optional)',
+  rollback: 'cycle number',
 };
 
-export function InputBar({ mode, onSubmitMessage, onSubmitNewSession, onSubmitResume, onSubmitContinue, onCancel }: Props) {
+const OPTIONAL_INPUT = new Set<InputMode>(['resume', 'continue']);
+
+export function InputBar({ mode, defaultText, onSubmit, onCancel }: Props) {
   const [text, setText] = useState('');
+  const prevMode = useRef(mode);
+
+  // Pre-fill text when entering a mode with defaultText
+  useEffect(() => {
+    if (mode !== prevMode.current && INPUT_MODES.has(mode) && defaultText) {
+      setText(defaultText);
+    }
+    prevMode.current = mode;
+  }, [mode, defaultText]);
 
   useInput(
     (input, key) => {
       if (key.return) {
-        // resume/continue allow empty input
-        if (mode === 'resume') {
-          onSubmitResume(text.trim());
-          setText('');
-          return;
-        }
-        if (mode === 'continue') {
-          onSubmitContinue(text.trim());
-          setText('');
-          return;
-        }
-        if (text.trim()) {
-          if (mode === 'message') {
-            onSubmitMessage(text.trim());
-          } else if (mode === 'new-session') {
-            onSubmitNewSession(text.trim());
-          }
+        if (OPTIONAL_INPUT.has(mode) || text.trim()) {
+          onSubmit(text.trim());
           setText('');
         }
         return;

@@ -4,12 +4,11 @@ import type { InputMode } from './InputBar.js';
 
 interface Props {
   mode: InputMode;
-  focus: 'sessions' | 'agents';
 }
 
-export function StatusLine({ mode, focus }: Props) {
+export function StatusLine({ mode }: Props) {
   if (mode === 'report-detail') {
-    return null; // ReportView renders its own footer
+    return null;
   }
 
   if (mode !== 'navigate') {
@@ -23,9 +22,8 @@ export function StatusLine({ mode, focus }: Props) {
   return (
     <Box paddingX={1}>
       <Text dimColor>
-        [m]sg  [k]ill  [g]o  [n]ew  [c]laude  [p]lan  [R]esume  [C]ontinue  [q]uit
-        {focus === 'agents' ? '  [r]e-run  [j]ump  [enter] reports' : ''}
-        {'  [tab] focus'}
+        [↑↓] navigate  [←→] collapse/expand  [space] toggle
+        {'  '}[m]sg  [k]ill  [g]oal  [n]ew  [p]lan  [w]indow  [R]esume  [b]ack  [q]uit
       </Text>
     </Box>
   );

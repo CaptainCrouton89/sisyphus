@@ -2,22 +2,30 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { Session } from '../../shared/types.js';
 import { PlanView } from './PlanView.js';
-import { AgentTable } from './AgentTable.js';
 import { CycleHistory } from './CycleHistory.js';
 import { MessageLog } from './MessageLog.js';
-import { statusColor, formatDuration, truncate, divider } from '../lib/format.js';
+import { statusColor, formatDuration, truncate, wrapText, stripFrontmatter, cleanMarkdown } from '../lib/format.js';
 
 interface Props {
   session: Session | null;
   planContent: string;
-  selectedAgentIndex: number;
-  agentFocused: boolean;
+  goalContent?: string;
+  logsContent?: string;
   width: number;
   height: number;
   paneAlive: boolean;
 }
 
-export function SessionDetail({ session, planContent, selectedAgentIndex, agentFocused, width, height, paneAlive }: Props) {
+function SectionHeader({ label, count, color }: { label: string; count?: number; color: string }) {
+  return (
+    <Box>
+      <Text color={color} bold>{'  '}▎ {label}</Text>
+      {count != null && <Text dimColor> ({count})</Text>}
+    </Box>
+  );
+}
+
+export function SessionDetail({ session, planContent, goalContent, logsContent, width, height, paneAlive }: Props) {
   if (!session) {
     return (
       <Box
@@ -54,28 +62,38 @@ export function SessionDetail({ session, planContent, selectedAgentIndex, agentF
   const conflicts = agents.filter((a) => a.mergeStatus === 'conflict');
   const contentWidth = width - 4;
 
-  // Vertical budget: allocate space for each section
-  const headerLines = 4; // task + stats + conflict/dead + divider
-  const planLines = Math.min(5, Math.max(2, Math.floor(height * 0.1)));
-  const cycleLines = Math.min(3, Math.max(1, cycles.length)) + 1;
-  const messageLines = messages.length > 0 ? Math.min(3, messages.length) + 1 : 0;
-  const agentDetailLines = 4; // scroll indicators (2) + selected agent detail (2)
-  const sectionHeaders = 8; // dividers + section labels
-  const fixedLines = headerLines + planLines + cycleLines + messageLines + agentDetailLines + sectionHeaders;
-  const agentMaxVisible = Math.max(3, height - fixedLines);
+  // Dynamic layout
+  const headerLines = 3 + (conflicts.length > 0 ? 1 : 0) + (session.status === 'active' && !paneAlive ? 1 : 0);
+  const availableLines = height - headerLines - 4;
+  const hasCompletion = session.status === 'completed' && session.completionReport;
+  const hasLogs = !!logsContent?.trim() && !!stripFrontmatter(logsContent!).trim();
+
+  // Section budgets — plan gets the lion's share, others are compact
+  const cycleLines = Math.min(8, Math.max(1, cycles.length)) + 2; // +2 for header + blank
+  const messageLines = messages.length > 0 ? Math.min(6, messages.length) + 2 : 0;
+  const completionLines = hasCompletion ? Math.min(6, Math.max(3, Math.floor(availableLines * 0.12))) + 2 : 0;
+  const logsLines = hasLogs ? Math.min(5, Math.max(2, Math.floor(availableLines * 0.08))) + 2 : 0;
+  const planLines = Math.max(5, availableLines - cycleLines - messageLines - completionLines - logsLines);
 
   const isDead = session.status === 'active' && !paneAlive;
+
+  // Clean logs content
+  const cleanLogs = hasLogs ? stripFrontmatter(logsContent!) : '';
+  const logEntries = cleanLogs
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && l !== '---' && !l.startsWith('description:'));
 
   return (
     <Box
       flexDirection="column"
       width={width}
       borderStyle="round"
-      borderColor={agentFocused ? 'yellow' : 'gray'}
+      borderColor="gray"
       paddingX={1}
     >
       {/* Task name */}
-      <Text bold> {truncate(session.task, contentWidth - 2)}</Text>
+      <Text bold> {truncate(goalContent ? cleanMarkdown(goalContent.split('\n')[0]!) : session.task, contentWidth - 2)}</Text>
 
       {/* Status bar */}
       <Box>
@@ -93,7 +111,7 @@ export function SessionDetail({ session, planContent, selectedAgentIndex, agentF
 
       {/* Dead session warning */}
       {isDead && (
-        <Text color="red">  ⚠ tmux window closed — session is stale. Kill or resume it.</Text>
+        <Text color="red">{'  '}⚠ tmux window closed — session is stale. Kill or resume it.</Text>
       )}
 
       {/* Conflict banner */}
@@ -104,32 +122,45 @@ export function SessionDetail({ session, planContent, selectedAgentIndex, agentF
       )}
 
       {/* Plan */}
-      <Text dimColor>{'  ' + divider(contentWidth - 2)}</Text>
-      <Text bold dimColor>  Plan</Text>
+      <Text>{' '}</Text>
+      <SectionHeader label="PLAN" color="yellow" />
       <PlanView content={planContent} maxLines={planLines} width={contentWidth} />
 
-      {/* Agents */}
-      <Text dimColor>{'  ' + divider(contentWidth - 2)}</Text>
-      <Text bold dimColor>  Agents ({agents.length})</Text>
-      <AgentTable
-        agents={agents}
-        selectedIndex={selectedAgentIndex}
-        focused={agentFocused}
-        width={contentWidth}
-        maxVisible={agentMaxVisible}
-      />
+      {/* Completion report */}
+      {hasCompletion && (
+        <Box flexDirection="column">
+          <Text>{' '}</Text>
+          <SectionHeader label="COMPLETION" color="cyan" />
+          {wrapText(cleanMarkdown(session.completionReport!), contentWidth - 6)
+            .slice(0, completionLines - 2)
+            .map((line, i) => (
+              <Text key={i} dimColor>{'    '}{line}</Text>
+            ))}
+        </Box>
+      )}
 
       {/* Cycles */}
-      <Text dimColor>{'  ' + divider(contentWidth - 2)}</Text>
-      <Text bold dimColor>  Cycles ({cycles.length})</Text>
-      <CycleHistory cycles={cycles} maxCycles={3} />
+      <Text>{' '}</Text>
+      <SectionHeader label="CYCLES" count={cycles.length} color="blue" />
+      <CycleHistory cycles={cycles} maxCycles={cycleLines - 2} />
 
-      {/* Messages — only show if there are any */}
+      {/* Messages */}
       {messages.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>{'  ' + divider(contentWidth - 2)}</Text>
-          <Text bold dimColor>  Messages ({messages.length})</Text>
-          <MessageLog messages={messages} maxMessages={3} width={contentWidth} />
+          <Text>{' '}</Text>
+          <SectionHeader label="MESSAGES" count={messages.length} color="magenta" />
+          <MessageLog messages={messages} maxMessages={messageLines - 2} width={contentWidth} />
+        </Box>
+      )}
+
+      {/* Logs */}
+      {hasLogs && logEntries.length > 0 && (
+        <Box flexDirection="column">
+          <Text>{' '}</Text>
+          <SectionHeader label="LOGS" color="gray" />
+          {logEntries.slice(0, logsLines - 2).map((line, i) => (
+            <Text key={i} dimColor>{'    '}{truncate(cleanMarkdown(line), contentWidth - 6)}</Text>
+          ))}
         </Box>
       )}
     </Box>

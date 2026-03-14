@@ -1,80 +1,35 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { readFileSync } from 'node:fs';
-import type { Agent, AgentReport } from '../../shared/types.js';
-import { formatDuration, formatTime, divider, statusColor, agentStatusIcon } from '../lib/format.js';
+import type { Agent } from '../../shared/types.js';
+import type { ReportBlock } from '../lib/reports.js';
+import { formatDuration, formatTime, divider, statusColor, agentStatusIcon, wrapText } from '../lib/format.js';
 
 interface Props {
   agent: Agent;
+  reportBlocks: ReportBlock[];
   width: number;
   height: number;
   onClose: () => void;
 }
 
-interface ReportBlock {
-  type: 'update' | 'final';
-  timestamp: string;
-  content: string;
-  summary: string;
-}
-
-function loadReportContent(report: AgentReport): string {
-  try {
-    return readFileSync(report.filePath, 'utf-8');
-  } catch {
-    return report.summary;
-  }
-}
-
-function wrapText(text: string, width: number): string[] {
-  const result: string[] = [];
-  for (const rawLine of text.split('\n')) {
-    if (rawLine.length <= width) {
-      result.push(rawLine);
-      continue;
-    }
-    // Word wrap
-    let remaining = rawLine;
-    while (remaining.length > width) {
-      let breakAt = remaining.lastIndexOf(' ', width);
-      if (breakAt <= 0) breakAt = width;
-      result.push(remaining.slice(0, breakAt));
-      remaining = remaining.slice(breakAt).trimStart();
-    }
-    if (remaining) result.push(remaining);
-  }
-  return result;
-}
-
-export function ReportView({ agent, width, height, onClose }: Props) {
+export function ReportView({ agent, reportBlocks, width, height, onClose }: Props) {
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const contentWidth = width - 6; // border + padding + gutter
 
   // Build the rendered lines (memoized since report content is static)
-  const { lines, reportOffsets } = useMemo(() => {
+  const lines = useMemo(() => {
     const lines: Array<{ text: string; color?: string; bold?: boolean; dim?: boolean }> = [];
-    const reportOffsets: number[] = [];
 
-    // Reverse chronological
-    const reports: ReportBlock[] = [...agent.reports]
-      .reverse()
-      .map((r) => ({
-        type: r.type,
-        timestamp: r.timestamp,
-        content: loadReportContent(r),
-        summary: r.summary,
-      }));
-
-    if (reports.length === 0) {
+    if (reportBlocks.length === 0) {
       lines.push({ text: '', dim: true });
       lines.push({ text: '  No reports submitted yet.', dim: true });
       lines.push({ text: '', dim: true });
-      return { lines, reportOffsets };
+      return lines;
     }
 
-    for (let i = 0; i < reports.length; i++) {
-      const report = reports[i]!;
+    for (let i = 0; i < reportBlocks.length; i++) {
+      const report = reportBlocks[i]!;
       const time = formatTime(report.timestamp);
 
       if (i > 0) {
@@ -82,8 +37,6 @@ export function ReportView({ agent, width, height, onClose }: Props) {
         lines.push({ text: `  ${divider(contentWidth - 2, '·')}`, dim: true });
         lines.push({ text: '' });
       }
-
-      reportOffsets.push(lines.length);
 
       // Report header
       const badge = report.type === 'final' ? 'FINAL' : 'UPDATE';
@@ -103,8 +56,8 @@ export function ReportView({ agent, width, height, onClose }: Props) {
     }
 
     lines.push({ text: '' });
-    return { lines, reportOffsets };
-  }, [agent.reports, contentWidth]);
+    return lines;
+  }, [reportBlocks, contentWidth]);
 
   // Scroll bounds
   const viewableHeight = height - 7; // header (4) + footer (2) + border
