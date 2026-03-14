@@ -1,6 +1,6 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import type { Provider } from '../shared/types.js';
 
 export interface AgentTypeFrontmatter {
@@ -108,6 +108,68 @@ export function resolveAgentTypePath(agentType: string, pluginDir: string, cwd: 
   }
 
   return null;
+}
+
+export interface DiscoveredAgentType {
+  qualifiedName: string;
+  source: 'bundled' | 'plugin' | 'project' | 'user';
+  description?: string;
+  model?: string;
+}
+
+export function discoverAgentTypes(pluginDir: string, cwd: string): DiscoveredAgentType[] {
+  const seen = new Set<string>();
+  const results: DiscoveredAgentType[] = [];
+
+  function scanDir(dir: string, prefix: string | null, source: DiscoveredAgentType['source']): void {
+    let files: string[];
+    try {
+      files = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const file of files) {
+      if (!file.endsWith('.md') || file === 'CLAUDE.md') continue;
+      const name = basename(file, '.md');
+      const qualifiedName = prefix ? `${prefix}:${name}` : name;
+      if (seen.has(qualifiedName)) continue;
+      seen.add(qualifiedName);
+
+      try {
+        const content = readFileSync(join(dir, file), 'utf-8');
+        const fm = parseAgentFrontmatter(content);
+        results.push({ qualifiedName, source, description: fm.description, model: fm.model });
+      } catch {
+        results.push({ qualifiedName, source });
+      }
+    }
+  }
+
+  // Priority order: project > user > bundled > plugins
+  scanDir(join(cwd, '.claude', 'agents'), null, 'project');
+  scanDir(join(homedir(), '.claude', 'agents'), null, 'user');
+  scanDir(join(pluginDir, 'agents'), 'sisyphus', 'bundled');
+
+  // Installed plugins (handles v1 flat and v2 nested formats)
+  try {
+    const registryPath = join(homedir(), '.claude', 'plugins', 'installed_plugins.json');
+    const registry = JSON.parse(readFileSync(registryPath, 'utf-8'));
+    const pluginEntries = registry.plugins ?? registry;
+    for (const key of Object.keys(pluginEntries)) {
+      const atIdx = key.indexOf('@');
+      if (atIdx < 1) continue;
+      const namespace = key.slice(0, atIdx);
+      const entry = pluginEntries[key];
+      const installPath = Array.isArray(entry) ? entry[0]?.installPath : entry?.installPath;
+      if (installPath) {
+        scanDir(join(installPath, 'agents'), namespace, 'plugin');
+      }
+    }
+  } catch {
+    // Registry missing or unparseable
+  }
+
+  return results;
 }
 
 export interface ResolvedAgentConfig {

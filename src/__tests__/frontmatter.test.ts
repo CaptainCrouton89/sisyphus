@@ -9,6 +9,7 @@ import {
   extractAgentBody,
   resolveAgentTypePath,
   resolveAgentConfig,
+  discoverAgentTypes,
 } from '../daemon/frontmatter.js';
 
 // ---------------------------------------------------------------------------
@@ -268,5 +269,108 @@ A claude agent.`);
     const config = resolveAgentConfig('sisyphus:claude-agent', pluginDir, testDir);
     const provider = detectProvider(config?.frontmatter.model);
     assert.equal(provider, 'anthropic');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// discoverAgentTypes
+// ---------------------------------------------------------------------------
+describe('discoverAgentTypes', () => {
+  let testDir: string;
+  let pluginDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'sisyphus-discover-'));
+    pluginDir = join(testDir, 'plugin');
+    mkdirSync(join(pluginDir, 'agents'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('discovers bundled agents with sisyphus: prefix', () => {
+    writeFileSync(join(pluginDir, 'agents', 'debug.md'), `---
+name: debugger
+model: opus
+description: Investigates bugs
+---
+
+Body.`);
+    writeFileSync(join(pluginDir, 'agents', 'implement.md'), `---
+name: implementer
+model: sonnet
+description: Writes code
+---
+
+Body.`);
+
+    const types = discoverAgentTypes(pluginDir, testDir);
+    const bundled = types.filter(t => t.source === 'bundled');
+    assert.equal(bundled.length, 2);
+
+    const debug = types.find(t => t.qualifiedName === 'sisyphus:debug');
+    assert.notEqual(debug, undefined);
+    assert.equal(debug!.source, 'bundled');
+    assert.equal(debug!.model, 'opus');
+    assert.equal(debug!.description, 'Investigates bugs');
+
+    const impl = types.find(t => t.qualifiedName === 'sisyphus:implement');
+    assert.notEqual(impl, undefined);
+    assert.equal(impl!.source, 'bundled');
+  });
+
+  it('discovers project-local agents as bare names', () => {
+    const projectAgentDir = join(testDir, '.claude', 'agents');
+    mkdirSync(projectAgentDir, { recursive: true });
+    writeFileSync(join(projectAgentDir, 'custom.md'), `---
+description: My custom agent
+---
+
+Body.`);
+
+    const types = discoverAgentTypes(pluginDir, testDir);
+    const custom = types.find(t => t.qualifiedName === 'custom');
+    assert.notEqual(custom, undefined);
+    assert.equal(custom!.source, 'project');
+    assert.equal(custom!.description, 'My custom agent');
+  });
+
+  it('skips CLAUDE.md files', () => {
+    writeFileSync(join(pluginDir, 'agents', 'CLAUDE.md'), '# Not an agent');
+    writeFileSync(join(pluginDir, 'agents', 'real.md'), '---\ndescription: Real agent\n---\nBody.');
+
+    const types = discoverAgentTypes(pluginDir, testDir);
+    const bundled = types.filter(t => t.source === 'bundled');
+    assert.equal(bundled.length, 1);
+    assert.equal(bundled[0]!.qualifiedName, 'sisyphus:real');
+    assert.equal(types.find(t => t.qualifiedName === 'sisyphus:CLAUDE'), undefined);
+  });
+
+  it('handles missing directories gracefully', () => {
+    const emptyDir = mkdtempSync(join(tmpdir(), 'sisyphus-empty-'));
+    const missingPlugin = join(emptyDir, 'no-such-plugin');
+
+    const types = discoverAgentTypes(missingPlugin, emptyDir);
+    // No project, user, or bundled agents — only installed plugins if any
+    assert.equal(types.filter(t => t.source === 'project').length, 0);
+    assert.equal(types.filter(t => t.source === 'user').length, 0);
+    assert.equal(types.filter(t => t.source === 'bundled').length, 0);
+
+    rmSync(emptyDir, { recursive: true, force: true });
+  });
+
+  it('deduplicates by qualified name (project wins over bundled)', () => {
+    // Create same bare name in both project and bundled
+    const projectAgentDir = join(testDir, '.claude', 'agents');
+    mkdirSync(projectAgentDir, { recursive: true });
+    writeFileSync(join(projectAgentDir, 'worker.md'), '---\ndescription: Project worker\n---\nBody.');
+    writeFileSync(join(pluginDir, 'agents', 'worker.md'), '---\ndescription: Bundled worker\n---\nBody.');
+
+    const types = discoverAgentTypes(pluginDir, testDir);
+    const workers = types.filter(t => t.qualifiedName === 'worker');
+    assert.equal(workers.length, 1);
+    assert.equal(workers[0]!.source, 'project');
+    assert.equal(workers[0]!.description, 'Project worker');
   });
 });
