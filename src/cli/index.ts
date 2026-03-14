@@ -13,6 +13,7 @@ import { registerKill } from './commands/kill.js';
 import { registerUninstall } from './commands/uninstall.js';
 import { registerNotify } from './commands/notify.js';
 import { registerMessage } from './commands/message.js';
+import { registerDashboard } from './commands/dashboard.js';
 
 const program = new Command();
 
@@ -35,6 +36,7 @@ registerKill(program);
 registerUninstall(program);
 registerNotify(program);
 registerMessage(program);
+registerDashboard(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

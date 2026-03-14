@@ -1,0 +1,135 @@
+export function formatDuration(startIso: string, endIso?: string | null): string {
+  const start = new Date(startIso).getTime();
+  const end = endIso ? new Date(endIso).getTime() : Date.now();
+  const totalSeconds = Math.floor((end - start) / 1000);
+  if (totalSeconds < 0) return '0s';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h${minutes}m`;
+  if (minutes > 0) return `${minutes}m${seconds}s`;
+  return `${seconds}s`;
+}
+
+export function formatTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'just now';
+}
+
+export function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
+export function truncate(text: string, max: number): string {
+  if (max < 4) return text.slice(0, max);
+  if (text.length <= max) return text;
+  // Try to break at a word boundary
+  const cut = text.lastIndexOf(' ', max - 1);
+  const breakAt = cut > max * 0.6 ? cut : max - 1;
+  return text.slice(0, breakAt) + '…';
+}
+
+/** Strip markdown syntax to plain text */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+[.)]\s+/gm, '')
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+    .replace(/^>\s+/gm, '')
+    .replace(/---+/g, '')
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Extract the first meaningful sentence from markdown-heavy text.
+ * Much better than blind truncation — finds actual content.
+ */
+export function extractFirstSentence(text: string, maxLen: number): string {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('#')) continue;
+    if (trimmed.startsWith('---')) continue;
+    if (trimmed.startsWith('```')) continue;
+    if (trimmed.startsWith('|')) continue;
+    if (trimmed.length < 5) continue;
+
+    const cleaned = stripMarkdown(trimmed);
+    if (cleaned.length < 5) continue;
+
+    // Try to end at a sentence boundary
+    const periodIdx = cleaned.indexOf('. ');
+    if (periodIdx > 10 && periodIdx < maxLen) {
+      return cleaned.slice(0, periodIdx + 1);
+    }
+    return truncate(cleaned, maxLen);
+  }
+  const fallback = stripMarkdown(text);
+  return truncate(fallback, maxLen);
+}
+
+export function statusColor(status: string): string {
+  switch (status) {
+    case 'active':
+    case 'running':
+      return 'green';
+    case 'completed':
+      return 'cyan';
+    case 'paused':
+      return 'yellow';
+    case 'killed':
+    case 'crashed':
+      return 'red';
+    case 'lost':
+      return 'gray';
+    default:
+      return 'white';
+  }
+}
+
+export function statusIndicator(status: string): string {
+  switch (status) {
+    case 'active':
+      return '▶';
+    case 'completed':
+      return '✓';
+    case 'paused':
+      return '⏸';
+    default:
+      return '·';
+  }
+}
+
+export function agentStatusIcon(status: string): string {
+  switch (status) {
+    case 'running':
+      return '▶';
+    case 'completed':
+      return '✓';
+    case 'killed':
+      return '✕';
+    case 'crashed':
+      return '!';
+    case 'lost':
+      return '?';
+    default:
+      return '·';
+  }
+}
+
+export function divider(width: number, char: string = '─'): string {
+  return char.repeat(Math.max(0, width));
+}

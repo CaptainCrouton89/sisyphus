@@ -8,6 +8,7 @@ import { getWindowId } from './orchestrator.js';
 import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
 import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
+import { summarizeReport } from './summarize.js';
 import { resolveAgentConfig, detectProvider } from './frontmatter.js';
 import { loadConfig } from '../shared/config.js';
 
@@ -232,6 +233,13 @@ export async function handleAgentReport(
     timestamp: new Date().toISOString(),
   };
   await state.appendAgentReport(cwd, sessionId, agentId, entry);
+
+  // Fire async Haiku summarization (non-blocking)
+  summarizeReport(content).then(async (aiSummary) => {
+    if (aiSummary) {
+      await state.updateReportSummary(cwd, sessionId, agentId, filePath, aiSummary);
+    }
+  }).catch(() => {});
 }
 
 export async function handleAgentSubmit(
@@ -253,6 +261,13 @@ export async function handleAgentSubmit(
     timestamp: new Date().toISOString(),
   };
   await state.appendAgentReport(cwd, sessionId, agentId, entry);
+
+  // Fire async Haiku summarization (non-blocking)
+  summarizeReport(report).then(async (aiSummary) => {
+    if (aiSummary) {
+      await state.updateReportSummary(cwd, sessionId, agentId, filePath, aiSummary);
+    }
+  }).catch(() => {});
 
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'completed',

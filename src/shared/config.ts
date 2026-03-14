@@ -18,6 +18,7 @@ export interface Config {
   autoUpdate?: boolean;
   orchestratorEffort?: EffortLevel;
   agentEffort?: EffortLevel;
+  editor?: string;
 }
 
 const DEFAULT_CONFIG: Config = {

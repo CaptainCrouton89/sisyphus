@@ -8,7 +8,7 @@ export type Request =
   | { type: 'yield'; sessionId: string; agentId: string; nextPrompt?: string; mode?: string }
   | { type: 'complete'; sessionId: string; report: string }
   | { type: 'continue'; sessionId: string }
-  | { type: 'status'; sessionId?: string }
+  | { type: 'status'; sessionId?: string; cwd?: string }
   | { type: 'list'; cwd: string; all?: boolean }
   | { type: 'resume'; sessionId: string; cwd: string; tmuxSession: string; tmuxWindow: string; message?: string }
   | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }

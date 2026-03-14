@@ -167,6 +167,25 @@ export async function appendAgentReport(cwd: string, sessionId: string, agentId:
   });
 }
 
+export async function updateReportSummary(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+  filePath: string,
+  summary: string,
+): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    if (!agent) return;
+    const report = agent.reports.find((r) => r.filePath === filePath);
+    if (report) {
+      report.summary = summary;
+      saveSession(session);
+    }
+  });
+}
+
 export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSessionName: string, tmuxWindowId: string): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);

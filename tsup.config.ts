@@ -5,6 +5,7 @@ export default defineConfig({
   entry: {
     daemon: 'src/daemon/index.ts',
     cli: 'src/cli/index.ts',
+    tui: 'src/tui/index.tsx',
   },
   format: ['esm'],
   target: 'node22',
