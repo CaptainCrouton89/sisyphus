@@ -14,7 +14,9 @@ export type Request =
   | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }
   | { type: 'kill'; sessionId: string }
   | { type: 'pane-exited'; paneId: string }
-  | { type: 'message'; sessionId: string; content: string; source?: MessageSource };
+  | { type: 'message'; sessionId: string; content: string; source?: MessageSource }
+  | { type: 'update-task'; sessionId: string; task: string }
+  | { type: 'rollback'; sessionId: string; toCycle: number };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }

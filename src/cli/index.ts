@@ -13,7 +13,9 @@ import { registerKill } from './commands/kill.js';
 import { registerUninstall } from './commands/uninstall.js';
 import { registerNotify } from './commands/notify.js';
 import { registerMessage } from './commands/message.js';
+import { registerUpdateTask } from './commands/update-task.js';
 import { registerDashboard } from './commands/dashboard.js';
+import { registerRollback } from './commands/rollback.js';
 
 const program = new Command();
 
@@ -36,7 +38,9 @@ registerKill(program);
 registerUninstall(program);
 registerNotify(program);
 registerMessage(program);
+registerUpdateTask(program);
 registerDashboard(program);
+registerRollback(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

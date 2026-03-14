@@ -192,6 +192,13 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { killedAgents, sessionId: req.sessionId } };
       }
 
+      case 'rollback': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        const result = await sessionManager.handleRollback(req.sessionId, cwd, req.toCycle);
+        return { ok: true, data: result as unknown as Record<string, unknown> };
+      }
+
       case 'pane-exited': {
         const entry = lookupPane(req.paneId);
         if (!entry) return { ok: true }; // Already handled or unknown
@@ -202,6 +209,13 @@ async function handleRequest(req: Request): Promise<Response> {
         }
         unregisterPane(req.paneId);
         await sessionManager.handlePaneExited(req.paneId, cwd, entry.sessionId, entry.role, entry.agentId);
+        return { ok: true };
+      }
+
+      case 'update-task': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        await state.updateTask(cwd, req.sessionId, req.task);
         return { ok: true };
       }
 
