@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { contextDir, logsPath, planPath, promptsDir, sessionDir, statePath } from '../shared/paths.js';
+import { contextDir, goalPath, logsPath, planPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
 import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const PLAN_SEED = `---
@@ -55,6 +55,7 @@ export function createSession(id: string, task: string, cwd: string, context?: s
 
   writeFileSync(planPath(cwd, id), PLAN_SEED, 'utf-8');
   writeFileSync(logsPath(cwd, id), LOGS_SEED, 'utf-8');
+  writeFileSync(goalPath(cwd, id), task, 'utf-8');
   writeFileSync(join(contextDir(cwd, id), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
 
   const session: Session = {
@@ -204,6 +205,15 @@ export async function appendMessage(cwd: string, sessionId: string, message: Mes
   });
 }
 
+export async function updateTask(cwd: string, sessionId: string, task: string): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    session.task = task;
+    saveSession(session);
+    writeFileSync(goalPath(cwd, sessionId), task, 'utf-8');
+  });
+}
+
 export async function completeOrchestratorCycle(cwd: string, sessionId: string, nextPrompt?: string, mode?: string): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
@@ -215,4 +225,65 @@ export async function completeOrchestratorCycle(cwd: string, sessionId: string, 
     if (mode) cycle.mode = mode;
     saveSession(session);
   });
+}
+
+export function createSnapshot(cwd: string, sessionId: string, cycleNumber: number): void {
+  const dir = snapshotDir(cwd, sessionId, cycleNumber);
+  mkdirSync(dir, { recursive: true });
+
+  copyFileSync(statePath(cwd, sessionId), join(dir, 'state.json'));
+
+  const plan = planPath(cwd, sessionId);
+  if (existsSync(plan)) copyFileSync(plan, join(dir, 'plan.md'));
+
+  const logs = logsPath(cwd, sessionId);
+  if (existsSync(logs)) copyFileSync(logs, join(dir, 'logs.md'));
+}
+
+export async function restoreSnapshot(cwd: string, sessionId: string, toCycle: number): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const dir = snapshotDir(cwd, sessionId, toCycle);
+    if (!existsSync(dir)) throw new Error(`No snapshot found for cycle ${toCycle}`);
+
+    // Restore state.json atomically
+    const snapshotState = readFileSync(join(dir, 'state.json'), 'utf-8');
+    const session = JSON.parse(snapshotState) as Session;
+    session.status = 'paused';
+    session.completedAt = undefined;
+    session.completionReport = undefined;
+    session.tmuxSessionName = undefined;
+    session.tmuxWindowId = undefined;
+    atomicWrite(statePath(cwd, sessionId), JSON.stringify(session, null, 2));
+
+    // Restore plan.md and logs.md
+    const snapshotPlan = join(dir, 'plan.md');
+    if (existsSync(snapshotPlan)) copyFileSync(snapshotPlan, planPath(cwd, sessionId));
+
+    const snapshotLogs = join(dir, 'logs.md');
+    if (existsSync(snapshotLogs)) copyFileSync(snapshotLogs, logsPath(cwd, sessionId));
+  });
+}
+
+export function listSnapshots(cwd: string, sessionId: string): number[] {
+  const dir = snapshotsDir(cwd, sessionId);
+  if (!existsSync(dir)) return [];
+
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(e => e.isDirectory() && e.name.startsWith('cycle-'))
+    .map(e => parseInt(e.name.replace('cycle-', ''), 10))
+    .filter(n => !isNaN(n))
+    .sort((a, b) => a - b);
+}
+
+export function deleteSnapshotsAfter(cwd: string, sessionId: string, afterCycle: number): void {
+  const dir = snapshotsDir(cwd, sessionId);
+  if (!existsSync(dir)) return;
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('cycle-')) continue;
+    const num = parseInt(entry.name.replace('cycle-', ''), 10);
+    if (!isNaN(num) && num > afterCycle) {
+      rmSync(join(dir, entry.name), { recursive: true, force: true });
+    }
+  }
 }

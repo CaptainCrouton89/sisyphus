@@ -117,12 +117,12 @@ export function getSessionStatus(cwd: string, sessionId: string): Session {
   return state.getSession(cwd, sessionId);
 }
 
-export function listSessions(cwd: string): Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number }> {
+export function listSessions(cwd: string): Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number; tmuxWindowId?: string }> {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];
 
   const entries = readdirSync(dir, { withFileTypes: true });
-  const sessions: Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number }> = [];
+  const sessions: Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number; tmuxWindowId?: string }> = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -134,6 +134,7 @@ export function listSessions(cwd: string): Array<{ id: string; task: string; sta
         status: session.status,
         createdAt: session.createdAt,
         agentCount: session.agents.length,
+        tmuxWindowId: session.tmuxWindowId,
       });
     } catch (err) {
       console.error(`[sisyphus] Failed to read session ${entry.name}:`, err);
@@ -174,6 +175,12 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         mergeDetails: result.conflictDetails,
       }).catch((err: unknown) => console.error(`[sisyphus] Failed to update merge status for ${result.agentId}:`, err));
     }
+  }
+
+  // Snapshot state at cycle boundary before respawning orchestrator
+  const cycleNumber = session.orchestratorCycles.length;
+  if (cycleNumber > 0) {
+    state.createSnapshot(cwd, sessionId, cycleNumber);
   }
 
   // Respawn on next tick — agents already finished, no delay needed
@@ -315,6 +322,64 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   orchestratorDone.delete(sessionId);
 
   return killedAgents;
+}
+
+export async function handleRollback(sessionId: string, cwd: string, toCycle: number): Promise<{ sessionId: string; restoredToCycle: number }> {
+  const session = state.getSession(cwd, sessionId);
+
+  // Validate cycle range
+  if (toCycle < 1 || toCycle > session.orchestratorCycles.length) {
+    const available = state.listSnapshots(cwd, sessionId);
+    throw new Error(
+      `Invalid cycle ${toCycle}. Available snapshots: ${available.length > 0 ? available.join(', ') : 'none'}`,
+    );
+  }
+
+  // Validate snapshot exists
+  const available = state.listSnapshots(cwd, sessionId);
+  if (!available.includes(toCycle)) {
+    throw new Error(
+      `No snapshot for cycle ${toCycle}. Available snapshots: ${available.length > 0 ? available.join(', ') : 'none'}`,
+    );
+  }
+
+  // Kill running agents (without completing session or killing window)
+  for (const agent of session.agents) {
+    if (agent.status === 'running') {
+      await state.updateAgent(cwd, sessionId, agent.id, {
+        status: 'killed',
+        killedReason: 'session rolled back',
+        completedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Clean up worktrees
+  for (const agent of session.agents) {
+    if (agent.worktreePath && agent.branchName) {
+      cleanupWorktree(cwd, agent.worktreePath, agent.branchName);
+    }
+  }
+
+  // Kill orchestrator pane if running
+  const orchPaneId = orchestrator.getOrchestratorPaneId(sessionId);
+  if (orchPaneId) {
+    tmux.killPane(orchPaneId);
+  }
+
+  // Untrack from monitor and registry
+  untrackSession(sessionId);
+  unregisterSessionPanes(sessionId);
+  clearAgentCounter(sessionId);
+  orchestratorDone.delete(sessionId);
+
+  // Restore snapshot state
+  await state.restoreSnapshot(cwd, sessionId, toCycle);
+
+  // Delete snapshots for cycles after the rollback target
+  state.deleteSnapshotsAfter(cwd, sessionId, toCycle);
+
+  return { sessionId, restoredToCycle: toCycle };
 }
 
 export async function handlePaneExited(

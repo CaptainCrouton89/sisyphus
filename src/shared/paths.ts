@@ -73,8 +73,20 @@ export function planPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'plan.md');
 }
 
+export function goalPath(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'goal.md');
+}
+
 export function logsPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'logs.md');
+}
+
+export function snapshotsDir(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'snapshots');
+}
+
+export function snapshotDir(cwd: string, sessionId: string, cycle: number): string {
+  return join(snapshotsDir(cwd, sessionId), `cycle-${cycle}`);
 }
 
 export function worktreeConfigPath(cwd: string): string {
