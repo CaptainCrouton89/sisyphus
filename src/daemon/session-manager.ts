@@ -258,6 +258,14 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       await orchestrator.spawnOrchestrator(sessionId, cwd, activeWindowId);
       updateTrackedWindow(sessionId, activeWindowId);
       if (initialPaneId) tmux.killPane(initialPaneId);
+
+      // Clean up completed agent panes now that the orchestrator is alive
+      for (const agent of freshSession.agents) {
+        if (agent.status !== 'running' && agent.paneId) {
+          tmux.killPane(agent.paneId);
+        }
+      }
+      tmux.selectLayout(activeWindowId);
     } catch (err) {
       console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err);
     }
