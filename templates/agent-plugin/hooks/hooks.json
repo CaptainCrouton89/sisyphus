@@ -8,6 +8,14 @@
           "command": "bash hooks/intercept-send-message.sh"
         }
       }
+    ],
+    "Stop": [
+      {
+        "hook": {
+          "type": "command",
+          "command": "bash hooks/require-submit.sh"
+        }
+      }
     ]
   }
 }
