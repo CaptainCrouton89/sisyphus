@@ -123,6 +123,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='${agentId}'`,
+    `export SISYPHUS_CWD='${cwd}'`,
     ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
     `export PATH="${npmBinDir}:$PATH"`,
   ].join(' && ');

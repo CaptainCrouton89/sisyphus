@@ -15,7 +15,8 @@ export function registerStart(program: Command): void {
     .option('-c, --context <context>', 'Background context for the orchestrator')
     .option('-n, --name <name>', 'Human-readable name for the session')
     .action(async (task: string, opts: { context?: string; name?: string }) => {
-      const request: Request = { type: 'start', task, context: opts.context, cwd: process.cwd(), name: opts.name };
+      const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+      const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name };
       const response = await sendRequest(request);
       if (response.ok) {
         const sessionId = response.data?.sessionId as string;
@@ -23,7 +24,7 @@ export function registerStart(program: Command): void {
         // Tag the user's current tmux session so it's part of the same cycle group
         if (process.env['TMUX']) {
           try {
-            execSync(`tmux set-option @sisyphus_cwd ${shellQuote(process.cwd())}`, { stdio: 'ignore' });
+            execSync(`tmux set-option @sisyphus_cwd ${shellQuote(cwd)}`, { stdio: 'ignore' });
           } catch { /* not in tmux or tmux error — ignore */ }
         }
 
