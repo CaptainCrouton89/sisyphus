@@ -24,7 +24,7 @@ export function registerDashboard(program: Command): void {
       ).trim();
 
       // Run the TUI in the new window's pane
-      const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)} --tmux-session ${shellQuote(tmuxSession)}`;
+      const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)}`;
       execSync(
         `tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`,
       );

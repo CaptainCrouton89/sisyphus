@@ -65,11 +65,11 @@ async function handleRequest(req: Request): Promise<Response> {
   try {
     switch (req.type) {
       case 'start': {
-        const session = await sessionManager.startSession(req.task, req.cwd, req.tmuxSession, req.tmuxWindow, req.context);
+        const session = await sessionManager.startSession(req.task, req.cwd, req.context, req.name);
         registerSessionCwd(session.id, req.cwd);
-        sessionTmuxMap.set(session.id, req.tmuxSession);
-        sessionWindowMap.set(session.id, req.tmuxWindow);
-        return { ok: true, data: { sessionId: session.id } };
+        if (session.tmuxSessionName) sessionTmuxMap.set(session.id, session.tmuxSessionName);
+        if (session.tmuxWindowId) sessionWindowMap.set(session.id, session.tmuxWindowId);
+        return { ok: true, data: { sessionId: session.id, tmuxSessionName: session.tmuxSessionName } };
       }
 
       case 'spawn': {
@@ -168,10 +168,10 @@ async function handleRequest(req: Request): Promise<Response> {
             return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}` };
           }
         }
-        sessionTmuxMap.set(req.sessionId, req.tmuxSession);
-        sessionWindowMap.set(req.sessionId, req.tmuxWindow);
-        const session = await sessionManager.resumeSession(req.sessionId, cwd, req.tmuxSession, req.tmuxWindow, req.message);
-        return { ok: true, data: { sessionId: session.id, status: session.status } };
+        const session = await sessionManager.resumeSession(req.sessionId, cwd, req.message);
+        if (session.tmuxSessionName) sessionTmuxMap.set(req.sessionId, session.tmuxSessionName);
+        if (session.tmuxWindowId) sessionWindowMap.set(req.sessionId, session.tmuxWindowId);
+        return { ok: true, data: { sessionId: session.id, status: session.status, tmuxSessionName: session.tmuxSessionName } };
       }
 
       case 'register_claude_session': {
@@ -192,9 +192,24 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { killedAgents, sessionId: req.sessionId } };
       }
 
-      case 'rollback': {
+      case 'kill-agent': {
         const cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        await sessionManager.handleKillAgent(req.sessionId, cwd, req.agentId);
+        return { ok: true, data: { agentId: req.agentId } };
+      }
+
+      case 'rollback': {
+        let cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) {
+          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
+          if (existsSync(stateFile)) {
+            cwd = req.cwd;
+            registerSessionCwd(req.sessionId, cwd);
+          } else {
+            return { ok: false, error: `Unknown session: ${req.sessionId}` };
+          }
+        }
         const result = await sessionManager.handleRollback(req.sessionId, cwd, req.toCycle);
         return { ok: true, data: result as unknown as Record<string, unknown> };
       }

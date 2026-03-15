@@ -84,7 +84,16 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
   if (session.status !== 'active') return;
 
   const livePanes = tmux.listPanes(windowId);
-  if (livePanes.length === 0) return;
+  if (livePanes.length === 0) {
+    // Check if the entire tmux session was destroyed
+    const tracked = trackedSessions.get(sessionId);
+    if (tracked && !tmux.sessionExists(tracked.tmuxSession)) {
+      await state.updateSessionStatus(cwd, sessionId, 'paused');
+      untrackSession(sessionId);
+      console.log(`[sisyphus] Session ${sessionId} paused: tmux session destroyed`);
+    }
+    return;
+  }
 
   const livePaneIds = new Set(livePanes.map(p => p.paneId));
 

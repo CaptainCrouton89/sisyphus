@@ -53,6 +53,25 @@ export function killWindow(windowTarget: string): void {
   execSafe(`tmux kill-window -t "${windowTarget}"`);
 }
 
+export function createSession(sessionName: string, windowName: string, cwd: string): { windowId: string; initialPaneId: string } {
+  exec(`tmux new-session -d -s "${sessionName}" -n "${windowName}" -c ${shellQuote(cwd)}`);
+  const windowId = exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{window_id}"`);
+  const initialPaneId = exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{pane_id}"`);
+  return { windowId, initialPaneId };
+}
+
+export function sessionExists(sessionName: string): boolean {
+  return execSafe(`tmux has-session -t "${sessionName}"`) !== null;
+}
+
+export function killSession(sessionName: string): void {
+  execSafe(`tmux kill-session -t "${sessionName}"`);
+}
+
+export function setSessionOption(sessionName: string, option: string, value: string): void {
+  execSafe(`tmux set-option -t "${sessionName}" ${option} ${shellQuote(value)}`);
+}
+
 export interface PaneInfo {
   paneId: string;
   panePid: string;

@@ -8,7 +8,7 @@ import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrac
 import { onAllAgentsDone } from './session-manager.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
-import { listPanes } from './tmux.js';
+import { listPanes, sessionExists } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
@@ -125,6 +125,15 @@ async function recoverSessions(): Promise<void> {
 
         // Reconnect to tmux panes if info was persisted
         if (session.tmuxSessionName && session.tmuxWindowId) {
+          if (!sessionExists(session.tmuxSessionName)) {
+            // Tmux session gone — pause so user can `sisyphus resume`
+            if (session.status === 'active') {
+              await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
+              console.log(`[sisyphus] Session ${sessionId} paused: tmux session no longer exists`);
+            }
+            recovered++;
+            continue;
+          }
           const livePanes = listPanes(session.tmuxWindowId);
           if (livePanes.length > 0) {
             registerSessionTmux(sessionId, session.tmuxSessionName, session.tmuxWindowId);

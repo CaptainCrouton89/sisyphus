@@ -22,10 +22,11 @@ export function register{Command}(program: Command): void {
 
 - **submit.ts** — Blocks if git worktree has uncommitted changes. Agent must commit first.
 - **yield.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID` environment variable
+- **rollback.ts** — Pauses session after rollback; use `resume` to respawn orchestrator
 
 ## Key Interactions
 
 - `start.ts` — Creates new session, returns session ID
 - `spawn.ts`, `submit.ts`, `yield.ts`, `complete.ts` — Lifecycle commands; require active session
 - `status.ts` — Query command; read-only
-- `list.ts`, `resume.ts`, `kill.ts` — Session management; don't require active session
+- `list.ts`, `resume.ts`, `kill.ts`, `rollback.ts` — Session management; don't require active session

@@ -7,22 +7,41 @@ import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentS
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionDir, sessionsDir } from '../shared/paths.js';
-import { unregisterSessionPanes } from './pane-registry.js';
+import { unregisterSessionPanes, unregisterAgentPane } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 
-export async function startSession(task: string, cwd: string, tmuxSession: string, windowId: string, context?: string): Promise<Session> {
-  const sessionId = uuidv4();
-  const session = state.createSession(sessionId, task, cwd, context);
-  await state.updateSessionTmux(cwd, sessionId, tmuxSession, windowId);
+const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-  trackSession(sessionId, cwd, tmuxSession);
+export async function startSession(task: string, cwd: string, context?: string, name?: string): Promise<Session> {
+  const sessionId = uuidv4();
+
+  if (name && !NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid session name "${name}": only alphanumeric, hyphens, and underscores allowed`);
+  }
+
+  const tmuxName = `sisyphus-${name ?? sessionId.slice(0, 8)}`;
+
+  if (tmux.sessionExists(tmuxName)) {
+    throw new Error(`Tmux session "${tmuxName}" already exists. Choose a different name.`);
+  }
+
+  const session = state.createSession(sessionId, task, cwd, context, name);
+
+  const { windowId, initialPaneId } = tmux.createSession(tmuxName, 'main', cwd);
+  tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd);
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
+
+  trackSession(sessionId, cwd, tmuxName);
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId);
   updateTrackedWindow(sessionId, windowId);
 
+  // Kill the initial pane created by tmux new-session (orchestrator has its own)
+  tmux.killPane(initialPaneId);
+
   pruneOldSessions(cwd);
 
-  return session;
+  return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
 }
 
 const PRUNE_KEEP_COUNT = 10;
@@ -70,8 +89,25 @@ function pruneOldSessions(cwd: string): void {
   }
 }
 
-export async function resumeSession(sessionId: string, cwd: string, tmuxSession: string, windowId: string, message?: string): Promise<Session> {
+export async function resumeSession(sessionId: string, cwd: string, message?: string): Promise<Session> {
   const session = state.getSession(cwd, sessionId);
+
+  const tmuxName = session.tmuxSessionName ?? `sisyphus-${sessionId.slice(0, 8)}`;
+
+  let windowId: string;
+  if (tmux.sessionExists(tmuxName) && session.tmuxWindowId) {
+    // Reuse existing tmux session
+    windowId = session.tmuxWindowId;
+  } else {
+    // Create fresh tmux session with the same name
+    const created = tmux.createSession(tmuxName, 'main', cwd);
+    tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd);
+    windowId = created.windowId;
+    // Kill the initial pane after orchestrator spawns (below)
+    await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
+    // We'll kill the initial pane after spawning orchestrator
+    var initialPaneId = created.initialPaneId;
+  }
 
   if (session.status !== 'active') {
     // Determine which agents still have live panes
@@ -99,16 +135,21 @@ export async function resumeSession(sessionId: string, cwd: string, tmuxSession:
   }
 
   await state.updateSessionStatus(cwd, sessionId, 'active');
-  await state.updateSessionTmux(cwd, sessionId, tmuxSession, windowId);
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
 
   // Reset counters based on existing agents
   resetAgentCounterFromState(sessionId, session.agents);
   resetColors(sessionId);
   orchestratorDone.delete(sessionId);
 
-  trackSession(sessionId, cwd, tmuxSession);
+  trackSession(sessionId, cwd, tmuxName);
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId, message);
   updateTrackedWindow(sessionId, windowId);
+
+  // Kill the initial pane if we created a fresh tmux session
+  if (initialPaneId) {
+    tmux.killPane(initialPaneId);
+  }
 
   return state.getSession(cwd, sessionId);
 }
@@ -117,12 +158,12 @@ export function getSessionStatus(cwd: string, sessionId: string): Session {
   return state.getSession(cwd, sessionId);
 }
 
-export function listSessions(cwd: string): Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number; tmuxWindowId?: string }> {
+export function listSessions(cwd: string): Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];
 
   const entries = readdirSync(dir, { withFileTypes: true });
-  const sessions: Array<{ id: string; task: string; status: string; createdAt: string; agentCount: number; tmuxWindowId?: string }> = [];
+  const sessions: Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -130,10 +171,12 @@ export function listSessions(cwd: string): Array<{ id: string; task: string; sta
       const session = state.getSession(cwd, entry.name);
       sessions.push({
         id: session.id,
+        name: session.name,
         task: session.task,
         status: session.status,
         createdAt: session.createdAt,
         agentCount: session.agents.length,
+        tmuxSessionName: session.tmuxSessionName,
         tmuxWindowId: session.tmuxWindowId,
       });
     } catch (err) {
@@ -184,11 +227,40 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
   }
 
   // Respawn on next tick — agents already finished, no delay needed
-  setImmediate(() => {
+  setImmediate(async () => {
     pendingRespawns.delete(sessionId);
-    orchestrator.spawnOrchestrator(sessionId, cwd, windowId)
-      .then(() => updateTrackedWindow(sessionId, windowId))
-      .catch((err: unknown) => console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err));
+    try {
+      // Re-check status — pane monitor may have paused us in the meantime
+      const freshSession = state.getSession(cwd, sessionId);
+      if (freshSession.status !== 'active') return;
+
+      // Ensure the tmux session and window still exist.
+      // Killing the last pane (orchestrator yield with no agents) destroys the window/session.
+      let activeWindowId = windowId;
+      const tmuxName = freshSession.tmuxSessionName;
+      const needsRecreation = tmuxName && (
+        !tmux.sessionExists(tmuxName) ||
+        tmux.listPanes(activeWindowId).length === 0
+      );
+      let initialPaneId: string | undefined;
+      if (needsRecreation) {
+        // Kill stale session if it exists without our window
+        if (tmux.sessionExists(tmuxName!)) {
+          tmux.killSession(tmuxName!);
+        }
+        const created = tmux.createSession(tmuxName!, 'main', cwd);
+        tmux.setSessionOption(tmuxName!, '@sisyphus_cwd', cwd);
+        activeWindowId = created.windowId;
+        initialPaneId = created.initialPaneId;
+        await state.updateSessionTmux(cwd, sessionId, tmuxName!, activeWindowId);
+        trackSession(sessionId, cwd, tmuxName!);
+      }
+      await orchestrator.spawnOrchestrator(sessionId, cwd, activeWindowId);
+      updateTrackedWindow(sessionId, activeWindowId);
+      if (initialPaneId) tmux.killPane(initialPaneId);
+    } catch (err) {
+      console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err);
+    }
   });
 }
 
@@ -251,7 +323,8 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
   const session = state.getSession(cwd, sessionId);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
   if (!hasRunningAgents) {
-    const windowId = orchestrator.getWindowId(sessionId);
+    // Fall back to state's tmuxWindowId if in-memory map is missing (e.g., after daemon restart)
+    const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
     if (windowId) {
       onAllAgentsDone(sessionId, cwd, windowId);
     }
@@ -312,8 +385,10 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   untrackSession(sessionId);
   unregisterSessionPanes(sessionId);
 
-  // Kill the entire tmux window
-  if (windowId) {
+  // Kill the entire tmux session (destroys all panes/windows atomically)
+  if (session.tmuxSessionName) {
+    tmux.killSession(session.tmuxSessionName);
+  } else if (windowId) {
     tmux.killWindow(windowId);
   }
 
@@ -322,6 +397,32 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   orchestratorDone.delete(sessionId);
 
   return killedAgents;
+}
+
+export async function handleKillAgent(sessionId: string, cwd: string, agentId: string): Promise<void> {
+  const session = state.getSession(cwd, sessionId);
+  const agent = session.agents.find(a => a.id === agentId);
+  if (!agent) throw new Error(`Unknown agent: ${agentId}`);
+  if (agent.status !== 'running') throw new Error(`Agent ${agentId} is not running (status: ${agent.status})`);
+
+  // Unregister pane first so the pane monitor doesn't trigger a respawn
+  unregisterAgentPane(sessionId, agentId);
+
+  // Kill the tmux pane
+  if (agent.paneId) {
+    tmux.killPane(agent.paneId);
+  }
+
+  // Clean up worktree if applicable
+  if (agent.worktreePath && agent.branchName) {
+    cleanupWorktree(cwd, agent.worktreePath, agent.branchName);
+  }
+
+  await state.updateAgent(cwd, sessionId, agentId, {
+    status: 'killed',
+    killedReason: 'killed by user',
+    completedAt: new Date().toISOString(),
+  });
 }
 
 export async function handleRollback(sessionId: string, cwd: string, toCycle: number): Promise<{ sessionId: string; restoredToCycle: number }> {
@@ -398,7 +499,7 @@ export async function handlePaneExited(
 
     const allDone = await handleAgentKilled(cwd, sessionId, agentId, 'pane exited');
     if (allDone) {
-      const windowId = orchestrator.getWindowId(sessionId);
+      const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
       if (windowId) {
         onAllAgentsDone(sessionId, cwd, windowId);
       }
@@ -408,7 +509,7 @@ export async function handlePaneExited(
     orchestratorDone.add(sessionId);
     const hasRunningAgents = session.agents.some(a => a.status === 'running');
     if (!hasRunningAgents && session.agents.length > 0) {
-      const windowId = orchestrator.getWindowId(sessionId);
+      const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
       if (windowId) {
         console.log(`[sisyphus] Orchestrator pane exited for session ${sessionId}, all agents done — triggering respawn`);
         onAllAgentsDone(sessionId, cwd, windowId);

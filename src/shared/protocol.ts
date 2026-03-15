@@ -1,7 +1,7 @@
 import type { MessageSource } from './types.js';
 
 export type Request =
-  | { type: 'start'; task: string; context?: string; cwd: string; tmuxSession: string; tmuxWindow: string }
+  | { type: 'start'; task: string; context?: string; cwd: string; name?: string }
   | { type: 'spawn'; sessionId: string; agentType: string; name: string; instruction: string; worktree?: boolean }
   | { type: 'submit'; sessionId: string; agentId: string; report: string }
   | { type: 'report'; sessionId: string; agentId: string; content: string }
@@ -10,13 +10,14 @@ export type Request =
   | { type: 'continue'; sessionId: string }
   | { type: 'status'; sessionId?: string; cwd?: string }
   | { type: 'list'; cwd: string; all?: boolean }
-  | { type: 'resume'; sessionId: string; cwd: string; tmuxSession: string; tmuxWindow: string; message?: string }
+  | { type: 'resume'; sessionId: string; cwd: string; message?: string }
   | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }
   | { type: 'kill'; sessionId: string }
+  | { type: 'kill-agent'; sessionId: string; agentId: string }
   | { type: 'pane-exited'; paneId: string }
   | { type: 'message'; sessionId: string; content: string; source?: MessageSource }
   | { type: 'update-task'; sessionId: string; task: string }
-  | { type: 'rollback'; sessionId: string; toCycle: number };
+  | { type: 'rollback'; sessionId: string; cwd: string; toCycle: number };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }

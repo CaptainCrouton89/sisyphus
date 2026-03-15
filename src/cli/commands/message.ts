@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
+import type { MessageSource } from '../../shared/types.js';
 
 export function registerMessage(program: Command): void {
   program
@@ -14,7 +15,11 @@ export function registerMessage(program: Command): void {
         process.exit(1);
       }
 
-      const request: Request = { type: 'message', sessionId, content };
+      const source: MessageSource | undefined = process.env.SISYPHUS_AGENT_ID
+        ? { type: 'agent' as const, agentId: process.env.SISYPHUS_AGENT_ID }
+        : undefined;
+
+      const request: Request = { type: 'message', sessionId, content, source };
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Message queued');

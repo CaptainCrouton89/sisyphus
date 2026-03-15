@@ -1,7 +1,6 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
-import { getTmuxSession, getTmuxWindow } from '../tmux.js';
 
 export function registerResume(program: Command): void {
   program
@@ -10,15 +9,15 @@ export function registerResume(program: Command): void {
     .argument('<session-id>', 'Session ID to resume')
     .argument('[message]', 'Additional instructions for the orchestrator')
     .action(async (sessionId: string, message?: string) => {
-      const tmuxSession = getTmuxSession();
-      const tmuxWindow = getTmuxWindow();
       const cwd = process.cwd();
-      const request: Request = { type: 'resume', sessionId, cwd, tmuxSession, tmuxWindow, message };
+      const request: Request = { type: 'resume', sessionId, cwd, message };
       const response = await sendRequest(request);
       if (response.ok) {
+        const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
         console.log(`Session ${sessionId} resumed`);
-        if (response.data?.tmuxWindow) {
-          console.log(`Orchestrator respawned in tmux window: ${response.data.tmuxWindow}`);
+        if (tmuxSessionName) {
+          console.log(`Tmux session: ${tmuxSessionName}`);
+          console.log(`  tmux attach -t ${tmuxSessionName}`);
         }
       } else {
         console.error(`Error: ${response.error}`);

@@ -1,7 +1,11 @@
 import type { Command } from 'commander';
+import { execSync } from 'node:child_process';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
-import { getTmuxSession, getTmuxWindow } from '../tmux.js';
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
 
 export function registerStart(program: Command): void {
   program
@@ -9,15 +13,27 @@ export function registerStart(program: Command): void {
     .description('Start a new sisyphus session')
     .argument('<task>', 'Task description for the orchestrator')
     .option('-c, --context <context>', 'Background context for the orchestrator')
-    .action(async (task: string, opts: { context?: string }) => {
-      const tmuxSession = getTmuxSession();
-      const tmuxWindow = getTmuxWindow();
-      const request: Request = { type: 'start', task, context: opts.context, cwd: process.cwd(), tmuxSession, tmuxWindow };
+    .option('-n, --name <name>', 'Human-readable name for the session')
+    .action(async (task: string, opts: { context?: string; name?: string }) => {
+      const request: Request = { type: 'start', task, context: opts.context, cwd: process.cwd(), name: opts.name };
       const response = await sendRequest(request);
       if (response.ok) {
         const sessionId = response.data?.sessionId as string;
+        const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
+        // Tag the user's current tmux session so it's part of the same cycle group
+        if (process.env['TMUX']) {
+          try {
+            execSync(`tmux set-option @sisyphus_cwd ${shellQuote(process.cwd())}`, { stdio: 'ignore' });
+          } catch { /* not in tmux or tmux error — ignore */ }
+        }
+
         console.log(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
         console.log(`The orchestrator and its agents will handle this task autonomously — no further action needed from you.`);
+
+        if (tmuxSessionName) {
+          console.log(`\nTmux session: ${tmuxSessionName}`);
+          console.log(`  tmux attach -t ${tmuxSessionName}`);
+        }
 
         console.log(`\nMonitor:`);
         console.log(`  sisyphus status ${sessionId}    # agents, cycles, reports`);

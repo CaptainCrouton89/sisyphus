@@ -8,7 +8,7 @@ export interface WorktreeConfig {
   init?: string;
 }
 
-export type EffortLevel = 'low' | 'medium' | 'high';
+export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
 
 export interface Config {
   model?: string;

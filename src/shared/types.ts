@@ -27,6 +27,7 @@ export interface AgentReport {
 
 export interface Session {
   id: string;
+  name?: string;
   task: string;
   context?: string;
   cwd: string;
