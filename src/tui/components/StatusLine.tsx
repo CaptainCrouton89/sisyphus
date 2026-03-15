@@ -97,10 +97,18 @@ export function StatusLine({ mode, detailFocused = false, logsFocused = false, s
   if (logsFocused) {
     return (
       <Box paddingX={1}>
-        <Text dimColor>
-          [↑↓] scroll  [←/tab] back  [l]ogs hide
-          {'  '}[m]sg  [k]ill  [g]oal  [n]ew  [p]lan  [w]indow  [R]esume  [q]uit
-        </Text>
+        <Text bold>[↑↓]</Text><Text dimColor> scroll  </Text>
+        <Text bold>[←/tab]</Text><Text dimColor> back  </Text>
+        <Text bold>[l]</Text><Text dimColor>ogs hide  </Text>
+        <Text dimColor>│ </Text>
+        <Text bold>[m]</Text><Text dimColor>sg  </Text>
+        <Text bold>[k]</Text><Text dimColor>ill  </Text>
+        <Text bold>[g]</Text><Text dimColor>oal  </Text>
+        <Text bold>[n]</Text><Text dimColor>ew  </Text>
+        <Text bold>[p]</Text><Text dimColor>lan  </Text>
+        <Text bold>[w]</Text><Text dimColor>indow  </Text>
+        <Text bold>[R]</Text><Text dimColor>esume  </Text>
+        <Text bold>[q]</Text><Text dimColor>uit</Text>
       </Box>
     );
   }
@@ -108,20 +116,36 @@ export function StatusLine({ mode, detailFocused = false, logsFocused = false, s
   if (detailFocused) {
     return (
       <Box paddingX={1}>
-        <Text dimColor>
-          [↑↓] scroll  [←/tab] back to tree  [l]{showLogs ? 'ogs hide' : 'ogs show'}
-          {'  '}[m]sg  [k]ill  [g]oal  [n]ew  [p]lan  [w]indow  [R]esume  [q]uit
-        </Text>
+        <Text bold>[↑↓]</Text><Text dimColor> scroll  </Text>
+        <Text bold>[←/tab]</Text><Text dimColor> back  </Text>
+        <Text bold>[l]</Text><Text dimColor>{showLogs ? 'ogs hide' : 'ogs show'}  </Text>
+        <Text dimColor>│ </Text>
+        <Text bold>[m]</Text><Text dimColor>sg  </Text>
+        <Text bold>[k]</Text><Text dimColor>ill  </Text>
+        <Text bold>[g]</Text><Text dimColor>oal  </Text>
+        <Text bold>[n]</Text><Text dimColor>ew  </Text>
+        <Text bold>[p]</Text><Text dimColor>lan  </Text>
+        <Text bold>[w]</Text><Text dimColor>indow  </Text>
+        <Text bold>[R]</Text><Text dimColor>esume  </Text>
+        <Text bold>[q]</Text><Text dimColor>uit</Text>
       </Box>
     );
   }
 
   return (
     <Box paddingX={1}>
-      <Text dimColor>
-        [↑↓] navigate  [←→] collapse/expand  [space] leader  [tab] detail  [l]{showLogs ? 'ogs hide' : 'ogs show'}
-        {'  '}[m]sg  [k]ill  [g]oal  [n]ew  [p]lan  [w]indow  [R]esume  [x] restart  [b]ack  [q]uit
-      </Text>
+      <Text bold>[↑↓]</Text><Text dimColor> navigate  </Text>
+      <Text bold>[←→]</Text><Text dimColor> collapse/expand  </Text>
+      <Text dimColor>│ </Text>
+      <Text bold>[space]</Text><Text dimColor> leader  </Text>
+      <Text bold>[tab]</Text><Text dimColor> detail  </Text>
+      <Text bold>[l]</Text><Text dimColor>{showLogs ? 'ogs hide' : 'ogs show'}  </Text>
+      <Text dimColor>│ </Text>
+      <Text bold>[m]</Text><Text dimColor>sg  </Text>
+      <Text bold>[k]</Text><Text dimColor>ill  </Text>
+      <Text bold>[n]</Text><Text dimColor>ew  </Text>
+      <Text bold>[R]</Text><Text dimColor>esume  </Text>
+      <Text bold>[q]</Text><Text dimColor>uit</Text>
     </Box>
   );
 }

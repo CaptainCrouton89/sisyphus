@@ -87,6 +87,20 @@ export function extractFirstSentence(text: string, maxLen: number): string {
   return truncate(fallback, maxLen);
 }
 
+export function durationColor(startOrMs: string | number, endIso?: string | null): string {
+  let totalMs: number;
+  if (typeof startOrMs === 'number') {
+    totalMs = startOrMs;
+  } else {
+    const start = new Date(startOrMs).getTime();
+    const end = endIso ? new Date(endIso).getTime() : Date.now();
+    totalMs = end - start;
+  }
+  if (totalMs < 10 * 60 * 1000) return '';
+  if (totalMs < 30 * 60 * 1000) return 'yellow';
+  return 'red';
+}
+
 export function statusColor(status: string): string {
   switch (status) {
     case 'active':
@@ -134,6 +148,16 @@ export function agentStatusIcon(status: string): string {
     default:
       return '·';
   }
+}
+
+export function agentTypeColor(agentType: string | undefined): string | undefined {
+  if (!agentType) return undefined;
+  const t = agentType.toLowerCase();
+  if (t.includes('research')) return 'blue';
+  if (t.includes('implement') || t.includes('code')) return 'green';
+  if (t.includes('review') || t.includes('test')) return 'magenta';
+  if (t.includes('plan')) return 'yellow';
+  return undefined;
 }
 
 export function divider(width: number, char: string = '─'): string {

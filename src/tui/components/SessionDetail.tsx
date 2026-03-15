@@ -79,25 +79,28 @@ function buildLines(
   const elapsed = formatDuration(session.createdAt, session.completedAt);
   const activeMs = computeActiveTimeMs(session);
   const activeTime = formatDuration(activeMs);
+  const modeColor = mode === 'planning' ? 'blue' : mode === 'implementation' ? 'green' : 'cyan';
   lines.push([
     seg('  '),
     seg(isDead ? '✕ dead' : session.status, {
       color: statusColor(isDead ? 'crashed' : session.status),
     }),
-    seg(
-      ` · cycle ${cycleNum}${mode ? ` (${mode})` : ''} · ${elapsed} · ${runningAgents}↑ ${completedAgents}✓ · ${activeTime} active`,
-      { dim: true },
-    ),
+    seg(` · cycle ${cycleNum}`, { dim: true }),
+    ...(mode ? [seg(' (', { dim: true }), seg(mode, { color: modeColor }), seg(')', { dim: true })] : []),
+    seg(` · ${elapsed} · `, { dim: true }),
+    seg(`${runningAgents} running`, { color: 'green' }),
+    seg(' · ', { dim: true }),
+    seg(`${completedAgents} done`, { color: 'cyan' }),
+    seg(` · ${activeTime} active`, { dim: true }),
   ]);
 
   // Dead session warning
   if (isDead) {
-    lines.push(
-      simple(
-        '  ⚠ tmux window closed — session is stale. Kill or resume it.',
-        { color: 'red' },
-      ),
-    );
+    lines.push([
+      seg('  '),
+      seg(' ✕ DEAD ', { color: 'red', bold: true }),
+      seg(' tmux window closed — kill or resume', { color: 'red' }),
+    ]);
   }
 
   // Conflict banner
@@ -113,11 +116,11 @@ function buildLines(
   // Plan section
   lines.push(simple(' '));
   lines.push([
-    seg('  ▎ PLAN', { color: 'yellow', bold: true }),
+    seg('  ▎ ◈ PLAN', { color: 'yellow', bold: true }),
   ]);
   const planLines = buildPlanLines(planContent, 99999, width);
   if (planLines.length === 0) {
-    lines.push(simple('    No plan yet', { dim: true, italic: true }));
+    lines.push(simple('    orchestrator will create one', { dim: true, italic: true }));
   } else {
     for (const pl of planLines) {
       lines.push(simple(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
@@ -127,7 +130,7 @@ function buildLines(
   // Completion report
   if (session.status === 'completed' && session.completionReport) {
     lines.push(simple(' '));
-    lines.push([seg('  ▎ COMPLETION', { color: 'cyan', bold: true })]);
+    lines.push([seg('  ▎ ✓ COMPLETION', { color: 'cyan', bold: true })]);
     wrapText(cleanMarkdown(session.completionReport), contentWidth - 6).forEach(
       (l) => {
         lines.push(simple(`    ${l}`, { dim: true }));
@@ -138,7 +141,7 @@ function buildLines(
   // Cycles section — newest first, messages nested below the cycle they fed into
   lines.push(simple(' '));
   lines.push([
-    seg('  ▎ CYCLES', { color: 'blue', bold: true }),
+    seg('  ▎ ⟳ CYCLES', { color: 'blue', bold: true }),
     seg(` (${cycles.length})`, { dim: true }),
   ]);
 
@@ -150,7 +153,7 @@ function buildLines(
         ? 'You'
         : msg.source.type === 'agent'
           ? msg.source.agentId
-          : 'sys';
+          : '⚙ system';
     const labelColor =
       msg.source.type === 'user' ? 'yellow' : msg.source.type === 'agent' ? 'cyan' : 'gray';
     const maxContent = Math.max(10, contentWidth - label.length - 18);
@@ -163,7 +166,7 @@ function buildLines(
   };
 
   if (cycles.length === 0) {
-    lines.push(simple('    no cycles yet', { dim: true, italic: true }));
+    lines.push(simple('    waiting for orchestrator…', { dim: true, italic: true }));
   } else {
     const sortedMsgs = [...messages].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
@@ -203,7 +206,7 @@ function buildLines(
           : [seg(duration, { dim: rowDim })]),
         seg('  ·  ', { dim: true }),
         seg(agentDetail, { dim: rowDim }),
-        ...(cycle.mode ? [seg(`  ·  ${cycle.mode}`, { color: 'cyan', dim: rowDim })] : []),
+        ...(cycle.mode ? [seg('  ·  ', { dim: true }), seg(cycle.mode, { color: cycle.mode === 'planning' ? 'blue' : cycle.mode === 'implementation' ? 'green' : 'cyan' })] : []),
         seg(`  ${startTime}`, { dim: true }),
       ];
       lines.push(row);

@@ -66,6 +66,20 @@ export function buildPlanLines(content: string, maxLines: number, width: number)
       continue;
     }
 
+    // Checkbox items — must come before bullet match
+    const checkboxMatch = trimmed.match(/^- \[( |x|X)\] (.+)/);
+    if (checkboxMatch) {
+      const checked = checkboxMatch[1] !== ' ';
+      const checkboxText = cleanMarkdown(checkboxMatch[2]!);
+      const icon = checked ? '☑' : '☐';
+      const wrapped = wrapText(`${icon} ${checkboxText}`, contentWidth - 6);
+      for (const wl of wrapped) {
+        if (lines.length >= maxLines) break;
+        lines.push({ text: `    ${wl}`, dim: true, color: checked ? 'green' : undefined });
+      }
+      continue;
+    }
+
     // Bullet items
     const bulletMatch = trimmed.match(/^[-*+]\s+(.+)/);
     if (bulletMatch) {

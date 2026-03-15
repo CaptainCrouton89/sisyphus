@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { Agent } from '../../shared/types.js';
-import { statusColor, formatDuration, truncate, agentStatusIcon, extractFirstSentence } from '../lib/format.js';
+import { statusColor, formatDuration, truncate, agentStatusIcon, extractFirstSentence, durationColor, agentTypeColor } from '../lib/format.js';
 
 interface Props {
   agents: Agent[];
@@ -42,6 +42,7 @@ export function AgentTable({ agents, selectedIndex, focused, width, maxVisible }
         const color = statusColor(agent.status);
         const icon = agentStatusIcon(agent.status);
         const dur = formatDuration(agent.spawnedAt, agent.completedAt);
+        const durClr = durationColor(agent.spawnedAt, agent.completedAt) || undefined;
         const conflict = agent.mergeStatus === 'conflict';
         const label = agent.name !== agent.id ? agent.name : truncate(agent.instruction, taskWidth);
 
@@ -51,7 +52,7 @@ export function AgentTable({ agents, selectedIndex, focused, width, maxVisible }
             <Text color={conflict ? 'red' : color}>{conflict ? '⚠' : icon}</Text>
             {' '}
             <Text bold>{agent.id}</Text>
-            <Text dimColor> {dur.padStart(6)}</Text>
+            <Text color={durClr} dimColor={!durClr}> {dur.padStart(6)}</Text>
             {'  '}
             {truncate(label, taskWidth)}
           </Text>
@@ -81,10 +82,19 @@ function SelectedAgentDetail({ agent, width }: { agent: Agent; width: number }) 
 
   return (
     <Box flexDirection="column" paddingLeft={4} marginTop={0}>
-      <Text dimColor>
-        {'  '}type: {agent.agentType} · status: {agent.status}
-        {agent.mergeStatus ? ` · merge: ${agent.mergeStatus}` : ''}
-      </Text>
+      <Box>
+        <Text dimColor>{'  '}type: </Text>
+        <Text color={agentTypeColor(agent.agentType)} dimColor={!agentTypeColor(agent.agentType)}>{agent.agentType}</Text>
+        <Text dimColor> · status: {agent.status}</Text>
+        {agent.mergeStatus && <Text dimColor> · </Text>}
+        {agent.mergeStatus === 'merged' && <Text color="green">⊕ merged</Text>}
+        {agent.mergeStatus === 'pending' && <Text color="yellow">◌ pending</Text>}
+        {agent.mergeStatus === 'no-changes' && <Text color="gray">∅ no changes</Text>}
+        {agent.mergeStatus === 'conflict' && <Text color="red">⚠ conflict</Text>}
+        {agent.mergeStatus && !['merged', 'pending', 'no-changes', 'conflict'].includes(agent.mergeStatus) && (
+          <Text dimColor>{agent.mergeStatus}</Text>
+        )}
+      </Box>
       {summary && (
         <Text dimColor>  ↳ {summary}</Text>
       )}

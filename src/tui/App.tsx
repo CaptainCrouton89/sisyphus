@@ -973,7 +973,13 @@ export function App({ cwd }: Props) {
 
       {notification && (
         <Box paddingX={1}>
-          <Text color="yellow" bold>{notification}</Text>
+          <Text color="yellow" bold>
+            {/error|failed/i.test(notification)
+              ? `✕ ${notification}`
+              : /success|created|killed|sent|copied|deleted/i.test(notification)
+                ? `✓ ${notification}`
+                : `ℹ ${notification}`}
+          </Text>
         </Box>
       )}
 

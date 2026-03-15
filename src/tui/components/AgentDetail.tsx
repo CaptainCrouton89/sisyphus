@@ -64,8 +64,19 @@ export function AgentDetail({ agent, reportBlocks, width, height }: Props) {
         <Text color={color}>{agent.status}</Text>
         <Text dimColor>
           {' · '}{dur} · {agent.agentType}
-          {agent.mergeStatus ? ` · merge: ${agent.mergeStatus}` : ''}
         </Text>
+        {agent.mergeStatus && (
+          <>
+            <Text dimColor> · </Text>
+            {agent.mergeStatus === 'merged' && <Text color="green">⊕ merged</Text>}
+            {agent.mergeStatus === 'pending' && <Text color="yellow">◌ pending</Text>}
+            {agent.mergeStatus === 'no-changes' && <Text color="gray">∅ no changes</Text>}
+            {agent.mergeStatus === 'conflict' && <Text color="red">⚠ conflict</Text>}
+            {!['merged', 'pending', 'no-changes', 'conflict'].includes(agent.mergeStatus) && (
+              <Text dimColor>{agent.mergeStatus}</Text>
+            )}
+          </>
+        )}
       </Box>
 
       {/* Alerts */}
@@ -82,7 +93,7 @@ export function AgentDetail({ agent, reportBlocks, width, height }: Props) {
 
       {/* Instruction */}
       <Text>{' '}</Text>
-      <Text color="white" bold>{'  '}▎ INSTRUCTION</Text>
+      <Text color="white" bold>{'  '}▎ ▷ INSTRUCTION</Text>
       {wrapText(agent.instruction, contentWidth - 6)
         .slice(0, instrMaxLines)
         .map((line, i) => (
@@ -93,7 +104,7 @@ export function AgentDetail({ agent, reportBlocks, width, height }: Props) {
       {agent.reports.length > 0 && (
         <>
           <Text>{' '}</Text>
-          <Text color="cyan" bold>{'  '}▎ REPORTS ({agent.reports.length})</Text>
+          <Text color="cyan" bold>{'  '}▎ ◇ REPORTS ({agent.reports.length})</Text>
           {hasResolvedReports ? (
             <Box flexDirection="column">
               {reportBlocks.slice(0, Math.min(reportBlocks.length, 3)).map((block, i) => {
@@ -135,7 +146,7 @@ export function AgentDetail({ agent, reportBlocks, width, height }: Props) {
 
       {/* Metadata */}
       <Text>{' '}</Text>
-      <Text color="gray" bold>{'  '}▎ META</Text>
+      <Text color="gray" bold>{'  '}▎ ◦ META</Text>
       <Text dimColor>{'    '}Spawned: {formatTime(agent.spawnedAt)}</Text>
       {agent.completedAt && (
         <Text dimColor>{'    '}Completed: {formatTime(agent.completedAt)}</Text>

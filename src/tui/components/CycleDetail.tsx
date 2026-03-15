@@ -9,6 +9,8 @@ import {
   truncate,
   extractFirstSentence,
   wrapText,
+  durationColor,
+  agentTypeColor,
 } from '../lib/format.js';
 
 interface Props {
@@ -56,16 +58,21 @@ export function CycleDetail({ cycle, agents, width, height }: Props) {
         <Text dimColor>
           {' · '}{dur}
           {' · '}{cycleAgents.length} agent{cycleAgents.length !== 1 ? 's' : ''}
-          {cycle.mode ? ` · ${cycle.mode}` : ''}
+          {cycle.mode ? ' · ' : ''}
         </Text>
+        {cycle.mode && (
+          <Text color={cycle.mode === 'planning' ? 'blue' : cycle.mode === 'implementation' ? 'green' : 'cyan'}>
+            {cycle.mode}
+          </Text>
+        )}
       </Box>
       <Text dimColor>{'  '}{formatTime(cycle.timestamp)}{cycle.completedAt ? ` → ${formatTime(cycle.completedAt)}` : ''}</Text>
 
       {/* Agents */}
       <Text>{' '}</Text>
-      <Text color="green" bold>{'  '}▎ AGENTS</Text>
+      <Text color="green" bold>{'  '}▎ ⊞ AGENTS</Text>
       {cycleAgents.length === 0 ? (
-        <Text dimColor italic>{'    '}No agents spawned yet</Text>
+        <Text dimColor italic>{'    '}orchestrator spawning agents…</Text>
       ) : (
         cycleAgents.map((agent) => {
           const nameLabel = agent.name !== agent.id ? agent.name : agent.agentType;
@@ -83,14 +90,18 @@ export function CycleDetail({ cycle, agents, width, height }: Props) {
                 <Text>{'    '}</Text>
                 <Text color={statusColor(agent.status)}>{agentStatusIcon(agent.status)}</Text>
                 <Text bold> {agent.id}</Text>
-                <Text dimColor> {truncate(nameLabel, contentWidth - 30)}</Text>
-                <Text dimColor> · {agent.status} · {formatDuration(agent.spawnedAt, agent.completedAt)}</Text>
+                <Text color={agentTypeColor(agent.agentType)} dimColor={!agentTypeColor(agent.agentType)}> {truncate(nameLabel, contentWidth - 30)}</Text>
+                {(() => {
+                  const dur = formatDuration(agent.spawnedAt, agent.completedAt);
+                  const durColor = durationColor(agent.spawnedAt, agent.completedAt) || undefined;
+                  return <Text dimColor> · {agent.status} · <Text color={durColor}>{dur}</Text></Text>;
+                })()}
               </Box>
               {instrPreview && (
                 <Text dimColor>{'      '}{truncate(instrPreview, contentWidth - 10)}</Text>
               )}
               {reportSummary && (
-                <Text color="cyan">{'      '}→ {reportSummary}</Text>
+                <Text dimColor>{'      '}<Text color="cyan">↳</Text> {reportSummary}</Text>
               )}
             </Box>
           );
@@ -101,7 +112,7 @@ export function CycleDetail({ cycle, agents, width, height }: Props) {
       {cycle.nextPrompt && (
         <>
           <Text>{' '}</Text>
-          <Text color="yellow" bold>{'  '}▎ NEXT PROMPT</Text>
+          <Text color="yellow" bold>{'  '}▎ ▷ NEXT PROMPT</Text>
           {wrapText(cycle.nextPrompt, contentWidth - 6)
             .slice(0, Math.max(3, promptAvailable))
             .map((line, i) => (

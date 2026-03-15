@@ -9,6 +9,8 @@ import {
   truncate,
   formatDuration,
   formatTime,
+  formatTimeAgo,
+  durationColor,
 } from '../lib/format.js';
 
 interface Props {
@@ -59,7 +61,7 @@ export function SessionTree({ nodes, cursorIndex, width, height, focused }: Prop
         const realIdx = scrollOffset + i;
         const isSelected = realIdx === cursorIndex;
         const prefix = renderTreePrefix(node, nodes, realIdx);
-        const { icon, label, meta, color, dim } = renderNodeContent(
+        const { icon, label, meta, color, dim, metaColor } = renderNodeContent(
           node,
           contentWidth - prefix.length,
         );
@@ -72,7 +74,7 @@ export function SessionTree({ nodes, cursorIndex, width, height, focused }: Prop
             </Text>
             {icon ? ' ' : ''}
             <Text dimColor={dim}>{label}</Text>
-            {meta ? <Text dimColor> {meta}</Text> : null}
+            {meta ? <Text color={metaColor} dimColor={!metaColor}> {meta}</Text> : null}
           </Text>
         );
       })}
@@ -87,7 +89,7 @@ export function SessionTree({ nodes, cursorIndex, width, height, focused }: Prop
 function renderNodeContent(
   node: TreeNode,
   maxWidth: number,
-): { icon: string; label: string; meta: string; color: string; dim: boolean } {
+): { icon: string; label: string; meta: string; color: string; dim: boolean; metaColor?: string } {
   switch (node.type) {
     case 'session': {
       const icon = statusIndicator(node.status);
@@ -95,7 +97,8 @@ function renderNodeContent(
       const dim = node.status === 'completed';
       const cyclePart = node.cycleCount > 0 ? `C${node.cycleCount}` : '';
       const dur = formatDuration(node.createdAt, node.completedAt);
-      const meta = [cyclePart, dur].filter(Boolean).join(' ');
+      const agopart = node.status === 'completed' && node.completedAt ? formatTimeAgo(node.completedAt) : '';
+      const meta = [cyclePart, dur, agopart].filter(Boolean).join(' ');
       const maxTask = Math.max(8, maxWidth - meta.length - 4);
       return { icon, label: truncate(node.task, maxTask), meta, color, dim };
     }
@@ -118,6 +121,7 @@ function renderNodeContent(
       const icon = agentStatusIcon(node.status);
       const color = statusColor(node.status);
       const dur = formatDuration(node.spawnedAt, node.completedAt);
+      const durClr = durationColor(node.spawnedAt, node.completedAt) || undefined;
       const dim = node.status === 'completed';
       const displayName = node.name !== node.agentId ? node.name : node.agentType;
       const maxLabel = Math.max(8, maxWidth - dur.length - 4);
@@ -127,6 +131,7 @@ function renderNodeContent(
         meta: dur,
         color,
         dim,
+        metaColor: durClr,
       };
     }
     case 'report': {
