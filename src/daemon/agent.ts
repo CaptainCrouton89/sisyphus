@@ -204,6 +204,118 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   return agent;
 }
 
+export async function restartAgent(
+  sessionId: string,
+  cwd: string,
+  agentId: string,
+  windowId: string,
+): Promise<void> {
+  const session = state.getSession(cwd, sessionId);
+  const agent = session.agents.find(a => a.id === agentId);
+  if (!agent) throw new Error(`Unknown agent: ${agentId}`);
+  if (agent.status === 'running') {
+    // Check if the pane is actually alive — if not, the agent is a zombie
+    const paneAlive = agent.paneId && tmux.paneExists(agent.paneId);
+    if (paneAlive) {
+      throw new Error(`Agent ${agentId} is already running`);
+    }
+    // Pane is dead — mark as lost before restarting
+    await state.updateAgent(cwd, sessionId, agentId, {
+      status: 'lost',
+      killedReason: 'pane disappeared (detected on restart)',
+      completedAt: new Date().toISOString(),
+    });
+  }
+
+  const { instruction, agentType, name, color } = agent;
+  const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
+
+  // Resolve agent config for frontmatter (model, provider)
+  const agentConfig = resolveAgentConfig(agentType, pluginPath, cwd);
+  const provider = detectProvider(agentConfig?.frontmatter.model);
+
+  let paneCwd = cwd;
+  let worktreeContext: WorktreeContext | undefined;
+
+  if (agent.worktreePath) {
+    paneCwd = agent.worktreePath;
+    const portOffset = countWorktreeAgents(session.agents);
+    worktreeContext = {
+      offset: portOffset,
+      total: portOffset,
+      branchName: agent.branchName!,
+    };
+  }
+
+  // Kill old pane if it still exists
+  if (agent.paneId) {
+    try { tmux.killPane(agent.paneId); } catch { /* already dead */ }
+    unregisterAgentPane(sessionId, agentId);
+  }
+
+  // Create new pane
+  const paneId = tmux.createPane(windowId, paneCwd);
+  registerPane(paneId, sessionId, 'agent', agentId);
+  const shortType = agentType && agentType !== 'worker'
+    ? agentType.replace(/^sisyphus:/, '')
+    : '';
+  const paneLabel = shortType ? `${name}-${shortType}` : name;
+  tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
+  tmux.setPaneStyle(paneId, color);
+
+  const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
+  const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
+  writeFileSync(suffixFilePath, suffix, 'utf-8');
+
+  const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
+  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
+
+  const cliBin = resolve(import.meta.dirname, 'cli.js');
+  const npmBinDir = resolve(import.meta.dirname, '../../.bin');
+
+  const envExports = [
+    `export SISYPHUS_SESSION_ID='${sessionId}'`,
+    `export SISYPHUS_AGENT_ID='${agentId}'`,
+    `export SISYPHUS_CWD='${cwd}'`,
+    ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
+    `export PATH="${npmBinDir}:$PATH"`,
+  ].join(' && ');
+
+  const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
+
+  let mainCmd: string;
+
+  if (provider === 'openai') {
+    const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
+    const parts: string[] = [];
+    if (agentConfig?.body) parts.push(agentConfig.body);
+    parts.push(suffix);
+    parts.push(`## Task\n\n${instruction}`);
+    writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
+    const model = agentConfig?.frontmatter.model ?? 'codex-mini';
+    mainCmd = `codex -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
+  } else {
+    const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
+    const config = loadConfig(cwd);
+    const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+  }
+
+  const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
+
+  // Update agent state in-place
+  await state.updateAgent(cwd, sessionId, agentId, {
+    status: 'running',
+    paneId,
+    provider,
+    spawnedAt: new Date().toISOString(),
+    completedAt: null,
+    killedReason: undefined,
+  });
+
+  tmux.sendKeys(paneId, fullCmd);
+}
+
 function nextReportNumber(cwd: string, sessionId: string, agentId: string): string {
   const dir = reportsDir(cwd, sessionId);
   try {

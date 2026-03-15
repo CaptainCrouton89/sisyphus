@@ -60,6 +60,10 @@ export function createSession(sessionName: string, windowName: string, cwd: stri
   return { windowId, initialPaneId };
 }
 
+export function paneExists(paneTarget: string): boolean {
+  return execSafe(`tmux display-message -t "${paneTarget}" -p "#{pane_id}"`) !== null;
+}
+
 export function sessionExists(sessionName: string): boolean {
   return execSafe(`tmux has-session -t "${sessionName}"`) !== null;
 }

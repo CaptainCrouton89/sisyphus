@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:net';
-import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { socketPath, globalDir, messagesDir } from '../shared/paths.js';
 import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
@@ -199,6 +199,13 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { agentId: req.agentId } };
       }
 
+      case 'restart-agent': {
+        const cwd = sessionCwdMap.get(req.sessionId);
+        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        await sessionManager.handleRestartAgent(req.sessionId, cwd, req.agentId);
+        return { ok: true, data: { agentId: req.agentId } };
+      }
+
       case 'rollback': {
         let cwd = sessionCwdMap.get(req.sessionId);
         if (!cwd) {
@@ -212,6 +219,27 @@ async function handleRequest(req: Request): Promise<Response> {
         }
         const result = await sessionManager.handleRollback(req.sessionId, cwd, req.toCycle);
         return { ok: true, data: result as unknown as Record<string, unknown> };
+      }
+
+      case 'delete': {
+        // Kill session if active (best-effort)
+        const activeCwd = sessionCwdMap.get(req.sessionId);
+        if (activeCwd) {
+          try {
+            await sessionManager.handleKill(req.sessionId, activeCwd);
+          } catch {
+            // May already be dead — continue
+          }
+          sessionCwdMap.delete(req.sessionId);
+          sessionTmuxMap.delete(req.sessionId);
+          sessionWindowMap.delete(req.sessionId);
+          sessionMessageCounters.delete(req.sessionId);
+          persistSessionRegistry();
+        }
+        // Remove session directory
+        const { sessionDir } = await import('../shared/paths.js');
+        rmSync(sessionDir(req.cwd, req.sessionId), { recursive: true, force: true });
+        return { ok: true };
       }
 
       case 'pane-exited': {

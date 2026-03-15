@@ -3,7 +3,7 @@ import { existsSync, readdirSync, rmSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
-import { spawnAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
+import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionDir, sessionsDir } from '../shared/paths.js';
@@ -405,6 +405,17 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   orchestratorDone.delete(sessionId);
 
   return killedAgents;
+}
+
+export async function handleRestartAgent(sessionId: string, cwd: string, agentId: string): Promise<void> {
+  const session = state.getSession(cwd, sessionId);
+  const agent = session.agents.find(a => a.id === agentId);
+  if (!agent) throw new Error(`Unknown agent: ${agentId}`);
+
+  const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
+  if (!windowId) throw new Error(`No tmux window found for session ${sessionId}`);
+
+  await restartAgent(sessionId, cwd, agentId, windowId);
 }
 
 export async function handleKillAgent(sessionId: string, cwd: string, agentId: string): Promise<void> {
