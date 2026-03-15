@@ -10,7 +10,7 @@ How to structure sisyphus sessions for common task types. This skill helps the o
 
 ## Core Principles
 
-1. **plan.md is the orchestrator's memory.** plan.md and agent reports persist across cycles — they're all you have. Keep plan.md current and specific enough that a fresh orchestrator can pick up where you left off.
+1. **roadmap.md is the orchestrator's memory.** roadmap.md and agent reports persist across cycles — they're all you have. Keep roadmap.md current and specific enough that a fresh orchestrator can pick up where you left off.
 
 2. **Agents are disposable.** Each agent gets one focused instruction. If it fails or the scope changes, spawn a new one — don't try to redirect a running agent.
 
@@ -22,7 +22,7 @@ How to structure sisyphus sessions for common task types. This skill helps the o
 
 ## Agent Types
 
-Available agent types are listed in the `<state>` block under **Available Agent Types**. Use `--agent-type` with `sisyphus spawn`.
+Available agent types are listed under **Available Agent Types** in your prompt. Use `--agent-type` with `sisyphus spawn`.
 
 For task breakdown patterns per workflow type, see [task-patterns.md](task-patterns.md).
 For end-to-end workflow examples, see [workflow-examples.md](workflow-examples.md).

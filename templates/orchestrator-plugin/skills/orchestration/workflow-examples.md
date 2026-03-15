@@ -10,7 +10,7 @@ End-to-end examples showing how the orchestrator structures cycles for real scen
 
 ### Cycle 1 — Diagnosis
 ```
-plan.md:
+roadmap.md:
   ## Bug Fix: WebSocket message loss during reconnection
 
   - [ ] Diagnose message loss during WebSocket reconnection
@@ -33,7 +33,7 @@ Agent report: "Root cause: reconnect() clears the message queue before the new s
   but should be deferred until onReconnect confirms the new socket is live.
   Confidence: High."
 
-plan.md updated:
+roadmap.md updated:
   - [x] ~~Diagnose message loss during WebSocket reconnection~~
   - [ ] Fix root cause — queue.clear() at L47 of reconnect.ts runs too early
   - [ ] Validate fix under concurrent load
@@ -51,7 +51,7 @@ Agents spawned:
 Agent report: "Fixed. Moved queue.clear() to onReconnect callback after socket.readyState
   confirms OPEN. Added message buffer during reconnection window. 2 files changed."
 
-plan.md updated:
+roadmap.md updated:
   - [x] ~~Diagnose message loss~~
   - [x] ~~Fix root cause~~
   - [ ] Validate fix under concurrent load
@@ -67,7 +67,7 @@ Agents spawned:
 ```
 Validation: PASS. Existing tests pass, reconnection preserves messages.
 
-plan.md updated:
+roadmap.md updated:
   - [x] ~~Diagnose~~, [x] ~~Fix~~, [x] ~~Validate~~
   - [ ] Review fix
 
@@ -82,7 +82,7 @@ Agents spawned:
 Review: Clean. One medium finding — buffer should have a max size to prevent
   memory issues if reconnect fails indefinitely. Not blocking.
 
-All plan.md items complete.
+All roadmap.md items complete.
 
 Action: complete — "Fixed WebSocket message loss during reconnection. Messages now
   buffered during reconnection window and drained on successful reconnect."
@@ -96,7 +96,7 @@ Action: complete — "Fixed WebSocket message loss during reconnection. Messages
 
 ### Cycle 1 — Spec
 ```
-plan.md:
+roadmap.md:
   ## Feature: API Rate Limiting
 
   ### Spec & Planning
@@ -127,7 +127,7 @@ Agent report: "Spec saved to context/spec-rate-limiting.md.
   Standard 429 response with Retry-After header. Config via environment variables.
   Open questions resolved with user: Redis is already in stack, use it."
 
-plan.md updated (spec item marked done):
+roadmap.md updated (spec item marked done):
   - [x] ~~Draft spec for API rate limiting~~
   - [ ] Plan implementation
   ...
@@ -151,7 +151,7 @@ Agents spawned:
 ```
 Plan review: PASS.
 
-plan.md updated (plan review done, starting implementation):
+roadmap.md updated (plan review done, starting implementation):
   - [x] ~~Draft spec~~, [x] ~~Plan~~, [x] ~~Review plan~~
   - [ ] Implement rate limiting middleware
   - [ ] Implement rate limit configuration
@@ -174,7 +174,7 @@ Agents spawned:
 
 ### Cycle 1 — Plan + baseline
 ```
-plan.md:
+roadmap.md:
   ## Refactor: Extract Token Service
 
   - [ ] Plan auth refactor — extract token service
@@ -197,7 +197,7 @@ Agents spawned (parallel):
 ```
 Plan complete, baseline captured (47 tests passing).
 
-plan.md updated:
+roadmap.md updated:
   - [x] ~~Plan auth refactor~~
   - [x] ~~Capture behavioral baseline~~ (47 tests passing)
   - [ ] Create TokenService class with extracted logic
@@ -232,6 +232,6 @@ Agents spawned (parallel):
 ### Cycle 5 — Complete
 ```
 All 47 tests passing. Review clean.
-All plan.md items complete.
+All roadmap.md items complete.
 Complete — "Extracted token logic into TokenService. All existing tests pass."
 ```

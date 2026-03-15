@@ -72,7 +72,7 @@ Each layer has its own `CLAUDE.md` with deeper context on conventions and constr
 ## Session Lifecycle
 
 1. `sisyphus start "task"` → daemon creates session, spawns orchestrator Claude in tmux pane
-2. Orchestrator updates plan.md, spawns agents (`sisyphus spawn`), then yields (`sisyphus yield`)
+2. Orchestrator updates roadmap.md, spawns agents (`sisyphus spawn`), then yields (`sisyphus yield`)
 3. Daemon kills orchestrator pane, monitors agent panes via polling
 4. Agents work in parallel, each calls `sisyphus submit --report "..."` when done
 5. When all agents finish, daemon respawns orchestrator with updated state (next cycle)
@@ -84,10 +84,8 @@ Orchestrator and agents receive `SISYPHUS_SESSION_ID` and `SISYPHUS_AGENT_ID` en
 
 Prompts are written to the `prompts/` subdirectory within the session directory to avoid shell quoting/newline issues with tmux send-keys:
 
-- **Orchestrator**: `prompts/orchestrator-system-{N}.md` — orchestrator template. `prompts/orchestrator-user-{N}.md` — session state block with concise context + instruction. Passed via `--append-system-prompt`.
+- **Orchestrator**: `prompts/orchestrator-system-{N}.md` — orchestrator template. `prompts/orchestrator-user-{N}.md` — session state (human-readable summary with agent reports, cycle history, roadmap.md/logs.md references) + contextual prompt. Passed via `--append-system-prompt`.
 - **Agents**: `prompts/{agentId}-system.md` — rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Passed via `--append-system-prompt`.
-
-The `<state>` block is a human-readable summary (not raw JSON) with agent reports (truncated to 120 chars), cycle history, and plan.md/logs.md references.
 
 ## Templates
 
@@ -120,7 +118,7 @@ The plugin provides specialized system prompts tailored to different agent roles
 ### State & Persistence
 - **Project-local** (relative to cwd where `sisyphus start` was run):
   - `.sisyphus/sessions/{sessionId}/state.json` — atomically written JSON
-  - `.sisyphus/sessions/{sessionId}/plan.md`, `logs.md`
+  - `.sisyphus/sessions/{sessionId}/roadmap.md`, `logs.md`
   - `.sisyphus/sessions/{sessionId}/prompts/` — orchestrator + agent prompt files
   - `.sisyphus/sessions/{sessionId}/reports/`, `context/`
   - `.sisyphus/config.json` — project config override

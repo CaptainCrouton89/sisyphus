@@ -85,7 +85,7 @@ Scan the project root for gitignored files that agents will need:
 
 ## Handling Merge Conflicts
 
-When the daemon merges agent branches back, conflicts appear in the `## Worktrees` section of your state block. For each conflicting agent you'll see:
+When the daemon merges agent branches back, conflicts appear in the `## Worktrees` section of your prompt. For each conflicting agent you'll see:
 - The branch name (still exists, unmerged)
 - The worktree path (still exists on disk)
 - The conflict details (git merge stderr output)

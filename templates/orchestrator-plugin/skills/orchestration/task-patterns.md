@@ -1,6 +1,6 @@
 # Work Breakdown Patterns
 
-Patterns for how the orchestrator should structure plan.md for common workflow types. Each pattern shows the plan structure, agent assignments, cycle sequencing, and failure handling.
+Patterns for how the orchestrator should structure roadmap.md for common workflow types. Each pattern shows the plan structure, agent assignments, cycle sequencing, and failure handling.
 
 ---
 

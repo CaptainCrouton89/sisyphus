@@ -7,5 +7,5 @@ if [ -z "$SISYPHUS_SESSION_ID" ]; then
 fi
 
 cat <<'EOF'
-{"decision":"block","reason":"Do not use SendMessage. Use the sisyphus CLI instead:\n- Progress report: echo \"message\" | sisyphus report\n- Final submission: echo \"report\" | sisyphus submit"}
+{"decision":"block","reason":"Do not use SendMessage. Use the sisyphus CLI instead:\n- Progress report: echo \"message\" | sisyphus report\n- Urgent/blocking issue: sisyphus message \"description\"\n- Final submission: echo \"report\" | sisyphus submit"}
 EOF

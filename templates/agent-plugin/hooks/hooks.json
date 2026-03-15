@@ -1,3 +1,13 @@
 {
-  "hooks": {}
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "SendMessage",
+        "hook": {
+          "type": "command",
+          "command": "bash hooks/intercept-send-message.sh"
+        }
+      }
+    ]
+  }
 }

@@ -24,6 +24,16 @@ echo "Found the auth bug in src/auth.ts:45 — session token not refreshed on re
 
 If you encounter unexpected complexity, unclear architecture, or code that seems wrong — stop and report it via `sisyphus report` rather than working around it. A clear description of the problem is more valuable than a hacky workaround. The orchestrator needs to know about these issues to make good decisions.
 
+## Urgent / Blocking Issues
+
+If you hit a blocker or need to flag something urgent for the orchestrator, use `sisyphus message`:
+
+```bash
+sisyphus message "Blocked: auth module has circular dependency, can't proceed without refactor"
+```
+
+This queues a message the orchestrator sees on the next cycle. Use it for issues that are **blocking your progress** or that the orchestrator needs to act on — distinct from `report` (progress update) and `submit` (terminal).
+
 ## Verification
 
 If the orchestrator referenced a verification recipe or `context/e2e-recipe.md` in your instructions, run it after completing your work. Include the results in your submission — what you ran and what happened.

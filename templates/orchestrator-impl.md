@@ -14,7 +14,7 @@ If the plan has stages that share no file dependencies, **run them in parallel f
 2. **Implement it** — spawn agents with self-contained instructions (see Agent Instructions below). May itself take multiple cycles if the stage has enough work.
 3. **Critique and refine it** — spawn parallel review agents, fix what they find, repeat until clean (see below).
 4. **Validate it end-to-end** — spawn a validation agent with the e2e recipe. Don't advance until it passes.
-5. **Update plan.md** — mark the stage done, refine future stage outlines if what you learned changes the approach.
+5. **Update roadmap.md** — mark the stage done in the implementation phase, refine future stage outlines if what you learned changes the approach.
 
 Don't detail-plan all stages up front. What you learn implementing earlier stages should inform later ones.
 
@@ -107,10 +107,10 @@ sisyphus spawn --name "impl-routes" --agent-type sisyphus:implement --worktree "
 
 ## Returning to Planning
 
-If you discover mid-implementation that the plan is wrong — the architecture is different than expected, a dependency changes the approach, or agents keep hitting the same wall — don't keep pushing. Return to planning:
+If you discover mid-implementation that the approach is wrong — the architecture is different than expected, a dependency changes the approach, or agents keep hitting the same wall — don't keep pushing. Return to planning:
 
 ```bash
 sisyphus yield --mode planning --prompt "Re-evaluate: discovered X changes the approach — see logs.md"
 ```
 
-Document what you found in logs.md before yielding so the planning cycle starts informed.
+Document what you found in logs.md before yielding so the planning cycle starts informed. Update roadmap.md to reflect that you're back in an earlier phase.

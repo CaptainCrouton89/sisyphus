@@ -31,7 +31,7 @@ sisyphus start "task" -c "background context"    # Start with additional context
 - When composing messages for the orchestrator, be specific and include relevant context
 - If the user wants to redirect a session, compose a clear message explaining what to change and why
 - You can read files in the project to gather context before writing orchestrator messages
-- Session state files are at `.sisyphus/sessions/<id>/plan.md` and `logs.md`
+- Session state files are at `.sisyphus/sessions/<id>/roadmap.md` and `logs.md`
 
 ## Project Context
 
