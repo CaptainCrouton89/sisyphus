@@ -27,6 +27,8 @@ A plan tells agents **what to build and where** — not how to write it. Agents 
 
 ## Plan Structures
 
+Choose based on scope. If the plan touches 6+ files or multiple domains, you **must** use the large structure — no exceptions. A 1500-line single file is not a plan, it's a wall.
+
 ### Small (1-5 files, single domain)
 
 Single plan file with phases, file ownership, and verification.
@@ -54,7 +56,7 @@ Single plan file with phases, file ownership, and verification.
 
 ### Large (6+ files, multiple domains)
 
-Master plan + sub-plans. The master plan stays navigable (<200 lines). Domain-specific detail lives in sub-plan files.
+Master plan + sub-plans. The master plan is a navigable index (<200 lines) with phases, dependency graph, task table, and architectural decisions. All per-stage detail goes in sub-plan files.
 
 ```markdown
 # {Topic} Implementation Plan
@@ -117,7 +119,7 @@ Save sub-plans alongside the master plan: `context/plan-{topic}-{domain}.md`
 
 ## Quality Standards
 
-**Navigable.** The master plan should be under 200 lines. An orchestrator or agent should be able to find what they need in seconds. Detail lives in sub-plans.
+**Navigable.** The master plan must be under 200 lines. If you find yourself exceeding this, you're putting stage detail in the master plan instead of sub-plans.
 
 **No code.** Describe what to build, reference patterns to follow. Agents are capable — they read the codebase and write the code.
 

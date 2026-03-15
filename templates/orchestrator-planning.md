@@ -27,6 +27,8 @@ Not every stage needs a standalone spec document — a well-defined stage might 
 
 Point plan agents at **inputs** (spec, context docs, corrections) — not a pre-made structure. Don't pre-decide staging, ordering, or design decisions. The plan agent has `effort: max` reasoning and will produce a better plan when given room to think through the structure itself.
 
+For cross-domain tasks, consider spawning parallel plan agents scoped to independent domains (e.g., one for backend, one for frontend, one for IPC). Each produces a focused sub-plan. This is faster and produces better domain-specific plans than one agent trying to plan everything.
+
 ## Progressive Development
 
 Not all tasks need the same process depth. A 2-file bug fix can go straight to implementation. A cross-repo feature with multiple domains needs full phased development.
