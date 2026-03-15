@@ -110,7 +110,7 @@ sisyphus spawn --name "impl-routes" --agent-type sisyphus:implement --worktree "
 If you discover mid-implementation that the approach is wrong — the architecture is different than expected, a dependency changes the approach, or agents keep hitting the same wall — don't keep pushing. Return to planning:
 
 ```bash
-sisyphus yield --mode planning --prompt "Re-evaluate: discovered X changes the approach — see logs.md"
+sisyphus yield --mode planning --prompt "Re-evaluate: discovered X changes the approach — write cycle log"
 ```
 
-Document what you found in logs.md before yielding so the planning cycle starts informed. Update roadmap.md to reflect that you're back in an earlier phase.
+Document what you found in the cycle log before yielding so the planning cycle starts informed. Update roadmap.md to reflect that you're back in an earlier phase.

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { contextDir, goalPath, logsPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
+import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
@@ -56,7 +56,7 @@ function formatStateForOrchestrator(session: Session): string {
 
   const ctxDir = contextDir(session.cwd, session.id);
   const roadmapFile = roadmapPath(session.cwd, session.id);
-  const logsFile = logsPath(session.cwd, session.id);
+  const logFile = cycleLogPath(session.cwd, session.id, cycleNum + 1);
 
   // Context section: first cycle shows background context text; subsequent cycles show context dir files
   let contextSection = '';
@@ -88,9 +88,6 @@ function formatStateForOrchestrator(session: Session): string {
         return `- [${sourceLabel} @ ${m.timestamp}] "${m.summary}"${fileRef}`;
       }).join('\n') + '\n'
     : '';
-
-  // Logs section
-  const logsRef = existsSync(logsFile) ? `@${logsFile}` : '(empty)';
 
   // Previous cycles: all except last, compact format
   let previousCyclesSection = '';
@@ -169,9 +166,9 @@ function formatStateForOrchestrator(session: Session): string {
 
 ${goalContent}
 ${contextSection}${messagesSection}
-### Logs
+### Cycle Log
 
-${logsRef}
+Write your cycle summary to: ${logFile}
 ${previousCyclesSection}${mostRecentCycleSection}
 ## Roadmap
 
@@ -221,6 +218,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const envExports = [
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='orchestrator'`,
+    `export SISYPHUS_CWD='${cwd}'`,
     `export PATH="${npmBinDir}:$PATH"`,
   ].join(' && ');
 
@@ -236,6 +234,12 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   const userPromptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
   writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
+
+  // Drain rendered messages so they don't reappear in future cycles
+  if (session.messages && session.messages.length > 0) {
+    await state.drainMessages(cwd, sessionId, session.messages.length);
+  }
+
   const pluginPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);

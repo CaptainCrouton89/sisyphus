@@ -1,21 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { contextDir, goalPath, logsPath, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
+import { contextDir, goalPath, legacyLogsPath, logsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
 import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const ROADMAP_SEED = `---
 description: >
   Living document tracking development phases and outstanding work.
----
-`;
-
-const LOGS_SEED = `---
-description: >
-  Session memory. Record important observations, decisions, and findings here.
-  This is your persistent memory across cycles: things you tried, what
-  worked/failed, design decisions and their rationale, gotchas discovered during
-  implementation.
 ---
 `;
 
@@ -54,7 +45,7 @@ export function createSession(id: string, task: string, cwd: string, context?: s
   mkdirSync(promptsDir(cwd, id), { recursive: true });
 
   writeFileSync(roadmapPath(cwd, id), ROADMAP_SEED, 'utf-8');
-  writeFileSync(logsPath(cwd, id), LOGS_SEED, 'utf-8');
+  mkdirSync(logsDir(cwd, id), { recursive: true });
   writeFileSync(goalPath(cwd, id), task, 'utf-8');
   writeFileSync(join(contextDir(cwd, id), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
 
@@ -197,6 +188,15 @@ export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSess
   });
 }
 
+export async function drainMessages(cwd: string, sessionId: string, count: number): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    if (!session.messages || count <= 0) return;
+    session.messages = session.messages.slice(count);
+    saveSession(session);
+  });
+}
+
 export async function appendMessage(cwd: string, sessionId: string, message: Message): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
@@ -237,8 +237,10 @@ export function createSnapshot(cwd: string, sessionId: string, cycleNumber: numb
   const roadmap = roadmapPath(cwd, sessionId);
   if (existsSync(roadmap)) copyFileSync(roadmap, join(dir, 'roadmap.md'));
 
-  const logs = logsPath(cwd, sessionId);
-  if (existsSync(logs)) copyFileSync(logs, join(dir, 'logs.md'));
+  const ld = logsDir(cwd, sessionId);
+  if (existsSync(ld)) cpSync(ld, join(dir, 'logs'), { recursive: true });
+  const legacyLogs = legacyLogsPath(cwd, sessionId);
+  if (existsSync(legacyLogs)) copyFileSync(legacyLogs, join(dir, 'logs.md'));
 }
 
 export async function restoreSnapshot(cwd: string, sessionId: string, toCycle: number): Promise<void> {
@@ -256,12 +258,20 @@ export async function restoreSnapshot(cwd: string, sessionId: string, toCycle: n
     session.tmuxWindowId = undefined;
     atomicWrite(statePath(cwd, sessionId), JSON.stringify(session, null, 2));
 
-    // Restore roadmap.md and logs.md
+    // Restore roadmap.md and logs
     const snapshotRoadmap = join(dir, 'roadmap.md');
     if (existsSync(snapshotRoadmap)) copyFileSync(snapshotRoadmap, roadmapPath(cwd, sessionId));
 
-    const snapshotLogs = join(dir, 'logs.md');
-    if (existsSync(snapshotLogs)) copyFileSync(snapshotLogs, logsPath(cwd, sessionId));
+    const snapshotLogsDir = join(dir, 'logs');
+    if (existsSync(snapshotLogsDir)) {
+      const currentLogsDir = logsDir(cwd, sessionId);
+      if (existsSync(currentLogsDir)) rmSync(currentLogsDir, { recursive: true, force: true });
+      cpSync(snapshotLogsDir, currentLogsDir, { recursive: true });
+    } else {
+      // Legacy fallback: snapshot has logs.md instead of logs/
+      const snapshotLogs = join(dir, 'logs.md');
+      if (existsSync(snapshotLogs)) copyFileSync(snapshotLogs, legacyLogsPath(cwd, sessionId));
+    }
   });
 }
 

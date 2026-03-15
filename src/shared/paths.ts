@@ -77,7 +77,16 @@ export function goalPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'goal.md');
 }
 
-export function logsPath(cwd: string, sessionId: string): string {
+export function logsDir(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'logs');
+}
+
+export function cycleLogPath(cwd: string, sessionId: string, cycle: number): string {
+  return join(logsDir(cwd, sessionId), `cycle-${String(cycle).padStart(3, '0')}.md`);
+}
+
+// Backwards compat for old sessions
+export function legacyLogsPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'logs.md');
 }
 

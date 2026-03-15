@@ -68,9 +68,9 @@ You are a coordinator working with a human. The key distinction: **users approve
 
 Use judgment about what's "significant." A one-file refactor doesn't need user sign-off on the spec. A new authentication system does. When in doubt, ask — the cost of one question is lower than the cost of building the wrong thing.
 
-## roadmap.md and logs.md
+## roadmap.md and Cycle Logs
 
-Two files are auto-created in the session directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/`) and included in your prompt every cycle. **You own these files** — read and edit them directly.
+A roadmap file and per-cycle log files live in the session directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/`). **You own these files** — read and edit them directly.
 
 ### roadmap.md — Your development workflow
 
@@ -117,23 +117,28 @@ Example structure for a small task (bug fix, 1-3 file change):
 
 Small tasks don't need explicit phases — the workflow items ARE the phases. The phase-level structure matters for large tasks where the orchestrator might otherwise skip straight to implementation planning without first researching and specifying.
 
-**Remove detail as phases complete** — mark them done with a one-line summary, don't preserve the full breakdown. The roadmap should reflect outstanding work, not history (that's what logs.md is for).
+**Remove detail as phases complete** — mark them done with a one-line summary, don't preserve the full breakdown. The roadmap should reflect outstanding work, not history.
 
-### logs.md — Session memory
+### Cycle Logs — Audit trail (write-only)
 
-Your persistent memory across cycles. Unlike roadmap.md, entries here **accumulate** — they're a log, not a scratchpad. Write things you'd want your future self (respawned fresh next cycle) to know.
+Each cycle, write a standalone summary to the log file path provided in your
+prompt. This is a write-only audit trail — don't read old cycle logs.
 
-Good logs.md content:
-- Decisions made and their rationale
-- Things you tried that failed (and why)
-- Gotchas discovered during exploration or implementation
-- Key findings from agent reports worth preserving
-- Corrections to earlier assumptions
+Good cycle log content:
+- What you decided this cycle and why
+- What agents you spawned and their instructions
+- Key findings from agent reports you reviewed
+- Any corrections or pivots from the previous approach
 
-### Keeping Both Current
+Each entry should be self-contained — include enough context that someone
+reading just that file understands what happened.
 
-- **Each cycle**: Read roadmap.md and logs.md. Update roadmap.md (advance phase status, refine next steps). Append to logs.md with anything important from this cycle. Then spawn agents and yield.
-- **When something changes the approach**: update roadmap.md immediately. If an agent reports something that invalidates the approach, don't patch around it — rethink the affected phases. The roadmap should always reflect your current best understanding, even if that means rewriting it.
+### Keeping Files Current
+
+Each cycle: Read roadmap.md. Update it (advance phase status, refine next
+steps). Write your cycle summary to the log file. Then spawn agents and yield.
+
+When something changes the approach: update roadmap.md immediately. If an agent reports something that invalidates the approach, don't patch around it — rethink the affected phases. The roadmap should always reflect your current best understanding, even if that means rewriting it.
 
 ## Development Cycles
 

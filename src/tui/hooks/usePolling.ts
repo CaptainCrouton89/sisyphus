@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { send } from '../lib/client.js';
-import { readFileSync, existsSync } from 'node:fs';
-import { goalPath, logsPath, roadmapPath } from '../../shared/paths.js';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { goalPath, logsDir, legacyLogsPath, roadmapPath } from '../../shared/paths.js';
 import { windowExists } from '../lib/tmux.js';
 import type { Session } from '../../shared/types.js';
 
@@ -92,12 +93,17 @@ export function usePolling(
         }
 
         try {
-          const lp = logsPath(cwd, selectedIdRef.current);
-          if (existsSync(lp)) {
-            logsContent = readFileSync(lp, 'utf-8');
+          const ld = logsDir(cwd, selectedIdRef.current);
+          if (existsSync(ld)) {
+            const files = readdirSync(ld).filter(f => f.startsWith('cycle-')).sort();
+            logsContent = files.map(f => readFileSync(join(ld, f), 'utf-8')).join('\n');
+          } else {
+            // Legacy fallback
+            const lp = legacyLogsPath(cwd, selectedIdRef.current);
+            if (existsSync(lp)) logsContent = readFileSync(lp, 'utf-8');
           }
         } catch {
-          // logs.md may not exist yet
+          // logs may not exist yet
         }
       }
 
