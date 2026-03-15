@@ -244,7 +244,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'high';
-  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "sisyphus:orch-${sessionId.slice(0, 8)}-cycle-${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
@@ -61,6 +61,37 @@ function renderAgentSuffix(sessionId: string, instruction: string, worktreeConte
     .replace(/\{\{WORKTREE_CONTEXT\}\}/g, worktreeBlock);
 }
 
+function createAgentPlugin(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+  agentType: string,
+  agentConfig: ReturnType<typeof resolveAgentConfig>,
+): string {
+  const base = `${promptsDir(cwd, sessionId)}/${agentId}-plugin`;
+  mkdirSync(`${base}/.claude-plugin`, { recursive: true });
+  mkdirSync(`${base}/agents`, { recursive: true });
+  mkdirSync(`${base}/hooks`, { recursive: true });
+
+  writeFileSync(
+    `${base}/.claude-plugin/plugin.json`,
+    JSON.stringify({ name: `sisyphus-agent-${agentId}`, version: '1.0.0' }),
+    'utf-8',
+  );
+
+  if (agentConfig?.filePath && agentType && agentType !== 'worker') {
+    const shortName = agentType.replace(/^sisyphus:/, '');
+    copyFileSync(agentConfig.filePath, `${base}/agents/${shortName}.md`);
+  }
+
+  const srcHooks = resolve(import.meta.dirname, '../templates/agent-plugin/hooks');
+  for (const f of ['hooks.json', 'require-submit.sh', 'intercept-send-message.sh']) {
+    copyFileSync(`${srcHooks}/${f}`, `${base}/hooks/${f}`);
+  }
+
+  return base;
+}
+
 export interface SpawnAgentOpts {
   sessionId: string;
   cwd: string;
@@ -76,10 +107,10 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const count = (agentCounters.get(sessionId) ?? 0) + 1;
   agentCounters.set(sessionId, count);
   const agentId = `agent-${String(count).padStart(3, '0')}`;
-  const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
+  const bundledPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
 
   // Resolve agent config for frontmatter (color, model, provider)
-  const agentConfig = resolveAgentConfig(agentType, pluginPath, cwd);
+  const agentConfig = resolveAgentConfig(agentType, bundledPluginPath, cwd);
   const provider = detectProvider(agentConfig?.frontmatter.model);
   const color = (agentConfig?.frontmatter.color ? normalizeTmuxColor(agentConfig.frontmatter.color) : null) ?? getNextColor(sessionId);
 
@@ -157,7 +188,8 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
     const config = loadConfig(cwd);
     const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
   const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
@@ -228,10 +260,10 @@ export async function restartAgent(
   }
 
   const { instruction, agentType, name, color } = agent;
-  const pluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
+  const bundledPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
 
   // Resolve agent config for frontmatter (model, provider)
-  const agentConfig = resolveAgentConfig(agentType, pluginPath, cwd);
+  const agentConfig = resolveAgentConfig(agentType, bundledPluginPath, cwd);
   const provider = detectProvider(agentConfig?.frontmatter.model);
 
   let paneCwd = cwd;
@@ -298,7 +330,8 @@ export async function restartAgent(
     const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
     const config = loadConfig(cwd);
     const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
   const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
@@ -387,11 +420,15 @@ export async function handleAgentSubmit(
     completedAt: new Date().toISOString(),
   });
 
-  // Don't kill the pane — let the agent's Claude process exit naturally.
-  // The pane-exited notification (or pane monitor) handles cleanup.
-  // This keeps the tmux session alive until the orchestrator respawns.
+  // Kill the pane — Claude doesn't exit on its own after running a bash command.
   const session = state.getSession(cwd, sessionId);
-  return allAgentsDone(session);
+  const agent = session.agents.find(a => a.id === agentId);
+  if (agent?.paneId) {
+    unregisterAgentPane(sessionId, agentId);
+    try { tmux.killPane(agent.paneId); } catch { /* already dead */ }
+  }
+
+  return allAgentsDone(state.getSession(cwd, sessionId));
 }
 
 export async function handleAgentKilled(
