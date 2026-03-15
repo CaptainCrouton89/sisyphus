@@ -1,6 +1,8 @@
 import type { Command } from 'commander';
 import { execSync } from 'node:child_process';
 import { sendRequest } from '../client.js';
+import { getTmuxSession } from '../tmux.js';
+import { isDashboardOpen, launchDashboard } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
 
 function shellQuote(s: string): string {
@@ -26,6 +28,14 @@ export function registerStart(program: Command): void {
           try {
             execSync(`tmux set-option @sisyphus_cwd ${shellQuote(cwd)}`, { stdio: 'ignore' });
           } catch { /* not in tmux or tmux error — ignore */ }
+
+          try {
+            const tmuxSession = getTmuxSession();
+            if (!isDashboardOpen(tmuxSession)) {
+              launchDashboard(tmuxSession, cwd);
+              console.log(`Dashboard opened in tmux window "sisyphus-dashboard"`);
+            }
+          } catch { /* dashboard launch failed — non-fatal */ }
         }
 
         console.log(`Task handed off to sisyphus orchestrator (session ${sessionId})`);

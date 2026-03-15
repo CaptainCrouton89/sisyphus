@@ -7,6 +7,32 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+export function isDashboardOpen(tmuxSession: string): boolean {
+  try {
+    const windows = execSync(
+      `tmux list-windows -t ${shellQuote(tmuxSession)} -F "#{window_name}"`,
+      { encoding: 'utf-8' },
+    );
+    return windows.split('\n').some(name => name.trim() === 'sisyphus-dashboard');
+  } catch {
+    return false;
+  }
+}
+
+export function launchDashboard(tmuxSession: string, cwd: string): void {
+  const tuiPath = join(import.meta.dirname, 'tui.js');
+
+  const windowId = execSync(
+    `tmux new-window -t ${shellQuote(tmuxSession)} -n "sisyphus-dashboard" -c ${shellQuote(cwd)} -P -F "#{window_id}"`,
+    { encoding: 'utf-8' },
+  ).trim();
+
+  const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)}`;
+  execSync(
+    `tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`,
+  );
+}
+
 export function registerDashboard(program: Command): void {
   program
     .command('dashboard')
@@ -15,18 +41,6 @@ export function registerDashboard(program: Command): void {
       assertTmux();
       const tmuxSession = getTmuxSession();
       const cwd = process.cwd();
-      const tuiPath = join(import.meta.dirname, 'tui.js');
-
-      // Create a new tmux window for the dashboard
-      const windowId = execSync(
-        `tmux new-window -t ${shellQuote(tmuxSession)} -n "sisyphus-dashboard" -c ${shellQuote(cwd)} -P -F "#{window_id}"`,
-        { encoding: 'utf-8' },
-      ).trim();
-
-      // Run the TUI in the new window's pane
-      const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)}`;
-      execSync(
-        `tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`,
-      );
+      launchDashboard(tmuxSession, cwd);
     });
 }
