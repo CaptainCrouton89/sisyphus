@@ -23,7 +23,7 @@ export function launchDashboard(tmuxSession: string, cwd: string): void {
   const tuiPath = join(import.meta.dirname, 'tui.js');
 
   const windowId = execSync(
-    `tmux new-window -t ${shellQuote(tmuxSession)} -n "sisyphus-dashboard" -c ${shellQuote(cwd)} -P -F "#{window_id}"`,
+    `tmux new-window -n "sisyphus-dashboard" -c ${shellQuote(cwd)} -P -F "#{window_id}"`,
     { encoding: 'utf-8' },
   ).trim();
 

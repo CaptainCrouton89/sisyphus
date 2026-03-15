@@ -16,6 +16,9 @@ import { registerMessage } from './commands/message.js';
 import { registerUpdateTask } from './commands/update-task.js';
 import { registerDashboard } from './commands/dashboard.js';
 import { registerRollback } from './commands/rollback.js';
+import { registerRestartAgent } from './commands/restart-agent.js';
+import { registerSetupKeybind } from './commands/setup-keybind.js';
+import { registerDoctor } from './commands/doctor.js';
 
 const program = new Command();
 
@@ -41,6 +44,9 @@ registerMessage(program);
 registerUpdateTask(program);
 registerDashboard(program);
 registerRollback(program);
+registerRestartAgent(program);
+registerSetupKeybind(program);
+registerDoctor(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

@@ -25,9 +25,21 @@ Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 
 **Pattern**: All commands use `sendRequest(request)` → waits for response or throws after max retries.
 
+## Daemon Installation (`install.ts`)
+
+- `ensureDaemonInstalled()` — Called on first connection attempt (macOS only):
+  - Generates launchd plist with `Label: com.sisyphus.daemon`
+  - Looks for daemon binary as sibling to CLI (`dirname(import.meta.url)/daemon.js`)
+  - Installs plist to `~/Library/LaunchAgents/`
+  - Loads via `launchctl load -w`
+  - Sets up tmux keybind for session cycling
+- `waitForDaemon(maxWaitMs)` — Blocks until socket is ready (detects daemon updates via `.daemon-updating` file)
+- `uninstallDaemon(purge)` — Removes plist, unloads daemon, optionally purges all state
+
 ## Conventions
 
 - Commands take minimal args; complex state lives in daemon
 - Error messages should be concise and actionable
 - Use environment variables (`SISYPHUS_SESSION_ID`, `SISYPHUS_AGENT_ID`) when agent-spawned
 - Command registration functions follow `register{Command}(program)` naming
+- Daemon binary path is computed relative to CLI binary location (supports any install directory)

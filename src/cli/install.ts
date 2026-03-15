@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
+import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -67,6 +68,10 @@ export async function ensureDaemonInstalled(): Promise<void> {
     writeFileSync(plistPath(), plist, 'utf8');
 
     execSync(`launchctl load -w ${plistPath()}`);
+
+    const keybindResult = setupTmuxKeybind();
+
+    printGettingStarted(keybindResult);
   }
 
   await waitForDaemon();
@@ -91,6 +96,8 @@ export async function uninstallDaemon(purge: boolean): Promise<void> {
     console.log('Daemon is not installed (plist not found).');
   }
 
+  removeTmuxKeybind();
+
   if (purge) {
     const dir = globalDir();
     if (existsSync(dir)) {
@@ -98,6 +105,45 @@ export async function uninstallDaemon(purge: boolean): Promise<void> {
       console.log(`Removed ${dir}`);
     }
   }
+}
+
+function printGettingStarted(keybindResult: SetupResult): void {
+  const lines = [
+    '',
+    'Sisyphus installed — daemon running via launchd.',
+    '',
+    'Sisyphus is a tmux-integrated orchestration daemon for Claude Code multi-agent workflows.',
+    'A background daemon manages sessions where an orchestrator Claude breaks tasks into',
+    'subtasks, spawns agent Claude instances in tmux panes, and coordinates their lifecycle.',
+    '',
+    'Quick start:',
+    '  sisyphus start "task description"   Start a session (must be inside tmux)',
+    '  sisyphus list                        List sessions',
+    '  sisyphus status                      Show current session status',
+    '  sisyphus kill <id>                   Kill a session',
+    '',
+    'Monitoring:',
+    '  sisyphus dashboard                   Open TUI dashboard',
+    '  tail -f ~/.sisyphus/daemon.log       Watch daemon logs',
+    '',
+  ];
+
+  if (keybindResult.status === 'installed') {
+    lines.push(`Tmux keybind: ${keybindResult.message}`);
+  } else if (keybindResult.status === 'conflict') {
+    lines.push(`Keybind: ${keybindResult.message}`);
+  }
+
+  lines.push(
+    '',
+    'Troubleshooting:',
+    '  sisyphus doctor                      Check installation health',
+    '  sisyphus setup-keybind [key]         Configure tmux session-cycling keybind',
+    '  sisyphus uninstall [--purge]         Remove daemon and optionally all data',
+    '',
+  );
+
+  console.log(lines.join('\n'));
 }
 
 function testConnection(): Promise<void> {
