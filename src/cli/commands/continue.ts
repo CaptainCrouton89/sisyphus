@@ -19,7 +19,6 @@ export function registerContinue(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Session reactivated. Plan cleared.');
-        console.log('Compress your logs (logs.md) and continue delegating agents.');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);
