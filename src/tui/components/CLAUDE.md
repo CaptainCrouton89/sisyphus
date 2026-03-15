@@ -8,16 +8,20 @@ React + Ink terminal UI components for session monitoring and control.
 - **Props-based composition** — components receive session/agent state and callbacks
 - **Box + Text primitives** — Ink's layout system (no external styling)
 - **Color/styling via props** — colors passed as strings (e.g., `color="yellow"`)
-- **Content builders as pure functions** — e.g., `buildPlanLines()` — separates formatting logic from React rendering
+- **Content builders as pure functions** — e.g., `buildPlanLines()`, `buildLines()` — separates formatting logic from React rendering
 - **Format utilities** — use `stripFrontmatter()`, `cleanMarkdown()`, `wrapText()` for markdown processing
 - **Dynamic layout allocation** — calculate section heights based on available space; allocate remaining to high-priority content (plan gets lion's share)
 - **Input mode isolation** — `useInput()` with `isActive` flag to toggle input capture per component
 
 ## Key Components
 
-- **InputBar**: Multi-mode input (`'navigate'`, `'message'`, `'new-session'`, `'resume'`, `'continue'`, `'edit-goal'`, `'report-detail'`, `'rollback'`) with optional text validation and mode-specific prompts
-- **StatusLine**: Dynamic help text (navigate mode vs. input mode)
-- **SessionDetail**: Session overview pane with dynamic layout budgeting — task, status, plan, cycles, messages, completion report, logs
+- **InputBar**: Multi-mode input with mode-specific prompts and validation
+  - Input modes: `'navigate'`, `'message'`, `'new-session'`, `'resume'`, `'continue'`, `'rollback'`, `'leader'`, `'copy-menu'`, `'report-detail'`, `'delete-confirm'`, `'spawn-agent'`, `'search'`, `'message-agent'`, `'shell-command'`, `'help'`
+  - Optional input: `'resume'`, `'continue'`, `'search'` (Enter without text allowed)
+  - Required input: All other input modes reject Enter without text
+  - Non-input modes: `'navigate'`, `'report-detail'`, `'leader'`, `'copy-menu'`, `'help'` (render null or help text)
+- **StatusLine**: Context-aware help text for all input modes and view states
+- **SessionDetail**: Session overview pane with dynamic layout budgeting — task, status, plan, cycles, messages, completion report, logs. Uses `Seg[][]` line representation for fine-grained styling (color, bold, dim, italic per segment).
 - **PlanView**: Formatted roadmap.md excerpt (headers bold/indented, lists clean, long lines wrapped) with truncation indicator
 - **CycleHistory**: Timeline of orchestrator cycles with mode labels
 - **MessageLog**: Session messages with truncation
@@ -29,18 +33,14 @@ React + Ink terminal UI components for session monitoring and control.
 ## Rendering Complex Content
 
 **Use dedicated builder functions** for complex formatting:
-- Return a simple data structure (`PlanLine[]`, `ReportLine[]`, etc.)
+- Return a simple data structure (`PlanLine[]`, `DetailLine[]`, etc.)
 - Keeps formatting logic separate from React rendering
 - Format utilities: `stripFrontmatter()`, `cleanMarkdown()`, `wrapText()`
 - Memoize builder output if component re-renders frequently
 
-**Section headers pattern** (SessionDetail):
-- Use `SectionHeader` component with `label`, optional `count`, and `color`
-- Colored label with count badge: `▎ LABEL (count)`
-
-**Truncation indicators**:
-- Replace last line with `… [key] open in editor` if content exceeds limit
-- Signals to user that more content exists
+**Line representation** (SessionDetail):
+- `DetailLine = Seg[]` where each `Seg` has `text` and optional styling (`color`, `bold`, `dim`, `italic`)
+- Enables per-segment styling without nested React components
 
 ## Layout & Spacing
 
@@ -50,12 +50,12 @@ React + Ink terminal UI components for session monitoring and control.
 - **Section separators**: Use blank lines (`<Text>{' '}</Text>`) between sections for breathing room
 - **Content width**: Account for borders, padding, indentation (`width - 4` or more depending on nesting)
 
-## Input Modes & Validation
+## Input Validation
 
 **InputBar** uses mode-specific behavior:
-- **Requires text**: `'message'`, `'new-session'`, `'edit-goal'`, `'rollback'` (Enter without text rejected)
-- **Optional text**: `'resume'`, `'continue'` (Enter without text allowed)
-- **No input**: `'navigate'` shows help, `'report-detail'` renders null
+- **Optional text**: `'resume'`, `'continue'`, `'search'` (via `OPTIONAL_INPUT` set)
+- **Required text**: All other input modes reject Enter without text
+- **Non-input modes**: `'navigate'`, `'report-detail'`, `'leader'`, `'copy-menu'`, `'help'` render help or null
 
 ## Constraints
 

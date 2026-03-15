@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { send } from '../lib/client.js';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { goalPath, logsDir, legacyLogsPath, roadmapPath } from '../../shared/paths.js';
+import { goalPath, logsDir, roadmapPath } from '../../shared/paths.js';
 import { windowExists } from '../lib/tmux.js';
 import type { Session } from '../../shared/types.js';
 
@@ -15,12 +15,18 @@ export interface SessionSummary {
   tmuxWindowId?: string;
 }
 
+export interface CycleLog {
+  cycle: number;
+  content: string;
+}
+
 export interface PollingState {
   sessions: SessionSummary[];
   selectedSession: Session | null;
   planContent: string;
   goalContent: string;
   logsContent: string;
+  logsCycles: CycleLog[];
   paneAlive: boolean;
   error: string | null;
 }
@@ -36,6 +42,7 @@ export function usePolling(
     planContent: '',
     goalContent: '',
     logsContent: '',
+    logsCycles: [],
     paneAlive: true,
     error: null,
   });
@@ -57,6 +64,7 @@ export function usePolling(
       let planContent = '';
       let goalContent = '';
       let logsContent = '';
+      let logsCycles: CycleLog[] = [];
       let paneAlive = true;
 
       if (selectedIdRef.current) {
@@ -96,11 +104,13 @@ export function usePolling(
           const ld = logsDir(cwd, selectedIdRef.current);
           if (existsSync(ld)) {
             const files = readdirSync(ld).filter(f => f.startsWith('cycle-')).sort();
-            logsContent = files.map(f => readFileSync(join(ld, f), 'utf-8')).join('\n');
-          } else {
-            // Legacy fallback
-            const lp = legacyLogsPath(cwd, selectedIdRef.current);
-            if (existsSync(lp)) logsContent = readFileSync(lp, 'utf-8');
+            logsCycles = files.map(f => {
+              const match = f.match(/cycle-(\d+)\.md$/);
+              const cycle = match ? parseInt(match[1]!, 10) : 0;
+              const content = readFileSync(join(ld, f), 'utf-8');
+              return { cycle, content };
+            });
+            logsContent = logsCycles.map(c => c.content).join('\n');
           }
         } catch {
           // logs may not exist yet
@@ -108,7 +118,7 @@ export function usePolling(
       }
 
       if (mountedRef.current) {
-        setState({ sessions, selectedSession, planContent, goalContent, logsContent, paneAlive, error: null });
+        setState({ sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, error: null });
       }
     } catch (err) {
       if (mountedRef.current) {

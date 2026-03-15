@@ -20,7 +20,9 @@ export interface KeybindingHandlers {
   onJumpToPane: () => void;
   onResume: () => void;
   onContinue: () => void;
+  onRestartAgent: () => void;
   onRollback: () => void;
+  onToggleLogs: () => void;
 }
 
 export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean): void {
@@ -45,7 +47,9 @@ export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean):
       if (input === 'j') { handlers.onJumpToPane(); return; }
       if (input === 'R') { handlers.onResume(); return; }
       if (input === 'C') { handlers.onContinue(); return; }
+      if (input === 'x') { handlers.onRestartAgent(); return; }
       if (input === 'b') { handlers.onRollback(); return; }
+      if (input === 'l') { handlers.onToggleLogs(); return; }
     },
     { isActive },
   );

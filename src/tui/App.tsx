@@ -2,26 +2,36 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Box, Text, useApp, useStdout } from 'ink';
 import { SessionTree } from './components/SessionTree.js';
 import { SessionDetail } from './components/SessionDetail.js';
+import { LogsPanel } from './components/LogsPanel.js';
 import { CycleDetail } from './components/CycleDetail.js';
 import { AgentDetail } from './components/AgentDetail.js';
 import { ReportView } from './components/ReportView.js';
 import { MessageLog } from './components/MessageLog.js';
 import { InputBar, type InputMode } from './components/InputBar.js';
 import { StatusLine } from './components/StatusLine.js';
+import { LeaderOverlay } from './components/LeaderOverlay.js';
+import { HelpOverlay } from './components/HelpOverlay.js';
 import { usePolling } from './hooks/usePolling.js';
 import { useKeybindings } from './hooks/useKeybindings.js';
+import { useLeaderKey } from './hooks/useLeaderKey.js';
 import { send } from './lib/client.js';
 import { resolveReports } from './lib/reports.js';
+import { copyToClipboard } from './lib/clipboard.js';
+import { buildSessionContext } from './lib/context.js';
 import { buildTree, findParentIndex } from './lib/tree.js';
 import {
   openCompanionPopup,
   openEditorPopup,
+  editInPopup,
   selectWindow,
   selectPane,
   switchToSession,
+  openLogPopup,
+  openShellPopup,
+  openInFileManager,
 } from './lib/tmux.js';
 import { wrapText, formatTime } from './lib/format.js';
-import { goalPath, roadmapPath } from '../shared/paths.js';
+import { goalPath, roadmapPath, sessionDir } from '../shared/paths.js';
 import { loadConfig } from '../shared/config.js';
 import type { Request } from '../shared/protocol.js';
 import type { TreeNode } from './types/tree.js';
@@ -50,17 +60,30 @@ export function App({ cwd }: Props) {
   const [notification, setNotification] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [detailScrollOffset, setDetailScrollOffset] = useState(0);
-  const [focusPane, setFocusPane] = useState<'tree' | 'detail'>('tree');
+  const [logsScrollOffset, setLogsScrollOffset] = useState(0);
+  const [showLogs, setShowLogs] = useState(true);
+  const [focusPane, setFocusPane] = useState<'tree' | 'detail' | 'logs'>('tree');
+  const [searchFilter, setSearchFilter] = useState<string | null>(null);
+  const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const cursorNodeIdRef = useRef<string | null>(null);
   const prevNodesRef = useRef<TreeNode[]>([]);
 
   // Polling
-  const { sessions, selectedSession, planContent, goalContent, logsContent, paneAlive, error } = usePolling(cwd, selectedSessionId);
+  const { sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, error } = usePolling(cwd, selectedSessionId);
+
+  // Filter sessions for search
+  const filteredSessions = useMemo(() => {
+    if (!searchFilter) return sessions;
+    const q = searchFilter.toLowerCase();
+    return sessions.filter(
+      (s) => s.task.toLowerCase().includes(q) || s.id.toLowerCase().includes(q),
+    );
+  }, [sessions, searchFilter]);
 
   // Build tree from current state
   const nodes = useMemo(
-    () => buildTree(sessions, selectedSession, expanded),
-    [sessions, selectedSession, expanded],
+    () => buildTree(filteredSessions, selectedSession, expanded),
+    [filteredSessions, selectedSession, expanded],
   );
 
   // Track cursor node identity: update ref only when cursor moved (nodes stable),
@@ -82,9 +105,10 @@ export function App({ cwd }: Props) {
     }
   }, [nodes, cursorIndex, selectedSessionId]);
 
-  // Reset detail scroll when cursor changes
+  // Reset scroll offsets when cursor changes
   useEffect(() => {
     setDetailScrollOffset(0);
+    setLogsScrollOffset(0);
   }, [cursorIndex]);
 
   // Stabilize cursor position when tree structure changes
@@ -233,7 +257,9 @@ export function App({ cwd }: Props) {
 
   // Layout — fixed-width tree panel (computed early for keybinding handlers)
   const treeWidth = 36;
-  const detailWidth = cols - treeWidth;
+  const remainingWidth = cols - treeWidth;
+  const detailWidth = showLogs ? Math.floor(remainingWidth * 0.6) : remainingWidth;
+  const logsWidth = showLogs ? remainingWidth - detailWidth : 0;
   const contentHeight = rows - 3;
 
   // Keybindings (only active in navigate mode)
@@ -242,6 +268,8 @@ export function App({ cwd }: Props) {
       onMoveUp: () => {
         if (focusPane === 'detail') {
           setDetailScrollOffset((o) => Math.max(0, o - 1));
+        } else if (focusPane === 'logs') {
+          setLogsScrollOffset((o) => Math.max(0, o - 1));
         } else {
           setCursorIndex((i) => Math.max(0, i - 1));
         }
@@ -249,11 +277,17 @@ export function App({ cwd }: Props) {
       onMoveDown: () => {
         if (focusPane === 'detail') {
           setDetailScrollOffset((o) => o + 1);
+        } else if (focusPane === 'logs') {
+          setLogsScrollOffset((o) => o + 1);
         } else {
           setCursorIndex((i) => Math.min(nodes.length - 1, i + 1));
         }
       },
       onLeft: () => {
+        if (focusPane === 'logs') {
+          setFocusPane('detail');
+          return;
+        }
         if (focusPane === 'detail') {
           setFocusPane('tree');
           return;
@@ -289,12 +323,24 @@ export function App({ cwd }: Props) {
         }
       },
       onTab: () => {
-        setFocusPane((f) => (f === 'tree' ? 'detail' : 'tree'));
+        setFocusPane((f) => {
+          if (f === 'tree') return 'detail';
+          if (f === 'detail') return showLogs ? 'logs' : 'tree';
+          return 'tree';
+        });
+      },
+      onToggleLogs: () => {
+        setShowLogs((prev) => {
+          if (prev) {
+            // Hiding: move focus away from logs if needed
+            setFocusPane((f) => (f === 'logs' ? 'detail' : f));
+            setLogsScrollOffset(0);
+          }
+          return !prev;
+        });
       },
       onSpace: () => {
-        const node = nodes[cursorIndex];
-        if (!node || !node.expandable) return;
-        toggleExpand(node.id);
+        setMode('leader');
       },
       onEnter: () => {
         const node = nodes[cursorIndex];
@@ -315,7 +361,18 @@ export function App({ cwd }: Props) {
       },
       onMessage: () => {
         if (!selectedSessionId) { notify('No session selected'); return; }
-        setMode('message');
+        const editor = resolveEditor(config.editor);
+        try {
+          const content = editInPopup(cwd, editor);
+          if (content) {
+            void sendAndNotify(
+              { type: 'message', sessionId: selectedSessionId, content },
+              'Message queued',
+            );
+          }
+        } catch {
+          notify('Failed to open editor');
+        }
       },
       onKill: () => {
         if (!selectedSessionId) { notify('No session selected'); return; }
@@ -344,7 +401,20 @@ export function App({ cwd }: Props) {
           notify(`Failed to open goal in ${editor}`);
         }
       },
-      onNewSession: () => setMode('new-session'),
+      onNewSession: () => {
+        const editor = resolveEditor(config.editor);
+        try {
+          const content = editInPopup(cwd, editor);
+          if (content) {
+            void sendAndNotify(
+              { type: 'start', task: content, cwd },
+              'Session created',
+            );
+          }
+        } catch {
+          notify('Failed to open editor');
+        }
+      },
       onClaude: () => {
         try {
           openCompanionPopup(cwd);
@@ -391,6 +461,14 @@ export function App({ cwd }: Props) {
         if (session?.status !== 'completed') { notify('Session not completed'); return; }
         setMode('continue');
       },
+      onRestartAgent: () => {
+        const agent = getAgentForNode(cursorNode);
+        if (!agent || !selectedSessionId) { notify('Select an agent to restart'); return; }
+        sendAndNotify(
+          { type: 'restart-agent', sessionId: selectedSessionId, agentId: agent.id },
+          `Restarted ${agent.id}`,
+        );
+      },
       onRollback: () => {
         if (!selectedSessionId) { notify('No session selected'); return; }
         setMode('rollback');
@@ -399,24 +477,144 @@ export function App({ cwd }: Props) {
     mode === 'navigate',
   );
 
+  // Leader key state machine
+  useLeaderKey(mode, (action) => {
+    switch (action.type) {
+      case 'enter-copy-menu':
+        setMode('copy-menu');
+        break;
+
+      case 'copy-path': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        const path = sessionDir(cwd, selectedSessionId);
+        try {
+          copyToClipboard(path);
+          notify(`Copied path (${path})`);
+        } catch {
+          notify('Failed to copy to clipboard');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'copy-context': {
+        if (!selectedSessionId || !session) { notify('No session selected'); setMode('navigate'); break; }
+        try {
+          const xml = buildSessionContext(session, cwd);
+          copyToClipboard(xml);
+          notify(`Copied context (${xml.length} chars)`);
+        } catch {
+          notify('Failed to copy context');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'copy-logs': {
+        if (!logsContent) { notify('No logs content'); setMode('navigate'); break; }
+        try {
+          copyToClipboard(logsContent);
+          notify(`Copied logs (${logsContent.length} chars)`);
+        } catch {
+          notify('Failed to copy to clipboard');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'copy-session-id': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        try {
+          copyToClipboard(selectedSessionId);
+          notify(`Copied session ID (${selectedSessionId})`);
+        } catch {
+          notify('Failed to copy to clipboard');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'delete-session': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        setMode('delete-confirm');
+        break;
+      }
+
+      case 'open-logs': {
+        try {
+          openLogPopup();
+        } catch {
+          notify('Failed to open log popup');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'open-session-dir': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        try {
+          openInFileManager(sessionDir(cwd, selectedSessionId));
+        } catch {
+          notify('Failed to open session directory');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'search':
+        setMode('search');
+        break;
+
+      case 'jump-to-session': {
+        // Find the Nth session-type node (1-indexed)
+        let count = 0;
+        for (let i = 0; i < nodes.length; i++) {
+          if (nodes[i]?.type === 'session') {
+            count++;
+            if (count === action.index) {
+              setCursorIndex(i);
+              break;
+            }
+          }
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'spawn-agent': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        setMode('spawn-agent');
+        break;
+      }
+
+      case 'message-agent': {
+        const agent = getAgentForNode(cursorNode);
+        if (!agent) { notify('Cursor must be on an agent'); setMode('navigate'); break; }
+        setTargetAgentId(agent.id);
+        setMode('message-agent');
+        break;
+      }
+
+      case 'help':
+        setMode('help');
+        break;
+
+      case 'shell-command': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        setMode('shell-command');
+        break;
+      }
+
+      case 'dismiss':
+        setMode('navigate');
+        break;
+    }
+  });
+
   // Submit handler — dispatches by input mode
   const handleSubmit = useCallback(
     async (text: string) => {
       switch (mode) {
-        case 'message':
-          if (!selectedSessionId) break;
-          await sendAndNotify(
-            { type: 'message', sessionId: selectedSessionId, content: text },
-            'Message queued',
-          );
-          break;
-        case 'new-session': {
-          await sendAndNotify(
-            { type: 'start', task: text, cwd },
-            'Session created',
-          );
-          break;
-        }
         case 'resume': {
           if (!selectedSessionId) break;
           await sendAndNotify(
@@ -449,15 +647,62 @@ export function App({ cwd }: Props) {
           );
           break;
         }
+        case 'delete-confirm': {
+          if (!selectedSessionId) break;
+          if (text !== 'yes') { notify('Delete cancelled (type "yes" to confirm)'); break; }
+          await sendAndNotify(
+            { type: 'delete', sessionId: selectedSessionId, cwd },
+            'Session deleted',
+          );
+          break;
+        }
+        case 'spawn-agent': {
+          if (!selectedSessionId) break;
+          if (!text.trim()) { notify('Instruction required'); break; }
+          await sendAndNotify(
+            {
+              type: 'spawn',
+              sessionId: selectedSessionId,
+              agentType: 'default',
+              name: 'agent',
+              instruction: text,
+            },
+            'Agent spawned',
+          );
+          break;
+        }
+        case 'search': {
+          setSearchFilter(text.trim() || null);
+          break;
+        }
+        case 'message-agent': {
+          if (!selectedSessionId || !targetAgentId) break;
+          await sendAndNotify(
+            { type: 'message', sessionId: selectedSessionId, content: text, source: { type: 'agent', agentId: targetAgentId } },
+            `Message sent to ${targetAgentId}`,
+          );
+          setTargetAgentId(null);
+          break;
+        }
+        case 'shell-command': {
+          if (!text.trim()) break;
+          try {
+            openShellPopup(cwd, text);
+          } catch {
+            notify('Failed to run shell command');
+          }
+          break;
+        }
       }
       setMode('navigate');
     },
-    [mode, selectedSessionId, cwd, notify, sendAndNotify],
+    [mode, selectedSessionId, targetAgentId, cwd, notify, sendAndNotify],
   );
 
   const handleCancel = useCallback(() => {
     setMode('navigate');
     setFocusPane('tree');
+    setTargetAgentId(null);
   }, []);
 
   // Resolve report content for ReportView and AgentDetail
@@ -715,6 +960,15 @@ export function App({ cwd }: Props) {
         />
 
         {renderDetailPanel(detailWidth, contentHeight)}
+        {showLogs && (
+          <LogsPanel
+            cycleLogs={selectedSession ? logsCycles : []}
+            width={logsWidth}
+            height={contentHeight}
+            scrollOffset={logsScrollOffset}
+            focused={mode === 'navigate' && focusPane === 'logs'}
+          />
+        )}
       </Box>
 
       {notification && (
@@ -736,7 +990,15 @@ export function App({ cwd }: Props) {
         onCancel={handleCancel}
       />
 
-      <StatusLine mode={mode} detailFocused={focusPane === 'detail'} />
+      <StatusLine
+        mode={mode}
+        detailFocused={focusPane === 'detail'}
+        logsFocused={focusPane === 'logs'}
+        showLogs={showLogs}
+      />
+
+      <LeaderOverlay mode={mode} rows={rows} cols={cols} />
+      <HelpOverlay mode={mode} rows={rows} cols={cols} />
     </Box>
   );
 }

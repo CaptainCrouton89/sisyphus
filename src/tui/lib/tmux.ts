@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { globalDir } from '../../shared/paths.js';
 
 const EXEC_ENV = {
@@ -63,6 +64,37 @@ const TERMINAL_EDITORS = new Set(['nvim', 'vim', 'vi', 'nano', 'emacs', 'micro',
 
 export function switchToSession(sessionName: string): void {
   execSafe(`tmux switch-client -t "${sessionName}"`);
+}
+
+export function editInPopup(cwd: string, editor: string, opts?: { content?: string; size?: { w: string; h: string } }): string | null {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'sisyphus-'));
+  const filePath = join(tmpDir, 'input.md');
+  try {
+    writeFileSync(filePath, opts?.content ? opts.content : '', 'utf-8');
+    openEditorPopup(cwd, editor, filePath, opts?.size);
+    const result = readFileSync(filePath, 'utf-8').trim();
+    return result || null;
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+export function openLogPopup(): void {
+  execSync(
+    `tmux display-popup -E -w 90% -h 80% ${shellQuote('tail -f ~/.sisyphus/daemon.log')}`,
+    { stdio: 'inherit', env: EXEC_ENV },
+  );
+}
+
+export function openShellPopup(cwd: string, command: string): void {
+  execSync(
+    `tmux display-popup -E -w 90% -h 80% -d ${shellQuote(cwd)} ${shellQuote(`sh -c '${command.replace(/'/g, "'\\''")}; echo; echo "Press enter to close"; read'`)}`,
+    { stdio: 'inherit', env: EXEC_ENV },
+  );
+}
+
+export function openInFileManager(path: string): void {
+  execSync(`open ${shellQuote(path)}`, { stdio: 'inherit', env: EXEC_ENV });
 }
 
 export function openEditorPopup(cwd: string, editor: string, filePath: string, size?: { w: string; h: string }): void {

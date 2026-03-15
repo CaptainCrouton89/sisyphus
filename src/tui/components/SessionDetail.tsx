@@ -228,29 +228,6 @@ function buildLines(
     });
   }
 
-  // Logs section
-  const hasLogs = !!logsContent?.trim() && !!stripFrontmatter(logsContent!).trim();
-  if (hasLogs) {
-    const cleanLogs = stripFrontmatter(logsContent!);
-    const logEntries = cleanLogs
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l && l !== '---' && !l.startsWith('description:'));
-
-    if (logEntries.length > 0) {
-      lines.push(simple(' '));
-      lines.push([seg('  ▎ LOGS', { color: 'gray', bold: true })]);
-      logEntries.forEach((l) => {
-        lines.push(
-          simple(
-            `    ${truncate(cleanMarkdown(l), contentWidth - 6)}`,
-            { dim: true },
-          ),
-        );
-      });
-    }
-  }
-
   return lines;
 }
 
