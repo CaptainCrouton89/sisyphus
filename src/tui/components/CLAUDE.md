@@ -18,7 +18,7 @@ React + Ink terminal UI components for session monitoring and control.
 - **InputBar**: Multi-mode input (`'navigate'`, `'message'`, `'new-session'`, `'resume'`, `'continue'`, `'edit-goal'`, `'report-detail'`, `'rollback'`) with optional text validation and mode-specific prompts
 - **StatusLine**: Dynamic help text (navigate mode vs. input mode)
 - **SessionDetail**: Session overview pane with dynamic layout budgeting — task, status, plan, cycles, messages, completion report, logs
-- **PlanView**: Formatted plan.md excerpt (headers bold/indented, lists clean, long lines wrapped) with truncation indicator
+- **PlanView**: Formatted roadmap.md excerpt (headers bold/indented, lists clean, long lines wrapped) with truncation indicator
 - **CycleHistory**: Timeline of orchestrator cycles with mode labels
 - **MessageLog**: Session messages with truncation
 - **PaneOutput**: Real-time pane output display with scrolling

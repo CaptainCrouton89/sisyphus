@@ -8,14 +8,14 @@ interface Props {
   width: number;
 }
 
-interface PlanLine {
+export interface PlanLine {
   text: string;
   bold?: boolean;
   dim?: boolean;
   color?: string;
 }
 
-function buildPlanLines(content: string, maxLines: number, width: number): PlanLine[] {
+export function buildPlanLines(content: string, maxLines: number, width: number): PlanLine[] {
   const clean = stripFrontmatter(content);
   if (!clean.trim()) return [];
 
@@ -37,7 +37,7 @@ function buildPlanLines(content: string, maxLines: number, width: number): PlanL
       const level = headerMatch[1]!.length;
       const headerText = cleanMarkdown(headerMatch[2]!);
       const indent = '  '.repeat(Math.max(0, level - 1));
-      if (lines.length > 0) lines.push({ text: '' }); // breathing room before headers
+      if (lines.length > 0) lines.push({ text: ' ' }); // breathing room before headers
       lines.push({
         text: `    ${indent}${headerText}`,
         bold: true,
@@ -49,7 +49,7 @@ function buildPlanLines(content: string, maxLines: number, width: number): PlanL
     // Empty lines — pass through (but collapse multiples)
     if (!trimmed) {
       if (lines.length > 0 && lines[lines.length - 1]!.text !== '') {
-        lines.push({ text: '' });
+        lines.push({ text: ' ' });
       }
       continue;
     }
@@ -102,7 +102,7 @@ export function PlanView({ content, maxLines, width }: Props) {
   if (lines.length === 0) {
     return (
       <Box>
-        <Text dimColor italic>    No plan yet</Text>
+        <Text dimColor italic>    No roadmap yet</Text>
       </Box>
     );
   }

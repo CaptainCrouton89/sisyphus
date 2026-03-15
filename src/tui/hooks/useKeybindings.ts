@@ -7,6 +7,7 @@ export interface KeybindingHandlers {
   onLeft: () => void;
   onRight: () => void;
   onSpace: () => void;
+  onTab: () => void;
   onMessage: () => void;
   onKill: () => void;
   onGoToWindow: () => void;
@@ -30,6 +31,7 @@ export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean):
       if (key.leftArrow) { handlers.onLeft(); return; }
       if (key.rightArrow) { handlers.onRight(); return; }
       if (key.return) { handlers.onEnter(); return; }
+      if (key.tab) { handlers.onTab(); return; }
       if (input === ' ') { handlers.onSpace(); return; }
       if (input === 'm') { handlers.onMessage(); return; }
       if (input === 'k') { handlers.onKill(); return; }

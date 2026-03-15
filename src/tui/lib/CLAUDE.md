@@ -4,7 +4,7 @@
 
 ## Organization
 
-- **format.ts** — Display utilities: duration/time formatting, markdown stripping, text truncation, status indicators, text wrapping
+- **format.ts** — Display utilities: duration/time formatting, markdown stripping/cleaning, text truncation, status indicators, text wrapping, frontmatter removal
 - **tree.ts** — Session tree building: sorts sessions (active+open → completed), expands cycles/agents/reports on demand
 - **tree-render.ts** — ASCII rendering: box-drawing connectors (│, ├─, └─), expand indicators (▸, ▼)
 - **tmux.ts** — tmux wrappers: window/pane selection, editor/companion popups, terminal editor detection
@@ -14,9 +14,25 @@
 ## Key Patterns
 
 ### Text Formatting
-- **stripMarkdown()** — Removes all markdown syntax; used before truncation
-- **extractFirstSentence()** — Finds first meaningful content line, respects sentence boundaries
-- **Status colors/icons** — `statusColor()` maps status → [green|cyan|yellow|red|gray|white]; `agentStatusIcon()` for agent-specific glyphs
+- **Duration/time**:
+  - `formatDuration(start, end?)` — Human format (1h23m, 45s)
+  - `formatTimeAgo(iso)` — Relative time (2h ago, just now)
+  - `formatTime(iso)` — HH:MM format
+- **Truncation**:
+  - `truncate(text, max)` — Word-boundary-aware with '…' ellipsis (falls back to 0.6x threshold if no space found)
+- **Markdown**:
+  - `stripMarkdown()` — Removes all markdown syntax (headers, bold, links, code blocks, lists); collapses whitespace
+  - `cleanMarkdown()` — Inline only (bold, italic, strikethrough, code, links); preserves structure
+  - `stripFrontmatter()` — Removes YAML frontmatter (--- ... ---)
+  - `extractFirstSentence()` — Finds first meaningful line, respects sentence boundaries, strips headers/code blocks
+- **Text wrapping**:
+  - `wrapText(text, width)` — Line-wrapping with word-boundary awareness
+- **Status**:
+  - `statusColor(status)` — Maps to terminal color (active/running→green, completed→cyan, paused→yellow, killed/crashed→red, lost→gray)
+  - `statusIndicator(status)` — Status glyph (▶, ✓, ⏸, ·)
+  - `agentStatusIcon(status)` — Agent-specific icons (▶, ✓, ✕, !, ?, ·)
+- **Misc**:
+  - `divider(width, char)` — Repeating character line (default '─')
 
 ### Tree Structure
 - Sessions sorted by: active+open (0) → active+closed (1) → paused+open (2) → paused+closed (3) → completed (4)
@@ -45,3 +61,4 @@
 - Tree rendering assumes depth hierarchy is well-formed (no skipped depths)
 - tmux commands fail silently (execSafe) in most cases — check window existence before operations
 - Truncation always aims for word boundaries, falls back to hard limit if none found in reasonable range (0.6x of max)
+- `stripMarkdown()` collapses all whitespace to single spaces (lossy); `cleanMarkdown()` preserves line structure

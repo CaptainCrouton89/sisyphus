@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { Session } from '../../shared/types.js';
-import { PlanView } from './PlanView.js';
-import { CycleHistory } from './CycleHistory.js';
-import { MessageLog } from './MessageLog.js';
-import { statusColor, formatDuration, truncate, wrapText, stripFrontmatter, cleanMarkdown } from '../lib/format.js';
+import { buildPlanLines } from './PlanView.js';
+import {
+  statusColor,
+  formatDuration,
+  formatTime,
+  truncate,
+  wrapText,
+  stripFrontmatter,
+  cleanMarkdown,
+} from '../lib/format.js';
 
 interface Props {
   session: Session | null;
@@ -14,18 +20,219 @@ interface Props {
   width: number;
   height: number;
   paneAlive: boolean;
+  scrollOffset?: number;
+  focused?: boolean;
 }
 
-function SectionHeader({ label, count, color }: { label: string; count?: number; color: string }) {
-  return (
-    <Box>
-      <Text color={color} bold>{'  '}▎ {label}</Text>
-      {count != null && <Text dimColor> ({count})</Text>}
-    </Box>
+type Seg = {
+  text: string;
+  color?: string;
+  bold?: boolean;
+  dim?: boolean;
+  italic?: boolean;
+};
+
+type DetailLine = Seg[];
+
+function seg(text: string, opts?: Partial<Omit<Seg, 'text'>>): Seg {
+  return { text, ...opts };
+}
+
+function simple(text: string, opts?: Partial<Omit<Seg, 'text'>>): DetailLine {
+  return [seg(text, opts)];
+}
+
+function buildLines(
+  session: Session,
+  planContent: string,
+  goalContent: string | undefined,
+  logsContent: string | undefined,
+  width: number,
+  paneAlive: boolean,
+): DetailLine[] {
+  const lines: DetailLine[] = [];
+  const contentWidth = width - 4;
+  const agents = session.agents ?? [];
+  const cycles = session.orchestratorCycles ?? [];
+  const messages = session.messages ?? [];
+  const isDead = session.status === 'active' && !paneAlive;
+  const conflicts = agents.filter((a) => a.mergeStatus === 'conflict');
+
+  // Goal text
+  const goalText = goalContent
+    ? cleanMarkdown(stripFrontmatter(goalContent).trim())
+    : session.task;
+  goalText
+    .split('\n')
+    .flatMap((l) => wrapText(l, contentWidth - 2))
+    .forEach((line, i) => {
+      lines.push(simple(`${i === 0 ? ' ' : '  '}${line}`, { bold: true }));
+    });
+
+  // Status bar (mixed colors)
+  const lastCycle = cycles.length > 0 ? cycles[cycles.length - 1]! : null;
+  const cycleNum = lastCycle?.cycle ?? 0;
+  const mode = lastCycle?.mode ?? '';
+  const runningAgents = agents.filter((a) => a.status === 'running').length;
+  const completedAgents = agents.filter((a) => a.status === 'completed').length;
+  const elapsed = formatDuration(session.createdAt, session.completedAt);
+  const agentMinutes = Math.round(
+    agents.reduce((sum, a) => {
+      const start = new Date(a.spawnedAt).getTime();
+      const end = a.completedAt ? new Date(a.completedAt).getTime() : Date.now();
+      return sum + (end - start) / 60000;
+    }, 0),
   );
+  lines.push([
+    seg('  '),
+    seg(isDead ? '✕ dead' : session.status, {
+      color: statusColor(isDead ? 'crashed' : session.status),
+    }),
+    seg(
+      ` · cycle ${cycleNum}${mode ? ` (${mode})` : ''} · ${elapsed} · ${runningAgents}↑ ${completedAgents}✓ · ${agentMinutes}m agent-time`,
+      { dim: true },
+    ),
+  ]);
+
+  // Dead session warning
+  if (isDead) {
+    lines.push(
+      simple(
+        '  ⚠ tmux window closed — session is stale. Kill or resume it.',
+        { color: 'red' },
+      ),
+    );
+  }
+
+  // Conflict banner
+  if (conflicts.length > 0) {
+    lines.push(
+      simple(
+        `  ⚠ ${conflicts.length} merge conflict${conflicts.length > 1 ? 's' : ''}`,
+        { color: 'red', bold: true },
+      ),
+    );
+  }
+
+  // Plan section
+  lines.push(simple(' '));
+  lines.push([
+    seg('  ▎ PLAN', { color: 'yellow', bold: true }),
+  ]);
+  const planLines = buildPlanLines(planContent, 99999, width);
+  if (planLines.length === 0) {
+    lines.push(simple('    No plan yet', { dim: true, italic: true }));
+  } else {
+    for (const pl of planLines) {
+      lines.push(simple(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
+    }
+  }
+
+  // Completion report
+  if (session.status === 'completed' && session.completionReport) {
+    lines.push(simple(' '));
+    lines.push([seg('  ▎ COMPLETION', { color: 'cyan', bold: true })]);
+    wrapText(cleanMarkdown(session.completionReport), contentWidth - 6).forEach(
+      (l) => {
+        lines.push(simple(`    ${l}`, { dim: true }));
+      },
+    );
+  }
+
+  // Cycles section
+  lines.push(simple(' '));
+  lines.push([
+    seg('  ▎ CYCLES', { color: 'blue', bold: true }),
+    seg(` (${cycles.length})`, { dim: true }),
+  ]);
+  if (cycles.length === 0) {
+    lines.push(simple('  No cycles yet', { dim: true, italic: true }));
+  } else {
+    [...cycles].reverse().forEach((cycle) => {
+      const duration = cycle.completedAt
+        ? formatDuration(cycle.timestamp, cycle.completedAt)
+        : 'running';
+      const n = cycle.agentsSpawned.length;
+      const m = cycle.mode ? `${cycle.mode}` : '';
+      lines.push(
+        simple(
+          `  C${cycle.cycle}: ${n} agent${n !== 1 ? 's' : ''} · ${duration}${m ? ` · ${m}` : ''}`,
+          { dim: true },
+        ),
+      );
+    });
+  }
+
+  // Messages section
+  if (messages.length > 0) {
+    lines.push(simple(' '));
+    lines.push([
+      seg('  ▎ MESSAGES', { color: 'magenta', bold: true }),
+      seg(` (${messages.length})`, { dim: true }),
+    ]);
+    messages.forEach((msg) => {
+      const time = formatTime(msg.timestamp);
+      const label =
+        msg.source.type === 'user'
+          ? 'You'
+          : msg.source.type === 'agent'
+            ? msg.source.agentId
+            : 'system';
+      const color =
+        msg.source.type === 'user'
+          ? 'yellow'
+          : msg.source.type === 'agent'
+            ? 'cyan'
+            : 'gray';
+      const content = truncate(
+        msg.summary || msg.content,
+        Math.max(10, contentWidth - 20),
+      );
+      lines.push([
+        seg(`  [${time}] `, { dim: true }),
+        seg(`${label}: `, { color, bold: true }),
+        seg(content),
+      ]);
+    });
+  }
+
+  // Logs section
+  const hasLogs = !!logsContent?.trim() && !!stripFrontmatter(logsContent!).trim();
+  if (hasLogs) {
+    const cleanLogs = stripFrontmatter(logsContent!);
+    const logEntries = cleanLogs
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && l !== '---' && !l.startsWith('description:'));
+
+    if (logEntries.length > 0) {
+      lines.push(simple(' '));
+      lines.push([seg('  ▎ LOGS', { color: 'gray', bold: true })]);
+      logEntries.forEach((l) => {
+        lines.push(
+          simple(
+            `    ${truncate(cleanMarkdown(l), contentWidth - 6)}`,
+            { dim: true },
+          ),
+        );
+      });
+    }
+  }
+
+  return lines;
 }
 
-export function SessionDetail({ session, planContent, goalContent, logsContent, width, height, paneAlive }: Props) {
+export function SessionDetail({
+  session,
+  planContent,
+  goalContent,
+  logsContent,
+  width,
+  height,
+  paneAlive,
+  scrollOffset = 0,
+  focused = false,
+}: Props) {
   if (!session) {
     return (
       <Box
@@ -42,126 +249,52 @@ export function SessionDetail({ session, planContent, goalContent, logsContent, 
     );
   }
 
-  const agents = session.agents ?? [];
-  const cycles = session.orchestratorCycles ?? [];
-  const messages = session.messages ?? [];
-
-  const lastCycle = cycles.length > 0 ? cycles[cycles.length - 1]! : null;
-  const cycleNum = lastCycle?.cycle ?? 0;
-  const mode = lastCycle?.mode ?? '';
-  const runningAgents = agents.filter((a) => a.status === 'running').length;
-  const completedAgents = agents.filter((a) => a.status === 'completed').length;
-  const elapsed = formatDuration(session.createdAt, session.completedAt);
-  const agentMinutes = Math.round(
-    agents.reduce((sum, a) => {
-      const start = new Date(a.spawnedAt).getTime();
-      const end = a.completedAt ? new Date(a.completedAt).getTime() : Date.now();
-      return sum + (end - start) / 60000;
-    }, 0),
+  const allLines = useMemo(
+    () => buildLines(session, planContent, goalContent, logsContent, width, paneAlive),
+    [session, planContent, goalContent, logsContent, width, paneAlive],
   );
-  const conflicts = agents.filter((a) => a.mergeStatus === 'conflict');
-  const contentWidth = width - 4;
 
-  // Dynamic layout
-  const headerLines = 3 + (conflicts.length > 0 ? 1 : 0) + (session.status === 'active' && !paneAlive ? 1 : 0);
-  const availableLines = height - headerLines - 4;
-  const hasCompletion = session.status === 'completed' && session.completionReport;
-  const hasLogs = !!logsContent?.trim() && !!stripFrontmatter(logsContent!).trim();
-
-  // Section budgets — plan gets the lion's share, others are compact
-  const cycleLines = Math.min(8, Math.max(1, cycles.length)) + 2; // +2 for header + blank
-  const messageLines = messages.length > 0 ? Math.min(6, messages.length) + 2 : 0;
-  const completionLines = hasCompletion ? Math.min(6, Math.max(3, Math.floor(availableLines * 0.12))) + 2 : 0;
-  const logsLines = hasLogs ? Math.min(5, Math.max(2, Math.floor(availableLines * 0.08))) + 2 : 0;
-  const planLines = Math.max(5, availableLines - cycleLines - messageLines - completionLines - logsLines);
-
-  const isDead = session.status === 'active' && !paneAlive;
-
-  // Clean logs content
-  const cleanLogs = hasLogs ? stripFrontmatter(logsContent!) : '';
-  const logEntries = cleanLogs
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l && l !== '---' && !l.startsWith('description:'));
+  const innerHeight = height - 2; // borders only
+  const hasOverflow = allLines.length > innerHeight;
+  const viewableHeight = hasOverflow ? innerHeight - 1 : innerHeight;
+  const maxScroll = Math.max(0, allLines.length - viewableHeight);
+  const effectiveOffset = Math.min(scrollOffset, maxScroll);
+  const visible = allLines.slice(effectiveOffset, effectiveOffset + viewableHeight);
+  const padCount = viewableHeight - visible.length;
+  const scrollPct =
+    maxScroll > 0 ? Math.round((effectiveOffset / maxScroll) * 100) : 100;
 
   return (
     <Box
       flexDirection="column"
       width={width}
       borderStyle="round"
-      borderColor="gray"
+      borderColor={focused ? 'blue' : 'gray'}
       paddingX={1}
     >
-      {/* Task name */}
-      <Text bold> {truncate(goalContent ? cleanMarkdown(goalContent.split('\n')[0]!) : session.task, contentWidth - 2)}</Text>
-
-      {/* Status bar */}
-      <Box>
-        <Text dimColor>{'  '}</Text>
-        <Text color={statusColor(isDead ? 'crashed' : session.status)}>
-          {isDead ? '✕ dead' : session.status}
-        </Text>
-        <Text dimColor>
-          {' · '}cycle {cycleNum}{mode ? ` (${mode})` : ''}
-          {' · '}{elapsed}
-          {' · '}{runningAgents}↑ {completedAgents}✓
-          {' · '}{agentMinutes}m agent-time
-        </Text>
-      </Box>
-
-      {/* Dead session warning */}
-      {isDead && (
-        <Text color="red">{'  '}⚠ tmux window closed — session is stale. Kill or resume it.</Text>
-      )}
-
-      {/* Conflict banner */}
-      {conflicts.length > 0 && (
-        <Text color="red" bold>
-          {'  '}⚠ {conflicts.length} merge conflict{conflicts.length > 1 ? 's' : ''}
-        </Text>
-      )}
-
-      {/* Plan */}
-      <Text>{' '}</Text>
-      <SectionHeader label="PLAN" color="yellow" />
-      <PlanView content={planContent} maxLines={planLines} width={contentWidth} />
-
-      {/* Completion report */}
-      {hasCompletion && (
-        <Box flexDirection="column">
-          <Text>{' '}</Text>
-          <SectionHeader label="COMPLETION" color="cyan" />
-          {wrapText(cleanMarkdown(session.completionReport!), contentWidth - 6)
-            .slice(0, completionLines - 2)
-            .map((line, i) => (
-              <Text key={i} dimColor>{'    '}{line}</Text>
-            ))}
-        </Box>
-      )}
-
-      {/* Cycles */}
-      <Text>{' '}</Text>
-      <SectionHeader label="CYCLES" count={cycles.length} color="blue" />
-      <CycleHistory cycles={cycles} maxCycles={cycleLines - 2} />
-
-      {/* Messages */}
-      {messages.length > 0 && (
-        <Box flexDirection="column">
-          <Text>{' '}</Text>
-          <SectionHeader label="MESSAGES" count={messages.length} color="magenta" />
-          <MessageLog messages={messages} maxMessages={messageLines - 2} width={contentWidth} />
-        </Box>
-      )}
-
-      {/* Logs */}
-      {hasLogs && logEntries.length > 0 && (
-        <Box flexDirection="column">
-          <Text>{' '}</Text>
-          <SectionHeader label="LOGS" color="gray" />
-          {logEntries.slice(0, logsLines - 2).map((line, i) => (
-            <Text key={i} dimColor>{'    '}{truncate(cleanMarkdown(line), contentWidth - 6)}</Text>
+      {visible.map((line, i) => (
+        <Text key={effectiveOffset + i}>
+          {line.map((s, j) => (
+            <Text
+              key={j}
+              color={s.color}
+              bold={s.bold}
+              dimColor={s.dim}
+              italic={s.italic}
+            >
+              {s.text}
+            </Text>
           ))}
-        </Box>
+        </Text>
+      ))}
+      {padCount > 0 &&
+        Array.from({ length: padCount }, (_, i) => (
+          <Text key={`pad-${i}`}>{' '}</Text>
+        ))}
+      {hasOverflow && (
+        <Text dimColor>
+          {'  '}[tab] scroll · {scrollPct}% · {allLines.length} lines
+        </Text>
       )}
     </Box>
   );

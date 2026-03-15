@@ -123,7 +123,7 @@ function renderNodeContent(
       const maxLabel = Math.max(8, maxWidth - dur.length - 4);
       return {
         icon,
-        label: truncate(`${node.agentId} ${displayName}`, maxLabel),
+        label: truncate(displayName, maxLabel),
         meta: dur,
         color,
         dim,

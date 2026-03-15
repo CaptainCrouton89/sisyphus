@@ -61,6 +61,10 @@ export function openCompanionPopup(cwd: string): void {
 
 const TERMINAL_EDITORS = new Set(['nvim', 'vim', 'vi', 'nano', 'emacs', 'micro', 'helix', 'hx', 'joe', 'ne', 'kak']);
 
+export function switchToSession(sessionName: string): void {
+  execSafe(`tmux switch-client -t "${sessionName}"`);
+}
+
 export function openEditorPopup(cwd: string, editor: string, filePath: string, size?: { w: string; h: string }): void {
   const { w = '90%', h = '90%' } = size ?? {};
   const editorBin = editor.split(/\s+/)[0]!.split('/').pop()!;

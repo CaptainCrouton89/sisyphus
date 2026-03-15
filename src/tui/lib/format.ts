@@ -153,6 +153,7 @@ export function cleanMarkdown(line: string): string {
 }
 
 export function wrapText(text: string, width: number): string[] {
+  if (width <= 0) return text.split('\n');
   const result: string[] = [];
   for (const rawLine of text.split('\n')) {
     if (rawLine.length <= width) {

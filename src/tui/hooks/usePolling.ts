@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { send } from '../lib/client.js';
 import { readFileSync, existsSync } from 'node:fs';
-import { goalPath, logsPath, planPath } from '../../shared/paths.js';
+import { goalPath, logsPath, roadmapPath } from '../../shared/paths.js';
 import { windowExists } from '../lib/tmux.js';
 import type { Session } from '../../shared/types.js';
 
@@ -74,12 +74,12 @@ export function usePolling(
         }
 
         try {
-          const pp = planPath(cwd, selectedIdRef.current);
+          const pp = roadmapPath(cwd, selectedIdRef.current);
           if (existsSync(pp)) {
             planContent = readFileSync(pp, 'utf-8');
           }
         } catch {
-          // plan.md may not exist yet
+          // roadmap.md may not exist yet
         }
 
         try {

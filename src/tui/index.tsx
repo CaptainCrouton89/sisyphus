@@ -13,6 +13,5 @@ function getArg(name: string): string | undefined {
 }
 
 const cwd = getArg('cwd') ?? process.cwd();
-const tmuxSession = getArg('tmux-session') ?? 'main';
 
-render(<App cwd={cwd} tmuxSession={tmuxSession} />);
+render(<App cwd={cwd} />);
