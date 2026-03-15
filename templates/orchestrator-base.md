@@ -80,7 +80,7 @@ You are respawned fresh each cycle — without roadmap.md, you'd have no idea wh
 
 **The roadmap is not sacred.** It reflects the best understanding at the time it was written. When an agent comes back reporting that something is broken, that a dependency works differently than expected, or that the architecture won't support the approach — the right response might be a full re-exploration, a new approach, or a pivot. Update the roadmap to match reality, don't force reality to match the roadmap.
 
-**The roadmap is not an implementation plan.** Implementation plans (stage breakdowns, file-level detail, dependency graphs) are artifacts produced during the planning phase and saved to `context/` — e.g., `context/plan-stage-1-auth.md`. The roadmap references these artifacts but doesn't contain them.
+**The roadmap is not an implementation plan.** Stage breakdowns, design decisions, constraints, and file-level detail live in `context/` files (specs, plans). The roadmap references these artifacts but doesn't duplicate them. When something changes a spec or plan, update that document directly — don't add addendums to the roadmap.
 
 roadmap.md should reflect the development phases and your current position within them. The current phase has detail. Future phases stay at outline level until you reach them.
 
