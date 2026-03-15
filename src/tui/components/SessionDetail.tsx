@@ -135,60 +135,96 @@ function buildLines(
     );
   }
 
-  // Cycles section
+  // Cycles section — newest first, messages nested below the cycle they fed into
   lines.push(simple(' '));
   lines.push([
     seg('  ▎ CYCLES', { color: 'blue', bold: true }),
     seg(` (${cycles.length})`, { dim: true }),
   ]);
-  if (cycles.length === 0) {
-    lines.push(simple('  No cycles yet', { dim: true, italic: true }));
-  } else {
-    [...cycles].reverse().forEach((cycle) => {
-      const duration = cycle.completedAt
-        ? formatDuration(cycle.timestamp, cycle.completedAt)
-        : 'running';
-      const n = cycle.agentsSpawned.length;
-      const m = cycle.mode ? `${cycle.mode}` : '';
-      lines.push(
-        simple(
-          `  C${cycle.cycle}: ${n} agent${n !== 1 ? 's' : ''} · ${duration}${m ? ` · ${m}` : ''}`,
-          { dim: true },
-        ),
-      );
-    });
-  }
 
-  // Messages section
-  if (messages.length > 0) {
-    lines.push(simple(' '));
+  // Render one message as an indented sub-row under its cycle
+  const pushMsgLine = (msg: (typeof messages)[number], connector: '└▸' | '├▸') => {
+    const time = formatTime(msg.timestamp);
+    const label =
+      msg.source.type === 'user'
+        ? 'You'
+        : msg.source.type === 'agent'
+          ? msg.source.agentId
+          : 'sys';
+    const labelColor =
+      msg.source.type === 'user' ? 'yellow' : msg.source.type === 'agent' ? 'cyan' : 'gray';
+    const maxContent = Math.max(10, contentWidth - label.length - 18);
     lines.push([
-      seg('  ▎ MESSAGES', { color: 'magenta', bold: true }),
-      seg(` (${messages.length})`, { dim: true }),
+      seg(`    ${connector} `, { dim: true }),
+      seg(`[${time}] `, { dim: true }),
+      seg(`${label} `, { color: labelColor, bold: true }),
+      seg(truncate(msg.summary || msg.content, maxContent), { dim: true }),
     ]);
-    messages.forEach((msg) => {
-      const time = formatTime(msg.timestamp);
-      const label =
-        msg.source.type === 'user'
-          ? 'You'
-          : msg.source.type === 'agent'
-            ? msg.source.agentId
-            : 'system';
-      const color =
-        msg.source.type === 'user'
-          ? 'yellow'
-          : msg.source.type === 'agent'
-            ? 'cyan'
-            : 'gray';
-      const content = truncate(
-        msg.summary || msg.content,
-        Math.max(10, contentWidth - 20),
-      );
-      lines.push([
-        seg(`  [${time}] `, { dim: true }),
-        seg(`${label}: `, { color, bold: true }),
-        seg(content),
-      ]);
+  };
+
+  if (cycles.length === 0) {
+    lines.push(simple('    no cycles yet', { dim: true, italic: true }));
+  } else {
+    const sortedMsgs = [...messages].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+    const reversedCycles = [...cycles].reverse(); // newest first in display
+
+    for (let i = 0; i < reversedCycles.length; i++) {
+      const cycle = reversedCycles[i]!;
+      const olderCycle = reversedCycles[i + 1]; // chronologically prior
+
+      const isRunning = !cycle.completedAt;
+      // Visual recency: newest completed = white, second = gray, rest = dim gray
+      const isNewest = i === 0;
+      const isSecond = i === 1;
+      const dot = isRunning ? '●' : '○';
+      const dotColor = isRunning ? 'green' : isNewest ? 'white' : 'gray';
+      const rowDim = !isRunning && !isNewest && !isSecond;
+      const duration = isRunning ? 'running' : formatDuration(cycle.timestamp, cycle.completedAt);
+      const n = cycle.agentsSpawned.length;
+      const startTime = formatTime(cycle.timestamp);
+
+      // For cycles with 1–2 agents, show agent type inline instead of just "N agents"
+      const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
+      const agentDetail =
+        cycleAgents.length === 1
+          ? truncate(cycleAgents[0]!.agentType || cycleAgents[0]!.name, 14)
+          : cycleAgents.length === 2
+            ? cycleAgents.map((a) => truncate(a.agentType || a.name, 10)).join(' + ')
+            : `${n} agent${n !== 1 ? 's' : ''}`;
+
+      const row: DetailLine = [
+        seg(`  ${dot} `, { color: dotColor }),
+        seg(`C${cycle.cycle}`, { bold: isRunning || isNewest, dim: rowDim }),
+        seg('  ', {}),
+        ...(isRunning
+          ? [seg('running', { color: 'green', bold: true })]
+          : [seg(duration, { dim: rowDim })]),
+        seg('  ·  ', { dim: true }),
+        seg(agentDetail, { dim: rowDim }),
+        ...(cycle.mode ? [seg(`  ·  ${cycle.mode}`, { color: 'cyan', dim: rowDim })] : []),
+        seg(`  ${startTime}`, { dim: true }),
+      ];
+      lines.push(row);
+
+      // Messages that fed into this cycle: sent after the prior cycle started, before this one
+      const cycleTime = new Date(cycle.timestamp).getTime();
+      const olderCycleTime = olderCycle ? new Date(olderCycle.timestamp).getTime() : 0;
+      const cycleMsgs = sortedMsgs.filter((m) => {
+        const t = new Date(m.timestamp).getTime();
+        return t < cycleTime && t >= olderCycleTime;
+      });
+      cycleMsgs.forEach((msg, mi) => {
+        pushMsgLine(msg, mi < cycleMsgs.length - 1 ? '├▸' : '└▸');
+      });
+    }
+
+    // Messages predating all cycles (before the first cycle started)
+    const firstCycleTime = new Date(reversedCycles[reversedCycles.length - 1]!.timestamp).getTime();
+    const preMsgs = sortedMsgs.filter((m) => new Date(m.timestamp).getTime() < firstCycleTime);
+    preMsgs.forEach((msg, mi) => {
+      pushMsgLine(msg, mi < preMsgs.length - 1 ? '├▸' : '└▸');
     });
   }
 
