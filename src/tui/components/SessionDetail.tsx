@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { Session } from '../../shared/types.js';
+import { computeActiveTimeMs } from '../../shared/utils.js';
 import { buildPlanLines } from './PlanView.js';
 import {
   statusColor,
@@ -76,20 +77,15 @@ function buildLines(
   const runningAgents = agents.filter((a) => a.status === 'running').length;
   const completedAgents = agents.filter((a) => a.status === 'completed').length;
   const elapsed = formatDuration(session.createdAt, session.completedAt);
-  const agentMinutes = Math.round(
-    agents.reduce((sum, a) => {
-      const start = new Date(a.spawnedAt).getTime();
-      const end = a.completedAt ? new Date(a.completedAt).getTime() : Date.now();
-      return sum + (end - start) / 60000;
-    }, 0),
-  );
+  const activeMs = computeActiveTimeMs(session);
+  const activeTime = formatDuration(activeMs);
   lines.push([
     seg('  '),
     seg(isDead ? '✕ dead' : session.status, {
       color: statusColor(isDead ? 'crashed' : session.status),
     }),
     seg(
-      ` · cycle ${cycleNum}${mode ? ` (${mode})` : ''} · ${elapsed} · ${runningAgents}↑ ${completedAgents}✓ · ${agentMinutes}m agent-time`,
+      ` · cycle ${cycleNum}${mode ? ` (${mode})` : ''} · ${elapsed} · ${runningAgents}↑ ${completedAgents}✓ · ${activeTime} active`,
       { dim: true },
     ),
   ]);

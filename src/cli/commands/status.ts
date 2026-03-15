@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
+import { computeActiveTimeMs } from '../../shared/utils.js';
 
 const STATUS_COLORS: Record<string, string> = {
   active: '\x1b[32m',    // green
@@ -21,10 +22,8 @@ function colorize(text: string, status: string): string {
   return `${color}${text}${RESET}`;
 }
 
-function formatDuration(startIso: string, endIso?: string | null): string {
-  const start = new Date(startIso).getTime();
-  const end = endIso ? new Date(endIso).getTime() : Date.now();
-  const totalSeconds = Math.floor((end - start) / 1000);
+function formatMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
   if (totalSeconds < 0) return '0s';
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -34,6 +33,13 @@ function formatDuration(startIso: string, endIso?: string | null): string {
   if (minutes > 0) parts.push(`${minutes}m`);
   parts.push(`${seconds}s`);
   return parts.join(' ');
+}
+
+function formatDuration(startOrMs: string | number, endIso?: string | null): string {
+  if (typeof startOrMs === 'number') return formatMs(startOrMs);
+  const start = new Date(startOrMs).getTime();
+  const end = endIso ? new Date(endIso).getTime() : Date.now();
+  return formatMs(end - start);
 }
 
 function formatAgent(agent: Agent): string {
@@ -76,7 +82,8 @@ function printSession(session: Session): void {
   }
   console.log(`  CWD: ${session.cwd}`);
   console.log(`  Created: ${session.createdAt}`);
-  console.log(`  Duration: ${sessionDuration}${session.completedAt ? '' : ' (ongoing)'}`);
+  const activeTime = formatDuration(computeActiveTimeMs(session));
+  console.log(`  Duration: ${sessionDuration}${session.completedAt ? '' : ' (ongoing)'} (${activeTime} active)`);
   console.log(`  Orchestrator cycles: ${session.orchestratorCycles.length}`);
 
   if (session.orchestratorCycles.length > 0) {
