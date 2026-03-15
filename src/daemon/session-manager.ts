@@ -29,7 +29,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
   const session = state.createSession(sessionId, task, cwd, context, name);
 
   const { windowId, initialPaneId } = tmux.createSession(tmuxName, 'main', cwd);
-  tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd);
+  tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
   await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
 
   trackSession(sessionId, cwd, tmuxName);
@@ -101,7 +101,7 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
   } else {
     // Create fresh tmux session with the same name
     const created = tmux.createSession(tmuxName, 'main', cwd);
-    tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd);
+    tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
     windowId = created.windowId;
     // Kill the initial pane after orchestrator spawns (below)
     await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
@@ -249,7 +249,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
           tmux.killSession(tmuxName!);
         }
         const created = tmux.createSession(tmuxName!, 'main', cwd);
-        tmux.setSessionOption(tmuxName!, '@sisyphus_cwd', cwd);
+        tmux.setSessionOption(tmuxName!, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
         activeWindowId = created.windowId;
         initialPaneId = created.initialPaneId;
         await state.updateSessionTmux(cwd, sessionId, tmuxName!, activeWindowId);

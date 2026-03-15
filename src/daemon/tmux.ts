@@ -72,6 +72,7 @@ export function setSessionOption(sessionName: string, option: string, value: str
   execSafe(`tmux set-option -t "${sessionName}" ${option} ${shellQuote(value)}`);
 }
 
+
 export interface PaneInfo {
   paneId: string;
   panePid: string;

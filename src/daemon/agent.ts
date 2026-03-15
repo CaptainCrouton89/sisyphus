@@ -274,17 +274,10 @@ export async function handleAgentSubmit(
     completedAt: new Date().toISOString(),
   });
 
+  // Don't kill the pane — let the agent's Claude process exit naturally.
+  // The pane-exited notification (or pane monitor) handles cleanup.
+  // This keeps the tmux session alive until the orchestrator respawns.
   const session = state.getSession(cwd, sessionId);
-  const agentArr = session.agents;
-  const agent = agentArr.slice().reverse().find(a => a.id === agentId);
-  if (agent) {
-    unregisterPane(agent.paneId);
-    tmux.killPane(agent.paneId);
-  }
-
-  const windowId = getWindowId(sessionId);
-  if (windowId) tmux.selectLayout(windowId);
-
   return allAgentsDone(session);
 }
 
