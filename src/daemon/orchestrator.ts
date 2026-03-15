@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { contextDir, goalPath, logsPath, planPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
+import { contextDir, goalPath, logsPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
@@ -55,7 +55,7 @@ function formatStateForOrchestrator(session: Session): string {
   const cycleNum = session.orchestratorCycles.length;
 
   const ctxDir = contextDir(session.cwd, session.id);
-  const planFile = planPath(session.cwd, session.id);
+  const roadmapFile = roadmapPath(session.cwd, session.id);
   const logsFile = logsPath(session.cwd, session.id);
 
   // Context section: first cycle shows background context text; subsequent cycles show context dir files
@@ -135,8 +135,8 @@ function formatStateForOrchestrator(session: Session): string {
     mostRecentCycleSection = `\n### Most Recent Cycle\n\n<last-cycle>\n${agentBlocks}\n</last-cycle>\n`;
   }
 
-  // Plan section
-  const planRef = existsSync(planFile) ? `@${planFile}` : '(empty)';
+  // Roadmap section
+  const roadmapRef = existsSync(roadmapFile) ? `@${roadmapFile}` : '(empty)';
 
   // Worktree status — only if any agents have worktree info or worktree config exists
   const worktreeAgents = session.agents.filter(a => a.worktreePath);
@@ -161,23 +161,11 @@ function formatStateForOrchestrator(session: Session): string {
     worktreeSection = `\n\n## Git Worktrees\n\n${worktreeHint}${wtLines}`;
   }
 
-  // Discover available agent types
-  const agentPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
-  const agentTypes = discoverAgentTypes(agentPluginPath, session.cwd);
-  const agentTypeLines = agentTypes.length > 0
-    ? agentTypes.map(t => {
-        const modelTag = t.model ? ` (${t.model})` : '';
-        const desc = t.description ? ` — ${t.description}` : '';
-        return `- \`${t.qualifiedName}\`${modelTag}${desc}`;
-      }).join('\n')
-    : '  (none)';
-
   // Goal section: read from goal.md, fall back to session.task
   const goalFile = goalPath(session.cwd, session.id);
   const goalContent = existsSync(goalFile) ? readFileSync(goalFile, 'utf-8').trim() : session.task;
 
-  return `<state>
-## Goal
+  return `## Goal
 
 ${goalContent}
 ${contextSection}${messagesSection}
@@ -185,15 +173,10 @@ ${contextSection}${messagesSection}
 
 ${logsRef}
 ${previousCyclesSection}${mostRecentCycleSection}
-## Plan
+## Roadmap
 
-${planRef}
-${worktreeSection}
-
-## Available Agent Types
-
-${agentTypeLines}
-</state>`;
+${roadmapRef}
+${worktreeSection}`;
 }
 
 export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
@@ -206,10 +189,28 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const basePrompt = loadOrchestratorPrompt(cwd, mode);
   const formattedState = formatStateForOrchestrator(session);
 
-  // System prompt: template only (no state)
+  // Inject available agent types into system prompt
+  const agentPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
+  const agentTypes = discoverAgentTypes(agentPluginPath, session.cwd);
+
+  // Built-in Claude Code agents available via --agent flag
+  agentTypes.push(
+    { qualifiedName: 'Explore', source: 'bundled', model: 'haiku', description: 'Fast codebase exploration — find files, search code, answer questions about architecture. Use for research and context gathering.' },
+  );
+
+  const agentTypeLines = agentTypes.length > 0
+    ? agentTypes.map(t => {
+        const modelTag = t.model ? ` (${t.model})` : '';
+        const desc = t.description ? ` — ${t.description}` : '';
+        return `- \`${t.qualifiedName}\`${modelTag}${desc}`;
+      }).join('\n')
+    : '  (none)';
+  const systemPrompt = basePrompt.replace('{{AGENT_TYPES}}', agentTypeLines);
+
+  // System prompt: template + agent types (no state)
   const cycleNum = session.orchestratorCycles.length + 1;
   const promptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-system-${cycleNum}.md`;
-  writeFileSync(promptFilePath, basePrompt, 'utf-8');
+  writeFileSync(promptFilePath, systemPrompt, 'utf-8');
 
   sessionWindowMap.set(sessionId, windowId);
 
@@ -223,7 +224,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     `export PATH="${npmBinDir}:$PATH"`,
   ].join(' && ');
 
-  // User message: state block + contextual prompt
+  // User message: session state + contextual prompt
   let userPrompt = formattedState;
   if (message) {
     userPrompt += `\n\n## Continuation Instructions\n\nThe user resumed this session with new instructions: ${message}`;

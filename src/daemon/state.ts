@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { contextDir, goalPath, logsPath, planPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
+import { contextDir, goalPath, logsPath, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
 import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
-const PLAN_SEED = `---
+const ROADMAP_SEED = `---
 description: >
-  Living document of what still needs to happen. Write out ne
+  Living document tracking development phases and outstanding work.
 ---
 `;
 
@@ -47,19 +47,20 @@ function atomicWrite(filePath: string, data: string): void {
   renameSync(tmpPath, filePath);
 }
 
-export function createSession(id: string, task: string, cwd: string, context?: string): Session {
+export function createSession(id: string, task: string, cwd: string, context?: string, name?: string): Session {
   const dir = sessionDir(cwd, id);
   mkdirSync(dir, { recursive: true });
   mkdirSync(contextDir(cwd, id), { recursive: true });
   mkdirSync(promptsDir(cwd, id), { recursive: true });
 
-  writeFileSync(planPath(cwd, id), PLAN_SEED, 'utf-8');
+  writeFileSync(roadmapPath(cwd, id), ROADMAP_SEED, 'utf-8');
   writeFileSync(logsPath(cwd, id), LOGS_SEED, 'utf-8');
   writeFileSync(goalPath(cwd, id), task, 'utf-8');
   writeFileSync(join(contextDir(cwd, id), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
 
   const session: Session = {
     id,
+    ...(name ? { name } : {}),
     task,
     ...(context ? { context } : {}),
     cwd,
@@ -154,7 +155,7 @@ export async function continueSession(cwd: string, sessionId: string): Promise<v
       cycles[cycles.length - 1]!.completedAt = undefined;
     }
     saveSession(session);
-    writeFileSync(planPath(cwd, sessionId), '', 'utf-8');
+    writeFileSync(roadmapPath(cwd, sessionId), '', 'utf-8');
   });
 }
 
@@ -233,8 +234,8 @@ export function createSnapshot(cwd: string, sessionId: string, cycleNumber: numb
 
   copyFileSync(statePath(cwd, sessionId), join(dir, 'state.json'));
 
-  const plan = planPath(cwd, sessionId);
-  if (existsSync(plan)) copyFileSync(plan, join(dir, 'plan.md'));
+  const roadmap = roadmapPath(cwd, sessionId);
+  if (existsSync(roadmap)) copyFileSync(roadmap, join(dir, 'roadmap.md'));
 
   const logs = logsPath(cwd, sessionId);
   if (existsSync(logs)) copyFileSync(logs, join(dir, 'logs.md'));
@@ -255,9 +256,9 @@ export async function restoreSnapshot(cwd: string, sessionId: string, toCycle: n
     session.tmuxWindowId = undefined;
     atomicWrite(statePath(cwd, sessionId), JSON.stringify(session, null, 2));
 
-    // Restore plan.md and logs.md
-    const snapshotPlan = join(dir, 'plan.md');
-    if (existsSync(snapshotPlan)) copyFileSync(snapshotPlan, planPath(cwd, sessionId));
+    // Restore roadmap.md and logs.md
+    const snapshotRoadmap = join(dir, 'roadmap.md');
+    if (existsSync(snapshotRoadmap)) copyFileSync(snapshotRoadmap, roadmapPath(cwd, sessionId));
 
     const snapshotLogs = join(dir, 'logs.md');
     if (existsSync(snapshotLogs)) copyFileSync(snapshotLogs, logsPath(cwd, sessionId));

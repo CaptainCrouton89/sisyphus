@@ -69,8 +69,8 @@ export function contextDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'context');
 }
 
-export function planPath(cwd: string, sessionId: string): string {
-  return join(sessionDir(cwd, sessionId), 'plan.md');
+export function roadmapPath(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'roadmap.md');
 }
 
 export function goalPath(cwd: string, sessionId: string): string {
