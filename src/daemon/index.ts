@@ -2,6 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from '
 import { execSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { globalDir, daemonPidPath, statePath } from '../shared/paths.js';
+
+// Patch console to prepend timestamps in log output
+const ts = () => new Date().toISOString();
+const origLog = console.log.bind(console);
+const origError = console.error.bind(console);
+console.log = (...args: unknown[]) => origLog(`[${ts()}]`, ...args);
+console.error = (...args: unknown[]) => origError(`[${ts()}]`, ...args);
 import { loadConfig } from '../shared/config.js';
 import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry } from './server.js';
 import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrackedWindow } from './pane-monitor.js';
