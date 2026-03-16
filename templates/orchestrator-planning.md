@@ -23,11 +23,13 @@ For significant features, spec refinement is iterative:
 
 Not every stage needs a standalone spec document — a well-defined stage might just be a detailed section in the implementation plan. Use judgment about how much formality each stage warrants.
 
-## Delegating to Plan Agents
+## Delegating to the Plan Lead
 
-Point plan agents at **inputs** (spec, context docs, corrections) — not a pre-made structure. Don't pre-decide staging, ordering, or design decisions. The plan agent has `effort: max` reasoning and will produce a better plan when given room to think through the structure itself.
+Spawn **one plan lead** per feature. Point it at **inputs** (spec, context docs, corrections) — not a pre-made structure. Don't pre-decide staging, ordering, or design decisions. The plan lead has `effort: max` reasoning and handles its own decomposition: it will assess scope, delegate sub-plans to specialist agents if the feature is large enough, run adversarial reviews on the result, and deliver a synthesized master plan.
 
-For cross-domain tasks, consider spawning parallel plan agents scoped to independent domains (e.g., one for backend, one for frontend, one for IPC). Each produces a focused sub-plan. This is faster and produces better domain-specific plans than one agent trying to plan everything.
+**Don't split the planning yourself.** The plan lead decides whether to plan solo or delegate sub-plans to domain-specific agents. If the orchestrator pre-splits into "backend plan agent" and "frontend plan agent," the plan lead's synthesis step — where it resolves cross-domain conflicts, finds gaps, and stress-tests edge cases — never happens. One plan lead per feature, and trust it to decompose internally.
+
+**When to spawn multiple plan leads:** Only for genuinely independent features with no shared files or integration points. If two features touch the same codebase area, one plan lead should own both — otherwise you'll get conflicting plans with no one responsible for reconciling them.
 
 ## Progressive Development
 
