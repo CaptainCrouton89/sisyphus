@@ -30,8 +30,9 @@ import {
   openShellPopup,
   openInFileManager,
 } from './lib/tmux.js';
-import { wrapText, formatTime } from './lib/format.js';
+import { wrapText, formatTime, cleanMarkdown, stripFrontmatter } from './lib/format.js';
 import { goalPath, roadmapPath, sessionDir } from '../shared/paths.js';
+import { readFileSync, existsSync } from 'node:fs';
 import { loadConfig } from '../shared/config.js';
 import type { Request } from '../shared/protocol.js';
 import type { TreeNode } from './types/tree.js';
@@ -69,7 +70,7 @@ export function App({ cwd }: Props) {
   const prevNodesRef = useRef<TreeNode[]>([]);
 
   // Polling
-  const { sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, error } = usePolling(cwd, selectedSessionId);
+  const { sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, contextFiles, error } = usePolling(cwd, selectedSessionId);
 
   // Filter sessions for search
   const filteredSessions = useMemo(() => {
@@ -82,8 +83,8 @@ export function App({ cwd }: Props) {
 
   // Build tree from current state
   const nodes = useMemo(
-    () => buildTree(filteredSessions, selectedSession, expanded),
-    [filteredSessions, selectedSession, expanded],
+    () => buildTree(filteredSessions, selectedSession, expanded, cwd),
+    [filteredSessions, selectedSession, expanded, cwd],
   );
 
   // Track cursor node identity: update ref only when cursor moved (nodes stable),
@@ -357,6 +358,13 @@ export function App({ cwd }: Props) {
           }
         } else if (node.type === 'report') {
           setMode('report-detail');
+        } else if (node.type === 'context-file') {
+          const editor = resolveEditor(config.editor);
+          try {
+            openEditorPopup(cwd, editor, node.filePath);
+          } catch {
+            notify('Failed to open file in editor');
+          }
         }
       },
       onMessage: () => {
@@ -472,6 +480,15 @@ export function App({ cwd }: Props) {
       onRollback: () => {
         if (!selectedSessionId) { notify('No session selected'); return; }
         setMode('rollback');
+      },
+      onEdit: () => {
+        if (!cursorNode || cursorNode.type !== 'context-file') return;
+        const editor = resolveEditor(config.editor);
+        try {
+          openEditorPopup(cwd, editor, cursorNode.filePath);
+        } catch {
+          notify('Failed to open file in editor');
+        }
       },
     },
     mode === 'navigate',
@@ -730,6 +747,19 @@ export function App({ cwd }: Props) {
     [detailAgent],
   );
 
+  // Load context file content when cursor is on a context-file node
+  const contextFileContent = useMemo(() => {
+    if (!cursorNode || cursorNode.type !== 'context-file') return null;
+    try {
+      if (existsSync(cursorNode.filePath)) {
+        return readFileSync(cursorNode.filePath, 'utf-8');
+      }
+    } catch {
+      // file may be unreadable
+    }
+    return null;
+  }, [cursorNode]);
+
   // Right panel content — determined by cursor node type
   const renderDetailPanel = useCallback(
     (detailWidth: number, contentHeight: number) => {
@@ -932,6 +962,57 @@ export function App({ cwd }: Props) {
           );
         }
 
+        case 'context':
+          return (
+            <Box
+              flexDirection="column"
+              width={detailWidth}
+              borderStyle="round"
+              borderColor="gray"
+              paddingX={1}
+            >
+              <Text bold> <Text color="white">⊞</Text> Context ({contextFiles.length})</Text>
+              {contextFiles.length === 0 ? (
+                <Text dimColor>{'  '}No context files found.</Text>
+              ) : (
+                contextFiles.map((f) => (
+                  <Text key={f} dimColor>{'  · '}{f}</Text>
+                ))
+              )}
+            </Box>
+          );
+
+        case 'context-file': {
+          const fileLines = contextFileContent != null
+            ? wrapText(cleanMarkdown(stripFrontmatter(contextFileContent)), detailWidth - 8)
+            : [];
+          const viewableLines = contentHeight - 6;
+          return (
+            <Box
+              flexDirection="column"
+              width={detailWidth}
+              borderStyle="round"
+              borderColor="white"
+              paddingX={1}
+            >
+              <Text bold> <Text color="white">⊞</Text> {cursorNode.label}</Text>
+              <Text>{' '}</Text>
+              {contextFileContent == null ? (
+                <Text dimColor>{'  '}File not found or unreadable.</Text>
+              ) : fileLines.length === 0 ? (
+                <Text dimColor>{'  '}(empty)</Text>
+              ) : (
+                fileLines.slice(0, viewableLines).map((line, i) => (
+                  <Text key={i}>{'    '}{line}</Text>
+                ))
+              )}
+              {fileLines.length > viewableLines && (
+                <Text dimColor>{'    '}… {fileLines.length - viewableLines} more lines</Text>
+              )}
+            </Box>
+          );
+        }
+
         default:
           return (
             <SessionDetail
@@ -945,7 +1026,7 @@ export function App({ cwd }: Props) {
           );
       }
     },
-    [cursorNode, session, planContent, goalContent, logsContent, paneAlive, agents, mode, reportAgent, reportBlocks, detailReportBlocks, handleCancel, detailScrollOffset, focusPane],
+    [cursorNode, session, planContent, goalContent, logsContent, paneAlive, agents, mode, reportAgent, reportBlocks, detailReportBlocks, handleCancel, detailScrollOffset, focusPane, contextFiles, contextFileContent],
   );
 
   return (
@@ -1001,6 +1082,7 @@ export function App({ cwd }: Props) {
         detailFocused={focusPane === 'detail'}
         logsFocused={focusPane === 'logs'}
         showLogs={showLogs}
+        cursorNodeType={cursorNode?.type}
       />
 
       <LeaderOverlay mode={mode} rows={rows} cols={cols} />

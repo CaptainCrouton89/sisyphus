@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { send } from '../lib/client.js';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { goalPath, logsDir, roadmapPath } from '../../shared/paths.js';
+import { goalPath, logsDir, roadmapPath, contextDir } from '../../shared/paths.js';
 import { windowExists } from '../lib/tmux.js';
 import type { Session } from '../../shared/types.js';
 
@@ -28,6 +28,7 @@ export interface PollingState {
   logsContent: string;
   logsCycles: CycleLog[];
   paneAlive: boolean;
+  contextFiles: string[];
   error: string | null;
 }
 
@@ -44,6 +45,7 @@ export function usePolling(
     logsContent: '',
     logsCycles: [],
     paneAlive: true,
+    contextFiles: [],
     error: null,
   });
 
@@ -66,6 +68,7 @@ export function usePolling(
       let logsContent = '';
       let logsCycles: CycleLog[] = [];
       let paneAlive = true;
+      let contextFiles: string[] = [];
 
       if (selectedIdRef.current) {
         const statusRes = await send({ type: 'status', sessionId: selectedIdRef.current, cwd });
@@ -115,10 +118,19 @@ export function usePolling(
         } catch {
           // logs may not exist yet
         }
+
+        try {
+          const cd = contextDir(cwd, selectedIdRef.current);
+          if (existsSync(cd)) {
+            contextFiles = readdirSync(cd).filter(f => !f.startsWith('.')).sort();
+          }
+        } catch {
+          // context dir may not exist yet
+        }
       }
 
       if (mountedRef.current) {
-        setState({ sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, error: null });
+        setState({ sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, contextFiles, error: null });
       }
     } catch (err) {
       if (mountedRef.current) {

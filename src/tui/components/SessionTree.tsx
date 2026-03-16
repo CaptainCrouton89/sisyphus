@@ -163,5 +163,21 @@ function renderNodeContent(
         dim: true,
       };
     }
+    case 'context':
+      return {
+        icon: '⊞',
+        label: `Context (${node.fileCount})`,
+        meta: '',
+        color: 'white',
+        dim: node.fileCount === 0,
+      };
+    case 'context-file':
+      return {
+        icon: '·',
+        label: node.label,
+        meta: '',
+        color: 'gray',
+        dim: false,
+      };
   }
 }

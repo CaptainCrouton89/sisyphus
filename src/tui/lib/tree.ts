@@ -1,3 +1,5 @@
+import { readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type {
   TreeNode,
   SessionTreeNode,
@@ -6,10 +8,13 @@ import type {
   ReportTreeNode,
   MessagesTreeNode,
   MessageTreeNode,
+  ContextTreeNode,
+  ContextFileTreeNode,
 } from '../types/tree.js';
 import type { Session } from '../../shared/types.js';
 import type { SessionSummary } from '../hooks/usePolling.js';
 import { windowExists } from './tmux.js';
+import { contextDir } from '../../shared/paths.js';
 
 /** Sort priority: active+open=0, active+closed=1, paused+open=2, paused+closed=3, completed=4 */
 function sessionSortKey(s: SessionSummary): number {
@@ -24,6 +29,7 @@ export function buildTree(
   sessions: SessionSummary[],
   selectedSession: Session | null,
   expanded: Set<string>,
+  cwd: string,
 ): TreeNode[] {
   const nodes: TreeNode[] = [];
 
@@ -173,6 +179,47 @@ export function buildTree(
             timestamp: msg.timestamp,
           } satisfies MessageTreeNode);
         }
+      }
+    }
+
+    // Context group
+    const ctxDir = contextDir(cwd, s.id);
+    let contextFiles: string[] = [];
+    try {
+      if (existsSync(ctxDir)) {
+        contextFiles = readdirSync(ctxDir).filter(
+          (f) => !f.startsWith('.'),
+        ).sort();
+      }
+    } catch {
+      // context dir may not exist
+    }
+
+    const ctxNodeId = `context:${s.id}`;
+    const ctxExpanded = expanded.has(ctxNodeId);
+
+    nodes.push({
+      id: ctxNodeId,
+      type: 'context',
+      depth: 1,
+      expandable: contextFiles.length > 0,
+      expanded: ctxExpanded && contextFiles.length > 0,
+      sessionId: s.id,
+      fileCount: contextFiles.length,
+    } satisfies ContextTreeNode);
+
+    if (ctxExpanded && contextFiles.length > 0) {
+      for (const filename of contextFiles) {
+        nodes.push({
+          id: `context-file:${s.id}:${filename}`,
+          type: 'context-file',
+          depth: 2,
+          expandable: false,
+          expanded: false,
+          sessionId: s.id,
+          label: filename,
+          filePath: join(ctxDir, filename),
+        } satisfies ContextFileTreeNode);
       }
     }
   }

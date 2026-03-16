@@ -1,4 +1,4 @@
-export type TreeNodeType = 'session' | 'cycle' | 'agent' | 'report' | 'messages' | 'message';
+export type TreeNodeType = 'session' | 'cycle' | 'agent' | 'report' | 'messages' | 'message' | 'context' | 'context-file';
 
 interface BaseTreeNode {
   id: string;
@@ -66,10 +66,25 @@ export interface MessageTreeNode extends BaseTreeNode {
   timestamp: string;
 }
 
+export interface ContextTreeNode extends BaseTreeNode {
+  type: 'context';
+  depth: 1;
+  fileCount: number;
+}
+
+export interface ContextFileTreeNode extends BaseTreeNode {
+  type: 'context-file';
+  depth: 2;
+  label: string;
+  filePath: string;
+}
+
 export type TreeNode =
   | SessionTreeNode
   | CycleTreeNode
   | AgentTreeNode
   | ReportTreeNode
   | MessagesTreeNode
-  | MessageTreeNode;
+  | MessageTreeNode
+  | ContextTreeNode
+  | ContextFileTreeNode;

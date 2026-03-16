@@ -1,15 +1,17 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { InputMode } from './InputBar.js';
+import type { TreeNodeType } from '../types/tree.js';
 
 interface Props {
   mode: InputMode;
   detailFocused?: boolean;
   logsFocused?: boolean;
   showLogs?: boolean;
+  cursorNodeType?: TreeNodeType;
 }
 
-export function StatusLine({ mode, detailFocused = false, logsFocused = false, showLogs = false }: Props) {
+export function StatusLine({ mode, detailFocused = false, logsFocused = false, showLogs = false, cursorNodeType }: Props) {
   if (mode === 'report-detail') {
     return null;
   }
@@ -137,6 +139,7 @@ export function StatusLine({ mode, detailFocused = false, logsFocused = false, s
       <Text bold>[↑↓]</Text><Text dimColor> navigate  </Text>
       <Text bold>[←→]</Text><Text dimColor> collapse/expand  </Text>
       <Text dimColor>│ </Text>
+      {cursorNodeType === 'context-file' && <><Text bold>[e]</Text><Text dimColor>dit  </Text><Text bold>[⏎]</Text><Text dimColor> open  </Text></>}
       <Text bold>[space]</Text><Text dimColor> leader  </Text>
       <Text bold>[tab]</Text><Text dimColor> detail  </Text>
       <Text bold>[l]</Text><Text dimColor>{showLogs ? 'ogs hide' : 'ogs show'}  </Text>

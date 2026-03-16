@@ -23,6 +23,7 @@ export interface KeybindingHandlers {
   onRestartAgent: () => void;
   onRollback: () => void;
   onToggleLogs: () => void;
+  onEdit: () => void;
 }
 
 export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean): void {
@@ -50,6 +51,7 @@ export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean):
       if (input === 'x') { handlers.onRestartAgent(); return; }
       if (input === 'b') { handlers.onRollback(); return; }
       if (input === 'l') { handlers.onToggleLogs(); return; }
+      if (input === 'e') { handlers.onEdit(); return; }
     },
     { isActive },
   );
