@@ -173,6 +173,12 @@ function buildLines(
     );
     const reversedCycles = [...cycles].reverse(); // newest first in display
 
+    // Strip namespace prefix for compact display (e.g., "devcore:programmer" → "programmer")
+    const shortType = (t: string) => {
+      const colonIdx = t.indexOf(':');
+      return colonIdx >= 0 ? t.slice(colonIdx + 1) : t;
+    };
+
     for (let i = 0; i < reversedCycles.length; i++) {
       const cycle = reversedCycles[i]!;
       const olderCycle = reversedCycles[i + 1]; // chronologically prior
@@ -188,28 +194,52 @@ function buildLines(
       const n = cycle.agentsSpawned.length;
       const startTime = formatTime(cycle.timestamp);
 
-      // For cycles with 1–2 agents, show agent type inline instead of just "N agents"
-      const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
-      const agentDetail =
-        cycleAgents.length === 1
-          ? truncate(cycleAgents[0]!.agentType || cycleAgents[0]!.name, 14)
-          : cycleAgents.length === 2
-            ? cycleAgents.map((a) => truncate(a.agentType || a.name, 10)).join(' + ')
-            : `${n} agent${n !== 1 ? 's' : ''}`;
+      // Compact mode label
+      const modeLabel = cycle.mode
+        ? cycle.mode === 'implementation' ? 'impl'
+          : cycle.mode === 'planning' ? 'plan'
+          : cycle.mode
+        : '';
+      const cycModeColor = cycle.mode === 'planning' ? 'blue' : cycle.mode === 'implementation' ? 'green' : 'cyan';
 
-      const row: DetailLine = [
+      const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
+
+      // Padded fields for column alignment
+      const cyclePad = `C${cycle.cycle}`.padEnd(4);
+      const durPad = (isRunning ? 'running' : duration).padEnd(9);
+
+      // Line 1: cycle metadata
+      const headerRow: DetailLine = [
         seg(`  ${dot} `, { color: dotColor }),
-        seg(`C${cycle.cycle}`, { bold: isRunning || isNewest, dim: rowDim }),
-        seg('  ', {}),
+        seg(cyclePad, { bold: isRunning || isNewest, dim: rowDim }),
         ...(isRunning
-          ? [seg('running', { color: 'green', bold: true })]
-          : [seg(duration, { dim: rowDim })]),
-        seg('  ·  ', { dim: true }),
-        seg(agentDetail, { dim: rowDim }),
-        ...(cycle.mode ? [seg('  ·  ', { dim: true }), seg(cycle.mode, { color: cycle.mode === 'planning' ? 'blue' : cycle.mode === 'implementation' ? 'green' : 'cyan' })] : []),
-        seg(`  ${startTime}`, { dim: true }),
+          ? [seg(durPad, { color: 'green', bold: true })]
+          : [seg(durPad, { dim: rowDim })]),
+        seg(startTime, { dim: true }),
+        ...(modeLabel ? [seg('  ', {}), seg(modeLabel, { color: cycModeColor })] : []),
       ];
-      lines.push(row);
+      lines.push(headerRow);
+
+      // Line 2: agent detail — full names, grouped by type
+      if (cycleAgents.length > 0) {
+        const typeGroups = new Map<string, number>();
+        for (const a of cycleAgents) {
+          const t = shortType(a.agentType || a.name || a.id);
+          typeGroups.set(t, (typeGroups.get(t) ?? 0) + 1);
+        }
+        const agentNames = [...typeGroups.entries()]
+          .map(([t, count]) => count > 1 ? `${count}× ${t}` : t)
+          .join(', ');
+        lines.push([
+          seg('      ', {}),
+          seg(truncate(agentNames, contentWidth - 6), { dim: rowDim }),
+        ]);
+      } else if (n > 0) {
+        lines.push([
+          seg('      ', {}),
+          seg(`${n} agent${n !== 1 ? 's' : ''}`, { dim: rowDim }),
+        ]);
+      }
 
       // Messages that fed into this cycle: sent after the prior cycle started, before this one
       const cycleTime = new Date(cycle.timestamp).getTime();

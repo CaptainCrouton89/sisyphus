@@ -108,7 +108,8 @@ function renderNodeContent(
         ? formatDuration(node.timestamp, node.completedAt)
         : 'running';
       const agents = `${node.agentCount} agent${node.agentCount !== 1 ? 's' : ''}`;
-      const mode = node.mode ? ` · ${node.mode}` : '';
+      const modeShort = node.mode === 'implementation' ? 'impl' : node.mode === 'planning' ? 'plan' : node.mode;
+      const mode = modeShort ? ` · ${modeShort}` : '';
       return {
         icon: isRunning ? '●' : '○',
         label: `C${node.cycleNumber}`,
