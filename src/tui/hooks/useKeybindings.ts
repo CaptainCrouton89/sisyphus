@@ -9,7 +9,6 @@ export interface KeybindingHandlers {
   onSpace: () => void;
   onTab: () => void;
   onMessage: () => void;
-  onKill: () => void;
   onGoToWindow: () => void;
   onEditGoal: () => void;
   onNewSession: () => void;
@@ -17,7 +16,6 @@ export interface KeybindingHandlers {
   onOpenPlan: () => void;
   onQuit: () => void;
   onReRun: () => void;
-  onJumpToPane: () => void;
   onResume: () => void;
   onContinue: () => void;
   onRestartAgent: () => void;
@@ -36,8 +34,13 @@ export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean):
       if (key.return) { handlers.onEnter(); return; }
       if (key.tab) { handlers.onTab(); return; }
       if (input === ' ') { handlers.onSpace(); return; }
+      // vim-style tree navigation
+      if (input === 'h') { handlers.onLeft(); return; }
+      if (input === 'j') { handlers.onMoveDown(); return; }
+      if (input === 'k') { handlers.onMoveUp(); return; }
+      if (input === 'l') { handlers.onRight(); return; }
+      if (input === 't') { handlers.onToggleLogs(); return; }
       if (input === 'm') { handlers.onMessage(); return; }
-      if (input === 'k') { handlers.onKill(); return; }
       if (input === 'w') { handlers.onGoToWindow(); return; }
       if (input === 'g') { handlers.onEditGoal(); return; }
       if (input === 'n') { handlers.onNewSession(); return; }
@@ -45,12 +48,10 @@ export function useKeybindings(handlers: KeybindingHandlers, isActive: boolean):
       if (input === 'p') { handlers.onOpenPlan(); return; }
       if (input === 'q') { handlers.onQuit(); return; }
       if (input === 'r') { handlers.onReRun(); return; }
-      if (input === 'j') { handlers.onJumpToPane(); return; }
       if (input === 'R') { handlers.onResume(); return; }
       if (input === 'C') { handlers.onContinue(); return; }
       if (input === 'x') { handlers.onRestartAgent(); return; }
       if (input === 'b') { handlers.onRollback(); return; }
-      if (input === 'l') { handlers.onToggleLogs(); return; }
       if (input === 'e') { handlers.onEdit(); return; }
     },
     { isActive },

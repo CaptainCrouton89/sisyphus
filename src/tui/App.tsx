@@ -382,18 +382,7 @@ export function App({ cwd }: Props) {
           notify('Failed to open editor');
         }
       },
-      onKill: () => {
-        if (!selectedSessionId) { notify('No session selected'); return; }
-        const node = nodes[cursorIndex];
-        if (node && (node.type === 'agent' || node.type === 'report')) {
-          const agentId = node.agentId;
-          const agent = agents.find(a => a.id === agentId);
-          if (agent?.status !== 'running') { notify(`Agent ${agentId} is not running`); return; }
-          sendAndNotify({ type: 'kill-agent', sessionId: selectedSessionId, agentId }, `Killed ${agentId}`);
-        } else {
-          sendAndNotify({ type: 'kill', sessionId: selectedSessionId }, 'Session killed');
-        }
-      },
+      // kill moved to leader menu (space k)
       onGoToWindow: () => {
         if (!session?.tmuxWindowId) { notify('No tmux window'); return; }
         if (session.tmuxSessionName) switchToSession(session.tmuxSessionName);
@@ -452,13 +441,7 @@ export function App({ cwd }: Props) {
           instruction: agent.instruction,
         }, `Re-spawned ${agent.name}`);
       },
-      onJumpToPane: () => {
-        const agent = getAgentForNode(cursorNode);
-        if (!agent?.paneId) { notify('Select an agent with an active pane'); return; }
-        if (session?.tmuxSessionName) switchToSession(session.tmuxSessionName);
-        if (session?.tmuxWindowId) selectWindow(session.tmuxWindowId);
-        selectPane(agent.paneId);
-      },
+      // jump-to-pane moved to leader menu (space j)
       onResume: () => {
         if (!selectedSessionId) { notify('No session selected'); return; }
         if (session?.status === 'active' && paneAlive) { notify('Session already active'); return; }
@@ -621,6 +604,35 @@ export function App({ cwd }: Props) {
         setMode('shell-command');
         break;
       }
+
+      case 'jump-to-pane': {
+        const agent = getAgentForNode(cursorNode);
+        if (!agent?.paneId) { notify('Select an agent with an active pane'); setMode('navigate'); break; }
+        if (session?.tmuxSessionName) switchToSession(session.tmuxSessionName);
+        if (session?.tmuxWindowId) selectWindow(session.tmuxWindowId);
+        selectPane(agent.paneId);
+        setMode('navigate');
+        break;
+      }
+
+      case 'kill': {
+        if (!selectedSessionId) { notify('No session selected'); setMode('navigate'); break; }
+        const node = nodes[cursorIndex];
+        if (node && (node.type === 'agent' || node.type === 'report')) {
+          const agentId = node.agentId;
+          const agent = agents.find(a => a.id === agentId);
+          if (agent?.status !== 'running') { notify(`Agent ${agentId} is not running`); setMode('navigate'); break; }
+          sendAndNotify({ type: 'kill-agent', sessionId: selectedSessionId, agentId }, `Killed ${agentId}`);
+        } else {
+          sendAndNotify({ type: 'kill', sessionId: selectedSessionId }, 'Session killed');
+        }
+        setMode('navigate');
+        break;
+      }
+
+      case 'quit':
+        exit();
+        break;
 
       case 'dismiss':
         setMode('navigate');

@@ -16,6 +16,9 @@ export type LeaderAction =
   | { type: 'message-agent' }
   | { type: 'help' }
   | { type: 'shell-command' }
+  | { type: 'jump-to-pane' }
+  | { type: 'kill' }
+  | { type: 'quit' }
   | { type: 'dismiss' };
 
 export function useLeaderKey(mode: InputMode, onAction: (action: LeaderAction) => void): void {
@@ -31,6 +34,9 @@ export function useLeaderKey(mode: InputMode, onAction: (action: LeaderAction) =
       if (input === 'm') { onAction({ type: 'message-agent' }); return; }
       if (input === '?') { onAction({ type: 'help' }); return; }
       if (input === '!') { onAction({ type: 'shell-command' }); return; }
+      if (input === 'j') { onAction({ type: 'jump-to-pane' }); return; }
+      if (input === 'k') { onAction({ type: 'kill' }); return; }
+      if (input === 'q') { onAction({ type: 'quit' }); return; }
       const digit = parseInt(input, 10);
       if (!isNaN(digit) && digit >= 1 && digit <= 9) {
         onAction({ type: 'jump-to-session', index: digit });

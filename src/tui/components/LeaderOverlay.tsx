@@ -9,7 +9,7 @@ interface Props {
 }
 
 const LEADER_WIDTH = 26;
-const LEADER_HEIGHT = 16; // 14 lines + 2 border
+const LEADER_HEIGHT = 19; // 17 lines + 2 border
 const COPY_HEIGHT = 9;    // 7 lines + 2 border
 // Full inner width between left and right border chars
 const INNER = LEADER_WIDTH - 2;
@@ -41,6 +41,9 @@ export function LeaderOverlay({ mode, rows, cols }: Props) {
         <Text>{pad('  m  message agent')}</Text>
         <Text>{pad('  /  search')}</Text>
         <Text>{pad('  !  shell command')}</Text>
+        <Text>{pad('  j  jump to pane')}</Text>
+        <Text>{pad('  k  kill session/agent')}</Text>
+        <Text>{pad('  q  quit')}</Text>
         <Text>{pad('  ?  help')}</Text>
         <Text>{pad(' 1-9  jump to session')}</Text>
         <Text>{pad(' ')}</Text>
