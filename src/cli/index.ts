@@ -20,6 +20,7 @@ import { registerRestartAgent } from './commands/restart-agent.js';
 import { registerSetupKeybind } from './commands/setup-keybind.js';
 import { registerDoctor } from './commands/doctor.js';
 import { registerCompanionContext } from './commands/companion-context.js';
+import { registerGettingStarted } from './commands/getting-started.js';
 
 const program = new Command();
 
@@ -49,6 +50,7 @@ registerRestartAgent(program);
 registerSetupKeybind(program);
 registerDoctor(program);
 registerCompanionContext(program);
+registerGettingStarted(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

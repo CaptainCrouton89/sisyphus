@@ -112,34 +112,16 @@ function printGettingStarted(keybindResult: SetupResult): void {
     '',
     'Sisyphus installed — daemon running via launchd.',
     '',
-    'Sisyphus is a tmux-integrated orchestration daemon for Claude Code multi-agent workflows.',
-    'A background daemon manages sessions where an orchestrator Claude breaks tasks into',
-    'subtasks, spawns agent Claude instances in tmux panes, and coordinates their lifecycle.',
-    '',
-    'Quick start:',
-    '  sisyphus start "task description"   Start a session (must be inside tmux)',
-    '  sisyphus list                        List sessions',
-    '  sisyphus status                      Show current session status',
-    '  sisyphus kill <id>                   Kill a session',
-    '',
-    'Monitoring:',
-    '  sisyphus dashboard                   Open TUI dashboard',
-    '  tail -f ~/.sisyphus/daemon.log       Watch daemon logs',
-    '',
   ];
 
   if (keybindResult.status === 'installed') {
-    lines.push(`Tmux keybind: ${keybindResult.message}`);
+    lines.push(`Tmux keybind: ${keybindResult.message}`, '');
   } else if (keybindResult.status === 'conflict') {
-    lines.push(`Keybind: ${keybindResult.message}`);
+    lines.push(`Keybind: ${keybindResult.message}`, '');
   }
 
   lines.push(
-    '',
-    'Troubleshooting:',
-    '  sisyphus doctor                      Check installation health',
-    '  sisyphus setup-keybind [key]         Configure tmux session-cycling keybind',
-    '  sisyphus uninstall [--purge]         Remove daemon and optionally all data',
+    'Run `sisyphus getting-started` for a complete usage guide.',
     '',
   );
 

@@ -9,6 +9,15 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+function isTmuxInstalled(): boolean {
+  try {
+    execSync('which tmux', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function registerStart(program: Command): void {
   program
     .command('start')
@@ -18,6 +27,13 @@ export function registerStart(program: Command): void {
     .option('-n, --name <name>', 'Human-readable name for the session')
     .action(async (task: string, opts: { context?: string; name?: string }) => {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+
+      if (!process.env['TMUX'] && isTmuxInstalled()) {
+        console.log('Note: Sisyphus uses tmux to manage agent panes.');
+        console.log('It is highly recommended to run sisyphus from inside a tmux session.');
+        console.log('  tmux new-session');
+        console.log('');
+      }
       const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name };
       const response = await sendRequest(request);
       if (response.ok) {
