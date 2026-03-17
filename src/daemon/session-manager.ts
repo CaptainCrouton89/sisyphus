@@ -10,6 +10,7 @@ import { sessionDir, sessionsDir } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
+import { sendTerminalNotification } from './notify.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -195,10 +196,18 @@ const orchestratorDone = new Set<string>();
 export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string): void {
   if (pendingRespawns.has(sessionId)) return;
 
-  // Don't respawn while the orchestrator is still running — wait for yield
+  // Don't respawn while the orchestrator is still running — wait for yield.
+  // Also check persisted state: if the last cycle has completedAt, the orchestrator
+  // already yielded (e.g., before a daemon restart wiped in-memory state).
   if (!orchestratorDone.has(sessionId)) {
-    console.log(`[sisyphus] All agents done for session ${sessionId}, waiting for orchestrator to yield`);
-    return;
+    const session = state.getSession(cwd, sessionId);
+    const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+    if (lastCycle?.completedAt) {
+      orchestratorDone.add(sessionId);
+    } else {
+      console.log(`[sisyphus] All agents done for session ${sessionId}, waiting for orchestrator to yield`);
+      return;
+    }
   }
 
   const session = state.getSession(cwd, sessionId);
@@ -516,6 +525,10 @@ export async function handlePaneExited(
     const agent = session.agents.find(a => a.id === agentId);
     if (!agent || agent.status !== 'running') return;
 
+    // Agent exited without calling `sisyphus submit`
+    const label = agent.name ? `${agent.name} (${agentId})` : agentId;
+    sendTerminalNotification('Sisyphus', `Agent ${label} exited without submitting a report`);
+
     const allDone = await handleAgentKilled(cwd, sessionId, agentId, 'pane exited');
     if (allDone) {
       const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
@@ -525,6 +538,8 @@ export async function handlePaneExited(
     }
   } else if (role === 'orchestrator') {
     // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
+    const sessionName = session.name ?? sessionId.slice(0, 8);
+    sendTerminalNotification('Sisyphus', `Orchestrator exited without yielding (${sessionName})`);
     orchestratorDone.add(sessionId);
     const hasRunningAgents = session.agents.some(a => a.status === 'running');
     if (!hasRunningAgents && session.agents.length > 0) {
