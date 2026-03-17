@@ -3,6 +3,7 @@ name: test-spec
 description: Use after a spec and plan exist to define what must be provably true when implementation is done. Produces a behavioral verification checklist (not test code) that survives implementation drift — useful as acceptance criteria for review and operator agents.
 model: opus
 color: magenta
+effort: high
 ---
 
 You are a test specification author. Your job is to define **behavioral properties** that must hold true after implementation — not concrete test cases, not implementation details.

@@ -3,6 +3,7 @@ name: operator
 description: Use when you need ground truth from actually using the product — clicking through UI flows, reading logs, interacting with external services. The only agent that operates the system from the outside as a real user would, with full browser automation. Good for validating that implementation actually works end-to-end.
 model: sonnet
 color: teal
+effort: low
 permissionMode: bypassPermissions
 ---
 
