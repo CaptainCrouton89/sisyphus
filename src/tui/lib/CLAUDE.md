@@ -1,13 +1,14 @@
 # src/tui/lib
 
-**TUI library utilities** — formatting, rendering, tree structures, and daemon communication.
+**TUI library utilities** — formatting, rendering, tree structures, daemon communication, and Claude companion context.
 
 ## Organization
 
 - **format.ts** — Display utilities: duration/time formatting, markdown stripping/cleaning, text truncation, status indicators, text wrapping, frontmatter removal
 - **tree.ts** — Session tree building: sorts sessions (active+open → completed), expands cycles/agents/reports on demand
 - **tree-render.ts** — ASCII rendering: box-drawing connectors (│, ├─, └─), expand indicators (▸, ▼)
-- **tmux.ts** — tmux wrappers: window/pane selection, editor/companion popups, terminal editor detection
+- **tmux.ts** — tmux wrappers: window/pane selection, editor/companion popups, terminal editor detection, companion context building
+- **context.ts** — XML context builders: generates session/agent/report context for Claude companion prompt (filters, escapes, aggregates state)
 - **client.ts** — Daemon socket client: sends JSON requests, 5s timeout, line-delimited response
 - **reports.ts** — Agent reports: loads report files, handles missing files gracefully
 
@@ -44,11 +45,25 @@
 - Prefix building happens per-node: builds ancestor chain (│ or space per depth), then connector (├─ or └─), then expand indicator (▸ or ▼)
 - Last-sibling detection scans forward for same depth (no following sibling = last)
 
+### Claude Companion Context (context.ts)
+- **XML format**: `<sessions>`, `<session>`, `<agents>`, `<agent>`, `<reports>`, `<completion-report>`
+- **buildCompanionContext()** — Aggregates all recent sessions (completed sessions filtered: 7 days)
+  - Per session: task, status, created time, cycle count, agent counts by status, goal (first meaningful line), roadmap unchecked todos (up to 5)
+  - Used in dashboard companion popup for high-level context
+- **buildSessionContext()** — Full context for an active session
+  - Per agent: id, name, agentType, status, instruction, all report blocks (chronological), completion report
+  - Per cycle: cycle number, mode, agents spawned
+  - Includes goal + roadmap as raw markdown
+  - Used in companion popup for detailed session management
+- **escapeXml()** — Escapes `&`, `<`, `>`, `"` for safe XML embedding
+- **readFileSafe()** — Reads files gracefully, returns null on any error (missing files, permission errors)
+
 ### Tmux Integration
 - Custom ENV augments PATH to include Homebrew bins (`/opt/homebrew/bin:/usr/local/bin`)
 - **execSafe()** suppresses stderr (stdio: ['pipe', 'pipe', 'pipe']) for non-critical checks like `windowExists()`
+- **openCompanionPopup()** — Loads `dist/templates/dashboard-claude.md`, renders `{{CWD}}` + `{{SESSIONS_CONTEXT}}`, spawns Claude companion with `-E` flag (close on exit)
 - **openEditorPopup()** detects terminal editors (vim, nvim, nano, etc.) and uses tmux popup; GUI editors run directly
-- **openCompanionPopup()** loads dashboard template from `dist/templates/dashboard-claude.md`, renders {{CWD}}, spawns Claude in popup
+- **shellQuote()** — Single-quote escaping for safe tmux send-keys
 
 ### Daemon Client
 - Connects to Unix socket (`socketPath()`), writes JSON request + newline, reads single-line JSON response
@@ -62,3 +77,6 @@
 - tmux commands fail silently (execSafe) in most cases — check window existence before operations
 - Truncation always aims for word boundaries, falls back to hard limit if none found in reasonable range (0.6x of max)
 - `stripMarkdown()` collapses all whitespace to single spaces (lossy); `cleanMarkdown()` preserves line structure
+- Companion context XML must escape all user-provided content — use `escapeXml()` for all agent.name, session.task, report content, etc.
+- Completed sessions in companion context filtered to 7-day window (prevents huge context on old projects)
+- File reads via `readFileSafe()` must handle missing files gracefully (goal.md, roadmap.md may not exist yet in new sessions)

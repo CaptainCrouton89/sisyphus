@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { globalDir } from '../../shared/paths.js';
+import { buildCompanionContext } from './context.js';
 
 const EXEC_ENV = {
   ...process.env,
@@ -50,7 +51,10 @@ export function openCompanionPopup(cwd: string): void {
     template = `You are a Sisyphus dashboard companion. Help the user manage multi-agent sessions.\nProject: ${cwd}\nRun \`sisyphus list\` and \`sisyphus status\` to see current state.`;
   }
 
-  const rendered = template.replace(/\{\{CWD\}\}/g, cwd);
+  const sessionsContext = buildCompanionContext(cwd);
+  const rendered = template
+    .replace(/\{\{CWD\}\}/g, cwd)
+    .replace(/\{\{SESSIONS_CONTEXT\}\}/g, sessionsContext);
   const promptPath = join(globalDir(), 'dashboard-companion-prompt.md');
   writeFileSync(promptPath, rendered, 'utf-8');
 

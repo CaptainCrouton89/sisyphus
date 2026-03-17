@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { goalPath, roadmapPath } from '../../shared/paths.js';
+import { readFileSync, readdirSync } from 'node:fs';
+import { goalPath, roadmapPath, sessionsDir, statePath } from '../../shared/paths.js';
 import { resolveReports } from './reports.js';
-import type { Session } from '../../shared/types.js';
+import type { Session, AgentStatus } from '../../shared/types.js';
 
 function readFileSafe(filePath: string): string | null {
   try {
@@ -17,6 +17,91 @@ function escapeXml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+export function buildCompanionContext(cwd: string): string {
+  let sessionDirs: string[];
+  try {
+    sessionDirs = readdirSync(sessionsDir(cwd));
+  } catch {
+    return '<sessions>No sessions found.</sessions>';
+  }
+
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const sessionBlocks: string[] = [];
+
+  for (const sessionId of sessionDirs) {
+    const stateRaw = readFileSafe(statePath(cwd, sessionId));
+    if (!stateRaw) continue;
+
+    let session: Session;
+    try {
+      session = JSON.parse(stateRaw) as Session;
+    } catch {
+      continue;
+    }
+
+    // Skip completed sessions older than 7 days
+    if (session.status === 'completed' && session.completedAt) {
+      if (now - new Date(session.completedAt).getTime() > sevenDaysMs) continue;
+    }
+
+    const lines: string[] = [];
+    const nameAttr = session.name ? ` name="${escapeXml(session.name)}"` : '';
+    lines.push(`  <session id="${escapeXml(session.id)}"${nameAttr} status="${escapeXml(session.status)}">`);
+    lines.push(`    <task>${escapeXml(session.task)}</task>`);
+    lines.push(`    <created>${escapeXml(session.createdAt)}</created>`);
+    lines.push(`    <cycles>${session.orchestratorCycles.length}</cycles>`);
+
+    if (session.status === 'completed') {
+      if (session.completionReport) {
+        const snippet = session.completionReport.slice(0, 300).replace(/\n+/g, ' ').trim();
+        lines.push(`    <completion-report>${escapeXml(snippet)}${session.completionReport.length > 300 ? '…' : ''}</completion-report>`);
+      }
+    } else {
+      // Agent summary by status
+      if (session.agents.length > 0) {
+        const counts = new Map<AgentStatus, number>();
+        for (const agent of session.agents) {
+          counts.set(agent.status, (counts.get(agent.status) ?? 0) + 1);
+        }
+        const summary = [...counts.entries()].map(([status, n]) => `${n} ${status}`).join(', ');
+        lines.push(`    <agents>${escapeXml(summary)}</agents>`);
+      }
+
+      // Goal: first meaningful line
+      const goalContent = readFileSafe(goalPath(cwd, session.id));
+      if (goalContent) {
+        const firstLine = goalContent.split('\n').map(l => l.trim()).find(l => l.length > 0 && !l.startsWith('#'));
+        if (firstLine) lines.push(`    <goal>${escapeXml(firstLine)}</goal>`);
+      }
+
+      // Roadmap unchecked todos (up to 5)
+      const roadmapContent = readFileSafe(roadmapPath(cwd, session.id));
+      if (roadmapContent) {
+        const todos = roadmapContent
+          .split('\n')
+          .filter(l => l.includes('- [ ]'))
+          .slice(0, 5)
+          .map(l => l.trim());
+        if (todos.length > 0) {
+          lines.push('    <todos>');
+          for (const todo of todos) lines.push(`      ${escapeXml(todo)}`);
+          lines.push('    </todos>');
+        }
+      }
+    }
+
+    lines.push('  </session>');
+    sessionBlocks.push(lines.join('\n'));
+  }
+
+  if (sessionBlocks.length === 0) {
+    return '<sessions>No sessions found.</sessions>';
+  }
+
+  return ['<sessions>', ...sessionBlocks, '</sessions>'].join('\n');
 }
 
 export function buildSessionContext(session: Session, cwd: string): string {

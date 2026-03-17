@@ -8,6 +8,7 @@ System prompt templates for orchestrator and agent initialization.
 - **orchestrator-planning.md** — Planning-phase orchestrator guidance. Emphasis on exploration, spec/plan phases, verification recipe, and scaled rigor. Appended when `--mode planning` (default).
 - **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, verification patterns, and worktree preferences. Appended when `--mode implementation`.
 - **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}`, `{{INSTRUCTION}}`, and `{{WORKTREE_CONTEXT}}` placeholders. Rendered once per agent spawn.
+- **dashboard-claude.md** — Dashboard companion prompt. Guides a Claude instance embedded in the TUI to help users manage sessions. Contains `{{CWD}}` and `{{SESSIONS_CONTEXT}}` placeholders.
 - **banner.txt** — ASCII banner (cosmetic).
 
 ## Configuration Files
