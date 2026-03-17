@@ -42,58 +42,12 @@ Not all tasks need the same process depth. A 2-file bug fix can go straight to i
 
 Signs you need phased development: the task touches multiple unfamiliar subsystems, the task description spans different concerns (backend, frontend, IPC, etc.), or a spec exists with more than 3 distinct work areas.
 
-### How phased development works
-
-The roadmap tracks **development phases**, not implementation stages. A large feature's roadmap looks like:
-
-```markdown
-## Goal: Implement Worker System
-
-### Phases
-1. Research — explore architecture, conventions, constraints [current]
-2. Spec — validate/refine spec, align with user [outlined]
-3. Plan — break into implementation stages [outlined]
-4. Implement — execute stage-by-stage with review cycles [outlined]
-5. Validate — e2e verification [outlined]
-```
-
-Each phase expands when you enter it. Implementation stages only appear once Phase 3 (Plan) produces them — and they live in `context/`, not the roadmap itself.
-
-### Phase expansion
-
-When entering a new phase, expand it in the roadmap with concrete items:
-
-```markdown
-### Phase 1: Research (current)
-- [x] Core architecture exploration (scheduler, presets, routing)
-- [x] Agent IPC + runtime patterns
-- [ ] Gateway patterns (RTK Query, components)
-
-### Phase 3: Plan (current)
-- Implementation plan: see context/plan-implementation.md
-- [x] High-level stage outline
-- [ ] Detail-plan stage 1 (types + migration)
-- [ ] Review plan against spec
-```
-
-Future phases stay as one-liners until reached. What you learn in earlier phases informs how later phases get expanded.
-
 ### Implementation stages are context artifacts
 
 When Phase 3 (Plan) runs, it produces implementation stage breakdowns saved to `context/`:
 - `context/plan-implementation.md` — overall stage outline with dependencies
 - `context/plan-stage-1-types.md` — detailed plan for stage 1
 - `context/plan-stage-2-service.md` — detailed plan for stage 2 (written when stage 1 is underway)
-
-The roadmap references these but doesn't contain them. During Phase 4 (Implement), the roadmap tracks which stages are done:
-
-```markdown
-### Phase 4: Implement (current)
-See context/plan-implementation.md for stage breakdown.
-- [x] Stage 1: Types + migration — verified
-- [ ] Stage 2: Worker service — in progress (see context/plan-stage-2-service.md)
-- [ ] Stage 3: Gateway UI — outlined
-```
 
 ### Don't front-load phases
 

@@ -91,17 +91,13 @@ Example structure for a large feature:
 
 ### Phases
 1. Research — explore auth patterns, middleware conventions, session store [done]
-2. Spec — draft and align on approach [done]
-3. Plan — break into implementation stages [in progress]
-4. Implement — execute stage-by-stage with review cycles [outlined]
-5. Validate — e2e verification, integration tests [outlined]
+2. Spec — draft and align on approach [done | → 1 if domain gaps found]
+3. Plan — break into implementation stages [in progress | → 2 if spec gaps surface]
+4. Implement — per stage: implement → critique → refine until clean [outlined | → 3 if approach breaks]
+5. Validate — e2e verify → fix → re-verify until passing [outlined | → 4 if failures | → 2 if approach flawed]
 
 ### Phase 3: Plan (current)
-- Implementation plan: see context/plan-auth.md
-- [x] High-level stage outline drafted
-- [ ] Detail-plan stage 1 (session middleware)
-- [ ] Review plan against spec
-- Pending: user to confirm whether OAuth is in scope
+[... current phase detail: context file refs, checklist items, pending decisions ...]
 ```
 
 Example structure for a small task (bug fix, 1-3 file change):
