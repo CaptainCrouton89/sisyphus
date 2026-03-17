@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hook": {
+          "type": "command",
+          "command": "bash hooks/user-prompt-context.sh"
+        }
+      }
+    ]
+  }
+}

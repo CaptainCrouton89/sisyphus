@@ -20,7 +20,7 @@ import { copyToClipboard } from './lib/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
 import { buildTree, findParentIndex } from './lib/tree.js';
 import {
-  openCompanionPopup,
+  openCompanionPane,
   openEditorPopup,
   editInPopup,
   selectWindow,
@@ -62,7 +62,7 @@ export function App({ cwd }: Props) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [detailScrollOffset, setDetailScrollOffset] = useState(0);
   const [logsScrollOffset, setLogsScrollOffset] = useState(0);
-  const [showLogs, setShowLogs] = useState(true);
+  const [showLogs, setShowLogs] = useState(false);
   const [focusPane, setFocusPane] = useState<'tree' | 'detail' | 'logs'>('tree');
   const [searchFilter, setSearchFilter] = useState<string | null>(null);
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
@@ -414,9 +414,9 @@ export function App({ cwd }: Props) {
       },
       onClaude: () => {
         try {
-          openCompanionPopup(cwd);
+          openCompanionPane(cwd);
         } catch {
-          notify('Failed to open companion popup');
+          notify('Failed to open companion pane');
         }
       },
       onOpenPlan: () => {

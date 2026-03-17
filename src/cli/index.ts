@@ -19,6 +19,7 @@ import { registerRollback } from './commands/rollback.js';
 import { registerRestartAgent } from './commands/restart-agent.js';
 import { registerSetupKeybind } from './commands/setup-keybind.js';
 import { registerDoctor } from './commands/doctor.js';
+import { registerCompanionContext } from './commands/companion-context.js';
 
 const program = new Command();
 
@@ -47,6 +48,7 @@ registerRollback(program);
 registerRestartAgent(program);
 registerSetupKeybind(program);
 registerDoctor(program);
+registerCompanionContext(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

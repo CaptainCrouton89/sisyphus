@@ -1,9 +1,8 @@
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { globalDir } from '../../shared/paths.js';
-import { buildCompanionContext } from './context.js';
 
 const EXEC_ENV = {
   ...process.env,
@@ -42,7 +41,29 @@ export function windowExists(windowId: string): boolean {
   return execSafe(`tmux display-message -t "${windowId}" -p "#{window_id}"`) !== null;
 }
 
-export function openCompanionPopup(cwd: string): void {
+let companionPaneId: string | null = null;
+
+function setupCompanionPlugin(): string {
+  const srcDir = join(import.meta.dirname, 'templates', 'companion-plugin');
+  const destDir = join(globalDir(), 'companion-plugin');
+  if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
+  cpSync(srcDir, destDir, { recursive: true });
+  return destDir;
+}
+
+function isPaneAlive(paneId: string): boolean {
+  return execSafe(`tmux display-message -t ${shellQuote(paneId)} -p "#{pane_id}"`) !== null;
+}
+
+export function openCompanionPane(cwd: string): void {
+  // If companion pane is alive, focus it
+  if (companionPaneId && isPaneAlive(companionPaneId)) {
+    execSafe(`tmux select-pane -t ${shellQuote(companionPaneId)}`);
+    return;
+  }
+
+  const pluginDir = setupCompanionPlugin();
+
   const templatePath = join(import.meta.dirname, 'templates', 'dashboard-claude.md');
   let template: string;
   try {
@@ -51,17 +72,18 @@ export function openCompanionPopup(cwd: string): void {
     template = `You are a Sisyphus dashboard companion. Help the user manage multi-agent sessions.\nProject: ${cwd}\nRun \`sisyphus list\` and \`sisyphus status\` to see current state.`;
   }
 
-  const sessionsContext = buildCompanionContext(cwd);
-  const rendered = template
-    .replace(/\{\{CWD\}\}/g, cwd)
-    .replace(/\{\{SESSIONS_CONTEXT\}\}/g, sessionsContext);
+  const rendered = template.replace(/\{\{CWD\}\}/g, cwd);
   const promptPath = join(globalDir(), 'dashboard-companion-prompt.md');
   writeFileSync(promptPath, rendered, 'utf-8');
 
-  execSync(
-    `tmux display-popup -E -w 80% -h 80% -d ${shellQuote(cwd)} ${shellQuote(`claude --dangerously-skip-permissions --system-prompt "$(cat ${shellQuote(promptPath)})"`)}`  ,
-    { stdio: 'inherit', env: EXEC_ENV },
+  const pathEnv = `/opt/homebrew/bin:/usr/local/bin:${process.env['PATH'] ?? '/usr/bin:/bin'}`;
+
+  const claudeCmd = `SISYPHUS_COMPANION_CWD=${shellQuote(cwd)} PATH=${shellQuote(pathEnv)} claude --dangerously-skip-permissions --plugin-dir ${shellQuote(pluginDir)} --append-system-prompt "$(cat ${shellQuote(promptPath)})"`;
+
+  const result = exec(
+    `tmux split-window -h -d -l 33% -P -F "#{pane_id}" -c ${shellQuote(cwd)} ${shellQuote(claudeCmd)}`,
   );
+  companionPaneId = result.trim() || null;
 }
 
 const TERMINAL_EDITORS = new Set(['nvim', 'vim', 'vi', 'nano', 'emacs', 'micro', 'helix', 'hx', 'joe', 'ne', 'kak']);
