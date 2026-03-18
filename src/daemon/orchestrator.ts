@@ -254,9 +254,20 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
   const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
-  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
+  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}'` : '';
   const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
-  tmux.sendKeys(paneId, `${bannerCmd} ${envExports} && ${claudeCmd}; ${notifyCmd}`);
+
+  // Write full command to a shell script to avoid tmux send-keys buffer limits
+  const scriptLines = [
+    '#!/usr/bin/env bash',
+    ...(bannerCmd ? [bannerCmd] : []),
+    envExports,
+    `${claudeCmd}`,
+    notifyCmd,
+  ];
+  const scriptPath = `${promptsDir(cwd, sessionId)}/orchestrator-run-${cycleNum}.sh`;
+  writeFileSync(scriptPath, scriptLines.join('\n'), { mode: 0o755 });
+  tmux.sendKeys(paneId, `bash '${scriptPath}'`);
 
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,

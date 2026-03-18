@@ -192,7 +192,17 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
-  const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
+  // Write full command to a shell script to avoid tmux send-keys buffer limits
+  const scriptLines = [
+    '#!/usr/bin/env bash',
+    ...(bannerCmd ? [bannerCmd.replace(/ &&$/, '')] : []),
+    envExports,
+    mainCmd,
+    notifyCmd,
+  ];
+  const scriptPath = `${promptsDir(cwd, sessionId)}/${agentId}-run.sh`;
+  writeFileSync(scriptPath, scriptLines.join('\n'), { mode: 0o755 });
+  const fullCmd = `bash '${scriptPath}'`;
 
   const agent: Agent = {
     id: agentId,
@@ -334,7 +344,17 @@ export async function restartAgent(
     mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
-  const fullCmd = `${bannerCmd} ${envExports} && ${mainCmd}; ${notifyCmd}`;
+  // Write full command to a shell script to avoid tmux send-keys buffer limits
+  const scriptLines = [
+    '#!/usr/bin/env bash',
+    ...(bannerCmd ? [bannerCmd.replace(/ &&$/, '')] : []),
+    envExports,
+    mainCmd,
+    notifyCmd,
+  ];
+  const scriptPath = `${promptsDir(cwd, sessionId)}/${agentId}-run.sh`;
+  writeFileSync(scriptPath, scriptLines.join('\n'), { mode: 0o755 });
+  const fullCmd = `bash '${scriptPath}'`;
 
   // Update agent state in-place
   await state.updateAgent(cwd, sessionId, agentId, {
