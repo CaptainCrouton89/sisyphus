@@ -90,9 +90,34 @@ function createAgentPlugin(
   }
 
   const srcHooks = resolve(import.meta.dirname, '../templates/agent-plugin/hooks');
-  for (const f of ['hooks.json', 'require-submit.sh', 'intercept-send-message.sh']) {
+  for (const f of ['require-submit.sh', 'intercept-send-message.sh']) {
     copyFileSync(`${srcHooks}/${f}`, `${base}/hooks/${f}`);
   }
+
+  // Build hooks config with conditional UserPromptSubmit per agent type
+  const hooksConfig: Record<string, unknown[]> = {
+    PreToolUse: [
+      { matcher: 'SendMessage', hook: { type: 'command', command: 'bash hooks/intercept-send-message.sh' } },
+    ],
+    Stop: [
+      { hook: { type: 'command', command: 'bash hooks/require-submit.sh' } },
+    ],
+  };
+
+  const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
+  if (normalizedType === 'plan') {
+    hooksConfig.UserPromptSubmit = [
+      { hook: { type: 'command', command: 'bash hooks/plan-user-prompt.sh' } },
+    ];
+    copyFileSync(`${srcHooks}/plan-user-prompt.sh`, `${base}/hooks/plan-user-prompt.sh`);
+  } else if (normalizedType === 'spec-draft') {
+    hooksConfig.UserPromptSubmit = [
+      { hook: { type: 'command', command: 'bash hooks/spec-user-prompt.sh' } },
+    ];
+    copyFileSync(`${srcHooks}/spec-user-prompt.sh`, `${base}/hooks/spec-user-prompt.sh`);
+  }
+
+  writeFileSync(`${base}/hooks/hooks.json`, JSON.stringify({ hooks: hooksConfig }, null, 2), 'utf-8');
 
   return base;
 }
