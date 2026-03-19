@@ -50,6 +50,27 @@ export function setSessionOption(sessionName: string, option: string, value: str
   execSafe(`tmux set-option -t "${sessionName}" ${option} ${shellQuote(value)}`);
 }
 
+export function findHomeSession(cwd: string): string | null {
+  const output = execSafe('tmux list-sessions -F "#{session_name}"');
+  if (!output) return null;
+  const normalizedCwd = cwd.replace(/\/+$/, '');
+  for (const name of output.split('\n').filter(Boolean)) {
+    if (name.startsWith('sisyphus-')) continue;
+    const val = execSafe(`tmux show-options -t "${name}" -v @sisyphus_cwd`);
+    if (val?.trim() === normalizedCwd) return name;
+  }
+  return null;
+}
+
+export function switchAttachedClients(sessionName: string, targetSession: string): void {
+  if (!sessionExists(targetSession)) return;
+  const output = execSafe(`tmux list-clients -t "${sessionName}" -F "#{client_tty}"`);
+  if (!output) return;
+  for (const tty of output.split('\n').filter(Boolean)) {
+    execSafe(`tmux switch-client -c "${tty}" -t "${targetSession}"`);
+  }
+}
+
 
 export interface PaneInfo {
   paneId: string;

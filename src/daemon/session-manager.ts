@@ -14,6 +14,12 @@ import { sendTerminalNotification } from './notify.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+function switchToHomeSession(session: Session): void {
+  if (!session.tmuxSessionName) return;
+  const home = tmux.findHomeSession(session.cwd);
+  if (home) tmux.switchAttachedClients(session.tmuxSessionName, home);
+}
+
 export async function startSession(task: string, cwd: string, context?: string, name?: string): Promise<Session> {
   const sessionId = uuidv4();
 
@@ -366,7 +372,9 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 }
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {
+  const session = state.getSession(cwd, sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
+  switchToHomeSession(session);
 }
 
 export async function handleContinue(sessionId: string, cwd: string): Promise<void> {
@@ -418,6 +426,9 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   // Untrack from pane monitor and pane registry
   untrackSession(sessionId);
   unregisterSessionPanes(sessionId);
+
+  // Switch any attached clients back to the home session before destroying
+  switchToHomeSession(session);
 
   // Kill the entire tmux session (destroys all panes/windows atomically)
   if (session.tmuxSessionName) {
