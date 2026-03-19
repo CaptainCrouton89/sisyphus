@@ -11,6 +11,8 @@ import {
   formatTime,
   formatTimeAgo,
   durationColor,
+  agentDisplayName,
+  modeColor,
 } from '../lib/format.js';
 
 interface Props {
@@ -125,7 +127,7 @@ function renderNodeContent(
       const dur = formatDuration(node.spawnedAt, node.completedAt);
       const durClr = durationColor(node.spawnedAt, node.completedAt) || undefined;
       const dim = node.status === 'completed';
-      const displayName = node.name !== node.agentId ? node.name : node.agentType;
+      const displayName = agentDisplayName({ name: node.name, id: node.agentId, agentType: node.agentType });
       const maxLabel = Math.max(8, maxWidth - dur.length - 4);
       return {
         icon,

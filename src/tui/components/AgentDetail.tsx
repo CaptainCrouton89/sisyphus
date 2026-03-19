@@ -8,9 +8,11 @@ import {
   statusColor,
   agentStatusIcon,
   wrapText,
-  cleanMarkdown,
   seg,
   singleLine,
+  agentDisplayName,
+  reportBadge,
+  mergeStatusDisplay,
   type DetailLine,
 } from '../lib/format.js';
 
@@ -29,7 +31,7 @@ function buildLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, width
   const dur = formatDuration(agent.spawnedAt, agent.completedAt);
   const icon = agentStatusIcon(agent.status);
   const color = statusColor(agent.status);
-  const nameLabel = agent.name !== agent.id ? agent.name : agent.agentType;
+  const nameLabel = agentDisplayName(agent);
   const maxMergeLines = 3;
 
   // Header
@@ -40,31 +42,16 @@ function buildLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, width
   ]);
 
   // Status line
-  const mergeSegs: ReturnType<typeof seg>[] = [];
-  if (agent.mergeStatus) {
-    mergeSegs.push(seg(' · ', { dim: true }));
-    switch (agent.mergeStatus) {
-      case 'merged':
-        mergeSegs.push(seg('⊕ merged', { color: 'green' }));
-        break;
-      case 'pending':
-        mergeSegs.push(seg('◌ pending', { color: 'yellow' }));
-        break;
-      case 'no-changes':
-        mergeSegs.push(seg('∅ no changes', { color: 'gray' }));
-        break;
-      case 'conflict':
-        mergeSegs.push(seg('⚠ conflict', { color: 'red' }));
-        break;
-      default:
-        mergeSegs.push(seg(agent.mergeStatus, { dim: true }));
-    }
-  }
+  const merge = agent.mergeStatus ? mergeStatusDisplay(agent.mergeStatus) : null;
   lines.push([
     seg('  '),
     seg(agent.status, { color }),
     seg(` · ${dur} · ${agent.agentType}`, { dim: true }),
-    ...mergeSegs,
+    ...(merge
+      ? [seg(' · ', { dim: true }), seg(`${merge.icon} ${merge.label}`, { color: merge.color })]
+      : agent.mergeStatus
+        ? [seg(' · ', { dim: true }), seg(agent.mergeStatus, { dim: true })]
+        : []),
   ]);
 
   // Alerts
@@ -98,8 +85,7 @@ function buildLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, width
     if (hasResolved) {
       for (let i = 0; i < reportBlocks.length; i++) {
         const block = reportBlocks[i]!;
-        const badge = block.type === 'final' ? 'FINAL' : 'UPDATE';
-        const badgeColor = block.type === 'final' ? 'cyan' : 'yellow';
+        const { label: badge, color: badgeColor } = reportBadge(block.type);
 
         if (i > 0) lines.push(singleLine(' '));
         lines.push([
@@ -107,14 +93,13 @@ function buildLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, width
           seg(badge, { color: badgeColor, bold: block.type === 'final' }),
           seg(` ${formatTime(block.timestamp)}`, { dim: true }),
         ]);
-        for (const wl of wrapText(cleanMarkdown(block.content.trim()), contentWidth - 10)) {
+        for (const wl of wrapText(block.content.trim(), contentWidth - 10)) {
           lines.push(singleLine(`      ${wl}`, { dim: true }));
         }
       }
     } else {
       for (const report of agent.reports) {
-        const badge = report.type === 'final' ? 'FINAL' : 'UPDATE';
-        const badgeColor = report.type === 'final' ? 'cyan' : 'yellow';
+        const { label: badge, color: badgeColor } = reportBadge(report.type);
         lines.push([
           seg('    '),
           seg(badge, { color: badgeColor, bold: report.type === 'final' }),

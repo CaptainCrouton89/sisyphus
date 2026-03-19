@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { messageSourceLabel } from './format.js';
 import type {
   TreeNode,
   SessionTreeNode,
@@ -159,12 +160,8 @@ export function buildTree(
 
       if (msgsExpanded) {
         for (const msg of messages) {
-          const sourceLabel =
-            msg.source.type === 'user'
-              ? 'You'
-              : msg.source.type === 'agent'
-                ? msg.source.agentId
-                : 'system';
+          const agentId = msg.source.type === 'agent' ? msg.source.agentId : undefined;
+          const sourceLabel = messageSourceLabel(msg.source.type, agentId);
 
           nodes.push({
             id: `message:${s.id}:${msg.id}`,

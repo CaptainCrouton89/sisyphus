@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { Agent } from '../../shared/types.js';
-import { statusColor, formatDuration, truncate, agentStatusIcon, extractFirstSentence, durationColor, agentTypeColor } from '../lib/format.js';
+import { statusColor, formatDuration, truncate, agentStatusIcon, extractFirstSentence, durationColor, agentTypeColor, mergeStatusDisplay } from '../lib/format.js';
 
 interface Props {
   agents: Agent[];
@@ -86,14 +86,12 @@ function SelectedAgentDetail({ agent, width }: { agent: Agent; width: number }) 
         <Text dimColor>{'  '}type: </Text>
         <Text color={agentTypeColor(agent.agentType)} dimColor={!agentTypeColor(agent.agentType)}>{agent.agentType}</Text>
         <Text dimColor> · status: {agent.status}</Text>
-        {agent.mergeStatus && <Text dimColor> · </Text>}
-        {agent.mergeStatus === 'merged' && <Text color="green">⊕ merged</Text>}
-        {agent.mergeStatus === 'pending' && <Text color="yellow">◌ pending</Text>}
-        {agent.mergeStatus === 'no-changes' && <Text color="gray">∅ no changes</Text>}
-        {agent.mergeStatus === 'conflict' && <Text color="red">⚠ conflict</Text>}
-        {agent.mergeStatus && !['merged', 'pending', 'no-changes', 'conflict'].includes(agent.mergeStatus) && (
-          <Text dimColor>{agent.mergeStatus}</Text>
-        )}
+        {agent.mergeStatus && (() => {
+          const merge = mergeStatusDisplay(agent.mergeStatus);
+          return merge
+            ? <><Text dimColor> · </Text><Text color={merge.color}>{merge.icon} {merge.label}</Text></>
+            : <><Text dimColor> · </Text><Text dimColor>{agent.mergeStatus}</Text></>;
+        })()}
       </Box>
       {summary && (
         <Text dimColor>  ↳ {summary}</Text>

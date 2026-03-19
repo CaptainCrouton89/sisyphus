@@ -1,149 +1,111 @@
-import React, { useState, useMemo } from 'react';
-import { Box, Text, useInput } from 'ink';
+import React, { useMemo } from 'react';
 import type { Agent } from '../../shared/types.js';
 import type { ReportBlock } from '../lib/reports.js';
-import { formatDuration, formatTime, divider, statusColor, agentStatusIcon, wrapText } from '../lib/format.js';
+import { ScrollablePanel } from './ScrollablePanel.js';
+import {
+  formatDuration,
+  formatTime,
+  divider,
+  statusColor,
+  agentStatusIcon,
+  wrapText,
+  seg,
+  singleLine,
+  agentDisplayName,
+  reportBadge,
+  type DetailLine,
+} from '../lib/format.js';
 
 interface Props {
   agent: Agent;
   reportBlocks: ReportBlock[];
   width: number;
   height: number;
-  onClose: () => void;
+  scrollOffset?: number;
+  focused?: boolean;
 }
 
-export function ReportView({ agent, reportBlocks, width, height, onClose }: Props) {
-  const [scrollOffset, setScrollOffset] = useState(0);
-
+function buildLines(agent: Agent, reportBlocks: ReportBlock[], width: number): DetailLine[] {
+  const lines: DetailLine[] = [];
   const contentWidth = width - 6; // border + padding + gutter
-
-  // Build the rendered lines (memoized since report content is static)
-  const lines = useMemo(() => {
-    const lines: Array<{ text: string; color?: string; bold?: boolean; dim?: boolean }> = [];
-
-    if (reportBlocks.length === 0) {
-      lines.push({ text: '', dim: true });
-      lines.push({ text: '  No reports submitted yet.', dim: true });
-      lines.push({ text: '', dim: true });
-      return lines;
-    }
-
-    for (let i = 0; i < reportBlocks.length; i++) {
-      const report = reportBlocks[i]!;
-      const time = formatTime(report.timestamp);
-
-      if (i > 0) {
-        lines.push({ text: '' });
-        lines.push({ text: `  ${divider(contentWidth - 2, '·')}`, dim: true });
-        lines.push({ text: '' });
-      }
-
-      // Report header
-      const badge = report.type === 'final' ? 'FINAL' : 'UPDATE';
-      const badgeColor = report.type === 'final' ? 'cyan' : 'yellow';
-      lines.push({
-        text: `  ${badge}  ${time}`,
-        color: badgeColor,
-        bold: report.type === 'final',
-      });
-      lines.push({ text: '' });
-
-      // Report content — wrapped to fit
-      const wrapped = wrapText(report.content.trim(), contentWidth - 4);
-      for (const line of wrapped) {
-        lines.push({ text: `    ${line}` });
-      }
-    }
-
-    lines.push({ text: '' });
-    return lines;
-  }, [reportBlocks, contentWidth]);
-
-  // Scroll bounds
-  const viewableHeight = height - 7; // header (4) + footer (2) + border
-  const maxScroll = Math.max(0, lines.length - viewableHeight);
-
-  useInput((input, key) => {
-    if (key.escape || key.return) {
-      onClose();
-      return;
-    }
-    if (key.upArrow) {
-      setScrollOffset((o) => Math.max(0, o - 1));
-      return;
-    }
-    if (key.downArrow) {
-      setScrollOffset((o) => Math.min(maxScroll, o + 1));
-      return;
-    }
-    // Page up/down with shift or brackets
-    if (input === '[' || (key.upArrow && key.shift)) {
-      setScrollOffset((o) => Math.max(0, o - Math.floor(viewableHeight / 2)));
-      return;
-    }
-    if (input === ']' || (key.downArrow && key.shift)) {
-      setScrollOffset((o) => Math.min(maxScroll, o + Math.floor(viewableHeight / 2)));
-      return;
-    }
-  });
-
-  // Visible slice
-  const visible = lines.slice(scrollOffset, scrollOffset + viewableHeight);
-
-  // Scroll position indicator
-  const scrollPct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-  const totalReports = agent.reports.length;
+  const dur = formatDuration(agent.spawnedAt, agent.completedAt);
   const icon = agentStatusIcon(agent.status);
   const color = statusColor(agent.status);
-  const dur = formatDuration(agent.spawnedAt, agent.completedAt);
+  const totalReports = agent.reports.length;
+  const nameLabel = agentDisplayName(agent);
+
+  // Header
+  lines.push([
+    seg(' '),
+    seg(icon, { color }),
+    seg(' '),
+    seg(agent.id, { bold: true }),
+    seg(' ', { dim: true }),
+    seg('·', { dim: true }),
+    seg(' '),
+    seg(nameLabel, { bold: true }),
+  ]);
+
+  // Status line
+  lines.push(singleLine(
+    `  ${agent.status} · ${dur} · ${agent.agentType} · ${totalReports} report${totalReports !== 1 ? 's' : ''}`,
+    { dim: true },
+  ));
+
+  // Divider
+  lines.push(singleLine('  ' + divider(contentWidth - 2), { dim: true }));
+
+  if (reportBlocks.length === 0) {
+    lines.push(singleLine(''));
+    lines.push(singleLine('  No reports submitted yet.', { dim: true }));
+    lines.push(singleLine(''));
+    return lines;
+  }
+
+  for (let i = 0; i < reportBlocks.length; i++) {
+    const report = reportBlocks[i]!;
+    const time = formatTime(report.timestamp);
+
+    if (i > 0) {
+      lines.push(singleLine(''));
+      lines.push(singleLine(`  ${divider(contentWidth - 2, '·')}`, { dim: true }));
+      lines.push(singleLine(''));
+    }
+
+    // Report header badge
+    const { label: badge, color: badgeColor } = reportBadge(report.type);
+    lines.push([
+      seg(`  ${badge}`, { color: badgeColor, bold: report.type === 'final' }),
+      seg(`  ${time}`, { color: badgeColor }),
+    ]);
+
+    lines.push(singleLine(''));
+
+    // Report content — wrapped to fit
+    const wrapped = wrapText(report.content.trim(), contentWidth - 4);
+    for (const line of wrapped) {
+      lines.push(singleLine(`    ${line}`));
+    }
+  }
+
+  lines.push(singleLine(''));
+  return lines;
+}
+
+export function ReportView({ agent, reportBlocks, width, height, scrollOffset = 0, focused = false }: Props) {
+  const lines = useMemo(
+    () => buildLines(agent, reportBlocks, width),
+    [agent, reportBlocks, width],
+  );
 
   return (
-    <Box
-      flexDirection="column"
+    <ScrollablePanel
+      lines={lines}
       width={width}
       height={height}
-      borderStyle="round"
+      scrollOffset={scrollOffset}
+      focused={focused}
       borderColor="cyan"
-      paddingX={1}
-    >
-      {/* Header */}
-      <Text bold>
-        {' '}
-        <Text color={color}>{icon}</Text>
-        {' '}
-        {agent.id}
-        {' '}
-        <Text dimColor>·</Text>
-        {' '}
-        {agent.name !== agent.id ? agent.name : agent.agentType}
-      </Text>
-      <Text dimColor>
-        {'  '}{agent.status} · {dur} · {agent.agentType} · {totalReports} report{totalReports !== 1 ? 's' : ''}
-      </Text>
-      <Text dimColor>{'  ' + divider(contentWidth - 2)}</Text>
-
-      {/* Scrollable content */}
-      <Box flexDirection="column" flexGrow={1}>
-        {visible.map((line, i) => (
-          <Text
-            key={i}
-            color={line.color}
-            bold={line.bold}
-            dimColor={line.dim}
-          >
-            {line.text}
-          </Text>
-        ))}
-      </Box>
-
-      {/* Footer */}
-      <Text dimColor>{'  ' + divider(contentWidth - 2)}</Text>
-      <Text dimColor>
-        {'  '}[esc] back  [↑↓] scroll  [{ }] page
-        {'  '}
-        <Text>{scrollPct}%</Text>
-        {maxScroll > 0 && <Text dimColor> · {lines.length} lines</Text>}
-      </Text>
-    </Box>
+    />
   );
 }

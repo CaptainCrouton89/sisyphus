@@ -13,6 +13,8 @@ import {
   agentTypeColor,
   seg,
   singleLine,
+  agentDisplayName,
+  modeColor,
   type DetailLine,
 } from '../lib/format.js';
 
@@ -46,7 +48,7 @@ function buildLines(cycle: OrchestratorCycle, agents: Agent[], width: number): D
       ? [
           seg(' · ', { dim: true }),
           seg(cycle.mode, {
-            color: cycle.mode === 'planning' ? 'blue' : cycle.mode === 'implementation' ? 'green' : 'cyan',
+            color: modeColor(cycle.mode),
           }),
         ]
       : []),
@@ -66,7 +68,7 @@ function buildLines(cycle: OrchestratorCycle, agents: Agent[], width: number): D
     lines.push(singleLine('    orchestrator spawning agents…', { dim: true, italic: true }));
   } else {
     for (const agent of cycleAgents) {
-      const nameLabel = agent.name !== agent.id ? agent.name : agent.agentType;
+      const nameLabel = agentDisplayName(agent);
       const instrPreview = agent.instruction.split('\n')[0] || '';
       const latestReport = agent.reports.length > 0 ? agent.reports[agent.reports.length - 1]! : null;
       const reportSummary = latestReport && agent.status === 'completed'

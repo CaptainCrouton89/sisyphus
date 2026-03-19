@@ -14,6 +14,9 @@ import {
   cleanMarkdown,
   seg,
   singleLine,
+  messageSourceLabel,
+  messageSourceColor,
+  modeColor,
   type DetailLine,
 } from '../lib/format.js';
 
@@ -65,14 +68,14 @@ function buildLines(
   const elapsed = formatDuration(session.createdAt, session.completedAt);
   const activeMs = computeActiveTimeMs(session);
   const activeTime = formatDuration(activeMs);
-  const modeColor = mode === 'planning' ? 'blue' : mode === 'implementation' ? 'green' : 'cyan';
+  const modeLabelColor = modeColor(mode);
   lines.push([
     seg('  '),
     seg(isDead ? '✕ dead' : session.status, {
       color: statusColor(isDead ? 'crashed' : session.status),
     }),
     seg(` · cycle ${cycleNum}`, { dim: true }),
-    ...(mode ? [seg(' (', { dim: true }), seg(mode, { color: modeColor }), seg(')', { dim: true })] : []),
+    ...(mode ? [seg(' (', { dim: true }), seg(mode, { color: modeLabelColor }), seg(')', { dim: true })] : []),
     seg(` · ${elapsed} · `, { dim: true }),
     seg(`${runningAgents} running`, { color: 'green' }),
     seg(' · ', { dim: true }),
@@ -123,7 +126,7 @@ function buildLines(
   if (session.status === 'completed' && session.completionReport) {
     lines.push(singleLine(' '));
     lines.push([seg('  ▎ ✓ COMPLETION', { color: 'cyan', bold: true })]);
-    wrapText(cleanMarkdown(session.completionReport), contentWidth - 6).forEach(
+    wrapText(session.completionReport, contentWidth - 6).forEach(
       (l) => {
         lines.push(singleLine(`    ${l}`, { dim: true }));
       },
@@ -140,14 +143,9 @@ function buildLines(
   // Render one message as an indented sub-row under its cycle
   const pushMsgLine = (msg: (typeof messages)[number], connector: '└▸' | '├▸') => {
     const time = formatTime(msg.timestamp);
-    const label =
-      msg.source.type === 'user'
-        ? 'You'
-        : msg.source.type === 'agent'
-          ? msg.source.agentId
-          : '⚙ system';
-    const labelColor =
-      msg.source.type === 'user' ? 'yellow' : msg.source.type === 'agent' ? 'cyan' : 'gray';
+    const agentId = msg.source.type === 'agent' ? msg.source.agentId : undefined;
+    const label = messageSourceLabel(msg.source.type, agentId);
+    const labelColor = messageSourceColor(msg.source.type);
     const maxContent = Math.max(10, contentWidth - label.length - 18);
     lines.push([
       seg(`    ${connector} `, { dim: true }),
@@ -192,7 +190,7 @@ function buildLines(
           : cycle.mode === 'planning' ? 'plan'
           : cycle.mode
         : '';
-      const cycModeColor = cycle.mode === 'planning' ? 'blue' : cycle.mode === 'implementation' ? 'green' : 'cyan';
+      const cycModeColor = modeColor(cycle.mode);
 
       const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Box, Text, useApp, useStdout } from 'ink';
+import { Box, Text, useApp, useStdout, useInput } from 'ink';
 import { SessionTree } from './components/SessionTree.js';
 import { SessionDetail } from './components/SessionDetail.js';
 import { LogsPanel } from './components/LogsPanel.js';
@@ -30,7 +30,7 @@ import {
   openInFileManager,
 } from './lib/tmux.js';
 import { ScrollablePanel } from './components/ScrollablePanel.js';
-import { wrapText, formatTime, cleanMarkdown, stripFrontmatter, seg, singleLine, type DetailLine } from './lib/format.js';
+import { wrapText, formatTime, stripFrontmatter, seg, singleLine, agentDisplayName, reportBadge, messageSourceLabel, messageSourceColor, type DetailLine } from './lib/format.js';
 import { goalPath, roadmapPath, sessionDir } from '../shared/paths.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { loadConfig } from '../shared/config.js';
@@ -263,6 +263,16 @@ export function App({ cwd }: Props) {
   const logsWidth = showLogs ? remainingWidth - detailWidth : 0;
   const contentHeight = rows - 3;
 
+  const expandSessionLatestCycle = (node: TreeNode) => {
+    if (node.type === 'session' && selectedSession?.id === node.sessionId) {
+      const cycles = selectedSession.orchestratorCycles;
+      if (cycles.length > 0) {
+        const latest = cycles[cycles.length - 1]!;
+        expandNode(`cycle:${node.sessionId}:${latest.cycle}`);
+      }
+    }
+  };
+
   // Keybindings (only active in navigate mode)
   useKeybindings(
     {
@@ -309,13 +319,7 @@ export function App({ cwd }: Props) {
         if (node.expandable && !node.expanded) {
           expandNode(node.id);
           // Convenience: expanding a session also expands its latest cycle
-          if (node.type === 'session' && selectedSession?.id === node.sessionId) {
-            const cycles = selectedSession.orchestratorCycles;
-            if (cycles.length > 0) {
-              const latest = cycles[cycles.length - 1]!;
-              expandNode(`cycle:${node.sessionId}:${latest.cycle}`);
-            }
-          }
+          expandSessionLatestCycle(node);
         } else if (node.expandable && node.expanded) {
           // Move cursor to first child
           if (cursorIndex + 1 < nodes.length && nodes[cursorIndex + 1]!.depth > node.depth) {
@@ -349,13 +353,7 @@ export function App({ cwd }: Props) {
         if (node.expandable && !node.expanded) {
           expandNode(node.id);
           // Convenience: expanding a session also expands its latest cycle
-          if (node.type === 'session' && selectedSession?.id === node.sessionId) {
-            const cycles = selectedSession.orchestratorCycles;
-            if (cycles.length > 0) {
-              const latest = cycles[cycles.length - 1]!;
-              expandNode(`cycle:${node.sessionId}:${latest.cycle}`);
-            }
-          }
+          expandSessionLatestCycle(node);
         } else if (node.type === 'report') {
           setMode('report-detail');
         } else if (node.type === 'context-file') {
@@ -493,6 +491,16 @@ export function App({ cwd }: Props) {
       },
     },
     mode === 'navigate',
+  );
+
+  // Report detail scroll + dismiss
+  useInput(
+    (input, key) => {
+      if (key.escape || key.return) { handleCancel(); return; }
+      if (key.upArrow) { setDetailScrollOffset((o) => Math.max(0, o - 1)); return; }
+      if (key.downArrow) { setDetailScrollOffset((o) => o + 1); return; }
+    },
+    { isActive: mode === 'report-detail' },
   );
 
   // Leader key state machine
@@ -801,7 +809,8 @@ export function App({ cwd }: Props) {
             reportBlocks={reportBlocks}
             width={detailWidth}
             height={contentHeight}
-            onClose={handleCancel}
+            scrollOffset={detailScrollOffset}
+            focused={true}
           />
         );
       }
@@ -918,10 +927,9 @@ export function App({ cwd }: Props) {
             return originalIdx === reportIdx;
           });
           if (specificBlock) {
-            const badge = specificBlock.type === 'final' ? 'FINAL' : 'UPDATE';
-            const badgeColor = specificBlock.type === 'final' ? 'cyan' : 'yellow';
+            const { label: badge, color: badgeColor } = reportBadge(specificBlock.type);
             const reportContentLines: DetailLine[] = [
-              [seg(' '), seg(badge, { color: badgeColor }), seg(` ${agent.id} · ${agent.name !== agent.id ? agent.name : agent.agentType}`, { bold: true })],
+              [seg(' '), seg(badge, { color: badgeColor }), seg(` ${agent.id} · ${agentDisplayName(agent)}`, { bold: true })],
               singleLine(`  ${formatTime(specificBlock.timestamp)}`, { dim: true }),
               singleLine(' '),
               [seg('  ▎ CONTENT', { color: badgeColor, bold: true })],
@@ -959,8 +967,9 @@ export function App({ cwd }: Props) {
           } else {
             for (const msg of session.messages) {
               const time = formatTime(msg.timestamp);
-              const label = msg.source.type === 'user' ? 'You' : msg.source.type === 'agent' ? msg.source.agentId : 'system';
-              const labelColor = msg.source.type === 'user' ? 'yellow' : msg.source.type === 'agent' ? 'cyan' : 'gray';
+              const agentId = msg.source.type === 'agent' ? msg.source.agentId : undefined;
+              const label = messageSourceLabel(msg.source.type, agentId);
+              const labelColor = messageSourceColor(msg.source.type);
               const maxContent = Math.max(10, detailWidth - label.length - 20);
               msgsLines.push([
                 seg(`  [${time}] `, { dim: true }),
@@ -1034,7 +1043,7 @@ export function App({ cwd }: Props) {
           if (contextFileContent == null) {
             ctxFileLines.push(singleLine('  File not found or unreadable.', { dim: true }));
           } else {
-            const wrapped = wrapText(cleanMarkdown(stripFrontmatter(contextFileContent)), detailWidth - 8);
+            const wrapped = wrapText(stripFrontmatter(contextFileContent), detailWidth - 8);
             if (wrapped.length === 0) {
               ctxFileLines.push(singleLine('  (empty)', { dim: true }));
             } else {

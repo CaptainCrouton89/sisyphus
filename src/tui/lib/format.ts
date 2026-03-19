@@ -187,10 +187,52 @@ export function singleLine(text: string, opts?: Partial<Omit<Seg, 'text'>>): Det
   return [seg(text, opts)];
 }
 
+export function messageSourceLabel(source: string, agentId?: string): string {
+  if (source === 'user') return 'You';
+  if (source === 'agent') {
+    if (!agentId) throw new Error('agentId required when source is agent');
+    return agentId;
+  }
+  return 'system';
+}
+
+export function messageSourceColor(source: string): string {
+  if (source === 'user') return 'yellow';
+  if (source === 'agent') return 'cyan';
+  return 'gray';
+}
+
+export function reportBadge(type: string): { label: string; color: string } {
+  return type === 'final'
+    ? { label: 'FINAL', color: 'cyan' }
+    : { label: 'UPDATE', color: 'yellow' };
+}
+
+export function agentDisplayName(agent: { name: string; id: string; agentType: string }): string {
+  return agent.name !== agent.id ? agent.name : agent.agentType;
+}
+
+export function modeColor(mode?: string): string {
+  if (mode === 'planning') return 'blue';
+  if (mode === 'implementation') return 'green';
+  return 'cyan';
+}
+
+export function mergeStatusDisplay(status: string): { icon: string; label: string; color: string } | null {
+  switch (status) {
+    case 'merged': return { icon: '⊕', label: 'merged', color: 'green' };
+    case 'pending': return { icon: '◌', label: 'pending', color: 'yellow' };
+    case 'no-changes': return { icon: '∅', label: 'no changes', color: 'gray' };
+    case 'conflict': return { icon: '⚠', label: 'conflict', color: 'red' };
+    default: return null;
+  }
+}
+
 export function wrapText(text: string, width: number): string[] {
-  if (width <= 0) return text.split('\n');
+  const cleaned = cleanMarkdown(text);
+  if (width <= 0) return cleaned.split('\n');
   const result: string[] = [];
-  for (const rawLine of text.split('\n')) {
+  for (const rawLine of cleaned.split('\n')) {
     if (stringWidth(rawLine) <= width) {
       result.push(rawLine);
       continue;
