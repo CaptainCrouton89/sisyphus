@@ -3,18 +3,22 @@
     "PreToolUse": [
       {
         "matcher": "SendMessage",
-        "hook": {
-          "type": "command",
-          "command": "bash hooks/intercept-send-message.sh"
-        }
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/intercept-send-message.sh"
+          }
+        ]
       }
     ],
     "Stop": [
       {
-        "hook": {
-          "type": "command",
-          "command": "bash hooks/require-submit.sh"
-        }
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/require-submit.sh"
+          }
+        ]
       }
     ]
   }

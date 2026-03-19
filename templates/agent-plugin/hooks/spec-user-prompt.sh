@@ -2,10 +2,7 @@
 # UserPromptSubmit hook: remind spec agent to iterate with the user.
 if [ -z "$SISYPHUS_SESSION_ID" ]; then exit 0; fi
 
-python3 -c "
-import json, sys
-print(json.dumps({'additionalContext': sys.stdin.read()}))
-" <<'HINT'
+cat <<'HINT'
 <spec-reminder>
 Iterate with the user — include them in the process before writing anything to disk:
 

@@ -2,10 +2,12 @@
   "hooks": {
     "UserPromptSubmit": [
       {
-        "hook": {
-          "type": "command",
-          "command": "bash hooks/user-prompt-context.sh"
-        }
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-context.sh"
+          }
+        ]
       }
     ]
   }

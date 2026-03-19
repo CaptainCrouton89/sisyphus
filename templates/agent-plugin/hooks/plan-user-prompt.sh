@@ -2,10 +2,7 @@
 # UserPromptSubmit hook: remind plan agent to delegate for large tasks.
 if [ -z "$SISYPHUS_SESSION_ID" ]; then exit 0; fi
 
-python3 -c "
-import json, sys
-print(json.dumps({'additionalContext': sys.stdin.read()}))
-" <<'HINT'
+cat <<'HINT'
 <planning-reminder>
 For particularly large or multi-domain tasks, delegate sub-plans to specialist agents rather than planning everything solo:
 
