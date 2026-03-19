@@ -1,21 +1,6 @@
-export function formatDuration(startOrMs: string | number, endIso?: string | null): string {
-  let totalMs: number;
-  if (typeof startOrMs === 'number') {
-    totalMs = startOrMs;
-  } else {
-    const start = new Date(startOrMs).getTime();
-    const end = endIso ? new Date(endIso).getTime() : Date.now();
-    totalMs = end - start;
-  }
-  const totalSeconds = Math.floor(totalMs / 1000);
-  if (totalSeconds < 0) return '0s';
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h${minutes}m`;
-  if (minutes > 0) return `${minutes}m${seconds}s`;
-  return `${seconds}s`;
-}
+import stringWidth from 'string-width';
+
+export { formatDuration, statusColor } from '../../shared/format.js';
 
 export function formatTimeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -32,12 +17,23 @@ export function formatTime(iso: string): string {
 }
 
 export function truncate(text: string, max: number): string {
-  if (max < 4) return text.slice(0, max);
-  if (text.length <= max) return text;
-  // Try to break at a word boundary
-  const cut = text.lastIndexOf(' ', max - 1);
-  const breakAt = cut > max * 0.6 ? cut : max - 1;
-  return text.slice(0, breakAt) + '…';
+  // Collapse newlines and normalize wide emoji (see cleanMarkdown for rationale)
+  const clean = text.replace(/\n/g, ' ').replace(/✅/g, '✓').replace(/❌/g, '✗').replace(/\p{Emoji_Presentation}/gu, '');
+  if (max < 4) return clean.slice(0, max);
+  const w = stringWidth(clean);
+  if (w <= max) return clean;
+  // Trim from the end until we fit, respecting display width
+  let result = clean;
+  while (stringWidth(result) > max - 1 && result.length > 0) {
+    // Try to break at a word boundary
+    const cut = result.lastIndexOf(' ', result.length - 2);
+    if (cut > max * 0.4) {
+      result = result.slice(0, cut);
+    } else {
+      result = result.slice(0, result.length - 1);
+    }
+  }
+  return result + '…';
 }
 
 /** Strip markdown syntax to plain text */
@@ -101,25 +97,6 @@ export function durationColor(startOrMs: string | number, endIso?: string | null
   return 'red';
 }
 
-export function statusColor(status: string): string {
-  switch (status) {
-    case 'active':
-    case 'running':
-      return 'green';
-    case 'completed':
-      return 'cyan';
-    case 'paused':
-      return 'yellow';
-    case 'killed':
-    case 'crashed':
-      return 'red';
-    case 'lost':
-      return 'gray';
-    default:
-      return 'white';
-  }
-}
-
 export function statusIndicator(status: string): string {
   switch (status) {
     case 'active':
@@ -179,7 +156,14 @@ export function cleanMarkdown(line: string): string {
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/~~(.+?)~~/g, '$1')
     .replace(/`(.+?)`/g, '$1')
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1');
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+    // Normalize wide emoji → single-width alternatives.
+    // Ink's @alcalzone/ansi-tokenize treats emoji as width=1, but terminals
+    // render them as width=2. This mismatch causes lines to overflow by 1
+    // column, wrapping the right border to the next row (phantom blank lines).
+    .replace(/✅/g, '✓')
+    .replace(/❌/g, '✗')
+    .replace(/\p{Emoji_Presentation}/gu, '');
 }
 
 // Shared line types for scrollable panels
@@ -207,14 +191,33 @@ export function wrapText(text: string, width: number): string[] {
   if (width <= 0) return text.split('\n');
   const result: string[] = [];
   for (const rawLine of text.split('\n')) {
-    if (rawLine.length <= width) {
+    if (stringWidth(rawLine) <= width) {
       result.push(rawLine);
       continue;
     }
     let remaining = rawLine;
-    while (remaining.length > width) {
-      let breakAt = remaining.lastIndexOf(' ', width);
-      if (breakAt <= 0) breakAt = width;
+    while (stringWidth(remaining) > width) {
+      // Find a break point that fits within display width
+      let breakAt = -1;
+      // Start from an estimated position and scan for a space
+      let estimate = Math.min(remaining.length, width);
+      for (let i = estimate; i >= 0; i--) {
+        if (remaining[i] === ' ' && stringWidth(remaining.slice(0, i)) <= width) {
+          breakAt = i;
+          break;
+        }
+      }
+      if (breakAt <= 0) {
+        // No space found — find the max chars that fit
+        breakAt = remaining.length;
+        for (let i = 1; i <= remaining.length; i++) {
+          if (stringWidth(remaining.slice(0, i)) > width) {
+            breakAt = i - 1;
+            break;
+          }
+        }
+        if (breakAt <= 0) breakAt = 1; // always make progress
+      }
       result.push(remaining.slice(0, breakAt));
       remaining = remaining.slice(breakAt).trimStart();
     }

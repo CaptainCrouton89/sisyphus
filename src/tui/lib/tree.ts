@@ -208,7 +208,7 @@ export function buildTree(
           expanded: false,
           sessionId: s.id,
           label: filename,
-          filePath: join(ctxDir, filename),
+          filePath: join(contextDir(cwd, s.id), filename),
         } satisfies ContextFileTreeNode);
       }
     }
