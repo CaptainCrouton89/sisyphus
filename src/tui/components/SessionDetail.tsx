@@ -85,7 +85,7 @@ function buildLines(
     lines.push([
       seg('  '),
       seg(' ✕ DEAD ', { color: 'red', bold: true }),
-      seg(' tmux window closed — kill or resume', { color: 'red' }),
+      seg(' tmux window closed — [w] reopen  [R] resume', { color: 'red' }),
     ]);
   }
 

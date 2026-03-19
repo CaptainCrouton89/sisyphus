@@ -90,6 +90,23 @@ function pruneOldSessions(cwd: string): void {
   }
 }
 
+export async function reopenWindow(sessionId: string, cwd: string): Promise<{ tmuxSessionName: string; tmuxWindowId: string }> {
+  const session = state.getSession(cwd, sessionId);
+  const tmuxName = session.tmuxSessionName ?? `sisyphus-${session.name ?? sessionId.slice(0, 8)}`;
+
+  // If window still exists, just return the existing IDs
+  if (tmux.sessionExists(tmuxName) && session.tmuxWindowId) {
+    return { tmuxSessionName: tmuxName, tmuxWindowId: session.tmuxWindowId };
+  }
+
+  // Create fresh tmux session
+  const created = tmux.createSession(tmuxName, 'main', cwd);
+  tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, created.windowId);
+
+  return { tmuxSessionName: tmuxName, tmuxWindowId: created.windowId };
+}
+
 export async function resumeSession(sessionId: string, cwd: string, message?: string): Promise<Session> {
   const session = state.getSession(cwd, sessionId);
 

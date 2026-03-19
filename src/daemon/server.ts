@@ -228,6 +228,24 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: result as unknown as Record<string, unknown> };
       }
 
+      case 'reopen-window': {
+        let tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) {
+          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
+          if (existsSync(stateFile)) {
+            tracking = { cwd: req.cwd, messageCounter: 0 };
+            sessionTrackingMap.set(req.sessionId, tracking);
+            persistSessionRegistry();
+          } else {
+            return unknownSessionError(req.sessionId);
+          }
+        }
+        const result = await sessionManager.reopenWindow(req.sessionId, tracking.cwd);
+        tracking.tmuxSession = result.tmuxSessionName;
+        tracking.windowId = result.tmuxWindowId;
+        return { ok: true, data: result };
+      }
+
       case 'delete': {
         // Kill session if active (best-effort)
         const activeTracking = sessionTrackingMap.get(req.sessionId);

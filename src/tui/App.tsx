@@ -384,9 +384,27 @@ export function App({ cwd }: Props) {
       },
       // kill moved to leader menu (space k)
       onGoToWindow: () => {
-        if (!session?.tmuxWindowId) { notify('No tmux window'); return; }
-        if (session.tmuxSessionName) switchToSession(session.tmuxSessionName);
-        selectWindow(session.tmuxWindowId);
+        if (!session || !selectedSessionId) { notify('No session selected'); return; }
+
+        if (paneAlive && session.tmuxWindowId) {
+          // Window is alive — just switch to it
+          if (session.tmuxSessionName) switchToSession(session.tmuxSessionName);
+          selectWindow(session.tmuxWindowId);
+          return;
+        }
+
+        // Window is dead — reopen via daemon
+        void (async () => {
+          try {
+            const res = await send({ type: 'reopen-window', sessionId: selectedSessionId, cwd });
+            if (!res.ok) { notify(`Error: ${res.error}`); return; }
+            const data = res.data as { tmuxSessionName: string; tmuxWindowId: string };
+            switchToSession(data.tmuxSessionName);
+            selectWindow(data.tmuxWindowId);
+          } catch (err) {
+            notify(`Error: ${(err as Error).message}`);
+          }
+        })();
       },
       onEditGoal: () => {
         if (!selectedSessionId) { notify('No session selected'); return; }
