@@ -95,24 +95,25 @@ function createAgentPlugin(
   }
 
   // Build hooks config with conditional UserPromptSubmit per agent type
+  // Use ${CLAUDE_PLUGIN_ROOT} for paths — Claude Code resolves this to the plugin directory
   const hooksConfig: Record<string, unknown[]> = {
     PreToolUse: [
-      { matcher: 'SendMessage', hook: { type: 'command', command: 'bash hooks/intercept-send-message.sh' } },
+      { matcher: 'SendMessage', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/intercept-send-message.sh' }] },
     ],
     Stop: [
-      { hook: { type: 'command', command: 'bash hooks/require-submit.sh' } },
+      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/require-submit.sh' }] },
     ],
   };
 
   const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
   if (normalizedType === 'plan') {
     hooksConfig.UserPromptSubmit = [
-      { hook: { type: 'command', command: 'bash hooks/plan-user-prompt.sh' } },
+      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-user-prompt.sh' }] },
     ];
     copyFileSync(`${srcHooks}/plan-user-prompt.sh`, `${base}/hooks/plan-user-prompt.sh`);
   } else if (normalizedType === 'spec-draft') {
     hooksConfig.UserPromptSubmit = [
-      { hook: { type: 'command', command: 'bash hooks/spec-user-prompt.sh' } },
+      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/spec-user-prompt.sh' }] },
     ];
     copyFileSync(`${srcHooks}/spec-user-prompt.sh`, `${base}/hooks/spec-user-prompt.sh`);
   }
@@ -430,14 +431,19 @@ export async function handleAgentSubmit(
   });
 
   // Kill the pane — Claude doesn't exit on its own after running a bash command.
+  // But if this is the last agent, defer the kill to onAllAgentsDone() so the tmux
+  // window doesn't collapse (killing the last pane destroys the window and detaches the user).
   const session = state.getSession(cwd, sessionId);
   const agent = session.agents.find(a => a.id === agentId);
+  const allDone = allAgentsDone(session);
   if (agent?.paneId) {
     unregisterAgentPane(sessionId, agentId);
-    try { tmux.killPane(agent.paneId); } catch { /* already dead */ }
+    if (!allDone) {
+      try { tmux.killPane(agent.paneId); } catch { /* already dead */ }
+    }
   }
 
-  return allAgentsDone(state.getSession(cwd, sessionId));
+  return allDone;
 }
 
 export async function handleAgentKilled(
