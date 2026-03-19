@@ -6,15 +6,21 @@
 
 Before starting each cycle, ask: **which stages or tasks are independent right now?** If two stages touch different subsystems (e.g., backend vs frontend, separate services, unrelated modules), spawn them concurrently — don't serialize work that doesn't need to be serialized. Use `--worktree` when parallel agents might touch overlapping files.
 
-Sequential execution is the default trap. Fight it actively. At every yield, look for work that can run alongside the next stage — review agents while the next implementation starts, frontend and backend stages in parallel, independent fix agents concurrently. A cycle with one agent running is a wasted cycle if other work was ready.
+Maximize parallelism **within your development cycle, not by skipping parts of it.** Running a review alongside the next stage's implementation is good parallelism. Skipping review because the next stage is ready is not — that's cutting corners faster, not working faster. A cycle with one agent running is a wasted cycle if other work was ready, but "other work" includes critique and validation agents, not just the next implementation stage.
 
-If the plan has stages that share no file dependencies, **run them in parallel from the start.** Each stage is multiple cycles:
+If the plan has stages that share no file dependencies, **run them in parallel from the start.** The development cycle for each stage involves some combination of:
 
 1. **Detail-plan it** — expand the high-level outline into specific file changes, informed by previous stages. If complex enough, spawn a spec agent first.
 2. **Implement it** — spawn agents with self-contained instructions (see Agent Instructions below). May itself take multiple cycles if the stage has enough work.
-3. **Critique and refine it** — spawn parallel review agents, fix what they find, repeat until clean (see below).
-4. **Validate it end-to-end** — spawn a validation agent with the e2e recipe. Don't advance until it passes.
-5. **Update roadmap.md** — mark the stage done in the implementation phase, refine future stage outlines if what you learned changes the approach.
+3. **Critique and refine it** — spawn review agents, fix what they find (see Critique and Refinement below).
+4. **Validate it** — spawn a validation agent to verify the stage actually works (see E2E Validation below).
+
+Not every stage needs every step. Use your judgment about what level of rigor each stage deserves:
+- A types/interfaces stage might just need implementation — the next stage that consumes the types will surface any problems.
+- A core business logic stage needs implementation + critique at minimum — subtle bugs here cascade everywhere.
+- An integration stage or anything touching critical paths needs the full loop including validation — you're building on accumulated assumptions and need to verify they hold.
+
+The key question each cycle: **what's the riskiest unverified work right now?** If you just finished a foundation stage and are about to build on it, validate the foundation. If you just implemented a low-risk config change, move on and batch it into a broader review later. When multiple stages have completed without any critique or validation, you've lost the feedback loop — stop implementing and catch up on verification before problems compound.
 
 Don't detail-plan all stages up front. What you learn implementing earlier stages should inform later ones.
 
@@ -52,11 +58,11 @@ When you see these reports, investigate before pushing forward. If the smell sug
 
 ## Critique and Refinement
 
-After implementation agents report, **do not advance to the next stage.** The code needs to be reviewed and refined first. This is not optional.
+After implementation agents report, assess whether the stage needs critique before advancing. For stages that touch core logic, integration points, or critical paths — review before building on top. For low-risk stages (types, config, boilerplate), you can defer review and batch it with a later critique cycle. The failure mode is not "sometimes skipping review" — it's implementing six stages in a row without any review at all.
 
 ### Critique cycle
 
-Spawn three review agents in parallel, each attacking a different dimension:
+When a stage warrants critique, spawn review agents in parallel, each attacking a different dimension:
 
 1. **Code reuse reviewer** — searches the codebase for existing utilities, helpers, and patterns that the new code duplicates. Flags any new function that reimplements existing functionality, any inline logic that could use an existing utility.
 
@@ -83,7 +89,7 @@ Spawn reviewers again on the refined code. If they come back with new issues, fi
 
 ## E2E Validation
 
-After the critique/refine loop produces clean code, **validate end-to-end before advancing.** This is also not optional. The implementing agent is the worst validator of its own work — same blind spots, same assumptions.
+E2E validation confirms the implementation actually works — not just that it compiles or passes unit tests, but that the feature behaves correctly when exercised. Reserve full e2e validation for stages where you're about to build on accumulated work (integration stages, milestones where multiple stages come together) or where failure would be expensive to debug later. Not every stage needs its own e2e pass — but don't let more than 2-3 stages accumulate without one.
 
 Spawn a validation agent with the e2e recipe from `context/e2e-recipe.md`. The agent should:
 - Follow the setup steps exactly (build, start servers, seed data)

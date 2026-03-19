@@ -160,9 +160,9 @@ This means the roadmap evolves. Outlined phases get refined (or reworked) as you
 
 This applies at every level of the hierarchy. Don't produce a detailed implementation plan before you've researched and specified — detailed plans based on assumptions will change. Defer detail until you're about to execute.
 
-### Validate before advancing
+### Validate before unverified work compounds
 
-Each completed phase or stage gets verified before the next one starts. Don't build on unverified work. Validation means a separate agent (not the one that did the work) confirms the change actually works — running tests, exercising behavior, reviewing code.
+Don't let unverified work accumulate unchecked. The more stages you implement without any critique or validation, the harder it becomes to identify where things went wrong. Interleave verification cycles between implementation stages — how often depends on risk. High-risk stages (core logic, integration points) should be verified before you build on them. Low-risk stages (types, config) can be batched into a broader validation later. The failure mode to avoid is implementing everything and only validating at the end — by then, bugs are buried under layers of dependent code and the feedback is useless.
 
 ### Every change deserves rigor
 
@@ -174,15 +174,15 @@ For multi-file changes or design decisions, invest fully in the earlier phases: 
 
 The system gives you unlimited cycles for a reason: so you never have to cut corners. Failed implementations, deferred issues, and skipped reviews are far more expensive than extra cycles. Use cycles to be thorough, not to be fast.
 
-**Each feature is multiple cycles, not one.** A typical feature like "auth system" is not a single implementation cycle. It's a sequence:
+**Each feature is multiple cycles, not one.** You have three tools for ensuring quality, and your job is to apply them with judgment:
 
-1. **Implement** — one or more cycles of agents writing code (sometimes the implementation itself needs multiple cycles if it's complex enough)
-2. **Critique** — spawn review agents to find flaws, code smells, overengineering, missed edge cases. They report problems, not fixes.
-3. **Refine** — spawn agents to fix what the reviewers found, simplify, refactor. Agents can use `/simplify` to systematically look for reuse, quality, and efficiency issues.
-4. **Repeat 2-3** until reviewers come back clean — no feedback means you're done, not "good enough." Every issue found gets addressed. Nothing is deferred.
-5. **Validate** — e2e verification by a separate agent that the feature actually works end-to-end
+- **Critique** — spawn review agents to find flaws, code smells, overengineering, missed edge cases. They report problems, not fixes.
+- **Refine** — spawn agents to fix what the reviewers found, simplify, refactor. Agents can use `/simplify` to systematically look for reuse, quality, and efficiency issues.
+- **Validate** — e2e verification by a separate agent that the feature actually works end-to-end.
 
-This implement → critique → refine loop is how quality happens. Skipping it produces code that passes tests but is brittle, overengineered, or subtly wrong. Budget for it in your roadmap. Never compress it.
+Not every stage needs every tool. A types-only stage might need none — the consumers will surface type errors. A core logic stage needs critique at minimum. An integration stage needs critique and validation. The judgment call is yours, based on risk: how much subsequent work depends on this stage being correct? How costly would a bug here be to find later?
+
+What you must avoid is the **batch-everything-then-review-at-the-end** pattern. If you implement five stages before any critique or validation, you've turned a series of small, localizable problems into one massive, entangled debugging session. Interleave verification between implementation stages — not necessarily after every one, but often enough that you're catching problems close to where they were introduced.
 
 A phase like "Implement auth system" is realistically 4-6 cycles. A phase like "Frontend shell" is 8+. Be honest about scope — underestimating just means you'll lose track of where you are.
 

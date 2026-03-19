@@ -78,28 +78,33 @@ Feature with moderate complexity. Requirements may need clarification. Multiple 
 ### Implementation
 - [ ] Phase 1 — [foundation/types/interfaces]
 - [ ] Phase 2 — [core logic]
+- [ ] Critique phases 1-2
 - [ ] Phase 3 — [integration/wiring]
-
-### Validation
-- [ ] Validate full implementation
+- [ ] Validate — smoketest full feature e2e
 - [ ] Review implementation
 ```
+
+Note: critique and validation are embedded between implementation phases, not deferred to the end. Phase 1 (types) is low-risk and doesn't need its own review, but critique catches issues before Phase 3 builds on them. Validation happens after integration, when all the pieces come together.
 
 ### Cycle plan
 - **Cycle 1**: Spawn `sisyphus:spec-draft` for spec. Yield. (Human iterates on spec between cycles.)
 - **Cycle 2**: Spawn `sisyphus:plan` for plan. Yield.
 - **Cycle 3**: Spawn `sisyphus:review-plan` for review. If fail, respawn plan with issues. Yield.
 - **Cycle 4**: Spawn `sisyphus:implement` for Phase 1. Yield.
-- **Cycle 5**: Spawn `sisyphus:implement` for Phase 2 + `sisyphus:validate` for Phase 1 (parallel if independent). Yield.
-- **Cycle 6-8**: Continue phases, validate, review.
+- **Cycle 5**: Spawn `sisyphus:implement` for Phase 2. Phase 1 is types — low risk, doesn't need its own validation. Yield.
+- **Cycle 6**: Spawn `sisyphus:review` for critique of phases 1-2. This is the checkpoint before integration builds on top. Yield.
+- **Cycle 7**: Address critique findings + spawn `sisyphus:implement` for Phase 3. Yield.
+- **Cycle 8**: Spawn `sisyphus:validate` for e2e smoketest. Yield.
+- **Cycle 9**: Address validation failures or complete.
 
 ### Failure modes
 - **Spec needs human input**: Mark session as needing human review. Orchestrator notes open questions.
 - **Plan fails review**: Feed review issues back, respawn planner.
-- **Phase fails validation**: Feed specifics back to implement agent for that phase only.
+- **Critique finds issues in foundation**: Fix before starting integration — don't build on shaky ground.
+- **Validation fails**: Feed specifics back to implement agent for the failing area.
 
 ### Parallelization
-Phases without dependencies can run in parallel. Types/interfaces (Phase 1) must complete before implementation phases that consume them.
+Phases without dependencies can run in parallel. Types/interfaces (Phase 1) must complete before implementation phases that consume them. Critique can run alongside detail-planning for the next phase.
 
 ---
 
@@ -119,31 +124,40 @@ Cross-cutting feature, multiple domains, needs team coordination. Uses **progres
 ### Stage Outline (high-level only — no file-level detail yet)
 1. [domain A foundation] — no deps — ~N cycles
 2. [domain B foundation] — no deps — ~N cycles
+   → critique stages 1-2 (foundation is low-risk individually, but review before building on it)
 3. [domain A implementation] — depends on 1 — ~N cycles
 4. [domain B implementation] — depends on 2 — ~N cycles
+   → critique + validate stages 3-4 (core logic, high risk — verify before integration)
 5. [integration layer] — depends on 3, 4 — ~N cycles
-6. [integration tests] — depends on all — ~N cycles
+   → validate end-to-end (integration is where accumulated assumptions break)
+6. [final review] — depends on all
 
 ### Current Stage: [whichever is active]
 See context/plan-stage-N-{name}.md for detail plan.
 - [ ] [task-level items from detail plan]
 ```
 
+Note: verification checkpoints are embedded in the stage outline, not deferred to a final phase. The level of rigor varies — foundation stages get a light critique, core logic gets critique + validation, integration gets full e2e validation. This is judgment, not formula.
+
 ### Cycle plan
 - **Cycle 1**: Spawn `sisyphus:spec-draft` for spec. Yield.
-- **Cycle 2**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Do not detail any stage — no file-level specifics." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
+- **Cycle 2**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Include verification checkpoints between stages based on risk." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
 - **Cycle 3**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). Output to `context/plan-stage-1-{name}.md`. Yield.
 - **Cycle 4**: Spawn `sisyphus:implement` for stage 1. If stage 2 is independent, spawn `sisyphus:plan` to detail-plan stage 2 in parallel. Yield.
-- **Cycle 5**: Validate stage 1. Spawn `sisyphus:implement` for stage 2 (if detail-planned). Detail-plan stage 3 in parallel if independent. Yield.
-- **Cycle 6+**: Continue pattern — implement current stage, validate previous, detail-plan next. Each stage follows implement → critique → refine → validate.
+- **Cycle 5**: Spawn `sisyphus:implement` for stage 2 (if detail-planned). Spawn `sisyphus:review` to critique stages 1-2 in parallel — foundation review before core logic builds on it. Detail-plan stage 3 in parallel. Yield.
+- **Cycle 6**: Address critique findings. Spawn `sisyphus:implement` for stage 3. Yield.
+- **Cycle 7**: Spawn `sisyphus:implement` for stage 4. Spawn `sisyphus:review` to critique stage 3 in parallel. Yield.
+- **Cycle 8**: Spawn `sisyphus:validate` for stages 3-4 — core logic checkpoint before integration. Address stage 3 critique. Yield.
+- **Cycle 9+**: Implement integration stage. Validate e2e. Final review.
 
 ### Failure modes
 - **Detail-plan agent can't produce quality output**: The stage is still too large. Break it into sub-stages in the outline and detail-plan each sub-stage individually.
 - **Integration failures**: Often means contracts between domains don't match. Spawn debug agent targeting the integration seam.
 - **Stage N implementation invalidates stage N+1 outline**: Update the high-level outline. This is expected — it's why you don't detail-plan everything upfront.
+- **Critique finds issues after multiple stages built on top**: This is the scenario verification checkpoints exist to prevent. If it happens, you waited too long to review — add earlier checkpoints to the roadmap going forward.
 
 ### Parallelization
-Maximize within the progressive pattern. Independent stages run in parallel. Detail-planning the next stage runs alongside implementing the current one. Foundation stages complete before dependent stages. Integration waits for all domain implementations.
+Maximize within the progressive pattern. Independent stages run in parallel. Detail-planning the next stage runs alongside implementing the current one. Critique and validation agents run alongside the next stage's planning or implementation. Foundation stages complete before dependent stages. Integration waits for all domain implementations.
 
 ---
 
