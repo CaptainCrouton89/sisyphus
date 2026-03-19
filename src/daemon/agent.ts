@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
@@ -11,9 +11,11 @@ import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktr
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 import { summarizeReport } from './summarize.js';
 import { resolveAgentConfig, detectProvider } from './frontmatter.js';
+import type { Provider } from './frontmatter.js';
 import { loadConfig } from '../shared/config.js';
 import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
+import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -95,6 +97,81 @@ function createAgentPlugin(
   return base;
 }
 
+interface SetupAgentPaneOpts {
+  sessionId: string;
+  cwd: string;
+  agentId: string;
+  agentType: string;
+  name: string;
+  instruction: string;
+  windowId: string;
+  color: string;
+  provider: Provider;
+  agentConfig: ReturnType<typeof resolveAgentConfig>;
+  worktreeContext?: WorktreeContext;
+  paneCwd: string;
+}
+
+function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: string } {
+  const { sessionId, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, worktreeContext, paneCwd } = opts;
+
+  const paneId = tmux.createPane(windowId, paneCwd);
+  registerPane(paneId, sessionId, 'agent', agentId);
+  const shortType = agentType && agentType !== 'worker'
+    ? agentType.replace(/^sisyphus:/, '')
+    : '';
+  const paneLabel = shortType ? `${name}-${shortType}` : name;
+  tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
+  tmux.setPaneStyle(paneId, color);
+
+  const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
+  const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
+  writeFileSync(suffixFilePath, suffix, 'utf-8');
+
+  const bannerCmd = resolveBannerCmd();
+  const npmBinDir = resolveNpmBinDir();
+
+  const envExports = buildEnvExports([
+    `export SISYPHUS_SESSION_ID='${sessionId}'`,
+    `export SISYPHUS_AGENT_ID='${agentId}'`,
+    `export SISYPHUS_CWD='${cwd}'`,
+    ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
+    `export PATH="${npmBinDir}:$PATH"`,
+  ]);
+
+  const notifyCmd = buildNotifyCmd(paneId);
+
+  let mainCmd: string;
+
+  if (provider === 'openai') {
+    const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
+    const parts: string[] = [];
+    if (agentConfig?.body) parts.push(agentConfig.body);
+    parts.push(suffix);
+    parts.push(`## Task\n\n${instruction}`);
+    writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
+    const model = agentConfig?.frontmatter.model ?? 'codex-mini';
+    mainCmd = `codex -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
+  } else {
+    const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
+    const config = loadConfig(cwd);
+    const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
+    const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+  }
+
+  const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [
+    '#!/usr/bin/env bash',
+    ...(bannerCmd ? [bannerCmd] : []),
+    envExports,
+    mainCmd,
+    notifyCmd,
+  ]);
+  const fullCmd = `bash '${scriptPath}'`;
+
+  return { paneId, fullCmd };
+}
+
 export interface SpawnAgentOpts {
   sessionId: string;
   cwd: string;
@@ -142,78 +219,10 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     worktreeContext = { offset: portOffset, total: portOffset, branchName };
   }
 
-  const paneId = tmux.createPane(windowId, paneCwd);
-  registerPane(paneId, sessionId, 'agent', agentId);
-  const shortType = agentType && agentType !== 'worker'
-    ? agentType.replace(/^sisyphus:/, '')
-    : '';
-  const paneLabel = shortType ? `${name}-${shortType}` : name;
-  tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
-  tmux.setPaneStyle(paneId, color);
-
-  const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
-  const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
-  writeFileSync(suffixFilePath, suffix, 'utf-8');
-
-  const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
-  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
-
-  // Resolve CLI binary path so `sisyphus` works even when installed as a local dependency
-  const cliBin = resolve(import.meta.dirname, 'cli.js');
-  const npmBinDir = resolve(import.meta.dirname, '../../.bin');
-
-  const envExports = [
-    `export SISYPHUS_SESSION_ID='${sessionId}'`,
-    `export SISYPHUS_AGENT_ID='${agentId}'`,
-    `export SISYPHUS_CWD='${cwd}'`,
-    ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
-    `export PATH="${npmBinDir}:$PATH"`,
-  ].join(' && ');
-
-  const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
-
-  let mainCmd: string;
-
-  if (provider === 'openai') {
-    // Build combined prompt for codex
-    const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
-    const parts: string[] = [];
-
-    // 1. Agent type body (stripped of frontmatter)
-    if (agentConfig?.body) {
-      parts.push(agentConfig.body);
-    }
-
-    // 2. Rendered agent-suffix template
-    parts.push(suffix);
-
-    // 3. The instruction itself
-    parts.push(`## Task\n\n${instruction}`);
-
-    writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
-
-    const model = agentConfig?.frontmatter.model ?? 'codex-mini';
-    mainCmd = `codex -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
-  } else {
-    // Anthropic (current behavior)
-    const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
-    const config = loadConfig(cwd);
-    const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
-    const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-  }
-
-  // Write full command to a shell script to avoid tmux send-keys buffer limits
-  const scriptLines = [
-    '#!/usr/bin/env bash',
-    ...(bannerCmd ? [bannerCmd.replace(/ &&$/, '')] : []),
-    envExports,
-    mainCmd,
-    notifyCmd,
-  ];
-  const scriptPath = `${promptsDir(cwd, sessionId)}/${agentId}-run.sh`;
-  writeFileSync(scriptPath, scriptLines.join('\n'), { mode: 0o755 });
-  const fullCmd = `bash '${scriptPath}'`;
+  const { paneId, fullCmd } = setupAgentPane({
+    sessionId, cwd, agentId, agentType, name, instruction,
+    windowId, color, provider, agentConfig, worktreeContext, paneCwd,
+  });
 
   const agent: Agent = {
     id: agentId,
@@ -306,66 +315,10 @@ export async function restartAgent(
     unregisterAgentPane(sessionId, agentId);
   }
 
-  // Create new pane
-  const paneId = tmux.createPane(windowId, paneCwd);
-  registerPane(paneId, sessionId, 'agent', agentId);
-  const shortType = agentType && agentType !== 'worker'
-    ? agentType.replace(/^sisyphus:/, '')
-    : '';
-  const paneLabel = shortType ? `${name}-${shortType}` : name;
-  tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
-  tmux.setPaneStyle(paneId, color);
-
-  const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
-  const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
-  writeFileSync(suffixFilePath, suffix, 'utf-8');
-
-  const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
-  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}' &&` : '';
-
-  const cliBin = resolve(import.meta.dirname, 'cli.js');
-  const npmBinDir = resolve(import.meta.dirname, '../../.bin');
-
-  const envExports = [
-    `export SISYPHUS_SESSION_ID='${sessionId}'`,
-    `export SISYPHUS_AGENT_ID='${agentId}'`,
-    `export SISYPHUS_CWD='${cwd}'`,
-    ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
-    `export PATH="${npmBinDir}:$PATH"`,
-  ].join(' && ');
-
-  const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
-
-  let mainCmd: string;
-
-  if (provider === 'openai') {
-    const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
-    const parts: string[] = [];
-    if (agentConfig?.body) parts.push(agentConfig.body);
-    parts.push(suffix);
-    parts.push(`## Task\n\n${instruction}`);
-    writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
-    const model = agentConfig?.frontmatter.model ?? 'codex-mini';
-    mainCmd = `codex -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
-  } else {
-    const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
-    const config = loadConfig(cwd);
-    const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
-    const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-  }
-
-  // Write full command to a shell script to avoid tmux send-keys buffer limits
-  const scriptLines = [
-    '#!/usr/bin/env bash',
-    ...(bannerCmd ? [bannerCmd.replace(/ &&$/, '')] : []),
-    envExports,
-    mainCmd,
-    notifyCmd,
-  ];
-  const scriptPath = `${promptsDir(cwd, sessionId)}/${agentId}-run.sh`;
-  writeFileSync(scriptPath, scriptLines.join('\n'), { mode: 0o755 });
-  const fullCmd = `bash '${scriptPath}'`;
+  const { paneId, fullCmd } = setupAgentPane({
+    sessionId, cwd, agentId, agentType, name, instruction,
+    windowId, color, provider, agentConfig, worktreeContext, paneCwd,
+  });
 
   // Update agent state in-place
   await state.updateAgent(cwd, sessionId, agentId, {

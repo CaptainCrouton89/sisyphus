@@ -1,32 +1,6 @@
-import { execSync } from 'node:child_process';
-import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
-
-export const EXEC_ENV = execEnv();
-
-function exec(cmd: string): string {
-  return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV }).trim();
-}
-
-function execSafe(cmd: string): string | null {
-  try {
-    return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-  } catch {
-    return null;
-  }
-}
-
-export function getCurrentTmuxSession(): string {
-  const tmuxEnv = process.env['TMUX'];
-  if (!tmuxEnv) throw new Error('Not running inside tmux');
-  return exec('tmux display-message -p "#{session_name}"');
-}
-
-export function createWindow(sessionName: string, windowName: string, cwd?: string): string {
-  const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
-  exec(`tmux new-window -t "${sessionName}" -n "${windowName}"${cwdFlag} -P -F "#{window_id}"`);
-  return exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{window_id}"`);
-}
+import { exec, execSafe } from '../shared/exec.js';
+export { EXEC_ENV } from '../shared/exec.js';
 
 export function createPane(windowTarget: string, cwd?: string, position: 'left' | 'right' = 'right'): string {
   const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
@@ -106,15 +80,6 @@ export function setPaneStyle(paneTarget: string, color: string): void {
   execSafe(`tmux set -p -t "${paneTarget}" @pane_color "${color}"`);
   execSafe(`tmux set -w -t "${paneTarget}" pane-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
   execSafe(`tmux set -w -t "${paneTarget}" pane-active-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
-}
-
-export function sendSignal(paneTarget: string, signal: string): void {
-  const info = execSafe(`tmux list-panes -t "${paneTarget}" -F "#{pane_pid}"`);
-  if (!info) return;
-  const pid = info.split('\n')[0]?.trim();
-  if (pid) {
-    execSafe(`kill -${signal} ${pid}`);
-  }
 }
 
 export function selectLayout(windowTarget: string, layout: string = 'even-horizontal'): void {

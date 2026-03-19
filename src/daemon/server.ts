@@ -10,22 +10,13 @@ import { lookupPane, unregisterPane } from './pane-registry.js';
 
 let server: Server | null = null;
 
-// Track the cwd for each session so we can route requests
-const sessionCwdMap = new Map<string, string>();
-// Monotonic message counter per session
-const sessionMessageCounters = new Map<string, number>();
-// Track the originating tmux session for each sisyphus session
-const sessionTmuxMap = new Map<string, string>();
-// Track the originating tmux window for each sisyphus session
-const sessionWindowMap = new Map<string, string>();
-
-export function getSessionCwd(sessionId: string): string | undefined {
-  return sessionCwdMap.get(sessionId);
+interface SessionTracking {
+  cwd: string;
+  tmuxSession?: string;
+  windowId?: string;
+  messageCounter: number;
 }
-
-export function getSessionTmux(sessionId: string): string | undefined {
-  return sessionTmuxMap.get(sessionId);
-}
+const sessionTrackingMap = new Map<string, SessionTracking>();
 
 function registryPath(): string {
   return join(globalDir(), 'session-registry.json');
@@ -35,8 +26,8 @@ function persistSessionRegistry(): void {
   const dir = globalDir();
   mkdirSync(dir, { recursive: true });
   const registry: Record<string, string> = {};
-  for (const [id, cwd] of sessionCwdMap) {
-    registry[id] = cwd;
+  for (const [id, tracking] of sessionTrackingMap) {
+    registry[id] = tracking.cwd;
   }
   writeFileSync(registryPath(), JSON.stringify(registry, null, 2), 'utf-8');
 }
@@ -52,13 +43,23 @@ export function loadSessionRegistry(): Record<string, string> {
 }
 
 export function registerSessionCwd(sessionId: string, cwd: string): void {
-  sessionCwdMap.set(sessionId, cwd);
+  const existing = sessionTrackingMap.get(sessionId);
+  if (existing) {
+    existing.cwd = cwd;
+  } else {
+    sessionTrackingMap.set(sessionId, { cwd, messageCounter: 0 });
+  }
   persistSessionRegistry();
 }
 
 export function registerSessionTmux(sessionId: string, tmuxSession: string, windowId: string): void {
-  sessionTmuxMap.set(sessionId, tmuxSession);
-  sessionWindowMap.set(sessionId, windowId);
+  const existing = sessionTrackingMap.get(sessionId);
+  if (existing) {
+    existing.tmuxSession = tmuxSession;
+    existing.windowId = windowId;
+  } else {
+    sessionTrackingMap.set(sessionId, { cwd: '', tmuxSession, windowId, messageCounter: 0 });
+  }
 }
 
 function unknownSessionError(sessionId: string): Response {
@@ -70,59 +71,62 @@ async function handleRequest(req: Request): Promise<Response> {
     switch (req.type) {
       case 'start': {
         const session = await sessionManager.startSession(req.task, req.cwd, req.context, req.name);
-        registerSessionCwd(session.id, req.cwd);
-        if (session.tmuxSessionName) sessionTmuxMap.set(session.id, session.tmuxSessionName);
-        if (session.tmuxWindowId) sessionWindowMap.set(session.id, session.tmuxWindowId);
+        sessionTrackingMap.set(session.id, {
+          cwd: req.cwd,
+          tmuxSession: session.tmuxSessionName,
+          windowId: session.tmuxWindowId,
+          messageCounter: 0,
+        });
+        persistSessionRegistry();
         return { ok: true, data: { sessionId: session.id, tmuxSessionName: session.tmuxSessionName } };
       }
 
       case 'spawn': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        const result = await sessionManager.handleSpawn(req.sessionId, cwd, req.agentType, req.name, req.instruction, req.worktree);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const result = await sessionManager.handleSpawn(req.sessionId, tracking.cwd, req.agentType, req.name, req.instruction, req.worktree);
         return { ok: true, data: { agentId: result.agentId } };
       }
 
       case 'submit': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        const windowId = sessionWindowMap.get(req.sessionId);
-        if (!windowId) return { ok: false, error: `No tmux window found for session: ${req.sessionId}` };
-        await sessionManager.handleSubmit(cwd, req.sessionId, req.agentId, req.report, windowId);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        if (!tracking.windowId) return { ok: false, error: `No tmux window found for session: ${req.sessionId}` };
+        await sessionManager.handleSubmit(tracking.cwd, req.sessionId, req.agentId, req.report, tracking.windowId);
         return { ok: true };
       }
 
       case 'report': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleReport(cwd, req.sessionId, req.agentId, req.content);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleReport(tracking.cwd, req.sessionId, req.agentId, req.content);
         return { ok: true };
       }
 
       case 'yield': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleYield(req.sessionId, cwd, req.nextPrompt, req.mode);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleYield(req.sessionId, tracking.cwd, req.nextPrompt, req.mode);
         return { ok: true };
       }
 
       case 'complete': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleComplete(req.sessionId, cwd, req.report);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleComplete(req.sessionId, tracking.cwd, req.report);
         return { ok: true };
       }
 
       case 'continue': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleContinue(req.sessionId, cwd);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleContinue(req.sessionId, tracking.cwd);
         return { ok: true };
       }
 
       case 'status': {
         if (req.sessionId) {
-          const cwd = sessionCwdMap.get(req.sessionId) ?? req.cwd;
+          const cwd = sessionTrackingMap.get(req.sessionId)?.cwd ?? req.cwd;
           if (!cwd) return unknownSessionError(req.sessionId);
           const session = sessionManager.getSessionStatus(cwd, req.sessionId);
           return { ok: true, data: { session: session as unknown as Record<string, unknown> } };
@@ -135,11 +139,11 @@ async function handleRequest(req: Request): Promise<Response> {
         if (req.all) {
           // List sessions across all known cwds
           const seenCwds = new Set<string>();
-          for (const cwd of sessionCwdMap.values()) {
-            if (seenCwds.has(cwd)) continue;
-            seenCwds.add(cwd);
-            const sessions = sessionManager.listSessions(cwd);
-            allSessions.push(...sessions.map(s => ({ ...s, cwd } as unknown as Record<string, unknown>)));
+          for (const tracking of sessionTrackingMap.values()) {
+            if (seenCwds.has(tracking.cwd)) continue;
+            seenCwds.add(tracking.cwd);
+            const sessions = sessionManager.listSessions(tracking.cwd);
+            allSessions.push(...sessions.map(s => ({ ...s, cwd: tracking.cwd } as unknown as Record<string, unknown>)));
           }
         } else {
           // List sessions for the requesting cwd only
@@ -148,10 +152,10 @@ async function handleRequest(req: Request): Promise<Response> {
           // Count total across all cwds for the hint
           let totalCount = allSessions.length;
           const seenCwds = new Set<string>([req.cwd]);
-          for (const cwd of sessionCwdMap.values()) {
-            if (seenCwds.has(cwd)) continue;
-            seenCwds.add(cwd);
-            totalCount += sessionManager.listSessions(cwd).length;
+          for (const tracking of sessionTrackingMap.values()) {
+            if (seenCwds.has(tracking.cwd)) continue;
+            seenCwds.add(tracking.cwd);
+            totalCount += sessionManager.listSessions(tracking.cwd).length;
           }
           if (totalCount > allSessions.length) {
             return { ok: true, data: { sessions: allSessions, totalCount, filtered: true } };
@@ -161,83 +165,79 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'resume': {
-        let cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) {
+        let tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) {
           // Session not in memory — try to recover from disk using the cwd provided by CLI
           const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
           if (existsSync(stateFile)) {
-            cwd = req.cwd;
-            registerSessionCwd(req.sessionId, cwd);
+            tracking = { cwd: req.cwd, messageCounter: 0 };
+            sessionTrackingMap.set(req.sessionId, tracking);
+            persistSessionRegistry();
           } else {
             return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sisyphus list --all\` to see available sessions.` };
           }
         }
-        const session = await sessionManager.resumeSession(req.sessionId, cwd, req.message);
-        if (session.tmuxSessionName) sessionTmuxMap.set(req.sessionId, session.tmuxSessionName);
-        if (session.tmuxWindowId) sessionWindowMap.set(req.sessionId, session.tmuxWindowId);
+        const session = await sessionManager.resumeSession(req.sessionId, tracking.cwd, req.message);
+        if (session.tmuxSessionName) tracking.tmuxSession = session.tmuxSessionName;
+        if (session.tmuxWindowId) tracking.windowId = session.tmuxWindowId;
         return { ok: true, data: { sessionId: session.id, status: session.status, tmuxSessionName: session.tmuxSessionName } };
       }
 
       case 'register_claude_session': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleRegisterClaudeSession(cwd, req.sessionId, req.agentId, req.claudeSessionId);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleRegisterClaudeSession(tracking.cwd, req.sessionId, req.agentId, req.claudeSessionId);
         return { ok: true };
       }
 
       case 'kill': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        const killedAgents = await sessionManager.handleKill(req.sessionId, cwd);
-        sessionCwdMap.delete(req.sessionId);
-        sessionTmuxMap.delete(req.sessionId);
-        sessionWindowMap.delete(req.sessionId);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const killedAgents = await sessionManager.handleKill(req.sessionId, tracking.cwd);
+        sessionTrackingMap.delete(req.sessionId);
         persistSessionRegistry();
         return { ok: true, data: { killedAgents, sessionId: req.sessionId } };
       }
 
       case 'kill-agent': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleKillAgent(req.sessionId, cwd, req.agentId);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleKillAgent(req.sessionId, tracking.cwd, req.agentId);
         return { ok: true, data: { agentId: req.agentId } };
       }
 
       case 'restart-agent': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await sessionManager.handleRestartAgent(req.sessionId, cwd, req.agentId);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await sessionManager.handleRestartAgent(req.sessionId, tracking.cwd, req.agentId);
         return { ok: true, data: { agentId: req.agentId } };
       }
 
       case 'rollback': {
-        let cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) {
+        let tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) {
           const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
           if (existsSync(stateFile)) {
-            cwd = req.cwd;
-            registerSessionCwd(req.sessionId, cwd);
+            registerSessionCwd(req.sessionId, req.cwd);
+            tracking = sessionTrackingMap.get(req.sessionId)!;
           } else {
             return unknownSessionError(req.sessionId);
           }
         }
-        const result = await sessionManager.handleRollback(req.sessionId, cwd, req.toCycle);
+        const result = await sessionManager.handleRollback(req.sessionId, tracking.cwd, req.toCycle);
         return { ok: true, data: result as unknown as Record<string, unknown> };
       }
 
       case 'delete': {
         // Kill session if active (best-effort)
-        const activeCwd = sessionCwdMap.get(req.sessionId);
-        if (activeCwd) {
+        const activeTracking = sessionTrackingMap.get(req.sessionId);
+        if (activeTracking) {
           try {
-            await sessionManager.handleKill(req.sessionId, activeCwd);
+            await sessionManager.handleKill(req.sessionId, activeTracking.cwd);
           } catch {
             // May already be dead — continue
           }
-          sessionCwdMap.delete(req.sessionId);
-          sessionTmuxMap.delete(req.sessionId);
-          sessionWindowMap.delete(req.sessionId);
-          sessionMessageCounters.delete(req.sessionId);
+          sessionTrackingMap.delete(req.sessionId);
           persistSessionRegistry();
         }
         // Remove session directory
@@ -249,43 +249,42 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'pane-exited': {
         const entry = lookupPane(req.paneId);
         if (!entry) return { ok: true }; // Already handled or unknown
-        const cwd = sessionCwdMap.get(entry.sessionId);
-        if (!cwd) {
+        const tracking = sessionTrackingMap.get(entry.sessionId);
+        if (!tracking) {
           unregisterPane(req.paneId);
           return { ok: true };
         }
         unregisterPane(req.paneId);
-        await sessionManager.handlePaneExited(req.paneId, cwd, entry.sessionId, entry.role, entry.agentId);
+        await sessionManager.handlePaneExited(req.paneId, tracking.cwd, entry.sessionId, entry.role, entry.agentId);
         return { ok: true };
       }
 
       case 'update-task': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
-        await state.updateTask(cwd, req.sessionId, req.task);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await state.updateTask(tracking.cwd, req.sessionId, req.task);
         return { ok: true };
       }
 
       case 'message': {
-        const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return unknownSessionError(req.sessionId);
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
 
-        const counter = (sessionMessageCounters.get(req.sessionId) ?? 0) + 1;
-        sessionMessageCounters.set(req.sessionId, counter);
-        const id = `msg-${String(counter).padStart(3, '0')}`;
+        tracking.messageCounter += 1;
+        const id = `msg-${String(tracking.messageCounter).padStart(3, '0')}`;
 
         const source: MessageSource = req.source ?? { type: 'user' };
         const summary = req.content.length > 200 ? req.content.slice(0, 200) + '...' : req.content;
 
         let filePath: string | undefined;
         if (req.content.length > 200) {
-          const dir = messagesDir(cwd, req.sessionId);
+          const dir = messagesDir(tracking.cwd, req.sessionId);
           mkdirSync(dir, { recursive: true });
           filePath = join(dir, `${id}.md`);
           writeFileSync(filePath, req.content, 'utf-8');
         }
 
-        await state.appendMessage(cwd, req.sessionId, {
+        await state.appendMessage(tracking.cwd, req.sessionId, {
           id,
           source,
           content: req.content,

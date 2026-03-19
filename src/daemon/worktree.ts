@@ -1,26 +1,11 @@
-import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Agent } from '../shared/types.js';
 import type { WorktreeConfig } from '../shared/config.js';
 import { worktreeConfigPath, worktreeBaseDir } from '../shared/paths.js';
 
-import { execEnv } from '../shared/env.js';
+import { exec, execSafe } from '../shared/exec.js';
 import { shellQuote } from '../shared/shell.js';
-
-const EXEC_ENV = execEnv();
-
-function exec(cmd: string, cwd?: string): string {
-  return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd }).trim();
-}
-
-function execSafe(cmd: string, cwd?: string): string | null {
-  try {
-    return exec(cmd, cwd);
-  } catch {
-    return null;
-  }
-}
 
 
 export interface MergeResult {
@@ -66,26 +51,6 @@ export function createWorktreeShell(
   exec(`git -C ${shellQuote(cwd)} worktree add ${shellQuote(worktreePath)} ${shellQuote(branchName)}`);
 
   return { worktreePath, branchName };
-}
-
-/**
- * Create git worktree AND run bootstrap synchronously.
- * Use createWorktreeShell + bootstrapWorktree separately when you need
- * to defer the slow bootstrap to avoid blocking.
- */
-export function createWorktree(
-  cwd: string,
-  sessionId: string,
-  agentId: string,
-): { worktreePath: string; branchName: string } {
-  const result = createWorktreeShell(cwd, sessionId, agentId);
-
-  const config = loadWorktreeConfig(cwd);
-  if (config) {
-    bootstrapWorktree(cwd, result.worktreePath, config);
-  }
-
-  return result;
 }
 
 export function bootstrapWorktree(cwd: string, worktreePath: string, config: WorktreeConfig): void {

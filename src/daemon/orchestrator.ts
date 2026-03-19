@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { resolve, dirname, join } from 'node:path';
+import { resolve, join } from 'node:path';
+import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -217,16 +218,14 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   sessionWindowMap.set(sessionId, windowId);
 
-  // Resolve CLI binary path so `sisyphus` works even when installed as a local dependency
-  const cliBin = resolve(import.meta.dirname, 'cli.js');
-  const npmBinDir = resolve(import.meta.dirname, '../../.bin');
+  const npmBinDir = resolveNpmBinDir();
 
-  const envExports = [
+  const envExports = buildEnvExports([
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='orchestrator'`,
     `export SISYPHUS_CWD='${cwd}'`,
     `export PATH="${npmBinDir}:$PATH"`,
-  ].join(' && ');
+  ]);
 
   // User message: session state + contextual prompt
   let userPrompt = formattedState;
@@ -259,20 +258,16 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   tmux.setPaneTitle(paneId, `Sisyphus`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
-  const bannerPath = resolve(import.meta.dirname, '../templates/banner.txt');
-  const bannerCmd = existsSync(bannerPath) ? `cat '${bannerPath}'` : '';
-  const notifyCmd = `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
+  const bannerCmd = resolveBannerCmd();
+  const notifyCmd = buildNotifyCmd(paneId);
 
-  // Write full command to a shell script to avoid tmux send-keys buffer limits
-  const scriptLines = [
+  const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `orchestrator-run-${cycleNum}`, [
     '#!/usr/bin/env bash',
     ...(bannerCmd ? [bannerCmd] : []),
     envExports,
-    `${claudeCmd}`,
+    claudeCmd,
     notifyCmd,
-  ];
-  const scriptPath = `${promptsDir(cwd, sessionId)}/orchestrator-run-${cycleNum}.sh`;
-  writeFileSync(scriptPath, scriptLines.join('\n'), { mode: 0o755 });
+  ]);
   tmux.sendKeys(paneId, `bash '${scriptPath}'`);
 
   await state.addOrchestratorCycle(cwd, sessionId, {
