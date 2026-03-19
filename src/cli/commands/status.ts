@@ -5,44 +5,21 @@ import type { Request } from '../../shared/protocol.js';
 import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
 import { computeActiveTimeMs } from '../../shared/utils.js';
 import { roadmapPath } from '../../shared/paths.js';
+import { formatDuration, statusColor } from '../../shared/format.js';
 
-const STATUS_COLORS: Record<string, string> = {
-  active: '\x1b[32m',    // green
-  paused: '\x1b[33m',    // yellow
-  completed: '\x1b[36m', // cyan
-  running: '\x1b[32m',   // green
-  killed: '\x1b[31m',    // red
-  crashed: '\x1b[31m',   // red
-  lost: '\x1b[90m',      // gray
+const COLOR_CODES: Record<string, string> = {
+  green: '\x1b[32m', yellow: '\x1b[33m', cyan: '\x1b[36m',
+  red: '\x1b[31m', gray: '\x1b[90m', white: '\x1b[37m',
 };
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';
 
 function colorize(text: string, status: string): string {
-  const color = STATUS_COLORS[status];
-  if (!color) return `${text}${RESET}`;
-  return `${color}${text}${RESET}`;
-}
-
-function formatMs(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  if (totalSeconds < 0) return '0s';
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
-  return parts.join(' ');
-}
-
-function formatDuration(startOrMs: string | number, endIso?: string | null): string {
-  if (typeof startOrMs === 'number') return formatMs(startOrMs);
-  const start = new Date(startOrMs).getTime();
-  const end = endIso ? new Date(endIso).getTime() : Date.now();
-  return formatMs(end - start);
+  const colorName = statusColor(status);
+  const code = COLOR_CODES[colorName];
+  if (!code) return `${text}\x1b[0m`;
+  return `${code}${text}\x1b[0m`;
 }
 
 function inferOrchestratorPhase(session: Session): string {
@@ -150,7 +127,7 @@ function printSession(session: Session): void {
 
   const lastActivity = computeLastActivity(session);
   if (lastActivity) {
-    console.log(`  Last activity: ${formatMs(Date.now() - lastActivity.getTime())} ago`);
+    console.log(`  Last activity: ${formatDuration(Date.now() - lastActivity.getTime())} ago`);
   }
 
   console.log(`  Orchestrator cycles: ${session.orchestratorCycles.length}`);

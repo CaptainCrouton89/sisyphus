@@ -1,44 +1,9 @@
-import { connect } from 'node:net';
-import { socketPath } from '../shared/paths.js';
 import type { Request, Response } from '../shared/protocol.js';
+import { rawSend as sharedRawSend } from '../shared/client.js';
 import { ensureDaemonInstalled, waitForDaemon } from './install.js';
 
 export function rawSend(request: Request): Promise<Response> {
-  const sock = socketPath();
-
-  return new Promise<Response>((resolve, reject) => {
-    const socket = connect(sock);
-    let data = '';
-
-    const timeout = setTimeout(() => {
-      socket.destroy();
-      reject(new Error('Request timed out after 10s. The daemon may be overloaded.\n  Check: sisyphus doctor\n  Logs: tail -20 ~/.sisyphus/daemon.log'));
-    }, 10_000);
-
-    socket.on('connect', () => {
-      socket.write(JSON.stringify(request) + '\n');
-    });
-
-    socket.on('data', (chunk) => {
-      data += chunk.toString();
-      const newlineIdx = data.indexOf('\n');
-      if (newlineIdx !== -1) {
-        clearTimeout(timeout);
-        const line = data.slice(0, newlineIdx);
-        socket.destroy();
-        try {
-          resolve(JSON.parse(line) as Response);
-        } catch {
-          reject(new Error(`Invalid JSON response from daemon: ${line}`));
-        }
-      }
-    });
-
-    socket.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
+  return sharedRawSend(request, 10_000);
 }
 
 export async function sendRequest(request: Request): Promise<Response> {

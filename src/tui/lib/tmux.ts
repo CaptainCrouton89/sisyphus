@@ -3,22 +3,9 @@ import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { globalDir } from '../../shared/paths.js';
-import { execEnv, augmentedPath } from '../../shared/env.js';
+import { augmentedPath } from '../../shared/env.js';
 import { shellQuote } from '../../shared/shell.js';
-
-const EXEC_ENV = execEnv();
-
-function exec(cmd: string): string {
-  return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV }).trim();
-}
-
-function execSafe(cmd: string): string | null {
-  try {
-    return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-  } catch {
-    return null;
-  }
-}
+import { exec, execSafe, EXEC_ENV } from '../../shared/exec.js';
 
 
 export function getWindowId(): string {

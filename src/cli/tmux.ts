@@ -20,7 +20,3 @@ export function getTmuxSession(): string {
   return execSync('tmux display-message -p "#{session_name}"', { encoding: 'utf8' }).trim();
 }
 
-export function getTmuxWindow(): string {
-  assertTmux();
-  return execSync('tmux display-message -p "#{window_id}"', { encoding: 'utf8' }).trim();
-}
