@@ -147,7 +147,7 @@ Agents spawned:
     against spec at context/spec-rate-limiting.md"
 ```
 
-### Cycle 4 — Implement (phases 1+2 parallel)
+### Cycle 4 — Implement phases 1+2 (parallel, low-risk foundation)
 ```
 Plan review: PASS.
 
@@ -155,16 +155,67 @@ roadmap.md updated (plan review done, starting implementation):
   - [x] ~~Draft spec~~, [x] ~~Plan~~, [x] ~~Review plan~~
   - [ ] Implement rate limiting middleware
   - [ ] Implement rate limit configuration
-  ...
+  - [ ] Critique phases 1-2 — review before integration phase
+  - [ ] Implement rate limit headers and error responses
+  - [ ] Validate — smoketest rate limiting end-to-end
+  - [ ] Final review
 
-Agents spawned:
+Agents spawned (parallel — phases touch different files):
   implement agent → "Implement Phase 1 from context/plan-rate-limiting.md —
     rate limiting middleware in src/api/middleware/rate-limit.ts"
   implement agent → "Implement Phase 2 from context/plan-rate-limiting.md —
     rate limit configuration in src/config/rate-limits.ts"
 ```
 
-### Cycle 5-7 — Continue phases, validate, review, complete
+### Cycle 5 — Critique before integration builds on top
+```
+Both implementation agents complete.
+
+Why critique now: Phase 3 (headers/error responses) integrates the middleware and
+  config — if the foundation has issues, they'll cascade. Cheaper to catch now.
+
+roadmap.md updated:
+  - [x] ~~Implement middleware~~, [x] ~~Implement config~~
+  - [ ] Critique phases 1-2
+  ...
+
+Agents spawned:
+  review agent → "Review rate limiting middleware and config implementation.
+    Focus on: Redis connection handling, sliding window correctness,
+    config schema matches what middleware expects."
+```
+
+### Cycle 6 — Implement phase 3 + address critique
+```
+Review: 2 findings — middleware doesn't handle Redis connection failure gracefully,
+  config schema allows negative rate limits.
+
+Agents spawned (parallel):
+  implement agent → "Fix review findings in reports/agent-008-final.md for
+    rate limiting middleware and config."
+  implement agent → "Implement Phase 3 from context/plan-rate-limiting.md —
+    rate limit headers and 429 error responses in src/api/middleware/rate-limit.ts"
+```
+
+### Cycle 7 — Validate end-to-end
+```
+Phase 3 and fixes complete.
+
+Why validate now: all three phases are done and integrated. This is the checkpoint
+  before calling it complete — verify it actually works, not just compiles.
+
+Agents spawned:
+  validate agent → "Verify rate limiting end-to-end: start server, send requests
+    exceeding limits, confirm 429 responses with correct Retry-After headers.
+    Test per-user isolation, endpoint-specific overrides, Redis failover behavior."
+```
+
+### Cycle 8 — Complete
+```
+Validation: PASS. Final review agent confirms no issues.
+Complete — "Added per-user API rate limiting with Redis-backed sliding window,
+  configurable per-endpoint limits, and graceful Redis failover."
+```
 
 ---
 

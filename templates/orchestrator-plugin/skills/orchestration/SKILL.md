@@ -16,7 +16,7 @@ How to structure sisyphus sessions for common task types. This skill helps the o
 
 3. **Parallelize when independent.** If two tasks don't share files or depend on each other's output, spawn agents for both in the same cycle.
 
-4. **Validate at boundaries.** After each logical phase completes, spawn a validation agent before moving on. Catching problems early prevents cascading rework.
+4. **Interleave verification.** Don't batch all implementation and defer review to the end. Embed critique and validation checkpoints between stages based on risk — the more subsequent work depends on a stage being correct, the more it needs verification before you build on it.
 
 5. **Reports are handoffs.** Agent reports should contain everything the next cycle's orchestrator needs — what was done, what was found, what's unresolved, where artifacts were saved.
 

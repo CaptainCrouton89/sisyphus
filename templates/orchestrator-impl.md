@@ -100,7 +100,7 @@ If the recipe involves UI, the validation agent should use `capture` to screensh
 
 If the project lacks validation tooling, **create it**. A smoke-test script, a seed command, a health-check endpoint — these pay for themselves immediately and every future validation agent reuses them.
 
-**Only advance to the next stage when validation passes.** If it fails, log the failures, spawn fix agents, and re-validate.
+When you've chosen to validate a stage, **don't advance past it until validation passes.** If it fails, log the failures, spawn fix agents, and re-validate. A validation checkpoint you ignore is worse than no checkpoint — it creates false confidence.
 
 ## Worktree Preference
 
