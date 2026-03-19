@@ -106,16 +106,21 @@ function createAgentPlugin(
   };
 
   const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
-  if (normalizedType === 'plan') {
+  const userPromptHooks: Record<string, string> = {
+    'plan': 'plan-user-prompt.sh',
+    'spec-draft': 'spec-user-prompt.sh',
+    'review': 'review-user-prompt.sh',
+    'review-plan': 'review-plan-user-prompt.sh',
+    'debug': 'debug-user-prompt.sh',
+    'operator': 'operator-user-prompt.sh',
+    'test-spec': 'test-spec-user-prompt.sh',
+  };
+  const hookScript = userPromptHooks[normalizedType];
+  if (hookScript) {
     hooksConfig.UserPromptSubmit = [
-      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-user-prompt.sh' }] },
+      { hooks: [{ type: 'command', command: `bash \${CLAUDE_PLUGIN_ROOT}/hooks/${hookScript}` }] },
     ];
-    copyFileSync(`${srcHooks}/plan-user-prompt.sh`, `${base}/hooks/plan-user-prompt.sh`);
-  } else if (normalizedType === 'spec-draft') {
-    hooksConfig.UserPromptSubmit = [
-      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/spec-user-prompt.sh' }] },
-    ];
-    copyFileSync(`${srcHooks}/spec-user-prompt.sh`, `${base}/hooks/spec-user-prompt.sh`);
+    copyFileSync(`${srcHooks}/${hookScript}`, `${base}/hooks/${hookScript}`);
   }
 
   writeFileSync(`${base}/hooks/hooks.json`, JSON.stringify({ hooks: hooksConfig }, null, 2), 'utf-8');
