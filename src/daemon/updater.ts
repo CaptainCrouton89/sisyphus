@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { get } from 'node:https';
 import { daemonUpdatingPath } from '../shared/paths.js';
@@ -98,8 +98,21 @@ function clearUpdating(): void {
   try { unlinkSync(daemonUpdatingPath()); } catch {}
 }
 
+function isLinkedInstall(): boolean {
+  // If the global node_modules entry is a symlink, we're locally linked for development — skip auto-update
+  try {
+    const nodeDir = resolve(process.execPath, '..');
+    const globalPrefix = execSync('npm prefix -g', { timeout: 5000, encoding: 'utf-8', env: { ...process.env, PATH: `${nodeDir}:${process.env.PATH ?? ''}` } }).trim();
+    const globalPkgDir = resolve(globalPrefix, 'lib', 'node_modules', 'sisyphi');
+    return lstatSync(globalPkgDir).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 export async function checkAndApply(): Promise<void> {
   clearUpdating(); // clean up stale marker from previous run
+  if (isLinkedInstall()) return;
   try {
     const update = await checkForUpdate();
     if (!update) return;
