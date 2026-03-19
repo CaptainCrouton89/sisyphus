@@ -30,6 +30,7 @@ export function createSession(sessionName: string, windowName: string, cwd: stri
   exec(`tmux new-session -d -s "${sessionName}" -n "${windowName}" -c ${shellQuote(cwd)}`);
   const windowId = exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{window_id}"`);
   const initialPaneId = exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{pane_id}"`);
+  configureSessionDefaults(sessionName, windowId);
   return { windowId, initialPaneId };
 }
 
@@ -72,7 +73,8 @@ export function setPaneTitle(paneTarget: string, title: string): void {
 }
 
 export function setPaneStyle(paneTarget: string, color: string): void {
-  const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]#{pane_current_path} #[default]`;
+  const gitBranch = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null || echo 'n/a')`;
+  const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]#{pane_current_path} | ${gitBranch} #[default]`;
   execSafe(`tmux set -p -t "${paneTarget}" pane-border-format ${shellQuote(fmt)}`);
   // Store color as a per-pane user variable. The window-level border styles use a
   // format string that resolves #{@pane_color} per-pane at render time, giving each
@@ -84,5 +86,20 @@ export function setPaneStyle(paneTarget: string, color: string): void {
 
 export function selectLayout(windowTarget: string, layout: string = 'even-horizontal'): void {
   execSafe(`tmux select-layout -t "${windowTarget}" ${layout}`);
+}
+
+/**
+ * Sets window/session-level tmux options that Sisyphus depends on.
+ * Without these, pane labels won't show and titles may get clobbered.
+ */
+function configureSessionDefaults(sessionName: string, windowId: string): void {
+  // Pane border labels at top of each pane
+  execSafe(`tmux set -w -t "${windowId}" pane-border-status top`);
+  // Prevent tmux from overwriting pane/window titles we set
+  execSafe(`tmux set -w -t "${windowId}" allow-rename off`);
+  execSafe(`tmux set -w -t "${windowId}" automatic-rename off`);
+  // Re-tile when a pane dies so remaining panes fill the space
+  execSafe(`tmux set-hook -t "${sessionName}" after-kill-pane "select-layout even-horizontal"`);
+  execSafe(`tmux set-hook -t "${sessionName}" pane-exited "select-layout even-horizontal"`);
 }
 
