@@ -1,22 +1,11 @@
 import type { Command } from 'commander';
 import { execSync } from 'node:child_process';
 import { sendRequest } from '../client.js';
-import { getTmuxSession } from '../tmux.js';
-import { isDashboardOpen, launchDashboard } from './dashboard.js';
+import { getTmuxSession, isTmuxInstalled } from '../tmux.js';
+import { shellQuote } from '../../shared/shell.js';
+import { ensureDashboard } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
-function isTmuxInstalled(): boolean {
-  try {
-    execSync('which tmux', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export function registerStart(program: Command): void {
   program
@@ -25,14 +14,23 @@ export function registerStart(program: Command): void {
     .argument('<task>', 'Task description for the orchestrator')
     .option('-c, --context <context>', 'Background context for the orchestrator')
     .option('-n, --name <name>', 'Human-readable name for the session')
-    .action(async (task: string, opts: { context?: string; name?: string }) => {
+    .option('--no-tmux-check', 'Skip the tmux session check')
+    .action(async (task: string, opts: { context?: string; name?: string; tmuxCheck?: boolean }) => {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
-      if (!process.env['TMUX'] && isTmuxInstalled()) {
-        console.log('Note: Sisyphus uses tmux to manage agent panes.');
-        console.log('It is highly recommended to run sisyphus from inside a tmux session.');
-        console.log('  tmux new-session');
-        console.log('');
+      if (!process.env['TMUX'] && opts.tmuxCheck !== false) {
+        if (!isTmuxInstalled()) {
+          console.error('Error: tmux is not installed. Sisyphus requires tmux for agent panes.');
+          console.error('  Install: brew install tmux (macOS) or apt install tmux (Linux)');
+          console.error('  Then: tmux new-session');
+          process.exit(1);
+        }
+        console.error('Error: Not running inside a tmux session.');
+        console.error('  Sisyphus uses tmux to manage agent panes.');
+        console.error('  Start a tmux session first: tmux new-session');
+        console.error('');
+        console.error('  To skip this check: sisyphus start --no-tmux-check "task"');
+        process.exit(1);
       }
       const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name };
       const response = await sendRequest(request);
@@ -47,8 +45,7 @@ export function registerStart(program: Command): void {
 
           try {
             const tmuxSession = getTmuxSession();
-            if (!isDashboardOpen(tmuxSession)) {
-              launchDashboard(tmuxSession, cwd);
+            if (ensureDashboard(tmuxSession, cwd)) {
               console.log(`Dashboard opened in tmux window "sisyphus-dashboard"`);
             }
           } catch { /* dashboard launch failed — non-fatal */ }

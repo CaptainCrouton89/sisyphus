@@ -12,7 +12,7 @@ export function rawSend(request: Request): Promise<Response> {
 
     const timeout = setTimeout(() => {
       socket.destroy();
-      reject(new Error('Request timed out after 10s'));
+      reject(new Error('Request timed out after 10s. The daemon may be overloaded.\n  Check: sisyphus doctor\n  Logs: tail -20 ~/.sisyphus/daemon.log'));
     }, 10_000);
 
     socket.on('connect', () => {
@@ -72,11 +72,37 @@ export async function sendRequest(request: Request): Promise<Response> {
   }
 
   if (process.platform !== 'darwin') {
-    throw new Error(
-      `Sisyphus daemon is not running.\n` +
-      `  Start it manually: sisyphusd &\n` +
-      `  Or check logs at: ~/.sisyphus/daemon.log`
+    const lines = [`Sisyphus daemon is not running.`];
+    if (process.platform === 'linux') {
+      lines.push(
+        '',
+        '  Start options:',
+        '    sisyphusd &                                    # Run in background',
+        '    nohup sisyphusd > ~/.sisyphus/daemon.log 2>&1 & # Persist after logout',
+        '',
+        '  For systemd (recommended):',
+        '    # Create ~/.config/systemd/user/sisyphus.service with:',
+        '    #   [Unit]',
+        '    #   Description=Sisyphus Daemon',
+        '    #   [Service]',
+        '    #   ExecStart=/usr/bin/env node <path-to-sisyphusd>',
+        '    #   Restart=always',
+        '    #   [Install]',
+        '    #   WantedBy=default.target',
+        '    systemctl --user enable --now sisyphus',
+      );
+    } else {
+      lines.push(
+        '',
+        '  Start it manually: sisyphusd &',
+      );
+    }
+    lines.push(
+      '',
+      '  Diagnose: sisyphus doctor',
+      '  Logs: tail -f ~/.sisyphus/daemon.log',
     );
+    throw new Error(lines.join('\n'));
   }
   throw lastErr;
 }

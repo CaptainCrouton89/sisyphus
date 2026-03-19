@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
@@ -11,6 +12,8 @@ import { registerPane, unregisterPane, unregisterAgentPane } from './pane-regist
 import { summarizeReport } from './summarize.js';
 import { resolveAgentConfig, detectProvider } from './frontmatter.js';
 import { loadConfig } from '../shared/config.js';
+import { execEnv } from '../shared/env.js';
+import { shellQuote } from '../shared/shell.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -113,6 +116,14 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const agentConfig = resolveAgentConfig(agentType, bundledPluginPath, cwd);
   const provider = detectProvider(agentConfig?.frontmatter.model);
   const color = (agentConfig?.frontmatter.color ? normalizeTmuxColor(agentConfig.frontmatter.color) : null) ?? getNextColor(sessionId);
+
+  // Verify CLI is available before spawning
+  const cliToCheck = provider === 'openai' ? 'codex' : 'claude';
+  try {
+    execSync(`which ${cliToCheck}`, { stdio: 'pipe', env: execEnv() });
+  } catch {
+    throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sisyphus doctor\` to diagnose.`);
+  }
 
   let paneCwd = cwd;
   let worktreePath: string | undefined;
@@ -476,6 +487,3 @@ function allAgentsDone(session: import('../shared/types.js').Session): boolean {
   return running.length === 0 && session.agents.length > 0;
 }
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}

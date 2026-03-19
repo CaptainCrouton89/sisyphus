@@ -2,24 +2,32 @@ import type { Command } from 'commander';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { assertTmux, getTmuxSession } from '../tmux.js';
+import { shellQuote } from '../../shared/shell.js';
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
 
-export function isDashboardOpen(tmuxSession: string): boolean {
+/**
+ * Ensures a dashboard window exists in the given tmux session.
+ * If one is already open, focuses it. Otherwise launches a new one.
+ * Returns true if a new dashboard was created, false if an existing one was focused.
+ */
+export function ensureDashboard(tmuxSession: string, cwd: string): boolean {
   try {
     const windows = execSync(
       `tmux list-windows -t ${shellQuote(tmuxSession)} -F "#{window_name}"`,
       { encoding: 'utf-8' },
     );
-    return windows.split('\n').some(name => name.trim() === 'sisyphus-dashboard');
-  } catch {
-    return false;
-  }
-}
+    const isOpen = windows.split('\n').some(name => name.trim() === 'sisyphus-dashboard');
 
-export function launchDashboard(tmuxSession: string, cwd: string): void {
+    if (isOpen) {
+      execSync(
+        `tmux select-window -t ${shellQuote(tmuxSession)}:sisyphus-dashboard`,
+      );
+      return false;
+    }
+  } catch {
+    // tmux error — proceed to launch
+  }
+
   const tuiPath = join(import.meta.dirname, 'tui.js');
 
   const windowId = execSync(
@@ -31,6 +39,8 @@ export function launchDashboard(tmuxSession: string, cwd: string): void {
   execSync(
     `tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`,
   );
+
+  return true;
 }
 
 export function registerDashboard(program: Command): void {
@@ -40,7 +50,6 @@ export function registerDashboard(program: Command): void {
     .action(async () => {
       assertTmux();
       const tmuxSession = getTmuxSession();
-      const cwd = process.cwd();
-      launchDashboard(tmuxSession, cwd);
+      ensureDashboard(tmuxSession, process.cwd());
     });
 }

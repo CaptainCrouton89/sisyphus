@@ -1,9 +1,8 @@
 import { execSync } from 'node:child_process';
+import { execEnv } from '../shared/env.js';
+import { shellQuote } from '../shared/shell.js';
 
-const EXEC_ENV = {
-  ...process.env,
-  PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env['PATH'] ?? '/usr/bin:/bin'}`,
-};
+export const EXEC_ENV = execEnv();
 
 function exec(cmd: string): string {
   return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV }).trim();
@@ -122,6 +121,3 @@ export function selectLayout(windowTarget: string, layout: string = 'even-horizo
   execSafe(`tmux select-layout -t "${windowTarget}" ${layout}`);
 }
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}

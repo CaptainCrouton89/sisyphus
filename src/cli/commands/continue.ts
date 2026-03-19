@@ -6,7 +6,8 @@ import { assertTmux } from '../tmux.js';
 export function registerContinue(program: Command): void {
   program
     .command('continue')
-    .description('Reactivate a completed session (orchestrator only)')
+    .description('Clear roadmap and continue working on a completed session (stays in current cycle)')
+    .addHelpText('after', '\n  Use `continue` when a session completed but you want to add more work.\n  Use `resume` when you want to restart with specific new instructions.\n')
     .action(async () => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;

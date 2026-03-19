@@ -61,6 +61,10 @@ export function registerSessionTmux(sessionId: string, tmuxSession: string, wind
   sessionWindowMap.set(sessionId, windowId);
 }
 
+function unknownSessionError(sessionId: string): Response {
+  return { ok: false, error: `Unknown session: ${sessionId}. Run \`sisyphus list --all\` to see available sessions.` };
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   try {
     switch (req.type) {
@@ -74,14 +78,14 @@ async function handleRequest(req: Request): Promise<Response> {
 
       case 'spawn': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         const result = await sessionManager.handleSpawn(req.sessionId, cwd, req.agentType, req.name, req.instruction, req.worktree);
         return { ok: true, data: { agentId: result.agentId } };
       }
 
       case 'submit': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         const windowId = sessionWindowMap.get(req.sessionId);
         if (!windowId) return { ok: false, error: `No tmux window found for session: ${req.sessionId}` };
         await sessionManager.handleSubmit(cwd, req.sessionId, req.agentId, req.report, windowId);
@@ -90,28 +94,28 @@ async function handleRequest(req: Request): Promise<Response> {
 
       case 'report': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleReport(cwd, req.sessionId, req.agentId, req.content);
         return { ok: true };
       }
 
       case 'yield': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleYield(req.sessionId, cwd, req.nextPrompt, req.mode);
         return { ok: true };
       }
 
       case 'complete': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleComplete(req.sessionId, cwd, req.report);
         return { ok: true };
       }
 
       case 'continue': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleContinue(req.sessionId, cwd);
         return { ok: true };
       }
@@ -119,7 +123,7 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'status': {
         if (req.sessionId) {
           const cwd = sessionCwdMap.get(req.sessionId) ?? req.cwd;
-          if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+          if (!cwd) return unknownSessionError(req.sessionId);
           const session = sessionManager.getSessionStatus(cwd, req.sessionId);
           return { ok: true, data: { session: session as unknown as Record<string, unknown> } };
         }
@@ -165,7 +169,7 @@ async function handleRequest(req: Request): Promise<Response> {
             cwd = req.cwd;
             registerSessionCwd(req.sessionId, cwd);
           } else {
-            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}` };
+            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sisyphus list --all\` to see available sessions.` };
           }
         }
         const session = await sessionManager.resumeSession(req.sessionId, cwd, req.message);
@@ -176,14 +180,14 @@ async function handleRequest(req: Request): Promise<Response> {
 
       case 'register_claude_session': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleRegisterClaudeSession(cwd, req.sessionId, req.agentId, req.claudeSessionId);
         return { ok: true };
       }
 
       case 'kill': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         const killedAgents = await sessionManager.handleKill(req.sessionId, cwd);
         sessionCwdMap.delete(req.sessionId);
         sessionTmuxMap.delete(req.sessionId);
@@ -194,14 +198,14 @@ async function handleRequest(req: Request): Promise<Response> {
 
       case 'kill-agent': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleKillAgent(req.sessionId, cwd, req.agentId);
         return { ok: true, data: { agentId: req.agentId } };
       }
 
       case 'restart-agent': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await sessionManager.handleRestartAgent(req.sessionId, cwd, req.agentId);
         return { ok: true, data: { agentId: req.agentId } };
       }
@@ -214,7 +218,7 @@ async function handleRequest(req: Request): Promise<Response> {
             cwd = req.cwd;
             registerSessionCwd(req.sessionId, cwd);
           } else {
-            return { ok: false, error: `Unknown session: ${req.sessionId}` };
+            return unknownSessionError(req.sessionId);
           }
         }
         const result = await sessionManager.handleRollback(req.sessionId, cwd, req.toCycle);
@@ -257,14 +261,14 @@ async function handleRequest(req: Request): Promise<Response> {
 
       case 'update-task': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
         await state.updateTask(cwd, req.sessionId, req.task);
         return { ok: true };
       }
 
       case 'message': {
         const cwd = sessionCwdMap.get(req.sessionId);
-        if (!cwd) return { ok: false, error: `Unknown session: ${req.sessionId}` };
+        if (!cwd) return unknownSessionError(req.sessionId);
 
         const counter = (sessionMessageCounters.get(req.sessionId) ?? 0) + 1;
         sessionMessageCounters.set(req.sessionId, counter);

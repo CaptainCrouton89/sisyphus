@@ -5,7 +5,8 @@ import type { Request } from '../../shared/protocol.js';
 export function registerResume(program: Command): void {
   program
     .command('resume')
-    .description('Resume a paused session')
+    .description('Respawn orchestrator with new instructions (for paused/completed sessions)')
+    .addHelpText('after', '\n  Use `resume` to restart a paused or completed session with new instructions.\n  Use `continue` to keep working on a completed session without new instructions.\n')
     .argument('<session-id>', 'Session ID to resume')
     .argument('[message]', 'Additional instructions for the orchestrator')
     .action(async (sessionId: string, message?: string) => {

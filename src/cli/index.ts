@@ -1,4 +1,11 @@
+const nodeVersion = parseInt(process.versions.node.split('.')[0]!, 10);
+if (nodeVersion < 22) {
+  console.error(`Sisyphus requires Node.js v22+ (current: v${process.versions.node})`);
+  process.exit(1);
+}
+
 import { Command } from 'commander';
+import { existsSync, mkdirSync } from 'node:fs';
 import { registerStart } from './commands/start.js';
 import { registerSpawn } from './commands/spawn.js';
 import { registerSubmit } from './commands/submit.js';
@@ -21,6 +28,8 @@ import { registerSetupKeybind } from './commands/setup-keybind.js';
 import { registerDoctor } from './commands/doctor.js';
 import { registerCompanionContext } from './commands/companion-context.js';
 import { registerGettingStarted } from './commands/getting-started.js';
+import { registerInit } from './commands/init.js';
+import { globalDir } from '../shared/paths.js';
 
 const program = new Command();
 
@@ -28,6 +37,10 @@ program
   .name('sisyphus')
   .description('tmux-integrated orchestration daemon for Claude Code')
   .version('0.1.0');
+
+program.configureHelp({
+  sortSubcommands: false,
+});
 
 registerStart(program);
 registerSpawn(program);
@@ -51,6 +64,33 @@ registerSetupKeybind(program);
 registerDoctor(program);
 registerCompanionContext(program);
 registerGettingStarted(program);
+registerInit(program);
+
+program.addHelpText('after', `
+Examples:
+  $ sisyphus start "Implement auth system"     Start a new session
+  $ sisyphus start "Build @spec.md" -n auth    Start with a name and spec reference
+  $ sisyphus status                            Check current sessions
+  $ sisyphus dashboard                         Open the TUI
+  $ sisyphus doctor                            Verify installation
+
+Run 'sisyphus getting-started' for a complete usage guide.
+`);
+
+// Show welcome on first run (before ~/.sisyphus exists)
+const args = process.argv.slice(2);
+const firstArg = args[0];
+const skipWelcome = ['doctor', 'getting-started', 'help', '--help', '-h', 'init', 'uninstall', '--version', '-V'];
+if (!existsSync(globalDir()) && firstArg && !skipWelcome.includes(firstArg)) {
+  mkdirSync(globalDir(), { recursive: true });
+  console.log('');
+  console.log('  Welcome to Sisyphus — multi-agent orchestration for Claude Code.');
+  console.log('');
+  console.log('  First time? Run these commands:');
+  console.log('    sisyphus doctor           Check your setup');
+  console.log('    sisyphus getting-started   Learn the basics');
+  console.log('');
+}
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);

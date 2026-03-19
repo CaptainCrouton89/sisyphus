@@ -1,14 +1,5 @@
 import type { Command } from 'commander';
-import { execSync } from 'node:child_process';
-
-function isTmuxInstalled(): boolean {
-  try {
-    execSync('which tmux', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { isTmuxInstalled } from '../tmux.js';
 
 export function registerGettingStarted(program: Command): void {
   program
@@ -130,6 +121,12 @@ export function registerGettingStarted(program: Command): void {
         '  Health:',
         '    sisyphus doctor                     Check installation health',
         '    tail -f ~/.sisyphus/daemon.log      Watch daemon logs',
+        '',
+        '  ─── Next Steps ─────────────────────────────',
+        '',
+        '  1. Run `sisyphus doctor` to check your setup',
+        '  2. Start a tmux session: `tmux new-session`',
+        '  3. Try it: `sisyphus start "your task description"`',
         '',
       );
 

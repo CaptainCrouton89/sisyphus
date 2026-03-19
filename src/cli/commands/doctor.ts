@@ -12,26 +12,90 @@ interface Check {
   fix?: string;
 }
 
+function checkNodeVersion(): Check {
+  const major = parseInt(process.versions.node.split('.')[0]!, 10);
+  if (major < 22) {
+    return { name: 'Node.js', status: 'fail', detail: `v${process.versions.node} (v22+ required)`, fix: 'Install Node.js 22+: https://nodejs.org' };
+  }
+  return { name: 'Node.js', status: 'ok', detail: `v${process.versions.node}` };
+}
+
+function checkClaudeCli(): Check {
+  try {
+    execSync('which claude', { stdio: 'pipe' });
+    return { name: 'Claude CLI', status: 'ok', detail: 'Found on PATH' };
+  } catch {
+    return {
+      name: 'Claude CLI',
+      status: 'fail',
+      detail: 'Not found on PATH',
+      fix: 'Install Claude Code: https://docs.anthropic.com/en/docs/claude-code/overview',
+    };
+  }
+}
+
+function checkGit(): Check {
+  try {
+    const version = execSync('git --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    return { name: 'git', status: 'ok', detail: version };
+  } catch {
+    return { name: 'git', status: 'fail', detail: 'Not found on PATH', fix: 'Install git: https://git-scm.com/downloads' };
+  }
+}
+
+function checkTmuxVersion(): Check {
+  try {
+    const version = execSync('tmux -V', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    // Parse "tmux X.Y" or "tmux next-X.Y"
+    const match = version.match(/(\d+\.\d+)/);
+    if (!match) return { name: 'tmux version', status: 'warn', detail: `Could not parse version: ${version}` };
+    const ver = parseFloat(match[1]);
+    if (ver < 3.2) {
+      const upgradeHint = process.platform === 'darwin' ? 'brew install tmux (or upgrade)' : 'apt install tmux (Debian/Ubuntu) or your package manager';
+      return { name: 'tmux version', status: 'warn', detail: `${version} (3.2+ recommended for popup support)`, fix: upgradeHint };
+    }
+    return { name: 'tmux version', status: 'ok', detail: version };
+  } catch {
+    return { name: 'tmux version', status: 'warn', detail: 'Could not determine version' };
+  }
+}
+
 function checkDaemonInstalled(): Check {
-  if (isInstalled()) {
-    return { name: 'Daemon plist', status: 'ok', detail: 'Installed in LaunchAgents' };
+  if (process.platform === 'darwin') {
+    if (isInstalled()) {
+      return { name: 'Daemon plist', status: 'ok', detail: 'Installed in LaunchAgents' };
+    }
+    return {
+      name: 'Daemon plist',
+      status: 'fail',
+      detail: 'Not installed',
+      fix: 'Run any sisyphus command to auto-install, or: sisyphus start "test"',
+    };
+  }
+  // Linux: check if PID file exists (daemon started manually)
+  const pid = daemonPidPath();
+  if (existsSync(pid)) {
+    return { name: 'Daemon setup', status: 'ok', detail: `PID file found at ${pid}` };
   }
   return {
-    name: 'Daemon plist',
+    name: 'Daemon setup',
     status: 'fail',
-    detail: 'Not installed',
-    fix: 'Run any sisyphus command to auto-install, or: sisyphus start "test"',
+    detail: 'Daemon not running (no PID file)',
+    fix: 'Start manually: sisyphusd & — or configure via systemd',
   };
 }
 
 function checkDaemonRunning(): Check {
   const pid = daemonPidPath();
   if (!existsSync(pid)) {
+    const fix = process.platform === 'darwin'
+      ? 'launchctl load -w ~/Library/LaunchAgents/com.sisyphus.daemon.plist'
+      : 'sisyphusd & — or check if the process is running';
     return {
       name: 'Daemon process',
       status: 'fail',
       detail: 'No PID file found',
-      fix: 'launchctl load -w ~/Library/LaunchAgents/com.sisyphus.daemon.plist',
+      fix,
     };
   }
   try {
@@ -52,7 +116,8 @@ function checkTmux(): Check {
   try {
     execSync('which tmux', { stdio: 'pipe' });
   } catch {
-    return { name: 'tmux', status: 'fail', detail: 'Not found on PATH', fix: 'brew install tmux' };
+    const installHint = process.platform === 'darwin' ? 'brew install tmux' : 'apt install tmux (Debian/Ubuntu) or your package manager';
+    return { name: 'tmux', status: 'fail', detail: 'Not found on PATH', fix: installHint };
   }
   try {
     execSync('tmux list-sessions', { stdio: 'pipe' });
@@ -131,10 +196,14 @@ export function registerDoctor(program: Command): void {
     .description('Check sisyphus installation health')
     .action(async () => {
       const checks: Check[] = [
+        checkNodeVersion(),
+        checkClaudeCli(),
+        checkGit(),
+        checkTmux(),
+        checkTmuxVersion(),
         checkGlobalDir(),
         checkDaemonInstalled(),
         checkDaemonRunning(),
-        checkTmux(),
         checkCycleScript(),
         checkTmuxKeybind(),
       ];
@@ -147,7 +216,7 @@ export function registerDoctor(program: Command): void {
       }
 
       // Print fixes
-      const fixable = checks.filter((c) => c.fix);
+      const fixable = checks.filter((c) => c.fix && c.status !== 'ok');
       if (fixable.length > 0) {
         console.log('\nFixes:');
         for (const c of fixable) {

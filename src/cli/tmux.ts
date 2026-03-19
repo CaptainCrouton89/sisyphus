@@ -1,5 +1,14 @@
 import { execSync } from 'node:child_process';
 
+export function isTmuxInstalled(): boolean {
+  try {
+    execSync('which tmux', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function assertTmux(): void {
   if (!process.env.TMUX) {
     throw new Error('Not running inside a tmux pane. Sisyphus requires tmux.');

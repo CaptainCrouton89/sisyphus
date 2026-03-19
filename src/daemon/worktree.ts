@@ -5,10 +5,10 @@ import type { Agent } from '../shared/types.js';
 import type { WorktreeConfig } from '../shared/config.js';
 import { worktreeConfigPath, worktreeBaseDir } from '../shared/paths.js';
 
-const EXEC_ENV = {
-  ...process.env,
-  PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env['PATH'] ?? '/usr/bin:/bin'}`,
-};
+import { execEnv } from '../shared/env.js';
+import { shellQuote } from '../shared/shell.js';
+
+const EXEC_ENV = execEnv();
 
 function exec(cmd: string, cwd?: string): string {
   return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd }).trim();
@@ -22,9 +22,6 @@ function execSafe(cmd: string, cwd?: string): string | null {
   }
 }
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
 
 export interface MergeResult {
   agentId: string;

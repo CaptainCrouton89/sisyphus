@@ -1,17 +1,16 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
+import { shellQuote } from '../shared/shell.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import { discoverAgentTypes } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
 
 const sessionWindowMap = new Map<string, string>();
 const sessionOrchestratorPane = new Map<string, string>();
@@ -177,6 +176,13 @@ ${worktreeSection}`;
 }
 
 export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
+  // Verify claude CLI is available before spawning
+  try {
+    execSync('which claude', { stdio: 'pipe', env: tmux.EXEC_ENV });
+  } catch {
+    throw new Error('Claude CLI not found on PATH. Run `sisyphus doctor` to diagnose.');
+  }
+
   const session = state.getSession(cwd, sessionId);
 
   // Read mode and nextPrompt from last completed cycle

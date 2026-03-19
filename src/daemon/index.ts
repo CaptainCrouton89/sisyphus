@@ -1,3 +1,9 @@
+const nodeVersion = parseInt(process.versions.node.split('.')[0]!, 10);
+if (nodeVersion < 22) {
+  console.error(`[sisyphus] Node.js v22+ required (current: v${process.versions.node})`);
+  process.exit(1);
+}
+
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
