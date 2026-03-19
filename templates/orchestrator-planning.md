@@ -1,5 +1,9 @@
 # Planning Phase
 
+## Planning Phase Flow
+
+The natural sequence: **context → spec → roadmap refinement → detailed planning.** Context documents come first because they feed everything downstream — spec writers, planners, and implementers all benefit from not having to re-explore the codebase. After the spec is aligned, revisit the roadmap — that's when you actually understand scope well enough to flesh out phases honestly.
+
 ## Exploration
 
 Use explore agents to build understanding before making decisions. Each agent should save a focused context document to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` — these artifacts get passed to downstream agents so they don't have to re-explore the codebase themselves.
@@ -22,6 +26,10 @@ For significant features, spec refinement is iterative:
 - **Apply corrections back to the spec itself** — the spec is the single source of truth. Don't create a separate corrections file and pass both downstream; update the spec and delete the corrections. Plan agents should read one authoritative document, not reconcile two contradictory ones.
 
 Not every stage needs a standalone spec document — a well-defined stage might just be a detailed section in the implementation plan. Use judgment about how much formality each stage warrants.
+
+## Roadmap Refinement
+
+Once you have context docs and an aligned spec, revisit the roadmap. This is the first point where you understand real scope — adjust phase boundaries, add phases you didn't anticipate, reorder for dependencies. Keep future phases at outline level; just make sure the shape is honest.
 
 ## Delegating to the Plan Lead
 

@@ -104,32 +104,23 @@ function formatStateForOrchestrator(session: Session): string {
     previousCyclesSection = `\n### Previous Cycles\n\n${lines.join('\n')}\n`;
   }
 
-  // Most recent cycle: full report content
+  // Most recent cycle: agent reports as file references
   let mostRecentCycleSection = '';
   const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
   if (lastCycle && lastCycle.agentsSpawned.length > 0) {
     const agentMap = new Map(session.agents.map((a: Agent) => [a.id, a]));
-    const agentBlocks = lastCycle.agentsSpawned.map(id => {
+    const agentLines = lastCycle.agentsSpawned.map(id => {
       const agent = agentMap.get(id);
-      if (!agent) return `<agent-${id} status="unknown">\n(no agent data)\n</agent-${id}>`;
+      if (!agent) return `- **${id}**: unknown (no agent data)`;
 
-      // Prefer 'final' report, fall back to last report
       const finalReport = agent.reports.find(r => r.type === 'final');
       const reportToUse = finalReport ?? agent.reports[agent.reports.length - 1];
+      const reportRef = reportToUse ? `@${reportToUse.filePath}` : '(no reports)';
 
-      let reportContent = '(no reports)';
-      if (reportToUse) {
-        try {
-          reportContent = readFileSync(reportToUse.filePath, 'utf-8');
-        } catch {
-          reportContent = `(could not read report: ${reportToUse.filePath})`;
-        }
-      }
-
-      return `<agent-${id} name="${agent.name}" status="${agent.status}">\n${reportContent}\n</agent-${id}>`;
+      return `- **${id}** (${agent.name}) [${agent.status}]: ${reportRef}`;
     }).join('\n');
 
-    mostRecentCycleSection = `\n### Most Recent Cycle\n\n<last-cycle>\n${agentBlocks}\n</last-cycle>\n`;
+    mostRecentCycleSection = `\n### Most Recent Cycle\n\n${agentLines}\n`;
   }
 
   // Roadmap section
