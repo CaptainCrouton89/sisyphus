@@ -1,4 +1,3 @@
-import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   TreeNode,
@@ -13,13 +12,13 @@ import type {
 } from '../types/tree.js';
 import type { Session } from '../../shared/types.js';
 import type { SessionSummary } from '../hooks/usePolling.js';
-import { windowExists } from './tmux.js';
 import { contextDir } from '../../shared/paths.js';
 
 /** Sort priority: active+open=0, active+closed=1, paused+open=2, paused+closed=3, completed=4 */
 function sessionSortKey(s: SessionSummary): number {
   if (s.status === 'completed') return 4;
-  const open = s.tmuxWindowId ? windowExists(s.tmuxWindowId) : false;
+  // Use cached windowAlive from polling hook (avoids execSync in render path)
+  const open = s.windowAlive ?? false;
   if (s.status === 'active') return open ? 0 : 1;
   // paused
   return open ? 2 : 3;
@@ -30,6 +29,7 @@ export function buildTree(
   selectedSession: Session | null,
   expanded: Set<string>,
   cwd: string,
+  polledContextFiles: string[] = [],
 ): TreeNode[] {
   const nodes: TreeNode[] = [];
 
@@ -182,18 +182,8 @@ export function buildTree(
       }
     }
 
-    // Context group
-    const ctxDir = contextDir(cwd, s.id);
-    let contextFiles: string[] = [];
-    try {
-      if (existsSync(ctxDir)) {
-        contextFiles = readdirSync(ctxDir).filter(
-          (f) => !f.startsWith('.'),
-        ).sort();
-      }
-    } catch {
-      // context dir may not exist
-    }
+    // Context group — use polled file list for the selected session (avoids sync I/O in render)
+    const contextFiles = isSelected ? polledContextFiles : [];
 
     const ctxNodeId = `context:${s.id}`;
     const ctxExpanded = expanded.has(ctxNodeId);

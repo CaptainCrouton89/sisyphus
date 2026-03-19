@@ -182,6 +182,27 @@ export function cleanMarkdown(line: string): string {
     .replace(/\[(.+?)\]\(.+?\)/g, '$1');
 }
 
+// Shared line types for scrollable panels
+
+export type Seg = {
+  text: string;
+  color?: string;
+  bold?: boolean;
+  dim?: boolean;
+  italic?: boolean;
+};
+
+export type DetailLine = Seg[];
+
+export function seg(text: string, opts?: Partial<Omit<Seg, 'text'>>): Seg {
+  return { text, ...opts };
+}
+
+/** Create a single-segment DetailLine */
+export function singleLine(text: string, opts?: Partial<Omit<Seg, 'text'>>): DetailLine {
+  return [seg(text, opts)];
+}
+
 export function wrapText(text: string, width: number): string[] {
   if (width <= 0) return text.split('\n');
   const result: string[] = [];

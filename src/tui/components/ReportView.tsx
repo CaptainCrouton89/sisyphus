@@ -126,7 +126,7 @@ export function ReportView({ agent, reportBlocks, width, height, onClose }: Prop
       <Box flexDirection="column" flexGrow={1}>
         {visible.map((line, i) => (
           <Text
-            key={scrollOffset + i}
+            key={i}
             color={line.color}
             bold={line.bold}
             dimColor={line.dim}

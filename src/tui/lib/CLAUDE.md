@@ -2,81 +2,55 @@
 
 **TUI library utilities** — formatting, rendering, tree structures, daemon communication, and Claude companion context.
 
-## Organization
+## Files
 
-- **format.ts** — Display utilities: duration/time formatting, markdown stripping/cleaning, text truncation, status indicators, text wrapping, frontmatter removal
-- **tree.ts** — Session tree building: sorts sessions (active+open → completed), expands cycles/agents/reports on demand
-- **tree-render.ts** — ASCII rendering: box-drawing connectors (│, ├─, └─), expand indicators (▸, ▼)
-- **tmux.ts** — tmux wrappers: window/pane selection, editor/companion popups, terminal editor detection, companion context building
-- **context.ts** — XML context builders: generates session/agent/report context for Claude companion prompt (filters, escapes, aggregates state)
-- **client.ts** — Daemon socket client: sends JSON requests, 5s timeout, line-delimited response
-- **reports.ts** — Agent reports: loads report files, handles missing files gracefully
+- **format.ts** — Display utilities: duration/time formatting, markdown stripping/cleaning, text truncation, status indicators, styled line segments
+- **tree.ts** — Session tree building and sorting
+- **tree-render.ts** — ASCII rendering with box-drawing connectors
+- **tmux.ts** — Tmux integration: pane/window selection, editor popups, daemon log viewer, companion pane management
+- **context.ts** — XML context builders for Claude companion prompt
+- **client.ts** — Daemon socket client (5s timeout, JSON requests)
+- **reports.ts** — Load and handle agent report files
 
 ## Key Patterns
 
-### Text Formatting
-- **Duration/time**:
-  - `formatDuration(start, end?)` — Human format (1h23m, 45s)
-  - `formatTimeAgo(iso)` — Relative time (2h ago, just now)
-  - `formatTime(iso)` — HH:MM format
-- **Truncation**:
-  - `truncate(text, max)` — Word-boundary-aware with '…' ellipsis (falls back to 0.6x threshold if no space found)
-- **Markdown**:
-  - `stripMarkdown()` — Removes all markdown syntax (headers, bold, links, code blocks, lists); collapses whitespace
-  - `cleanMarkdown()` — Inline only (bold, italic, strikethrough, code, links); preserves structure
-  - `stripFrontmatter()` — Removes YAML frontmatter (--- ... ---)
-  - `extractFirstSentence()` — Finds first meaningful line, respects sentence boundaries, strips headers/code blocks
-- **Text wrapping**:
-  - `wrapText(text, width)` — Line-wrapping with word-boundary awareness
-- **Status**:
-  - `statusColor(status)` — Maps to terminal color (active/running→green, completed→cyan, paused→yellow, killed/crashed→red, lost→gray)
-  - `statusIndicator(status)` — Status glyph (▶, ✓, ⏸, ·)
-  - `agentStatusIcon(status)` — Agent-specific icons (▶, ✓, ✕, !, ?, ·)
-- **Misc**:
-  - `divider(width, char)` — Repeating character line (default '─')
+### Text Formatting & Colors
+- **Time**: `formatDuration(start, end?)` → "1h23m", `formatTimeAgo(iso)` → "2h ago", `formatTime(iso)` → "HH:MM"
+- **Truncation**: `truncate(text, max)` — word-boundary-aware with '…'
+- **Markdown**: `stripMarkdown()` (all syntax), `cleanMarkdown()` (inline only), `stripFrontmatter()`, `extractFirstSentence()`
+- **Wrapping**: `wrapText(text, width)` with word boundaries
+- **Status colors**: `statusColor(status)`, `durationColor(startOrMs)` (yellow <30min, red ≥30min), `agentTypeColor(agentType)`
+- **Status icons**: `statusIndicator(status)`, `agentStatusIcon(status)`, `divider(width, char)`
 
-### Tree Structure
-- Sessions sorted by: active+open (0) → active+closed (1) → paused+open (2) → paused+closed (3) → completed (4)
-- Within groups: most recent first (by createdAt)
-- Children only expanded for selected session + expanded state combo (prevents rendering all hierarchies)
-- Node IDs use prefixes: `session:`, `cycle:`, `agent:`, `report:`, `messages:`, `message:`
+### Styled Line Rendering (format.ts)
+- `Seg` — {text, color?, bold?, dim?, italic?} — single styled segment
+- `DetailLine = Seg[]` — multi-segment line with mixed styling
+- `seg(text, opts)` and `singleLine(text, opts)` — builders for styled output
 
-### Tree Rendering
-- Prefix building happens per-node: builds ancestor chain (│ or space per depth), then connector (├─ or └─), then expand indicator (▸ or ▼)
-- Last-sibling detection scans forward for same depth (no following sibling = last)
+### Tree Building (tree.ts)
+- Sessions sorted: active+open → active+closed → paused+open → paused+closed → completed (by recency within groups)
+- `buildTree(sessions, selectedSession, expanded, cwd, polledContextFiles)` — expands only selected session to avoid rendering all hierarchies
+- Node IDs prefixed: `session:`, `cycle:`, `agent:`, `report:`, `messages:`, `message:`, `context:`, `context-file:`
+- `findParentIndex(nodes, index)` — locate ancestor in node list
 
 ### Claude Companion Context (context.ts)
-- **XML format**: `<sessions>`, `<session>`, `<agents>`, `<agent>`, `<reports>`, `<completion-report>`
-- **buildCompanionContext()** — Aggregates all recent sessions (completed sessions filtered: 7 days)
-  - Per session: task, status, created time, cycle count, agent counts by status, goal (first meaningful line), roadmap unchecked todos (up to 5)
-  - Used in dashboard companion popup for high-level context
-- **buildSessionContext()** — Full context for an active session
-  - Per agent: id, name, agentType, status, instruction, all report blocks (chronological), completion report
-  - Per cycle: cycle number, mode, agents spawned
-  - Includes goal + roadmap as raw markdown
-  - Used in companion popup for detailed session management
-- **escapeXml()** — Escapes `&`, `<`, `>`, `"` for safe XML embedding
-- **readFileSafe()** — Reads files gracefully, returns null on any error (missing files, permission errors)
+- XML format: `buildCompanionContext()` aggregates recent sessions (≤7 days) with task, status, agent counts, goal (first line), roadmap todos
+- `buildSessionContext()` provides full context for session management: agent details, reports, completion status
+- `escapeXml()` handles safe embedding of user-provided content
 
-### Tmux Integration
-- Custom ENV augments PATH to include Homebrew bins (`/opt/homebrew/bin:/usr/local/bin`)
-- **execSafe()** suppresses stderr (stdio: ['pipe', 'pipe', 'pipe']) for non-critical checks like `windowExists()`
-- **openCompanionPopup()** — Loads `dist/templates/dashboard-claude.md`, renders `{{CWD}}` + `{{SESSIONS_CONTEXT}}`, spawns Claude companion with `-E` flag (close on exit)
-- **openEditorPopup()** detects terminal editors (vim, nvim, nano, etc.) and uses tmux popup; GUI editors run directly
-- **shellQuote()** — Single-quote escaping for safe tmux send-keys
-
-### Daemon Client
-- Connects to Unix socket (`socketPath()`), writes JSON request + newline, reads single-line JSON response
-- 5s timeout (hardcoded); destroy socket on timeout or successful read
-- Expects first complete line as response (stops reading after `\n`)
+### Tmux Integration (tmux.ts)
+- `openCompanionPane(cwd)` — Splits pane horizontally (33%), runs Claude with companion plugin, caches `companionPaneId` for reuse
+- Companion plugin auto-copies from `src/tui/lib/templates/companion-plugin` to global dir on first use
+- Dashboard template (`dashboard-claude.md`) rendered with `{{CWD}}` only
+- `openEditorPopup(cwd, editor, filePath, size?)` — Terminal editors use `tmux display-popup`, GUI editors run directly
+- `editInPopup()` — Creates temp file, opens in editor, returns edited content
+- Utility popups: `openLogPopup()` (tail daemon logs), `openShellPopup(cwd, cmd)`, `openInFileManager(path)`
+- Window/pane helpers: `getWindowId()`, `selectWindow()`, `selectPane()`, `windowExists()`, `switchToSession()`
 
 ## Constraints
 
-- Markdown stripping is lossy — use for display only, not data transformation
-- Tree rendering assumes depth hierarchy is well-formed (no skipped depths)
-- tmux commands fail silently (execSafe) in most cases — check window existence before operations
-- Truncation always aims for word boundaries, falls back to hard limit if none found in reasonable range (0.6x of max)
-- `stripMarkdown()` collapses all whitespace to single spaces (lossy); `cleanMarkdown()` preserves line structure
-- Companion context XML must escape all user-provided content — use `escapeXml()` for all agent.name, session.task, report content, etc.
-- Completed sessions in companion context filtered to 7-day window (prevents huge context on old projects)
-- File reads via `readFileSafe()` must handle missing files gracefully (goal.md, roadmap.md may not exist yet in new sessions)
+- `stripMarkdown()` collapses all whitespace to single spaces (lossy); use `cleanMarkdown()` to preserve structure
+- tmux operations fail silently via `execSafe()` — check existence before operations
+- Companion pane auto-reuses if alive (keyed by `companionPaneId`); killing pane requires reset
+- File reads via `readFileSafe()` must handle missing files gracefully (goal.md, roadmap.md may not exist)
+- Companion context XML must escape all user-provided content via `escapeXml()`

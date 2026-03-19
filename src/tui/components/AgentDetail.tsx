@@ -1,7 +1,7 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import React, { useMemo } from 'react';
 import type { Agent } from '../../shared/types.js';
 import type { ReportBlock } from '../lib/reports.js';
+import { ScrollablePanel } from './ScrollablePanel.js';
 import {
   formatDuration,
   formatTime,
@@ -9,6 +9,9 @@ import {
   agentStatusIcon,
   wrapText,
   cleanMarkdown,
+  seg,
+  singleLine,
+  type DetailLine,
 } from '../lib/format.js';
 
 interface Props {
@@ -16,144 +19,144 @@ interface Props {
   reportBlocks?: ReportBlock[];
   width: number;
   height: number;
+  scrollOffset?: number;
+  focused?: boolean;
 }
 
-export function AgentDetail({ agent, reportBlocks, width, height }: Props) {
+function buildLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, width: number): DetailLine[] {
+  const lines: DetailLine[] = [];
   const contentWidth = width - 4;
   const dur = formatDuration(agent.spawnedAt, agent.completedAt);
   const icon = agentStatusIcon(agent.status);
   const color = statusColor(agent.status);
   const nameLabel = agent.name !== agent.id ? agent.name : agent.agentType;
+  const maxMergeLines = 3;
 
-  // Dynamic line budget
-  const metaLines = 3; // header + status + blank
-  const alertLines = (agent.killedReason ? 1 : 0) + (agent.mergeStatus === 'conflict' && agent.mergeDetails ? 2 : 0);
-  const timestampLines = 1 + (agent.completedAt ? 1 : 0) + (agent.paneId ? 1 : 0) + (agent.worktreePath ? 1 : 0) + (agent.branchName ? 1 : 0) + 2; // +header +blank
-  const reportHeader = agent.reports.length > 0 ? 2 : 0; // header + blank
-  const fixedLines = metaLines + alertLines + timestampLines + reportHeader + 4; // borders
+  // Header
+  lines.push([
+    seg(' '),
+    seg(icon, { color }),
+    seg(` ${agent.id} · ${nameLabel}`, { bold: true }),
+  ]);
 
-  const hasResolvedReports = reportBlocks && reportBlocks.length > 0;
-  const availableForContent = Math.max(6, height - fixedLines);
+  // Status line
+  const mergeSegs: ReturnType<typeof seg>[] = [];
+  if (agent.mergeStatus) {
+    mergeSegs.push(seg(' · ', { dim: true }));
+    switch (agent.mergeStatus) {
+      case 'merged':
+        mergeSegs.push(seg('⊕ merged', { color: 'green' }));
+        break;
+      case 'pending':
+        mergeSegs.push(seg('◌ pending', { color: 'yellow' }));
+        break;
+      case 'no-changes':
+        mergeSegs.push(seg('∅ no changes', { color: 'gray' }));
+        break;
+      case 'conflict':
+        mergeSegs.push(seg('⚠ conflict', { color: 'red' }));
+        break;
+      default:
+        mergeSegs.push(seg(agent.mergeStatus, { dim: true }));
+    }
+  }
+  lines.push([
+    seg('  '),
+    seg(agent.status, { color }),
+    seg(` · ${dur} · ${agent.agentType}`, { dim: true }),
+    ...mergeSegs,
+  ]);
 
-  // Split: instruction gets 40% when reports exist, otherwise most of it
-  let instrMaxLines: number;
-  let reportMaxLines: number;
-  if (hasResolvedReports) {
-    instrMaxLines = Math.max(4, Math.floor(availableForContent * 0.35));
-    reportMaxLines = Math.max(4, availableForContent - instrMaxLines);
-  } else {
-    const summaryLines = agent.reports.length;
-    instrMaxLines = Math.max(4, availableForContent - summaryLines - 1);
-    reportMaxLines = summaryLines;
+  // Alerts
+  if (agent.killedReason) {
+    lines.push(singleLine(`  ⚠ ${agent.killedReason}`, { color: 'red' }));
   }
 
+  if (agent.mergeStatus === 'conflict' && agent.mergeDetails) {
+    for (const ml of wrapText(agent.mergeDetails, contentWidth - 6).slice(0, maxMergeLines)) {
+      lines.push(singleLine(`  ⚠ ${ml}`, { color: 'red' }));
+    }
+  }
+
+  if (agent.mergeStatus === 'conflict') {
+    lines.push(singleLine('  resolve conflicts in worktree dir, then restart', { color: 'red', dim: true }));
+  }
+
+  // Instruction
+  lines.push(singleLine(' '));
+  lines.push(singleLine('  ▎ ▷ INSTRUCTION', { color: 'white', bold: true }));
+  for (const wl of wrapText(agent.instruction, contentWidth - 6)) {
+    lines.push(singleLine(`    ${wl}`, { dim: true }));
+  }
+
+  // Reports
+  if (agent.reports.length > 0) {
+    const hasResolved = reportBlocks && reportBlocks.length > 0;
+    lines.push(singleLine(' '));
+    lines.push([seg(`  ▎ ◇ REPORTS (${agent.reports.length})`, { color: 'cyan', bold: true })]);
+
+    if (hasResolved) {
+      for (let i = 0; i < reportBlocks.length; i++) {
+        const block = reportBlocks[i]!;
+        const badge = block.type === 'final' ? 'FINAL' : 'UPDATE';
+        const badgeColor = block.type === 'final' ? 'cyan' : 'yellow';
+
+        if (i > 0) lines.push(singleLine(' '));
+        lines.push([
+          seg('    '),
+          seg(badge, { color: badgeColor, bold: block.type === 'final' }),
+          seg(` ${formatTime(block.timestamp)}`, { dim: true }),
+        ]);
+        for (const wl of wrapText(cleanMarkdown(block.content.trim()), contentWidth - 10)) {
+          lines.push(singleLine(`      ${wl}`, { dim: true }));
+        }
+      }
+    } else {
+      for (const report of agent.reports) {
+        const badge = report.type === 'final' ? 'FINAL' : 'UPDATE';
+        const badgeColor = report.type === 'final' ? 'cyan' : 'yellow';
+        lines.push([
+          seg('    '),
+          seg(badge, { color: badgeColor, bold: report.type === 'final' }),
+          seg(` ${formatTime(report.timestamp)}  ${report.summary.split('\n')[0]}`, { dim: true }),
+        ]);
+      }
+    }
+  }
+
+  // Metadata
+  lines.push(singleLine(' '));
+  lines.push(singleLine('  ▎ ◦ META', { color: 'gray', bold: true }));
+  lines.push(singleLine(`    Spawned: ${formatTime(agent.spawnedAt)}`, { dim: true }));
+  if (agent.completedAt) {
+    lines.push(singleLine(`    Completed: ${formatTime(agent.completedAt)}`, { dim: true }));
+  }
+  if (agent.paneId) {
+    lines.push(singleLine(`    Pane: ${agent.paneId}`, { dim: true }));
+  }
+  if (agent.worktreePath) {
+    lines.push(singleLine(`    Worktree: ${agent.worktreePath}`, { dim: true }));
+  }
+  if (agent.branchName) {
+    lines.push(singleLine(`    Branch: ${agent.branchName}`, { dim: true }));
+  }
+
+  return lines;
+}
+
+export function AgentDetail({ agent, reportBlocks, width, height, scrollOffset = 0, focused = false }: Props) {
+  const allLines = useMemo(
+    () => buildLines(agent, reportBlocks, width),
+    [agent, reportBlocks, width],
+  );
+
   return (
-    <Box
-      flexDirection="column"
+    <ScrollablePanel
+      lines={allLines}
       width={width}
-      borderStyle="round"
-      borderColor="gray"
-      paddingX={1}
-    >
-      {/* Header */}
-      <Text bold>
-        {' '}<Text color={color}>{icon}</Text> {agent.id} · {nameLabel}
-      </Text>
-      <Box>
-        <Text dimColor>{'  '}</Text>
-        <Text color={color}>{agent.status}</Text>
-        <Text dimColor>
-          {' · '}{dur} · {agent.agentType}
-        </Text>
-        {agent.mergeStatus && (
-          <>
-            <Text dimColor> · </Text>
-            {agent.mergeStatus === 'merged' && <Text color="green">⊕ merged</Text>}
-            {agent.mergeStatus === 'pending' && <Text color="yellow">◌ pending</Text>}
-            {agent.mergeStatus === 'no-changes' && <Text color="gray">∅ no changes</Text>}
-            {agent.mergeStatus === 'conflict' && <Text color="red">⚠ conflict</Text>}
-            {!['merged', 'pending', 'no-changes', 'conflict'].includes(agent.mergeStatus) && (
-              <Text dimColor>{agent.mergeStatus}</Text>
-            )}
-          </>
-        )}
-      </Box>
-
-      {/* Alerts */}
-      {agent.killedReason && (
-        <Text color="red">{'  '}⚠ {agent.killedReason}</Text>
-      )}
-      {agent.mergeStatus === 'conflict' && agent.mergeDetails && (
-        <Box flexDirection="column">
-          {wrapText(agent.mergeDetails, contentWidth - 6).map((line, i) => (
-            <Text key={i} color="red">{'  '}⚠ {line}</Text>
-          ))}
-        </Box>
-      )}
-
-      {/* Instruction */}
-      <Text>{' '}</Text>
-      <Text color="white" bold>{'  '}▎ ▷ INSTRUCTION</Text>
-      {wrapText(agent.instruction, contentWidth - 6)
-        .slice(0, instrMaxLines)
-        .map((line, i) => (
-          <Text key={i} dimColor>{'    '}{line}</Text>
-        ))}
-
-      {/* Reports */}
-      {agent.reports.length > 0 && (
-        <>
-          <Text>{' '}</Text>
-          <Text color="cyan" bold>{'  '}▎ ◇ REPORTS ({agent.reports.length})</Text>
-          {hasResolvedReports ? (
-            <Box flexDirection="column">
-              {reportBlocks.slice(0, Math.min(reportBlocks.length, 3)).map((block, i) => {
-                const badge = block.type === 'final' ? 'FINAL' : 'UPDATE';
-                const badgeColor = block.type === 'final' ? 'cyan' : 'yellow';
-                const linesPerReport = Math.max(2, Math.floor(reportMaxLines / Math.min(reportBlocks.length, 3)) - 2);
-                return (
-                  <Box key={i} flexDirection="column">
-                    {i > 0 && <Text>{' '}</Text>}
-                    <Box>
-                      <Text>{'    '}</Text>
-                      <Text color={badgeColor} bold={block.type === 'final'}>{badge}</Text>
-                      <Text dimColor> {formatTime(block.timestamp)}</Text>
-                    </Box>
-                    {wrapText(cleanMarkdown(block.content.trim()), contentWidth - 10)
-                      .slice(0, linesPerReport)
-                      .map((line, j) => (
-                        <Text key={j} dimColor>{'      '}{line}</Text>
-                      ))}
-                  </Box>
-                );
-              })}
-            </Box>
-          ) : (
-            agent.reports.slice(0, reportMaxLines).map((report, i) => {
-              const badge = report.type === 'final' ? 'FINAL' : 'UPDATE';
-              const badgeColor = report.type === 'final' ? 'cyan' : 'yellow';
-              return (
-                <Box key={i}>
-                  <Text>{'    '}</Text>
-                  <Text color={badgeColor} bold={report.type === 'final'}>{badge}</Text>
-                  <Text dimColor> {formatTime(report.timestamp)}  {report.summary.split('\n')[0]}</Text>
-                </Box>
-              );
-            })
-          )}
-        </>
-      )}
-
-      {/* Metadata */}
-      <Text>{' '}</Text>
-      <Text color="gray" bold>{'  '}▎ ◦ META</Text>
-      <Text dimColor>{'    '}Spawned: {formatTime(agent.spawnedAt)}</Text>
-      {agent.completedAt && (
-        <Text dimColor>{'    '}Completed: {formatTime(agent.completedAt)}</Text>
-      )}
-      {agent.paneId && <Text dimColor>{'    '}Pane: {agent.paneId}</Text>}
-      {agent.worktreePath && <Text dimColor>{'    '}Worktree: {agent.worktreePath}</Text>}
-      {agent.branchName && <Text dimColor>{'    '}Branch: {agent.branchName}</Text>}
-    </Box>
+      height={height}
+      scrollOffset={scrollOffset}
+      focused={focused}
+    />
   );
 }

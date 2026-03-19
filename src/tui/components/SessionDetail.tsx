@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { Session } from '../../shared/types.js';
 import { computeActiveTimeMs } from '../../shared/utils.js';
 import { buildPlanLines } from './PlanView.js';
+import { ScrollablePanel } from './ScrollablePanel.js';
 import {
   statusColor,
   formatDuration,
@@ -11,6 +12,9 @@ import {
   wrapText,
   stripFrontmatter,
   cleanMarkdown,
+  seg,
+  singleLine,
+  type DetailLine,
 } from '../lib/format.js';
 
 interface Props {
@@ -25,29 +29,11 @@ interface Props {
   focused?: boolean;
 }
 
-type Seg = {
-  text: string;
-  color?: string;
-  bold?: boolean;
-  dim?: boolean;
-  italic?: boolean;
-};
-
-type DetailLine = Seg[];
-
-function seg(text: string, opts?: Partial<Omit<Seg, 'text'>>): Seg {
-  return { text, ...opts };
-}
-
-function simple(text: string, opts?: Partial<Omit<Seg, 'text'>>): DetailLine {
-  return [seg(text, opts)];
-}
-
 function buildLines(
   session: Session,
   planContent: string,
   goalContent: string | undefined,
-  logsContent: string | undefined,
+  _logsContent: string | undefined,
   width: number,
   paneAlive: boolean,
 ): DetailLine[] {
@@ -67,7 +53,7 @@ function buildLines(
     .split('\n')
     .flatMap((l) => wrapText(l, contentWidth - 2))
     .forEach((line, i) => {
-      lines.push(simple(`${i === 0 ? ' ' : '  '}${line}`, { bold: true }));
+      lines.push(singleLine(`${i === 0 ? ' ' : '  '}${line}`, { bold: true }));
     });
 
   // Status bar (mixed colors)
@@ -106,40 +92,46 @@ function buildLines(
   // Conflict banner
   if (conflicts.length > 0) {
     lines.push(
-      simple(
+      singleLine(
         `  ⚠ ${conflicts.length} merge conflict${conflicts.length > 1 ? 's' : ''}`,
         { color: 'red', bold: true },
+      ),
+    );
+    lines.push(
+      singleLine(
+        '  resolve in worktree, then [x] restart agent',
+        { color: 'red', dim: true },
       ),
     );
   }
 
   // Plan section
-  lines.push(simple(' '));
+  lines.push(singleLine(' '));
   lines.push([
     seg('  ▎ ◈ PLAN', { color: 'yellow', bold: true }),
   ]);
   const planLines = buildPlanLines(planContent, 99999, width);
   if (planLines.length === 0) {
-    lines.push(simple('    orchestrator will create one', { dim: true, italic: true }));
+    lines.push(singleLine('    orchestrator will create one', { dim: true, italic: true }));
   } else {
     for (const pl of planLines) {
-      lines.push(simple(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
+      lines.push(singleLine(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
     }
   }
 
   // Completion report
   if (session.status === 'completed' && session.completionReport) {
-    lines.push(simple(' '));
+    lines.push(singleLine(' '));
     lines.push([seg('  ▎ ✓ COMPLETION', { color: 'cyan', bold: true })]);
     wrapText(cleanMarkdown(session.completionReport), contentWidth - 6).forEach(
       (l) => {
-        lines.push(simple(`    ${l}`, { dim: true }));
+        lines.push(singleLine(`    ${l}`, { dim: true }));
       },
     );
   }
 
   // Cycles section — newest first, messages nested below the cycle they fed into
-  lines.push(simple(' '));
+  lines.push(singleLine(' '));
   lines.push([
     seg('  ▎ ⟳ CYCLES', { color: 'blue', bold: true }),
     seg(` (${cycles.length})`, { dim: true }),
@@ -166,7 +158,7 @@ function buildLines(
   };
 
   if (cycles.length === 0) {
-    lines.push(simple('    waiting for orchestrator…', { dim: true, italic: true }));
+    lines.push(singleLine('    waiting for orchestrator…', { dim: true, italic: true }));
   } else {
     const sortedMsgs = [...messages].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
@@ -296,48 +288,13 @@ export function SessionDetail({
     [session, planContent, goalContent, logsContent, width, paneAlive],
   );
 
-  const innerHeight = height - 2; // borders only
-  const hasOverflow = allLines.length > innerHeight;
-  const viewableHeight = hasOverflow ? innerHeight - 1 : innerHeight;
-  const maxScroll = Math.max(0, allLines.length - viewableHeight);
-  const effectiveOffset = Math.min(scrollOffset, maxScroll);
-  const visible = allLines.slice(effectiveOffset, effectiveOffset + viewableHeight);
-  const padCount = viewableHeight - visible.length;
-  const scrollPct =
-    maxScroll > 0 ? Math.round((effectiveOffset / maxScroll) * 100) : 100;
-
   return (
-    <Box
-      flexDirection="column"
+    <ScrollablePanel
+      lines={allLines}
       width={width}
-      borderStyle="round"
-      borderColor={focused ? 'blue' : 'gray'}
-      paddingX={1}
-    >
-      {visible.map((line, i) => (
-        <Text key={effectiveOffset + i}>
-          {line.map((s, j) => (
-            <Text
-              key={j}
-              color={s.color}
-              bold={s.bold}
-              dimColor={s.dim}
-              italic={s.italic}
-            >
-              {s.text}
-            </Text>
-          ))}
-        </Text>
-      ))}
-      {padCount > 0 &&
-        Array.from({ length: padCount }, (_, i) => (
-          <Text key={`pad-${i}`}>{' '}</Text>
-        ))}
-      {hasOverflow && (
-        <Text dimColor>
-          {'  '}[tab] scroll · {scrollPct}% · {allLines.length} lines
-        </Text>
-      )}
-    </Box>
+      height={height}
+      scrollOffset={scrollOffset}
+      focused={focused}
+    />
   );
 }

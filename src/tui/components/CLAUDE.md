@@ -22,11 +22,12 @@ React + Ink terminal UI components for session monitoring and control.
   - Non-input modes: `'navigate'`, `'report-detail'`, `'leader'`, `'copy-menu'`, `'help'` (render null or help text)
 - **StatusLine**: Context-aware help text for all input modes and view states
 - **SessionDetail**: Session overview pane with dynamic layout budgeting — task, status, plan, cycles, messages, completion report, logs. Uses `Seg[][]` line representation for fine-grained styling (color, bold, dim, italic per segment).
+- **AgentDetail**: Agent detail pane with dynamic layout budgeting — instruction, reports, alerts, metadata. Split allocation between instruction and report content based on available space.
 - **PlanView**: Formatted roadmap.md excerpt (headers bold/indented, lists clean, long lines wrapped) with truncation indicator
 - **CycleHistory**: Timeline of orchestrator cycles with mode labels
 - **MessageLog**: Session messages with truncation
 - **PaneOutput**: Real-time pane output display with scrolling
-- **SessionTree**: Hierarchical view of orchestrator + agents
+- **SessionTree**: Hierarchical view of orchestrator + agents with cursor navigation and smart scroll management
 - **ControlPanel**: Interactive buttons/shortcuts for daemon commands
 - **ReportView**: Scrollable agent report display with wrapped content, keyboard nav (↑↓ scroll, [ ] page, esc/enter close)
 

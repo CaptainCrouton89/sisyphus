@@ -1,7 +1,14 @@
 import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { CycleLog } from '../hooks/usePolling.js';
-import { stripFrontmatter, cleanMarkdown, wrapText } from '../lib/format.js';
+import { ScrollablePanel } from './ScrollablePanel.js';
+import {
+  stripFrontmatter,
+  cleanMarkdown,
+  wrapText,
+  seg,
+  type DetailLine,
+} from '../lib/format.js';
 
 interface Props {
   cycleLogs: CycleLog[];
@@ -9,19 +16,6 @@ interface Props {
   height: number;
   scrollOffset?: number;
   focused?: boolean;
-}
-
-type Seg = {
-  text: string;
-  color?: string;
-  bold?: boolean;
-  dim?: boolean;
-};
-
-type DetailLine = Seg[];
-
-function seg(text: string, opts?: Partial<Omit<Seg, 'text'>>): Seg {
-  return { text, ...opts };
 }
 
 function buildLines(cycleLogs: CycleLog[], width: number): DetailLine[] {
@@ -82,42 +76,13 @@ export function LogsPanel({
     [cycleLogs, width],
   );
 
-  const innerHeight = height - 2;
-  const hasOverflow = allLines.length > innerHeight;
-  const viewableHeight = hasOverflow ? innerHeight - 1 : innerHeight;
-  const maxScroll = Math.max(0, allLines.length - viewableHeight);
-  const effectiveOffset = Math.min(scrollOffset, maxScroll);
-  const visible = allLines.slice(effectiveOffset, effectiveOffset + viewableHeight);
-  const padCount = viewableHeight - visible.length;
-  const scrollPct =
-    maxScroll > 0 ? Math.round((effectiveOffset / maxScroll) * 100) : 100;
-
   return (
-    <Box
-      flexDirection="column"
+    <ScrollablePanel
+      lines={allLines}
       width={width}
-      borderStyle="round"
-      borderColor={focused ? 'blue' : 'gray'}
-      paddingX={1}
-    >
-      {visible.map((line, i) => (
-        <Text key={effectiveOffset + i}>
-          {line.map((s, j) => (
-            <Text key={j} color={s.color} bold={s.bold} dimColor={s.dim}>
-              {s.text}
-            </Text>
-          ))}
-        </Text>
-      ))}
-      {padCount > 0 &&
-        Array.from({ length: padCount }, (_, i) => (
-          <Text key={`pad-${i}`}>{' '}</Text>
-        ))}
-      {hasOverflow && (
-        <Text dimColor>
-          {'  '}[tab] scroll · {scrollPct}% · {allLines.length} lines
-        </Text>
-      )}
-    </Box>
+      height={height}
+      scrollOffset={scrollOffset}
+      focused={focused}
+    />
   );
 }

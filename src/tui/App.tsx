@@ -6,7 +6,6 @@ import { LogsPanel } from './components/LogsPanel.js';
 import { CycleDetail } from './components/CycleDetail.js';
 import { AgentDetail } from './components/AgentDetail.js';
 import { ReportView } from './components/ReportView.js';
-import { MessageLog } from './components/MessageLog.js';
 import { InputBar, type InputMode } from './components/InputBar.js';
 import { StatusLine } from './components/StatusLine.js';
 import { LeaderOverlay } from './components/LeaderOverlay.js';
@@ -30,7 +29,8 @@ import {
   openShellPopup,
   openInFileManager,
 } from './lib/tmux.js';
-import { wrapText, formatTime, cleanMarkdown, stripFrontmatter } from './lib/format.js';
+import { ScrollablePanel } from './components/ScrollablePanel.js';
+import { wrapText, formatTime, cleanMarkdown, stripFrontmatter, seg, singleLine, type DetailLine } from './lib/format.js';
 import { goalPath, roadmapPath, sessionDir } from '../shared/paths.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { loadConfig } from '../shared/config.js';
@@ -83,8 +83,8 @@ export function App({ cwd }: Props) {
 
   // Build tree from current state
   const nodes = useMemo(
-    () => buildTree(filteredSessions, selectedSession, expanded, cwd),
-    [filteredSessions, selectedSession, expanded, cwd],
+    () => buildTree(filteredSessions, selectedSession, expanded, cwd, contextFiles),
+    [filteredSessions, selectedSession, expanded, cwd, contextFiles],
   );
 
   // Track cursor node identity: update ref only when cursor moved (nodes stable),
@@ -831,6 +831,8 @@ export function App({ cwd }: Props) {
                 width={detailWidth}
                 height={contentHeight}
                 paneAlive={paneAlive}
+                scrollOffset={detailScrollOffset}
+                focused={focusPane === 'detail'}
               />
             );
           }
@@ -840,6 +842,8 @@ export function App({ cwd }: Props) {
               agents={session.agents}
               width={detailWidth}
               height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
             />
           );
         }
@@ -855,6 +859,8 @@ export function App({ cwd }: Props) {
                 width={detailWidth}
                 height={contentHeight}
                 paneAlive={paneAlive}
+                scrollOffset={detailScrollOffset}
+                focused={focusPane === 'detail'}
               />
             );
           }
@@ -864,6 +870,8 @@ export function App({ cwd }: Props) {
               reportBlocks={detailReportBlocks}
               width={detailWidth}
               height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
             />
           );
         }
@@ -879,6 +887,8 @@ export function App({ cwd }: Props) {
                 width={detailWidth}
                 height={contentHeight}
                 paneAlive={paneAlive}
+                scrollOffset={detailScrollOffset}
+                focused={focusPane === 'detail'}
               />
             );
           }
@@ -892,32 +902,22 @@ export function App({ cwd }: Props) {
           if (specificBlock) {
             const badge = specificBlock.type === 'final' ? 'FINAL' : 'UPDATE';
             const badgeColor = specificBlock.type === 'final' ? 'cyan' : 'yellow';
-            const reportLines = wrapText(specificBlock.content.trim(), detailWidth - 8);
-            const viewableLines = contentHeight - 7;
+            const reportContentLines: DetailLine[] = [
+              [seg(' '), seg(badge, { color: badgeColor }), seg(` ${agent.id} · ${agent.name !== agent.id ? agent.name : agent.agentType}`, { bold: true })],
+              singleLine(`  ${formatTime(specificBlock.timestamp)}`, { dim: true }),
+              singleLine(' '),
+              [seg('  ▎ CONTENT', { color: badgeColor, bold: true })],
+              ...wrapText(specificBlock.content.trim(), detailWidth - 8).map(l => singleLine(`    ${l}`)),
+            ];
             return (
-              <Box
-                flexDirection="column"
+              <ScrollablePanel
+                lines={reportContentLines}
                 width={detailWidth}
-                borderStyle="round"
+                height={contentHeight}
+                scrollOffset={detailScrollOffset}
+                focused={focusPane === 'detail'}
                 borderColor={badgeColor}
-                paddingX={1}
-              >
-                <Text bold>
-                  {' '}
-                  <Text color={badgeColor}>{badge}</Text>
-                  {' '}
-                  {agent.id} · {agent.name !== agent.id ? agent.name : agent.agentType}
-                </Text>
-                <Text dimColor>{'  '}{formatTime(specificBlock.timestamp)}</Text>
-                <Text>{' '}</Text>
-                <Text color={badgeColor} bold>{'  '}▎ CONTENT</Text>
-                {reportLines.slice(0, viewableLines).map((line, i) => (
-                  <Text key={i}>{'    '}{line}</Text>
-                ))}
-                {reportLines.length > viewableLines && (
-                  <Text dimColor>{'    '}… {reportLines.length - viewableLines} more lines [enter] full view</Text>
-                )}
-              </Box>
+              />
             );
           }
           return (
@@ -926,102 +926,114 @@ export function App({ cwd }: Props) {
               reportBlocks={detailReportBlocks}
               width={detailWidth}
               height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
             />
           );
         }
 
-        case 'messages':
+        case 'messages': {
+          const msgsLines: DetailLine[] = [
+            singleLine(` Messages (${session.messages.length})`, { bold: true }),
+          ];
+          if (session.messages.length === 0) {
+            msgsLines.push(singleLine('  No messages', { dim: true, italic: true }));
+          } else {
+            for (const msg of session.messages) {
+              const time = formatTime(msg.timestamp);
+              const label = msg.source.type === 'user' ? 'You' : msg.source.type === 'agent' ? msg.source.agentId : 'system';
+              const labelColor = msg.source.type === 'user' ? 'yellow' : msg.source.type === 'agent' ? 'cyan' : 'gray';
+              const maxContent = Math.max(10, detailWidth - label.length - 20);
+              msgsLines.push([
+                seg(`  [${time}] `, { dim: true }),
+                seg(`${label}: `, { color: labelColor, bold: true }),
+                seg(wrapText(msg.summary || msg.content, maxContent)[0] || '', {}),
+              ]);
+            }
+          }
           return (
-            <Box
-              flexDirection="column"
+            <ScrollablePanel
+              lines={msgsLines}
               width={detailWidth}
-              borderStyle="round"
-              borderColor="gray"
-              paddingX={1}
-            >
-              <Text bold> Messages ({session.messages.length})</Text>
-              <MessageLog
-                messages={session.messages}
-                maxMessages={contentHeight - 4}
-                width={detailWidth - 4}
-              />
-            </Box>
-          );
-
-        case 'message': {
-          const msg = session.messages.find((m) => m.id === cursorNode.messageId);
-          return (
-            <Box
-              flexDirection="column"
-              width={detailWidth}
-              borderStyle="round"
-              borderColor="gray"
-              paddingX={1}
-            >
-              <Text bold> Message</Text>
-              {msg ? (
-                <>
-                  <Text dimColor>
-                    {'  '}
-                    {cursorNode.source} · {cursorNode.timestamp}
-                  </Text>
-                  <Text>{'  '}{msg.content}</Text>
-                </>
-              ) : (
-                <Text dimColor>Message not found</Text>
-              )}
-            </Box>
+              height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
+            />
           );
         }
 
-        case 'context':
+        case 'message': {
+          const msg = session.messages.find((m) => m.id === cursorNode.messageId);
+          const msgContentLines: DetailLine[] = [
+            singleLine(' Message', { bold: true }),
+          ];
+          if (msg) {
+            msgContentLines.push(singleLine(`  ${cursorNode.source} · ${cursorNode.timestamp}`, { dim: true }));
+            for (const l of wrapText(msg.content, detailWidth - 8)) {
+              msgContentLines.push(singleLine(`  ${l}`));
+            }
+          } else {
+            msgContentLines.push(singleLine('  Message not found', { dim: true }));
+          }
           return (
-            <Box
-              flexDirection="column"
+            <ScrollablePanel
+              lines={msgContentLines}
               width={detailWidth}
-              borderStyle="round"
-              borderColor="gray"
-              paddingX={1}
-            >
-              <Text bold> <Text color="white">⊞</Text> Context ({contextFiles.length})</Text>
-              {contextFiles.length === 0 ? (
-                <Text dimColor>{'  '}No context files found.</Text>
-              ) : (
-                contextFiles.map((f) => (
-                  <Text key={f} dimColor>{'  · '}{f}</Text>
-                ))
-              )}
-            </Box>
+              height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
+            />
           );
+        }
+
+        case 'context': {
+          const ctxLines: DetailLine[] = [
+            [seg(' '), seg('⊞', { color: 'white' }), seg(` Context (${contextFiles.length})`, { bold: true })],
+          ];
+          if (contextFiles.length === 0) {
+            ctxLines.push(singleLine('  No context files found.', { dim: true }));
+          } else {
+            for (const f of contextFiles) {
+              ctxLines.push(singleLine(`  · ${f}`, { dim: true }));
+            }
+          }
+          return (
+            <ScrollablePanel
+              lines={ctxLines}
+              width={detailWidth}
+              height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
+            />
+          );
+        }
 
         case 'context-file': {
-          const fileLines = contextFileContent != null
-            ? wrapText(cleanMarkdown(stripFrontmatter(contextFileContent)), detailWidth - 8)
-            : [];
-          const viewableLines = contentHeight - 6;
+          const ctxFileLines: DetailLine[] = [
+            [seg(' '), seg('⊞', { color: 'white' }), seg(` ${cursorNode.label}`, { bold: true })],
+            singleLine(' '),
+          ];
+          if (contextFileContent == null) {
+            ctxFileLines.push(singleLine('  File not found or unreadable.', { dim: true }));
+          } else {
+            const wrapped = wrapText(cleanMarkdown(stripFrontmatter(contextFileContent)), detailWidth - 8);
+            if (wrapped.length === 0) {
+              ctxFileLines.push(singleLine('  (empty)', { dim: true }));
+            } else {
+              for (const l of wrapped) {
+                ctxFileLines.push(singleLine(`    ${l}`));
+              }
+            }
+          }
           return (
-            <Box
-              flexDirection="column"
+            <ScrollablePanel
+              lines={ctxFileLines}
               width={detailWidth}
-              borderStyle="round"
+              height={contentHeight}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
               borderColor="white"
-              paddingX={1}
-            >
-              <Text bold> <Text color="white">⊞</Text> {cursorNode.label}</Text>
-              <Text>{' '}</Text>
-              {contextFileContent == null ? (
-                <Text dimColor>{'  '}File not found or unreadable.</Text>
-              ) : fileLines.length === 0 ? (
-                <Text dimColor>{'  '}(empty)</Text>
-              ) : (
-                fileLines.slice(0, viewableLines).map((line, i) => (
-                  <Text key={i}>{'    '}{line}</Text>
-                ))
-              )}
-              {fileLines.length > viewableLines && (
-                <Text dimColor>{'    '}… {fileLines.length - viewableLines} more lines</Text>
-              )}
-            </Box>
+            />
           );
         }
 
@@ -1034,12 +1046,24 @@ export function App({ cwd }: Props) {
               width={detailWidth}
               height={contentHeight}
               paneAlive={paneAlive}
+              scrollOffset={detailScrollOffset}
+              focused={focusPane === 'detail'}
             />
           );
       }
     },
     [cursorNode, session, planContent, goalContent, logsContent, paneAlive, agents, mode, reportAgent, reportBlocks, detailReportBlocks, handleCancel, detailScrollOffset, focusPane, contextFiles, contextFileContent],
   );
+
+  if (cols < 60 || rows < 12) {
+    return (
+      <Box flexDirection="column" width={cols} height={rows} justifyContent="center" alignItems="center">
+        <Text color="yellow" bold>Terminal too small</Text>
+        <Text dimColor>Minimum: 60×12 (current: {cols}×{rows})</Text>
+        <Text dimColor>Resize your terminal and try again.</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" width={cols} height={rows}>

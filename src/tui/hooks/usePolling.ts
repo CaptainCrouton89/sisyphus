@@ -13,6 +13,8 @@ export interface SessionSummary {
   agentCount: number;
   createdAt: string;
   tmuxWindowId?: string;
+  /** Cached result of windowExists check — avoids synchronous subprocess in render */
+  windowAlive?: boolean;
 }
 
 export interface CycleLog {
@@ -62,6 +64,17 @@ export function usePolling(
         ? ((listRes.data?.sessions as SessionSummary[] | undefined) ?? [])
         : [];
 
+      // Cache window existence for non-completed sessions (avoids execSync in render path)
+      for (const s of sessions) {
+        if (s.status !== 'completed' && s.tmuxWindowId) {
+          try {
+            s.windowAlive = windowExists(s.tmuxWindowId);
+          } catch {
+            s.windowAlive = false;
+          }
+        }
+      }
+
       let selectedSession: Session | null = null;
       let planContent = '';
       let goalContent = '';
@@ -76,13 +89,10 @@ export function usePolling(
           selectedSession = (statusRes.data?.session as Session | undefined) ?? null;
         }
 
-        // Check if the session's tmux window is still alive
+        // Use cached windowAlive from the session list scan above
         if (selectedSession?.tmuxWindowId) {
-          try {
-            paneAlive = windowExists(selectedSession.tmuxWindowId);
-          } catch {
-            paneAlive = false;
-          }
+          const cached = sessions.find(s => s.id === selectedIdRef.current);
+          paneAlive = cached?.windowAlive ?? false;
         }
 
         try {
@@ -130,7 +140,12 @@ export function usePolling(
       }
 
       if (mountedRef.current) {
-        setState({ sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, contextFiles, error: null });
+        const next = { sessions, selectedSession, planContent, goalContent, logsContent, logsCycles, paneAlive, contextFiles, error: null };
+        // Skip re-render if data hasn't changed (avoids full tree rebuild every poll cycle)
+        setState((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+          return next;
+        });
       }
     } catch (err) {
       if (mountedRef.current) {

@@ -34,11 +34,12 @@ export function SessionTree({ nodes, cursorIndex, width, height, focused }: Prop
         <Text bold> Sessions </Text>
         <Text dimColor>No sessions found.</Text>
         <Text dimColor>Press [n] to create one.</Text>
+        <Text dimColor>Press [?] for all keybindings.</Text>
       </Box>
     );
   }
 
-  const maxVisible = Math.max(1, height - 3);
+  const maxVisible = Math.max(1, height - 4);
   const halfVisible = Math.floor(maxVisible / 2);
   const scrollOffset = Math.max(
     0,
@@ -172,13 +173,15 @@ function renderNodeContent(
         color: 'white',
         dim: node.fileCount === 0,
       };
-    case 'context-file':
+    case 'context-file': {
+      const maxLabel = Math.max(8, maxWidth - 4);
       return {
         icon: '·',
-        label: node.label,
+        label: truncate(node.label, maxLabel),
         meta: '',
         color: 'gray',
         dim: false,
       };
+    }
   }
 }

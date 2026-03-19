@@ -3,11 +3,10 @@ import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { globalDir } from '../../shared/paths.js';
+import { execEnv, augmentedPath } from '../../shared/env.js';
+import { shellQuote } from '../../shared/shell.js';
 
-const EXEC_ENV = {
-  ...process.env,
-  PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env['PATH'] ?? '/usr/bin:/bin'}`,
-};
+const EXEC_ENV = execEnv();
 
 function exec(cmd: string): string {
   return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV }).trim();
@@ -21,9 +20,6 @@ function execSafe(cmd: string): string | null {
   }
 }
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
 
 export function getWindowId(): string {
   return exec('tmux display-message -p "#{window_id}"');
@@ -76,7 +72,7 @@ export function openCompanionPane(cwd: string): void {
   const promptPath = join(globalDir(), 'dashboard-companion-prompt.md');
   writeFileSync(promptPath, rendered, 'utf-8');
 
-  const pathEnv = `/opt/homebrew/bin:/usr/local/bin:${process.env['PATH'] ?? '/usr/bin:/bin'}`;
+  const pathEnv = augmentedPath();
 
   const claudeCmd = `SISYPHUS_COMPANION_CWD=${shellQuote(cwd)} PATH=${shellQuote(pathEnv)} claude --dangerously-skip-permissions --plugin-dir ${shellQuote(pluginDir)} --append-system-prompt "$(cat ${shellQuote(promptPath)})"`;
 
