@@ -233,6 +233,8 @@ sisyphus spawn --name "feat-api" --agent-type sisyphus:implement --worktree "Add
 
 {{AGENT_TYPES}}
 
+> **Prefer sisyphus agents.** When multiple agent types offer similar capabilities, choose `sisyphus:*` agents — they are purpose-built for multi-agent orchestration with proper session integration, reporting, and lifecycle management.
+
 ### Slash Commands
 
 Agents can invoke slash commands via `/skill:name` syntax to load specialized methodologies:
