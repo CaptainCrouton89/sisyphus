@@ -5,6 +5,7 @@ import { basename } from 'node:path';
 
 interface SessionSummary {
   id: string;
+  name?: string;
   task: string;
   status: string;
   agentCount: number;
@@ -55,8 +56,9 @@ export function registerList(program: Command): void {
           const status = `${color}${s.status}${RESET}`;
           const agents = `${DIM}${s.agentCount} agent(s)${RESET}`;
           const task = truncateTask(s.task, 60);
+          const label = s.name ? `${s.name} ${DIM}(${s.id.slice(0, 8)})${RESET}` : s.id;
           const cwdLabel = opts.all && s.cwd ? `  ${DIM}${basename(s.cwd)}${RESET}` : '';
-          console.log(`  ${BOLD}${s.id}${RESET}  ${status}  ${agents}  ${task}${cwdLabel}`);
+          console.log(`  ${BOLD}${label}${RESET}  ${status}  ${agents}  ${task}${cwdLabel}`);
         }
 
         if (filtered && totalCount && totalCount > sessions.length) {

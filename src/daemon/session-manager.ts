@@ -11,6 +11,8 @@ import { unregisterSessionPanes, unregisterAgentPane } from './pane-registry.js'
 import type { Session } from '../shared/types.js';
 import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 import { sendTerminalNotification } from './notify.js';
+import { generateSessionName } from './summarize.js';
+import { registerSessionTmux } from './server.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -47,6 +49,31 @@ export async function startSession(task: string, cwd: string, context?: string, 
   tmux.killPane(initialPaneId);
 
   pruneOldSessions(cwd);
+
+  // Fire-and-forget: auto-generate a descriptive session name via Haiku
+  if (!name) {
+    generateSessionName(task).then(async (generatedName) => {
+      if (!generatedName) return;
+      let finalName = generatedName;
+      let candidate = `sisyphus-${finalName}`;
+      let attempt = 0;
+      while (tmux.sessionExists(candidate) && attempt < 5) {
+        attempt++;
+        finalName = `${generatedName}-${attempt}`;
+        candidate = `sisyphus-${finalName}`;
+      }
+      if (tmux.sessionExists(candidate)) return;
+
+      try {
+        tmux.renameSession(tmuxName, candidate);
+      } catch { return; }
+
+      await state.updateSessionName(cwd, sessionId, finalName);
+      await state.updateSessionTmux(cwd, sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
+      trackSession(sessionId, cwd, candidate);
+      registerSessionTmux(sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
+    }).catch(() => {});
+  }
 
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
 }

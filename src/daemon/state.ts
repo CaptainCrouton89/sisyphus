@@ -179,6 +179,14 @@ export async function updateReportSummary(
   });
 }
 
+export async function updateSessionName(cwd: string, sessionId: string, name: string): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    session.name = name;
+    saveSession(session);
+  });
+}
+
 export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSessionName: string, tmuxWindowId: string): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);

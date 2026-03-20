@@ -46,6 +46,10 @@ export function killSession(sessionName: string): void {
   execSafe(`tmux kill-session -t "${sessionName}"`);
 }
 
+export function renameSession(oldName: string, newName: string): void {
+  exec(`tmux rename-session -t "${oldName}" "${newName}"`);
+}
+
 export function setSessionOption(sessionName: string, option: string, value: string): void {
   execSafe(`tmux set-option -t "${sessionName}" ${option} ${shellQuote(value)}`);
 }
