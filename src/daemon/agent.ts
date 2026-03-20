@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
@@ -87,6 +87,16 @@ function createAgentPlugin(
   if (agentConfig?.filePath && agentType && agentType !== 'worker') {
     const shortName = agentType.replace(/^sisyphus:/, '');
     copyFileSync(agentConfig.filePath, `${base}/agents/${shortName}.md`);
+
+    // Copy sub-agent definitions if a subdirectory exists
+    const subAgentDir = join(dirname(agentConfig.filePath), shortName);
+    if (existsSync(subAgentDir)) {
+      for (const f of readdirSync(subAgentDir)) {
+        if (f.endsWith('.md') && f !== 'CLAUDE.md') {
+          copyFileSync(join(subAgentDir, f), `${base}/agents/${f}`);
+        }
+      }
+    }
   }
 
   const srcHooks = resolve(import.meta.dirname, '../templates/agent-plugin/hooks');
