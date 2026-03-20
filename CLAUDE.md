@@ -25,7 +25,7 @@ node --import tsx --test src/__tests__/state.test.ts
 Binaries:
 - **CLI**: `dist/cli.js` — entry point for `sisyphus` command
 - **Daemon**: `dist/daemon.js` — entry point for `sisyphusd` command
-- **TUI**: `dist/tui.js` — React/Ink-based terminal UI for monitoring and control
+- **TUI**: `dist/tui.js` — raw ANSI terminal UI for monitoring and control
 - All get shebang (#!) via tsup banner config
 
 **Critical for daemon development**: The daemon runs the built `dist/daemon.js` in-process, so code changes aren't picked up until restart. `npm run dev:daemon` watches and auto-restarts via `node dist/daemon.js restart`.
@@ -56,9 +56,8 @@ TUI (src/tui/)  ←→
 - Entry point: `dist/daemon.js` (becomes `sisyphusd` command, runs as background service)
 
 ### TUI Layer (`src/tui/`)
-- **React + Ink** — Terminal UI components for interactive session monitoring and control
+- **Raw ANSI** — Cursor-addressed terminal rendering with frame-buffer diffing (no React/Ink)
 - Communicates with daemon via the same Unix socket protocol as CLI
-- Uses `@r-cli/sdk` for Claude Code integration
 - Provides real-time pane output, session state, and interactive controls
 - Entry point: `dist/tui.js`
 

@@ -1,6 +1,6 @@
-import React from 'react';
-import { render } from 'ink';
-import { App } from './App.js';
+import { setupTerminal } from './terminal.js';
+import { createAppState } from './state.js';
+import { startApp } from './app.js';
 
 const args = process.argv.slice(2);
 
@@ -13,5 +13,6 @@ function getArg(name: string): string | undefined {
 }
 
 const cwd = getArg('cwd') ?? process.cwd();
-
-render(<App cwd={cwd} />);
+const cleanup = setupTerminal();
+const state = createAppState(cwd);
+startApp(state, cleanup);

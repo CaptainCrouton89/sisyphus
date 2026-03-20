@@ -12,7 +12,7 @@ import type {
   ContextFileTreeNode,
 } from '../types/tree.js';
 import type { Session } from '../../shared/types.js';
-import type { SessionSummary } from '../hooks/usePolling.js';
+import type { SessionSummary } from '../state.js';
 import { contextDir } from '../../shared/paths.js';
 
 /** Sort priority: active+open=0, active+closed=1, paused+open=2, paused+closed=3, completed=4 */
@@ -121,6 +121,7 @@ export function buildTree(
           spawnedAt: agent.spawnedAt,
           completedAt: agent.completedAt,
           reportCount: agent.reports.length,
+          mergeStatus: agent.mergeStatus,
         } satisfies AgentTreeNode);
 
         if (!agentExpanded || !hasReports) continue;

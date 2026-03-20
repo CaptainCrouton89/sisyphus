@@ -174,6 +174,7 @@ export type Seg = {
   bold?: boolean;
   dim?: boolean;
   italic?: boolean;
+  inverse?: boolean;
 };
 
 export type DetailLine = Seg[];
