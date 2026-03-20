@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
@@ -338,6 +339,7 @@ export async function handleSpawn(
   name: string,
   instruction: string,
   worktree?: boolean,
+  repo?: string,
 ): Promise<{ agentId: string }> {
   const windowId = orchestrator.getWindowId(sessionId);
   if (!windowId) throw new Error(`No tmux window found for session ${sessionId}`);
@@ -357,6 +359,7 @@ export async function handleSpawn(
     instruction,
     windowId,
     worktree,
+    repo,
   });
 
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
@@ -437,7 +440,8 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   // Clean up worktrees for agents that had them
   for (const agent of session.agents) {
     if (agent.worktreePath && agent.branchName) {
-      cleanupWorktree(cwd, agent.worktreePath, agent.branchName);
+      const repoRoot = (agent.repo && agent.repo !== '.') ? join(cwd, agent.repo) : cwd;
+      cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
     }
   }
 
@@ -498,7 +502,8 @@ export async function handleKillAgent(sessionId: string, cwd: string, agentId: s
 
   // Clean up worktree if applicable
   if (agent.worktreePath && agent.branchName) {
-    cleanupWorktree(cwd, agent.worktreePath, agent.branchName);
+    const repoRoot = (agent.repo && agent.repo !== '.') ? join(cwd, agent.repo) : cwd;
+    cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
   }
 
   await state.updateAgent(cwd, sessionId, agentId, {
@@ -541,7 +546,8 @@ export async function handleRollback(sessionId: string, cwd: string, toCycle: nu
   // Clean up worktrees
   for (const agent of session.agents) {
     if (agent.worktreePath && agent.branchName) {
-      cleanupWorktree(cwd, agent.worktreePath, agent.branchName);
+      const repoRoot = (agent.repo && agent.repo !== '.') ? join(cwd, agent.repo) : cwd;
+      cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
     }
   }
 
