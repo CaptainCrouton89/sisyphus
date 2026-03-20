@@ -5,11 +5,20 @@ import { join } from 'node:path';
 import { globalDir } from '../shared/paths.js';
 
 export const DEFAULT_KEY = 'M-s';
+export const DEFAULT_HOME_KEY = 'M-S';
 
 const SISYPHUS_CONF_MARKER = '# sisyphus-managed — do not edit';
 
 export function cycleScriptPath(): string {
   return join(globalDir(), 'bin', 'sisyphus-cycle');
+}
+
+export function homeScriptPath(): string {
+  return join(globalDir(), 'bin', 'sisyphus-home');
+}
+
+export function killPaneScriptPath(): string {
+  return join(globalDir(), 'bin', 'sisyphus-kill-pane');
 }
 
 export function sisyphusTmuxConfPath(): string {
@@ -45,10 +54,71 @@ done
 tmux switch-client -t "\${sessions[0]}"
 `;
 
+const HOME_SCRIPT = `#!/bin/bash
+# Jump to the home (non-sisyphus) session that has the dashboard window
+cwd=$(tmux show-option -v @sisyphus_cwd 2>/dev/null)
+[ -z "$cwd" ] && exit 0
+while IFS= read -r name; do
+  # Skip sisyphus agent/orchestrator sessions
+  case "$name" in sisyphus-*) continue ;; esac
+  scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
+  if [ "$scwd" = "$cwd" ]; then
+    tmux switch-client -t "$name"
+    # Focus the dashboard window if it exists
+    tmux select-window -t "$name:sisyphus-dashboard" 2>/dev/null
+    exit 0
+  fi
+done < <(tmux list-sessions -F '#{session_name}')
+`;
+
+const KILL_PANE_SCRIPT = `#!/bin/bash
+# prefix-x override for sisyphus sessions.
+# If this is the last pane, switch to the home session before killing.
+session=$(tmux display-message -p '#{session_name}')
+pane_count=$(tmux list-panes -t "$session" -F '#{pane_id}' | wc -l | tr -d ' ')
+
+if [ "$pane_count" -le 1 ]; then
+  # Last pane — find home session, switch there, then kill sisyphus session
+  cwd=$(tmux show-option -t "$session" -v @sisyphus_cwd 2>/dev/null)
+  if [ -n "$cwd" ]; then
+    while IFS= read -r name; do
+      case "$name" in sisyphus-*) continue ;; esac
+      scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
+      if [ "$scwd" = "$cwd" ]; then
+        tmux switch-client -t "$name"
+        tmux select-window -t "$name:sisyphus-dashboard" 2>/dev/null
+        tmux kill-session -t "$session"
+        exit 0
+      fi
+    done < <(tmux list-sessions -F '#{session_name}')
+  fi
+  # No home session found — just kill the pane
+  tmux kill-pane
+else
+  # Multiple panes — kill this one and rebalance
+  tmux kill-pane
+  tmux select-layout even-horizontal
+fi
+`;
+
 export function installCycleScript(): void {
-  const scriptPath = cycleScriptPath();
   mkdirSync(join(globalDir(), 'bin'), { recursive: true });
+  const scriptPath = cycleScriptPath();
   writeFileSync(scriptPath, CYCLE_SCRIPT, 'utf8');
+  chmodSync(scriptPath, 0o755);
+}
+
+export function installHomeScript(): void {
+  mkdirSync(join(globalDir(), 'bin'), { recursive: true });
+  const scriptPath = homeScriptPath();
+  writeFileSync(scriptPath, HOME_SCRIPT, 'utf8');
+  chmodSync(scriptPath, 0o755);
+}
+
+export function installKillPaneScript(): void {
+  mkdirSync(join(globalDir(), 'bin'), { recursive: true });
+  const scriptPath = killPaneScriptPath();
+  writeFileSync(scriptPath, KILL_PANE_SCRIPT, 'utf8');
   chmodSync(scriptPath, 0o755);
 }
 
@@ -83,8 +153,10 @@ export type SetupResult =
   | { status: 'already-installed'; message: string }
   | { status: 'conflict'; message: string; existingBinding: string };
 
-export function setupTmuxKeybind(key: string = DEFAULT_KEY): SetupResult {
+export function setupTmuxKeybind(key: string = DEFAULT_KEY, homeKey: string = DEFAULT_HOME_KEY): SetupResult {
   installCycleScript();
+  installHomeScript();
+  installKillPaneScript();
 
   // Check for existing binding before writing anything
   const existing = getExistingBinding(key);
@@ -96,10 +168,24 @@ export function setupTmuxKeybind(key: string = DEFAULT_KEY): SetupResult {
     };
   }
 
-  // Write ~/.sisyphus/tmux.conf
+  // Check home key for conflicts too (only if different from cycle key)
+  if (homeKey !== key) {
+    const existingHome = getExistingBinding(homeKey);
+    if (existingHome !== null && !isSisyphusBinding(existingHome)) {
+      return {
+        status: 'conflict',
+        message: `Tmux key ${homeKey} is already bound to something else.`,
+        existingBinding: existingHome,
+      };
+    }
+  }
+
+  // Write ~/.sisyphus/tmux.conf with keybindings + prefix-x override
   const confPath = sisyphusTmuxConfPath();
-  const bindingLine = `bind-key -T root ${key} run-shell ${cycleScriptPath()}`;
-  writeFileSync(confPath, `${SISYPHUS_CONF_MARKER}\n${bindingLine}\n`, 'utf8');
+  const cycleBinding = `bind-key -T root ${key} run-shell ${cycleScriptPath()}`;
+  const homeBinding = `bind-key -T root ${homeKey} run-shell ${homeScriptPath()}`;
+  const killPaneOverride = `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^sisyphus-'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`;
+  writeFileSync(confPath, `${SISYPHUS_CONF_MARKER}\n${cycleBinding}\n${homeBinding}\n${killPaneOverride}\n`, 'utf8');
 
   // Append source line to tmux.conf if not already there
   const userConf = userTmuxConfPath();
@@ -116,17 +202,19 @@ export function setupTmuxKeybind(key: string = DEFAULT_KEY): SetupResult {
     persistedToConf = true;
   }
 
-  // Apply binding live if tmux is running
+  // Apply bindings live if tmux is running
   try {
     execSync(`tmux bind-key -T root ${key} run-shell ${cycleScriptPath()}`, { stdio: 'pipe' });
+    execSync(`tmux bind-key -T root ${homeKey} run-shell ${homeScriptPath()}`, { stdio: 'pipe' });
+    execSync(`tmux ${killPaneOverride}`, { stdio: 'pipe' });
   } catch {
-    // tmux not running — binding will take effect on next session start
+    // tmux not running — bindings will take effect on next session start
   }
 
   if (existing !== null && isSisyphusBinding(existing)) {
     return {
       status: 'already-installed',
-      message: `Tmux keybinding ${key} already configured for sisyphus.`,
+      message: `Tmux keybindings ${key} (cycle) and ${homeKey} (dashboard) already configured for sisyphus.`,
     };
   }
 
@@ -135,7 +223,7 @@ export function setupTmuxKeybind(key: string = DEFAULT_KEY): SetupResult {
     : `\nNote: No tmux.conf found. Add this to your tmux config for persistence:\n  source-file ${confPath}`;
   return {
     status: 'installed',
-    message: `Tmux keybinding set: ${key} cycles sisyphus sessions${persistNote}`,
+    message: `Tmux keybindings set: ${key} cycles sessions, ${homeKey} jumps to dashboard${persistNote}`,
   };
 }
 
@@ -161,9 +249,17 @@ export function removeTmuxKeybind(): void {
     unlinkSync(confPath);
   }
 
-  // Remove cycle script
-  const scriptPath = cycleScriptPath();
-  if (existsSync(scriptPath)) {
-    unlinkSync(scriptPath);
+  // Restore default prefix-x binding if tmux is running
+  try {
+    execSync('tmux bind-key -T prefix x kill-pane \\; select-layout even-horizontal', { stdio: 'pipe' });
+  } catch {
+    // tmux not running
+  }
+
+  // Remove scripts
+  for (const scriptPath of [cycleScriptPath(), homeScriptPath(), killPaneScriptPath()]) {
+    if (existsSync(scriptPath)) {
+      unlinkSync(scriptPath);
+    }
   }
 }
