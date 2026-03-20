@@ -102,8 +102,9 @@ function renderNodeContent(
       const dur = formatDuration(node.createdAt, node.completedAt);
       const agopart = node.status === 'completed' && node.completedAt ? formatTimeAgo(node.completedAt) : '';
       const meta = [cyclePart, dur, agopart].filter(Boolean).join(' ');
-      const maxTask = Math.max(8, maxWidth - meta.length - 4);
-      return { icon, label: truncate(node.task, maxTask), meta, color, dim };
+      const displayText = node.name ?? node.task;
+      const maxLabel = Math.max(8, maxWidth - meta.length - 4);
+      return { icon, label: truncate(displayText, maxLabel), meta, color, dim };
     }
     case 'cycle': {
       const isRunning = !node.completedAt;

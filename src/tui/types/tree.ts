@@ -12,6 +12,7 @@ interface BaseTreeNode {
 export interface SessionTreeNode extends BaseTreeNode {
   type: 'session';
   depth: 0;
+  name?: string;
   task: string;
   status: string;
   cycleCount: number;

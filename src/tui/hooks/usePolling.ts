@@ -8,6 +8,7 @@ import type { Session } from '../../shared/types.js';
 
 export interface SessionSummary {
   id: string;
+  name?: string;
   task: string;
   status: string;
   agentCount: number;

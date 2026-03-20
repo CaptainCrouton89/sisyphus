@@ -53,6 +53,7 @@ export function buildTree(
       expandable: true,
       expanded: isExpanded && isSelected,
       sessionId: s.id,
+      name: s.name,
       task: s.task,
       status: s.status,
       cycleCount: isSelected ? (selectedSession?.orchestratorCycles.length ?? 0) : 0,
