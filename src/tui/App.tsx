@@ -13,6 +13,7 @@ import { HelpOverlay } from './components/HelpOverlay.js';
 import { usePolling } from './hooks/usePolling.js';
 import { useKeybindings } from './hooks/useKeybindings.js';
 import { useLeaderKey } from './hooks/useLeaderKey.js';
+import { useThrottledScroll } from './hooks/useThrottledScroll.js';
 import { send } from './lib/client.js';
 import { resolveReports } from './lib/reports.js';
 import { copyToClipboard } from './lib/clipboard.js';
@@ -60,8 +61,8 @@ export function App({ cwd }: Props) {
   const [mode, setMode] = useState<InputMode>('navigate');
   const [notification, setNotification] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [detailScrollOffset, setDetailScrollOffset] = useState(0);
-  const [logsScrollOffset, setLogsScrollOffset] = useState(0);
+  const detailScroll = useThrottledScroll(0);
+  const logsScroll = useThrottledScroll(0);
   const [showLogs, setShowLogs] = useState(false);
   const [focusPane, setFocusPane] = useState<'tree' | 'detail' | 'logs'>('tree');
   const [searchFilter, setSearchFilter] = useState<string | null>(null);
@@ -108,8 +109,8 @@ export function App({ cwd }: Props) {
 
   // Reset scroll offsets when cursor changes
   useEffect(() => {
-    setDetailScrollOffset(0);
-    setLogsScrollOffset(0);
+    detailScroll.reset();
+    logsScroll.reset();
   }, [cursorIndex]);
 
   // Stabilize cursor position when tree structure changes
@@ -278,18 +279,18 @@ export function App({ cwd }: Props) {
     {
       onMoveUp: () => {
         if (focusPane === 'detail') {
-          setDetailScrollOffset((o) => Math.max(0, o - 1));
+          detailScroll.scrollBy(-1);
         } else if (focusPane === 'logs') {
-          setLogsScrollOffset((o) => Math.max(0, o - 1));
+          logsScroll.scrollBy(-1);
         } else {
           setCursorIndex((i) => Math.max(0, i - 1));
         }
       },
       onMoveDown: () => {
         if (focusPane === 'detail') {
-          setDetailScrollOffset((o) => o + 1);
+          detailScroll.scrollBy(1);
         } else if (focusPane === 'logs') {
-          setLogsScrollOffset((o) => o + 1);
+          logsScroll.scrollBy(1);
         } else {
           setCursorIndex((i) => Math.min(nodes.length - 1, i + 1));
         }
@@ -339,7 +340,7 @@ export function App({ cwd }: Props) {
           if (prev) {
             // Hiding: move focus away from logs if needed
             setFocusPane((f) => (f === 'logs' ? 'detail' : f));
-            setLogsScrollOffset(0);
+            logsScroll.reset();
           }
           return !prev;
         });
@@ -497,8 +498,8 @@ export function App({ cwd }: Props) {
   useInput(
     (input, key) => {
       if (key.escape || key.return) { handleCancel(); return; }
-      if (key.upArrow) { setDetailScrollOffset((o) => Math.max(0, o - 1)); return; }
-      if (key.downArrow) { setDetailScrollOffset((o) => o + 1); return; }
+      if (key.upArrow) { detailScroll.scrollBy(-1); return; }
+      if (key.downArrow) { detailScroll.scrollBy(1); return; }
     },
     { isActive: mode === 'report-detail' },
   );
@@ -809,7 +810,7 @@ export function App({ cwd }: Props) {
             reportBlocks={reportBlocks}
             width={detailWidth}
             height={contentHeight}
-            scrollOffset={detailScrollOffset}
+            scrollOffset={detailScroll.offset}
             focused={true}
           />
         );
@@ -840,7 +841,7 @@ export function App({ cwd }: Props) {
               width={detailWidth}
               height={contentHeight}
               paneAlive={paneAlive}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -858,7 +859,7 @@ export function App({ cwd }: Props) {
                 width={detailWidth}
                 height={contentHeight}
                 paneAlive={paneAlive}
-                scrollOffset={detailScrollOffset}
+                scrollOffset={detailScroll.offset}
                 focused={focusPane === 'detail'}
               />
             );
@@ -869,7 +870,7 @@ export function App({ cwd }: Props) {
               agents={session.agents}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -886,7 +887,7 @@ export function App({ cwd }: Props) {
                 width={detailWidth}
                 height={contentHeight}
                 paneAlive={paneAlive}
-                scrollOffset={detailScrollOffset}
+                scrollOffset={detailScroll.offset}
                 focused={focusPane === 'detail'}
               />
             );
@@ -897,7 +898,7 @@ export function App({ cwd }: Props) {
               reportBlocks={detailReportBlocks}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -914,7 +915,7 @@ export function App({ cwd }: Props) {
                 width={detailWidth}
                 height={contentHeight}
                 paneAlive={paneAlive}
-                scrollOffset={detailScrollOffset}
+                scrollOffset={detailScroll.offset}
                 focused={focusPane === 'detail'}
               />
             );
@@ -940,7 +941,7 @@ export function App({ cwd }: Props) {
                 lines={reportContentLines}
                 width={detailWidth}
                 height={contentHeight}
-                scrollOffset={detailScrollOffset}
+                scrollOffset={detailScroll.offset}
                 focused={focusPane === 'detail'}
                 borderColor={badgeColor}
               />
@@ -952,7 +953,7 @@ export function App({ cwd }: Props) {
               reportBlocks={detailReportBlocks}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -983,7 +984,7 @@ export function App({ cwd }: Props) {
               lines={msgsLines}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -1007,7 +1008,7 @@ export function App({ cwd }: Props) {
               lines={msgContentLines}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -1029,7 +1030,7 @@ export function App({ cwd }: Props) {
               lines={ctxLines}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
@@ -1057,7 +1058,7 @@ export function App({ cwd }: Props) {
               lines={ctxFileLines}
               width={detailWidth}
               height={contentHeight}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
               borderColor="white"
             />
@@ -1073,13 +1074,13 @@ export function App({ cwd }: Props) {
               width={detailWidth}
               height={contentHeight}
               paneAlive={paneAlive}
-              scrollOffset={detailScrollOffset}
+              scrollOffset={detailScroll.offset}
               focused={focusPane === 'detail'}
             />
           );
       }
     },
-    [cursorNode, session, planContent, goalContent, logsContent, paneAlive, agents, mode, reportAgent, reportBlocks, detailReportBlocks, handleCancel, detailScrollOffset, focusPane, contextFiles, contextFileContent],
+    [cursorNode, session, planContent, goalContent, logsContent, paneAlive, agents, mode, reportAgent, reportBlocks, detailReportBlocks, handleCancel, detailScroll.offset, focusPane, contextFiles, contextFileContent],
   );
 
   if (cols < 60 || rows < 12) {
@@ -1109,7 +1110,7 @@ export function App({ cwd }: Props) {
             cycleLogs={selectedSession ? logsCycles : []}
             width={logsWidth}
             height={contentHeight}
-            scrollOffset={logsScrollOffset}
+            scrollOffset={logsScroll.offset}
             focused={mode === 'navigate' && focusPane === 'logs'}
           />
         )}
