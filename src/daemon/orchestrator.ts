@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath } from '../shared/paths.js';
+import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath, sessionDir } from '../shared/paths.js';
+import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { shellQuote } from '../shared/shell.js';
@@ -12,6 +13,52 @@ import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 
+
+interface RepoInfo {
+  name: string;       // "." for session root, directory name for children
+  path: string;       // absolute path
+  branch: string;     // current git branch
+  isDirty: boolean;   // has uncommitted changes
+}
+
+function detectRepos(cwd: string): RepoInfo[] {
+  const config = loadConfig(cwd);
+  const repos: RepoInfo[] = [];
+
+  // Check if session root is a git repo
+  if (existsSync(join(cwd, '.git'))) {
+    try { repos.push(getRepoInfo(cwd, '.')); } catch { /* skip unreadable root repo */ }
+  }
+
+  // Scan immediate children for git repos
+  try {
+    const entries = readdirSync(cwd, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith('.')) continue;
+      const childPath = join(cwd, entry.name);
+      if (existsSync(join(childPath, '.git'))) {
+        try { repos.push(getRepoInfo(childPath, entry.name)); } catch { /* skip unreadable repo */ }
+      }
+    }
+  } catch { /* ignore read errors */ }
+
+  // Filter by config.repos if present
+  if (config.repos && config.repos.length > 0) {
+    const allowed = new Set(config.repos);
+    return repos.filter(r => r.name === '.' || allowed.has(r.name));
+  }
+
+  return repos;
+}
+
+function getRepoInfo(repoPath: string, name: string): RepoInfo {
+  const branchRaw = execSafe(`git -C ${shellQuote(repoPath)} rev-parse --abbrev-ref HEAD`)?.trim();
+  if (!branchRaw) throw new Error(`Failed to detect git branch for repo: ${repoPath}`);
+  const status = execSafe(`git -C ${shellQuote(repoPath)} status --porcelain`);
+  const isDirty = !!(status && status.trim().length > 0);
+  return { name, path: repoPath, branch: branchRaw, isDirty };
+}
 
 const sessionWindowMap = new Map<string, string>();
 const sessionOrchestratorPane = new Map<string, string>();
@@ -126,27 +173,49 @@ function formatStateForOrchestrator(session: Session): string {
   // Roadmap section
   const roadmapRef = existsSync(roadmapFile) ? `@${roadmapFile}` : '(empty)';
 
-  // Worktree status — only if any agents have worktree info or worktree config exists
-  const worktreeAgents = session.agents.filter(a => a.worktreePath);
-  let worktreeSection = '';
-  if (worktreeAgents.length > 0 || existsSync(worktreeConfigPath(session.cwd))) {
-    let wtLines = '';
-    if (worktreeAgents.length > 0) {
-      wtLines = '\n' + worktreeAgents.map((a: Agent) => {
-        if (a.mergeStatus === 'conflict') {
-          return `- ${a.id}: CONFLICT — ${a.mergeDetails ?? 'unknown'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}`;
+  // Repositories section — always present
+  const repos = detectRepos(session.cwd);
+  let repositoriesSection = '\n\n## Repositories\n';
+
+  if (repos.length === 0) {
+    repositoriesSection += '\nNo git repositories detected.\n';
+  } else {
+    for (const repo of repos) {
+      const dirtyTag = repo.isDirty ? ' (dirty)' : '';
+      repositoriesSection += `\n### ${repo.name === '.' ? 'Session Root (.)' : repo.name}\n`;
+      repositoriesSection += `Branch: \`${repo.branch}\`${dirtyTag}\n`;
+
+      // Agents targeting this repo
+      const repoAgents = session.agents.filter((a: Agent) => (a.repo ? a.repo : '.') === repo.name);
+      if (repoAgents.length > 0) {
+        repositoriesSection += '\nAgents:\n';
+        for (const a of repoAgents) {
+          if (a.worktreePath) {
+            if (a.mergeStatus === 'conflict') {
+              repositoriesSection += `- ${a.id} (${a.name}): CONFLICT — ${a.mergeDetails ? a.mergeDetails : '(no details)'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}\n`;
+            } else if (a.mergeStatus === 'no-changes') {
+              repositoriesSection += `- ${a.id} (${a.name}): NO CHANGES — branch ${a.branchName}\n`;
+            } else {
+              const mergeStatus = a.mergeStatus ? a.mergeStatus : 'pending';
+              repositoriesSection += `- ${a.id} (${a.name}): worktree ${mergeStatus} (branch ${a.branchName})\n`;
+            }
+          } else {
+            repositoriesSection += `- ${a.id} (${a.name}) [${a.status}]\n`;
+          }
         }
-        if (a.mergeStatus === 'no-changes') {
-          return `- ${a.id}: NO CHANGES — agent did not commit any work to branch ${a.branchName}`;
-        }
-        const status = a.mergeStatus ?? 'pending';
-        return `- ${a.id}: ${status} (branch ${a.branchName})`;
-      }).join('\n');
+      }
     }
-    const worktreeHint = existsSync(worktreeConfigPath(session.cwd))
-      ? 'Worktree config active (`.sisyphus/worktree.json`). Use `--worktree` flag with `sisyphus spawn` to isolate agents in their own worktrees. Recommended for feature work, especially with potential file overlap.'
-      : 'No worktree configuration found. If this session involves parallel work where agents may edit overlapping files, use the `git-management` skill to set up `.sisyphus/worktree.json` and enable worktree isolation.';
-    worktreeSection = `\n\n## Git Worktrees\n\n${worktreeHint}${wtLines}`;
+
+    // Worktree config hint
+    const hasWorktreeConfig = existsSync(worktreeConfigPath(session.cwd));
+    if (hasWorktreeConfig) {
+      repositoriesSection += '\nWorktree config active (`.sisyphus/worktree.json`). Use `--worktree` with `--repo <name>` to isolate agents.\n';
+    }
+
+    // Spawn syntax hint for multi-repo
+    if (repos.length > 1) {
+      repositoriesSection += '\nTarget agents at specific repos:\n```bash\nsisyphus spawn --name "impl" --repo <repo-name> --worktree "task"\n```\n';
+    }
   }
 
   // Goal section: read from goal.md, fall back to session.task
@@ -164,7 +233,7 @@ ${previousCyclesSection}${mostRecentCycleSection}
 ## Roadmap
 
 ${roadmapRef}
-${worktreeSection}`;
+${repositoriesSection}`;
 }
 
 export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
@@ -211,10 +280,12 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   const npmBinDir = resolveNpmBinDir();
 
+  const sesDir = sessionDir(cwd, sessionId);
   const envExports = buildEnvExports([
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='orchestrator'`,
     `export SISYPHUS_CWD='${cwd}'`,
+    `export SISYPHUS_SESSION_DIR='${sesDir}'`,
     `export PATH="${npmBinDir}:$PATH"`,
   ]);
 

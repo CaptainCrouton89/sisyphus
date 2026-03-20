@@ -56,6 +56,7 @@ export interface Agent {
   completedAt: string | null;
   reports: AgentReport[];
   paneId: string;
+  repo: string;
   killedReason?: string;
   worktreePath?: string;
   branchName?: string;

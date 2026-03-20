@@ -10,6 +10,8 @@ export interface WorktreeConfig {
 
 export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
 
+export type KeyedWorktreeConfig = Record<string, WorktreeConfig>;
+
 export interface Config {
   model?: string;
   tmuxSession?: string;
@@ -19,6 +21,7 @@ export interface Config {
   orchestratorEffort?: EffortLevel;
   agentEffort?: EffortLevel;
   editor?: string;
+  repos?: string[];
 }
 
 const DEFAULT_CONFIG: Config = {

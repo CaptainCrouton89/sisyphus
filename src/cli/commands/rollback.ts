@@ -13,7 +13,8 @@ export function registerRollback(program: Command): void {
         process.exit(1);
       }
 
-      const request: Request = { type: 'rollback', sessionId, cwd: process.cwd(), toCycle };
+      const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+      const request: Request = { type: 'rollback', sessionId, cwd, toCycle };
       const response = await sendRequest(request);
       if (response.ok) {
         const data = response.data as { restoredToCycle: number };

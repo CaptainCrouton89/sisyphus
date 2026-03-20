@@ -1,4 +1,6 @@
 import type { Command } from 'commander';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { readStdin } from '../stdin.js';
@@ -13,7 +15,8 @@ export function registerSpawn(program: Command): void {
     .requiredOption('--name <name>', 'Agent name')
     .option('--instruction <instruction>', 'Task instruction for the agent (or pipe via stdin)')
     .option('--worktree', 'Spawn agent in an isolated git worktree')
-    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; worktree?: boolean }) => {
+    .option('--repo <name>', 'Repo subdirectory to use for this agent')
+    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; worktree?: boolean; repo?: string }) => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -27,6 +30,21 @@ export function registerSpawn(program: Command): void {
         process.exit(1);
       }
 
+      const sisyphusCwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+
+      if (opts.repo && opts.repo !== '.') {
+        const repoPath = join(sisyphusCwd, opts.repo);
+        if (!existsSync(repoPath)) {
+          console.error(`Error: repo directory does not exist: ${repoPath}`);
+          process.exit(1);
+        }
+      } else if (!opts.repo && opts.worktree) {
+        if (!existsSync(join(sisyphusCwd, '.git'))) {
+          console.error(`Error: --worktree requires a git repo at ${sisyphusCwd}. Use --repo to specify a subdirectory.`);
+          process.exit(1);
+        }
+      }
+
       const request: Request = {
         type: 'spawn',
         sessionId,
@@ -34,6 +52,7 @@ export function registerSpawn(program: Command): void {
         name: opts.name,
         instruction,
         ...(opts.worktree ? { worktree: true } : {}),
+        ...(opts.repo ? { repo: opts.repo } : {}),
       };
       const response = await sendRequest(request);
       if (response.ok) {

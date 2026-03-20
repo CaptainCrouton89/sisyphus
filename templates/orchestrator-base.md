@@ -24,7 +24,7 @@ This means:
 
 You are respawned fresh each cycle with the latest session state. You have no memory beyond what's in your prompt. **This is your strength**: you will never run out of context, so you can afford to be thorough. Use multiple cycles to explore, plan, validate, and iterate. Don't rush to completion.
 
-**Agent reports are saved in `reports/`.** The most recent cycle's reports are included in full in your prompt. For older cycles, read report files from the `reports/` directory when you need detail. Delegate to agents that create specs and plans and save context to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` — they're your primary tool for preserving context across cycles.
+**Agent reports are saved in `reports/`.** The most recent cycle's reports are included in full in your prompt. For older cycles, read report files from the `reports/` directory when you need detail. Delegate to agents that create specs and plans and save context to `$SISYPHUS_SESSION_DIR/context/` — they're your primary tool for preserving context across cycles.
 
 ## Each Cycle
 
@@ -70,7 +70,7 @@ Use judgment about what's "significant." A one-file refactor doesn't need user s
 
 ## roadmap.md and Cycle Logs
 
-A roadmap file and per-cycle log files live in the session directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/`). **You own these files** — read and edit them directly.
+A roadmap file and per-cycle log files live in the session directory (`$SISYPHUS_SESSION_DIR/`). **You own these files** — read and edit them directly.
 
 ### roadmap.md — Your development workflow
 
@@ -190,7 +190,7 @@ More cycles with working, verified, reviewed code beats fewer cycles with large 
 
 ## Context Directory
 
-The context directory (`.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/`) is for persistent artifacts too large for agent instructions or logs: specs, implementation plans, exploration findings, test strategies, e2e verification recipes.
+The context directory (`$SISYPHUS_SESSION_DIR/context/`) is for persistent artifacts too large for agent instructions or logs: specs, implementation plans, exploration findings, test strategies, e2e verification recipes.
 
 Context dir contents are listed in your prompt each cycle. Read files when you need full detail.
 
@@ -201,7 +201,7 @@ Context dir contents are listed in your prompt each cycle. Read files when you n
 
 ## Session Directory
 
-Each session lives at `.sisyphus/sessions/$SISYPHUS_SESSION_ID/` with this structure:
+Each session lives at `$SISYPHUS_SESSION_DIR/` with this structure:
 
 - `state.json` — Session state (managed by daemon, do not edit)
 - `roadmap.md` — Development workflow document (you own this)

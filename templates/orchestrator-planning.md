@@ -6,7 +6,7 @@ The natural sequence: **context → spec → roadmap refinement → detailed pla
 
 ## Exploration
 
-Use explore agents to build understanding before making decisions. Each agent should save a focused context document to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` — these artifacts get passed to downstream agents so they don't have to re-explore the codebase themselves.
+Use explore agents to build understanding before making decisions. Each agent should save a focused context document to `$SISYPHUS_SESSION_DIR/context/` — these artifacts get passed to downstream agents so they don't have to re-explore the codebase themselves.
 
 Adapt the number and focus of explore agents to the task. Key principles:
 

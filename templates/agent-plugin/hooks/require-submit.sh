@@ -14,7 +14,7 @@ if [ "$STOP_ACTIVE" = "True" ]; then
 fi
 
 # Check if the agent already submitted its final report
-REPORT_FILE="${SISYPHUS_CWD}/.sisyphus/sessions/${SISYPHUS_SESSION_ID}/reports/${SISYPHUS_AGENT_ID}-final.md"
+REPORT_FILE="${SISYPHUS_SESSION_DIR}/reports/${SISYPHUS_AGENT_ID}-final.md"
 if [ -f "$REPORT_FILE" ]; then
   exit 0
 fi

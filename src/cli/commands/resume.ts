@@ -10,7 +10,7 @@ export function registerResume(program: Command): void {
     .argument('<session-id>', 'Session ID to resume')
     .argument('[message]', 'Additional instructions for the orchestrator')
     .action(async (sessionId: string, message?: string) => {
-      const cwd = process.cwd();
+      const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
       const request: Request = { type: 'resume', sessionId, cwd, message };
       const response = await sendRequest(request);
       if (response.ok) {

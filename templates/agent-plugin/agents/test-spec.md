@@ -20,7 +20,7 @@ Implementation drifts from plans. Function names change, files move, APIs get re
 
 ## Output Format
 
-Save to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/test-spec-{topic}.md`:
+Save to `$SISYPHUS_SESSION_DIR/context/test-spec-{topic}.md`:
 
 ```markdown
 # {Topic} — Behavioral Test Spec

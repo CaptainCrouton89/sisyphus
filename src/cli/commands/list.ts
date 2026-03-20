@@ -33,7 +33,7 @@ export function registerList(program: Command): void {
     .description('List sessions (defaults to current project)')
     .option('-a, --all', 'Show sessions from all projects')
     .action(async (opts: { all?: boolean }) => {
-      const cwd = process.cwd();
+      const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
       const request: Request = { type: 'list', cwd, all: opts.all };
       const response = await sendRequest(request);
       if (response.ok) {

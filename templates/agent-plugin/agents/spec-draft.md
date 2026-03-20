@@ -62,7 +62,7 @@ Cover: ambiguous requirements, design choices with multiple valid approaches, sc
 
 ### 4. Write Spec (only after user sign-off)
 
-Once the user confirms the direction, save to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/`:
+Once the user confirms the direction, save to `$SISYPHUS_SESSION_DIR/context/`:
 
 **`spec-{topic}.md`** — High-level spec:
 - **Summary** — One paragraph

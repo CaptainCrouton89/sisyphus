@@ -6,7 +6,7 @@ import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getNextColor, normalizeTmuxColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
-import { promptsDir, reportsDir, reportFilePath } from '../shared/paths.js';
+import { promptsDir, reportsDir, reportFilePath, sessionDir } from '../shared/paths.js';
 import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 import { summarizeReport } from './summarize.js';
@@ -171,11 +171,13 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
 
   const bannerCmd = resolveBannerCmd();
   const npmBinDir = resolveNpmBinDir();
+  const sesDir = sessionDir(cwd, sessionId);
 
   const envExports = buildEnvExports([
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='${agentId}'`,
     `export SISYPHUS_CWD='${cwd}'`,
+    `export SISYPHUS_SESSION_DIR='${sesDir}'`,
     ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
     `export PATH="${npmBinDir}:$PATH"`,
   ]);
@@ -221,6 +223,7 @@ export interface SpawnAgentOpts {
   instruction: string;
   windowId: string;
   worktree?: boolean;
+  repo?: string;
 }
 
 export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
@@ -243,14 +246,16 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sisyphus doctor\` to diagnose.`);
   }
 
-  let paneCwd = cwd;
+  const repo = opts.repo !== undefined ? opts.repo : '.';
+  const repoRoot = repo === '.' ? cwd : join(cwd, repo);
+  let paneCwd = repoRoot;
   let worktreePath: string | undefined;
   let branchName: string | undefined;
   let worktreeContext: WorktreeContext | undefined;
 
   if (opts.worktree) {
     // Fast: git branch + worktree add + symlinks only (no bootstrap/init)
-    const wt = createWorktreeShell(cwd, sessionId, agentId);
+    const wt = createWorktreeShell(repoRoot, sessionId, agentId);
     worktreePath = wt.worktreePath;
     branchName = wt.branchName;
     paneCwd = worktreePath;
@@ -277,6 +282,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     completedAt: null,
     reports: [],
     paneId,
+    repo,
     ...(worktreePath ? { worktreePath, branchName, mergeStatus: 'pending' as const } : {}),
   };
 
@@ -287,11 +293,12 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     // the potentially slow init command (e.g. npm install).
     // The pane is already visible; Claude command is sent after bootstrap.
     const config = loadWorktreeConfig(cwd);
-    if (config) {
+    const repoConfig = config ? config[repo] : undefined;
+    if (repoConfig) {
       const wtPath = worktreePath;
       setImmediate(() => {
         try {
-          bootstrapWorktree(cwd, wtPath, config);
+          bootstrapWorktree(repoRoot, wtPath, repoConfig);
         } catch (err) {
           console.error(`[sisyphus] worktree bootstrap failed for ${agentId}: ${err instanceof Error ? err.message : err}`);
         }
@@ -348,6 +355,8 @@ export async function restartAgent(
       total: portOffset,
       branchName: agent.branchName!,
     };
+  } else if (agent.repo && agent.repo !== '.') {
+    paneCwd = join(cwd, agent.repo);
   }
 
   // Kill old pane if it still exists
