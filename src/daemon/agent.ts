@@ -51,14 +51,8 @@ function renderAgentSuffix(sessionId: string, instruction: string, worktreeConte
     template = `# Sisyphus Agent\nSession: {{SESSION_ID}}\nTask: {{INSTRUCTION}}`;
   }
 
-  let worktreeBlock = '';
-  if (worktreeContext) {
-    worktreeBlock = [
-      '## Worktree Context',
-      `You are working in an isolated git worktree on branch \`${worktreeContext.branchName}\`.`,
-      `If you start any services that require ports, add ${worktreeContext.offset} to the default port.`,
-    ].join('\n');
-  }
+  // Removed until we can flesh out the worktree system
+  const worktreeBlock = '';
 
   return template
     .replace(/\{\{SESSION_ID\}\}/g, sessionId)

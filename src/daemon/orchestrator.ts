@@ -12,7 +12,8 @@ import { discoverAgentTypes } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
-import { loadWorktreeConfig } from './worktree.js';
+// Removed until we can flesh out the worktree system
+// import { loadWorktreeConfig } from './worktree.js';
 
 
 interface RepoInfo {
@@ -181,41 +182,27 @@ function formatStateForOrchestrator(session: Session): string {
   if (repos.length === 0) {
     repositoriesSection += '\nNo git repositories detected.\n';
   } else {
-    const worktreeConfig = loadWorktreeConfig(session.cwd);
+    // Removed worktree config loading until we can flesh out the worktree system
+    // const worktreeConfig = loadWorktreeConfig(session.cwd);
 
     for (const repo of repos) {
       const dirtyTag = repo.isDirty ? ' (dirty)' : '';
       repositoriesSection += `\n### ${repo.name === '.' ? 'Session Root (.)' : repo.name}\n`;
       repositoriesSection += `Branch: \`${repo.branch}\`${dirtyTag}\n`;
 
-      if (worktreeConfig && worktreeConfig[repo.name]) {
-        repositoriesSection += `Worktree config: active\n`;
-      }
-
       // Agents targeting this repo
       const repoAgents = session.agents.filter((a: Agent) => a.repo === repo.name);
       if (repoAgents.length > 0) {
         repositoriesSection += '\nAgents:\n';
         for (const a of repoAgents) {
-          if (a.worktreePath) {
-            if (a.mergeStatus === 'conflict') {
-              repositoriesSection += `- ${a.id} (${a.name}): CONFLICT — ${a.mergeDetails ? a.mergeDetails : '(no details)'}\n  Branch: ${a.branchName}\n  Worktree: ${a.worktreePath}\n`;
-            } else if (a.mergeStatus === 'no-changes') {
-              repositoriesSection += `- ${a.id} (${a.name}): NO CHANGES — branch ${a.branchName}\n`;
-            } else {
-              const mergeStatus = a.mergeStatus ? a.mergeStatus : 'pending';
-              repositoriesSection += `- ${a.id} (${a.name}): worktree ${mergeStatus} (branch ${a.branchName})\n`;
-            }
-          } else {
-            repositoriesSection += `- ${a.id} (${a.name}) [${a.status}]\n`;
-          }
+          repositoriesSection += `- ${a.id} (${a.name}) [${a.status}]\n`;
         }
       }
     }
 
     // Spawn syntax hint for multi-repo
     if (repos.length > 1) {
-      repositoriesSection += '\nTarget agents at specific repos:\n```bash\nsisyphus spawn --name "impl" --repo <repo-name> --worktree "task"\n```\n';
+      repositoriesSection += '\nTarget agents at specific repos:\n```bash\nsisyphus spawn --name "impl" --repo <repo-name> "task"\n```\n';
     }
   }
 
