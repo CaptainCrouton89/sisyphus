@@ -30,6 +30,15 @@ export function loadWorktreeConfig(cwd: string): KeyedWorktreeConfig | null {
       );
     }
 
+    // Validate that all values are WorktreeConfig objects
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new Error(
+          `Invalid worktree.json: value for "${key}" must be an object with optional keys: copy, clone, symlink, init`
+        );
+      }
+    }
+
     return parsed as KeyedWorktreeConfig;
   } catch (err) {
     if (err instanceof SyntaxError) return null;
@@ -149,8 +158,12 @@ export function mergeWorktrees(cwd: string, agents: Agent[]): MergeResult[] {
   }
 
   // Snapshot .sisyphus state from session root (always cwd, not repo root)
-  execSafe(`git -C ${shellQuote(cwd)} add .sisyphus`);
-  execSafe(`git -C ${shellQuote(cwd)} commit -m 'sisyphus: snapshot session state before merge'`);
+  if (existsSync(join(cwd, '.git'))) {
+    execSafe(`git -C ${shellQuote(cwd)} add .sisyphus`);
+    execSafe(`git -C ${shellQuote(cwd)} commit -m 'sisyphus: snapshot session state before merge'`);
+  } else {
+    console.log('[sisyphus] Skipping .sisyphus snapshot — session root is not a git repo');
+  }
 
   for (const [repo, repoAgents] of byRepo) {
     const repoRoot = repo === '.' ? cwd : join(cwd, repo);

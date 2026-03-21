@@ -68,7 +68,12 @@ export function createSession(id: string, task: string, cwd: string, context?: s
 
 export function getSession(cwd: string, sessionId: string): Session {
   const content = readFileSync(statePath(cwd, sessionId), 'utf-8');
-  return JSON.parse(content) as Session;
+  const session = JSON.parse(content) as Session;
+  // Normalize agents from pre-multi-repo sessions that lack repo field
+  for (const agent of session.agents) {
+    if (!agent.repo) agent.repo = '.';
+  }
+  return session;
 }
 
 function saveSession(session: Session): void {

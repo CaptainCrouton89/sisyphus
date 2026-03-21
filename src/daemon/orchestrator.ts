@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, worktreeConfigPath, sessionDir } from '../shared/paths.js';
+import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -12,6 +12,7 @@ import { discoverAgentTypes } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
+import { loadWorktreeConfig } from './worktree.js';
 
 
 interface RepoInfo {
@@ -180,13 +181,19 @@ function formatStateForOrchestrator(session: Session): string {
   if (repos.length === 0) {
     repositoriesSection += '\nNo git repositories detected.\n';
   } else {
+    const worktreeConfig = loadWorktreeConfig(session.cwd);
+
     for (const repo of repos) {
       const dirtyTag = repo.isDirty ? ' (dirty)' : '';
       repositoriesSection += `\n### ${repo.name === '.' ? 'Session Root (.)' : repo.name}\n`;
       repositoriesSection += `Branch: \`${repo.branch}\`${dirtyTag}\n`;
 
+      if (worktreeConfig && worktreeConfig[repo.name]) {
+        repositoriesSection += `Worktree config: active\n`;
+      }
+
       // Agents targeting this repo
-      const repoAgents = session.agents.filter((a: Agent) => (a.repo ? a.repo : '.') === repo.name);
+      const repoAgents = session.agents.filter((a: Agent) => a.repo === repo.name);
       if (repoAgents.length > 0) {
         repositoriesSection += '\nAgents:\n';
         for (const a of repoAgents) {
@@ -204,12 +211,6 @@ function formatStateForOrchestrator(session: Session): string {
           }
         }
       }
-    }
-
-    // Worktree config hint
-    const hasWorktreeConfig = existsSync(worktreeConfigPath(session.cwd));
-    if (hasWorktreeConfig) {
-      repositoriesSection += '\nWorktree config active (`.sisyphus/worktree.json`). Use `--worktree` with `--repo <name>` to isolate agents.\n';
     }
 
     // Spawn syntax hint for multi-repo
@@ -311,13 +312,13 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'high';
-  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "sisyphus:orch-${sessionId.slice(0, 8)}-cycle-${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "sisyphus:orch-${session.name ?? sessionId.slice(0, 8)}-cycle-${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
-  tmux.setPaneTitle(paneId, `Sisyphus`);
+  tmux.setPaneTitle(paneId, session.name ? `${session.name} (orch)` : 'Sisyphus');
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
   const bannerCmd = resolveBannerCmd();

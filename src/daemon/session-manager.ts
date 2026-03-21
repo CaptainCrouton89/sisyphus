@@ -440,7 +440,7 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   // Clean up worktrees for agents that had them
   for (const agent of session.agents) {
     if (agent.worktreePath && agent.branchName) {
-      const repoRoot = (agent.repo && agent.repo !== '.') ? join(cwd, agent.repo) : cwd;
+      const repoRoot = agent.repo !== '.' ? join(cwd, agent.repo) : cwd;
       cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
     }
   }
@@ -502,7 +502,7 @@ export async function handleKillAgent(sessionId: string, cwd: string, agentId: s
 
   // Clean up worktree if applicable
   if (agent.worktreePath && agent.branchName) {
-    const repoRoot = (agent.repo && agent.repo !== '.') ? join(cwd, agent.repo) : cwd;
+    const repoRoot = agent.repo !== '.' ? join(cwd, agent.repo) : cwd;
     cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
   }
 
@@ -546,7 +546,7 @@ export async function handleRollback(sessionId: string, cwd: string, toCycle: nu
   // Clean up worktrees
   for (const agent of session.agents) {
     if (agent.worktreePath && agent.branchName) {
-      const repoRoot = (agent.repo && agent.repo !== '.') ? join(cwd, agent.repo) : cwd;
+      const repoRoot = agent.repo !== '.' ? join(cwd, agent.repo) : cwd;
       cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
     }
   }

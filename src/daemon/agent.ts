@@ -355,7 +355,7 @@ export async function restartAgent(
       total: portOffset,
       branchName: agent.branchName!,
     };
-  } else if (agent.repo && agent.repo !== '.') {
+  } else if (agent.repo !== '.') {
     paneCwd = join(cwd, agent.repo);
   }
 

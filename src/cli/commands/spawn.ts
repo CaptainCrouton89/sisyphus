@@ -32,15 +32,24 @@ export function registerSpawn(program: Command): void {
 
       const sisyphusCwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
+      if (opts.repo && (opts.repo.includes('/') || opts.repo.includes('..') || opts.repo.includes('\\'))) {
+        console.error('Error: --repo must be a directory name, not a path');
+        process.exit(1);
+      }
+
       if (opts.repo && opts.repo !== '.') {
         const repoPath = join(sisyphusCwd, opts.repo);
         if (!existsSync(repoPath)) {
           console.error(`Error: repo directory does not exist: ${repoPath}`);
           process.exit(1);
         }
-      } else if (!opts.repo && opts.worktree) {
+        if (opts.worktree && !existsSync(join(repoPath, '.git'))) {
+          console.error(`Error: --worktree requires a git repo; no .git found at ${repoPath}`);
+          process.exit(1);
+        }
+      } else if (!opts.repo) {
         if (!existsSync(join(sisyphusCwd, '.git'))) {
-          console.error(`Error: --worktree requires a git repo at ${sisyphusCwd}. Use --repo to specify a subdirectory.`);
+          console.error('Error: --repo is required when session root is not a git repo.');
           process.exit(1);
         }
       }
