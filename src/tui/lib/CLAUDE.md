@@ -15,17 +15,23 @@
 ## Key Patterns
 
 ### Text Formatting & Colors
-- **Time**: `formatDuration(start, end?)` → "1h23m", `formatTimeAgo(iso)` → "2h ago", `formatTime(iso)` → "HH:MM"
-- **Truncation**: `truncate(text, max)` — word-boundary-aware with '…'
-- **Markdown**: `stripMarkdown()` (all syntax), `cleanMarkdown()` (inline only), `stripFrontmatter()`, `extractFirstSentence()`
-- **Wrapping**: `wrapText(text, width)` with word boundaries
-- **Status colors**: `statusColor(status)`, `durationColor(startOrMs)` (yellow <30min, red ≥30min), `agentTypeColor(agentType)`
-- **Status icons**: `statusIndicator(status)`, `agentStatusIcon(status)`, `divider(width, char)`
+- **Time**: `formatDuration()`, `formatTimeAgo(iso)` → "2h ago", `formatTime(iso)` → "HH:MM"
+- **Truncation**: `truncate(text, max)` — word-boundary-aware with '…', normalizes emoji width (✅→✓, ❌→✗)
+- **Markdown**: `stripMarkdown()` (all syntax, lossy), `cleanMarkdown()` (inline, preserves structure, handles emoji), `stripFrontmatter()`, `extractFirstSentence(text, maxLen)`
+- **Wrapping**: `wrapText(text, width)` — word-boundary aware with display-width calculation
+- **Status/Duration**: `statusColor()`, `statusIndicator(status)` → ▶/✓/⏸/·; `durationColor(startOrMs, end?)` → yellow <30min, red ≥30min
+- **Agent colors**: `agentTypeColor(type)` → blue/green/magenta/yellow; `agentStatusIcon(status)` → ▶/✓/✕/!/?
+- **Mode**: `modeColor(mode)` → blue/green/cyan for planning/implementation/default; `abbreviateMode(mode)` → "impl"/"plan"
+- **Message display**: `messageSourceLabel(source, agentId?)` → "You"/"agent-001"/"system"; `messageSourceColor(source)` → yellow/cyan/gray
+- **Report**: `reportBadge(type)` → {label: "FINAL"|"UPDATE", color: "cyan"|"yellow"}
+- **Merge status**: `mergeStatusDisplay(status)` → {icon, label, color} or null (merged/pending/no-changes/conflict)
+- **Agent**: `agentDisplayName(agent)` — returns name or agentType if unavailable
+- **ANSI**: `ansiBold(text)`, `ansiDim(text)`, `ansiColor(text, color, bold?)`, `divider(width, char?)`
 
 ### Styled Line Rendering (format.ts)
-- `Seg` — {text, color?, bold?, dim?, italic?} — single styled segment
+- `Seg` — {text, color?, bold?, dim?, italic?, inverse?} — single styled segment
 - `DetailLine = Seg[]` — multi-segment line with mixed styling
-- `seg(text, opts)` and `singleLine(text, opts)` — builders for styled output
+- `seg(text, opts)`, `singleLine(text, opts)` — builders for styled output
 
 ### Tree Building (tree.ts)
 - Sessions sorted: active+open → active+closed → paused+open → paused+closed → completed (by recency within groups)
@@ -49,8 +55,9 @@
 
 ## Constraints
 
-- `stripMarkdown()` collapses all whitespace to single spaces (lossy); use `cleanMarkdown()` to preserve structure
-- tmux operations fail silently via `execSafe()` — check existence before operations
-- Companion pane auto-reuses if alive (keyed by `companionPaneId`); killing pane requires reset
-- File reads via `readFileSafe()` must handle missing files gracefully (goal.md, roadmap.md may not exist)
-- Companion context XML must escape all user-provided content via `escapeXml()`
+- **Markdown loss**: `stripMarkdown()` is lossy (collapses whitespace); use `cleanMarkdown()` for structure-preserving inline cleanup
+- **Emoji width**: Both `truncate()` and `cleanMarkdown()` normalize wide emoji → single-width to prevent terminal wrapping
+- **tmux operations** fail silently via `execSafe()` — always check existence before operations
+- **Companion pane** auto-reuses if alive; killing requires resetting `companionPaneId`
+- **File reads** via `readFileSafe()` must handle missing files (goal.md, roadmap.md may not exist)
+- **Context XML** must escape all user-provided content via `escapeXml()`
