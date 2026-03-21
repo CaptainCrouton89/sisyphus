@@ -1,5 +1,6 @@
 import type { Session } from '../shared/types.js';
 import type { TreeNode } from './types/tree.js';
+import type { ReportBlock } from './lib/reports.js';
 
 // ---------------------------------------------------------------------------
 // Polling data interfaces (moved from usePolling.ts)
@@ -189,6 +190,11 @@ export interface AppState {
   prevNodes: TreeNode[];
   prevCycleCount: number;
 
+  // Render caches
+  cachedReportBlocks: Map<string, ReportBlock[]>;
+  cachedTreeNodes: TreeNode[] | null;
+  treeCacheKey: string;
+
   // Config
   cwd: string;
 }
@@ -229,6 +235,9 @@ export function createAppState(cwd: string): AppState {
     cursorNodeId: null,
     prevNodes: [],
     prevCycleCount: 0,
+    cachedReportBlocks: new Map(),
+    cachedTreeNodes: null,
+    treeCacheKey: '',
     cwd,
   };
 }

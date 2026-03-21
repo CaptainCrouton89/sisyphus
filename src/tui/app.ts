@@ -167,6 +167,14 @@ export function startApp(state: AppState, cleanup: () => void): void {
         }
       }
 
+      // Resolve report files in poll (not render) to avoid sync disk reads on keypress
+      state.cachedReportBlocks.clear();
+      if (selectedSession) {
+        for (const agent of selectedSession.agents) {
+          state.cachedReportBlocks.set(agent.id, resolveReports(agent.reports));
+        }
+      }
+
       state.sessions = sessions;
       state.selectedSession = selectedSession;
       state.planContent = planContent;
@@ -224,13 +232,21 @@ export function startApp(state: AppState, cleanup: () => void): void {
         })
       : state.sessions;
 
-    const nodes = buildTree(
-      filteredSessions,
-      state.selectedSession,
-      state.expanded,
-      state.cwd,
-      state.contextFiles,
-    );
+    const cacheKey = `${state.expanded.size}:${filteredSessions.length}:${state.selectedSession?.id}:${state.contextFiles.length}:${state.searchFilter}`;
+    let nodes: TreeNode[];
+    if (cacheKey === state.treeCacheKey && state.cachedTreeNodes !== null) {
+      nodes = state.cachedTreeNodes;
+    } else {
+      nodes = buildTree(
+        filteredSessions,
+        state.selectedSession,
+        state.expanded,
+        state.cwd,
+        state.contextFiles,
+      );
+      state.cachedTreeNodes = nodes;
+      state.treeCacheKey = cacheKey;
+    }
 
     // Cursor stabilization
     stabilizeCursor(state, nodes);
@@ -265,14 +281,14 @@ export function startApp(state: AppState, cleanup: () => void): void {
     const agents = state.selectedSession?.agents ?? [];
     const reportAgent =
       state.mode === 'report-detail' ? getAgentForNode(cursorNode, agents) : null;
-    const reportBlocks = reportAgent ? resolveReports(reportAgent.reports) : [];
+    const reportBlocks = reportAgent ? (state.cachedReportBlocks.get(reportAgent.id) ?? []) : [];
 
     const detailAgent =
       cursorNode?.type === 'agent' || cursorNode?.type === 'report'
         ? getAgentForNode(cursorNode, agents)
         : null;
     const detailReportBlocks = detailAgent
-      ? (detailAgent === reportAgent ? reportBlocks : resolveReports(detailAgent.reports))
+      ? (state.cachedReportBlocks.get(detailAgent.id) ?? [])
       : [];
 
     // Load context file content (cached to avoid re-read on every render)

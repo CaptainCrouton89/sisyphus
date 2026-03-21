@@ -14,6 +14,7 @@ import {
   agentDisplayName,
   modeColor,
   mergeStatusDisplay,
+  abbreviateMode,
 } from '../lib/format.js';
 
 // ─── Node content renderer ────────────────────────────────────────────────────
@@ -50,12 +51,7 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
         ? formatDuration(node.timestamp, node.completedAt)
         : 'running';
       const agents = `${node.agentCount} agent${node.agentCount !== 1 ? 's' : ''}`;
-      const modeShort =
-        node.mode === 'implementation'
-          ? 'impl'
-          : node.mode === 'planning'
-            ? 'plan'
-            : node.mode;
+      const modeShort = abbreviateMode(node.mode);
       const mode = modeShort ? ` · ${modeShort}` : '';
       return {
         icon: isRunning ? '●' : '○',

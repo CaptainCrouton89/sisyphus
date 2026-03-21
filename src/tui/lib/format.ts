@@ -213,6 +213,31 @@ export function agentDisplayName(agent: { name: string; id: string; agentType: s
   return agent.name !== agent.id ? agent.name : agent.agentType;
 }
 
+export function abbreviateMode(mode: string | undefined | null): string {
+  if (!mode) return '';
+  if (mode === 'implementation') return 'impl';
+  if (mode === 'planning') return 'plan';
+  return mode;
+}
+
+export function ansiBold(text: string): string {
+  return `\x1b[1m${text}\x1b[0m`;
+}
+
+export function ansiDim(text: string): string {
+  return `\x1b[2m${text}\x1b[0m`;
+}
+
+export function ansiColor(text: string, color: string, bold = false): string {
+  const COLOR_MAP: Record<string, number> = { black: 30, red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36, white: 37, gray: 90 };
+  const codes: number[] = [];
+  if (bold) codes.push(1);
+  const sgr = COLOR_MAP[color];
+  if (sgr !== undefined) codes.push(sgr);
+  if (codes.length === 0) return text;
+  return `\x1b[${codes.join(';')}m${text}\x1b[0m`;
+}
+
 export function modeColor(mode?: string): string {
   if (mode === 'planning') return 'blue';
   if (mode === 'implementation') return 'green';

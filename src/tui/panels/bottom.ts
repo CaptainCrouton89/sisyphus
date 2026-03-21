@@ -1,4 +1,5 @@
 import { writeClipped, type FrameBuffer } from '../render.js';
+import { ansiBold, ansiDim } from '../lib/format.js';
 import type { AppState } from '../state.js';
 import { INPUT_MODES, PROMPTS } from '../state.js';
 import type { TreeNodeType } from '../types/tree.js';
@@ -67,8 +68,8 @@ export function renderInputBar(
 
 // ─── Status Line ──────────────────────────────────────────────────────────────
 
-const B = (s: string) => `\x1b[1m${s}\x1b[0m`;   // bold
-const D = (s: string) => `\x1b[2m${s}\x1b[0m`;   // dim
+const B = ansiBold;
+const D = ansiDim;
 const SEP = D('│ ');
 
 export function renderStatusLine(

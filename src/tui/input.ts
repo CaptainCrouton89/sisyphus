@@ -95,7 +95,6 @@ export interface InputActions {
 
 function handleCancel(state: AppState): void {
   state.mode = 'navigate';
-  state.focusPane = 'tree';
   state.targetAgentId = null;
   state.inputText = '';
   state.inputCursorPos = 0;
@@ -325,10 +324,10 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'enter-copy-menu':
       state.mode = 'copy-menu';
       requestRender();
-      break;
+      return;
 
     case 'copy-path': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       const path = sessionDir(state.cwd, selectedSessionId);
       try {
         actions.copyToClipboard(path);
@@ -336,13 +335,11 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       } catch {
         notify(state, 'Failed to copy to clipboard');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'copy-context': {
-      if (!selectedSessionId || !session) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId || !session) { notify(state, 'No session selected'); break; }
       try {
         const xml = actions.buildSessionContext(session, state.cwd);
         actions.copyToClipboard(xml);
@@ -350,42 +347,36 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       } catch {
         notify(state, 'Failed to copy context');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'copy-logs': {
-      if (!state.logsContent) { notify(state, 'No logs content'); state.mode = 'navigate'; requestRender(); break; }
+      if (!state.logsContent) { notify(state, 'No logs content'); break; }
       try {
         actions.copyToClipboard(state.logsContent);
         notify(state, `Copied logs (${state.logsContent.length} chars)`);
       } catch {
         notify(state, 'Failed to copy to clipboard');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'copy-session-id': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       try {
         actions.copyToClipboard(selectedSessionId);
         notify(state, `Copied session ID (${selectedSessionId})`);
       } catch {
         notify(state, 'Failed to copy to clipboard');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'delete-session': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       state.mode = 'delete-confirm';
       requestRender();
-      break;
+      return;
     }
 
     case 'open-logs': {
@@ -394,27 +385,23 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       } catch {
         notify(state, 'Failed to open log popup');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'open-session-dir': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       try {
         actions.openInFileManager(sessionDir(state.cwd, selectedSessionId));
       } catch {
         notify(state, 'Failed to open session directory');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'search':
       state.mode = 'search';
       requestRender();
-      break;
+      return;
 
     case 'jump-to-session': {
       let count = 0;
@@ -428,75 +415,70 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
           }
         }
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'spawn-agent': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       state.mode = 'spawn-agent';
       requestRender();
-      break;
+      return;
     }
 
     case 'message-agent': {
       const agent = actions.getAgentForNode(cursorNode);
-      if (!agent) { notify(state, 'Cursor must be on an agent'); state.mode = 'navigate'; requestRender(); break; }
+      if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
       state.targetAgentId = agent.id;
       state.mode = 'message-agent';
       requestRender();
-      break;
+      return;
     }
 
     case 'help':
       state.mode = 'help';
       requestRender();
-      break;
+      return;
 
     case 'shell-command': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       state.mode = 'shell-command';
       requestRender();
-      break;
+      return;
     }
 
     case 'jump-to-pane': {
       const agent = actions.getAgentForNode(cursorNode);
-      if (!agent?.paneId) { notify(state, 'Select an agent with an active pane'); state.mode = 'navigate'; requestRender(); break; }
+      if (!agent?.paneId) { notify(state, 'Select an agent with an active pane'); break; }
       if (session?.tmuxSessionName) actions.switchToSession(session.tmuxSessionName);
       if (session?.tmuxWindowId) actions.selectWindow(session.tmuxWindowId);
       actions.selectPane(agent.paneId);
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'kill': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); state.mode = 'navigate'; requestRender(); break; }
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       const node = nodes[state.cursorIndex];
       if (node && (node.type === 'agent' || node.type === 'report')) {
         const agentId = node.agentId;
         const agent = agents.find((a) => a.id === agentId);
-        if (agent?.status !== 'running') { notify(state, `Agent ${agentId} is not running`); state.mode = 'navigate'; requestRender(); break; }
+        if (agent?.status !== 'running') { notify(state, `Agent ${agentId} is not running`); break; }
         actions.sendAndNotify({ type: 'kill-agent', sessionId: selectedSessionId, agentId }, `Killed ${agentId}`);
       } else {
         actions.sendAndNotify({ type: 'kill', sessionId: selectedSessionId }, 'Session killed');
       }
-      state.mode = 'navigate';
-      requestRender();
       break;
     }
 
     case 'quit':
       actions.cleanup();
-      break;
+      return;
 
     case 'dismiss':
-      state.mode = 'navigate';
-      requestRender();
       break;
   }
+
+  state.mode = 'navigate';
+  requestRender();
 }
 
 function handleLeaderKey(input: string, key: Key, state: AppState, actions: InputActions): void {

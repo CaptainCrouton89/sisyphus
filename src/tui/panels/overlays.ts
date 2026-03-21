@@ -1,4 +1,5 @@
 import { drawBorder, writeClipped, type FrameBuffer } from '../render.js';
+import { ansiColor, ansiDim } from '../lib/format.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -14,22 +15,6 @@ function helpRow(left: string, right: string, innerWidth: number): string {
   return (left.padEnd(col) + right).padEnd(innerWidth);
 }
 
-function ansiMagentaBold(text: string): string {
-  return `\x1b[1;35m${text}\x1b[0m`;
-}
-
-function ansiCyanBold(text: string): string {
-  return `\x1b[1;36m${text}\x1b[0m`;
-}
-
-function ansiYellowBold(text: string): string {
-  return `\x1b[1;33m${text}\x1b[0m`;
-}
-
-function ansiDim(text: string): string {
-  return `\x1b[2m${text}\x1b[0m`;
-}
-
 // ─── Overlays ─────────────────────────────────────────────────────────────────
 
 export function renderLeaderOverlay(buf: FrameBuffer, rows: number, cols: number): void {
@@ -40,7 +25,7 @@ export function renderLeaderOverlay(buf: FrameBuffer, rows: number, cols: number
   drawBorder(buf, x, y, LEADER_WIDTH, LEADER_HEIGHT, 'magenta');
 
   const lines: string[] = [
-    ansiMagentaBold('  LEADER'.padEnd(innerWidth)),
+    ansiColor('  LEADER'.padEnd(innerWidth), 'magenta', true),
     ' '.padEnd(innerWidth),
     '  y  copy menu'.padEnd(innerWidth),
     '  d  delete session'.padEnd(innerWidth),
@@ -72,7 +57,7 @@ export function renderCopyMenuOverlay(buf: FrameBuffer, rows: number, cols: numb
   drawBorder(buf, x, y, LEADER_WIDTH, COPY_HEIGHT, 'cyan');
 
   const lines: string[] = [
-    ansiCyanBold('  COPY'.padEnd(innerWidth)),
+    ansiColor('  COPY'.padEnd(innerWidth), 'cyan', true),
     ' '.padEnd(innerWidth),
     '  p  session path'.padEnd(innerWidth),
     '  C  LLM context'.padEnd(innerWidth),
@@ -119,7 +104,7 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
   drawBorder(buf, x, y, HELP_WIDTH, height, 'yellow');
 
   // Title row
-  writeClipped(buf, x + 1, y + 1, ansiYellowBold('  KEYBINDINGS  (esc or ? to close)'.padEnd(innerWidth)), innerWidth);
+  writeClipped(buf, x + 1, y + 1, ansiColor('  KEYBINDINGS  (esc or ? to close)'.padEnd(innerWidth), 'yellow', true), innerWidth);
   // Blank row after title
   writeClipped(buf, x + 1, y + 2, ' '.padEnd(innerWidth), innerWidth);
 

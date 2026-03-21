@@ -38,6 +38,7 @@ import {
   extractFirstSentence,
   mergeStatusDisplay,
   divider,
+  abbreviateMode,
   type DetailLine,
 } from '../lib/format.js';
 
@@ -308,11 +309,7 @@ function buildSessionLines(
       const n = cycle.agentsSpawned.length;
       const startTime = formatTime(cycle.timestamp);
 
-      const modeLabel = cycle.mode
-        ? cycle.mode === 'implementation' ? 'impl'
-          : cycle.mode === 'planning' ? 'plan'
-          : cycle.mode
-        : '';
+      const modeLabel = abbreviateMode(cycle.mode);
       const cycModeColor = modeColor(cycle.mode);
 
       const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
