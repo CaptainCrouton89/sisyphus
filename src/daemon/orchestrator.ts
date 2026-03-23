@@ -221,7 +221,7 @@ ${previousCyclesSection}${mostRecentCycleSection}
 ## Roadmap
 
 ${roadmapRef}
-${repositoriesSection}`;
+`;
 }
 
 export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
