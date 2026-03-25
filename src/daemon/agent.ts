@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { resolve, dirname, join } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
@@ -145,10 +146,11 @@ interface SetupAgentPaneOpts {
   agentConfig: ReturnType<typeof resolveAgentConfig>;
   worktreeContext?: WorktreeContext;
   paneCwd: string;
+  claudeSessionId?: string;
 }
 
 function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: string } {
-  const { sessionId, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, worktreeContext, paneCwd } = opts;
+  const { sessionId, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, worktreeContext, paneCwd, claudeSessionId } = opts;
 
   const paneId = tmux.createPane(windowId, paneCwd);
   registerPane(paneId, sessionId, 'agent', agentId);
@@ -194,7 +196,8 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const config = loadConfig(cwd);
     const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
     const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
   const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [
@@ -259,9 +262,11 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     worktreeContext = { offset: portOffset, total: portOffset, branchName };
   }
 
+  const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
+
   const { paneId, fullCmd } = setupAgentPane({
     sessionId, cwd, agentId, agentType, name, instruction,
-    windowId, color, provider, agentConfig, worktreeContext, paneCwd,
+    windowId, color, provider, agentConfig, worktreeContext, paneCwd, claudeSessionId,
   });
 
   const agent: Agent = {
@@ -269,6 +274,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     name,
     agentType,
     provider,
+    claudeSessionId,
     color,
     instruction,
     status: 'running',
@@ -359,9 +365,11 @@ export async function restartAgent(
     unregisterAgentPane(sessionId, agentId);
   }
 
+  const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
+
   const { paneId, fullCmd } = setupAgentPane({
     sessionId, cwd, agentId, agentType, name, instruction,
-    windowId, color, provider, agentConfig, worktreeContext, paneCwd,
+    windowId, color, provider, agentConfig, worktreeContext, paneCwd, claudeSessionId,
   });
 
   // Update agent state in-place
@@ -369,6 +377,7 @@ export async function restartAgent(
     status: 'running',
     paneId,
     provider,
+    claudeSessionId,
     spawnedAt: new Date().toISOString(),
     completedAt: null,
     killedReason: undefined,

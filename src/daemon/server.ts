@@ -183,13 +183,6 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { sessionId: session.id, status: session.status, tmuxSessionName: session.tmuxSessionName } };
       }
 
-      case 'register_claude_session': {
-        const tracking = sessionTrackingMap.get(req.sessionId);
-        if (!tracking) return unknownSessionError(req.sessionId);
-        await sessionManager.handleRegisterClaudeSession(tracking.cwd, req.sessionId, req.agentId, req.claudeSessionId);
-        return { ok: true };
-      }
-
       case 'kill': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);

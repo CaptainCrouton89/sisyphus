@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir } from '../shared/paths.js';
@@ -299,7 +300,8 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'high';
-  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "sisyphus:orch-${session.name ?? sessionId.slice(0, 8)}-cycle-${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const claudeSessionId = randomUUID();
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "sisyphus:orch-${session.name ?? sessionId.slice(0, 8)}-cycle-${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 
@@ -325,6 +327,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     timestamp: new Date().toISOString(),
     agentsSpawned: [],
     paneId,
+    claudeSessionId,
   });
 }
 

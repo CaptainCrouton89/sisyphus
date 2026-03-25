@@ -11,7 +11,6 @@ export type Request =
   | { type: 'status'; sessionId?: string; cwd?: string }
   | { type: 'list'; cwd: string; all?: boolean }
   | { type: 'resume'; sessionId: string; cwd: string; message?: string }
-  | { type: 'register_claude_session'; sessionId: string; agentId: string; claudeSessionId: string }
   | { type: 'kill'; sessionId: string }
   | { type: 'kill-agent'; sessionId: string; agentId: string }
   | { type: 'restart-agent'; sessionId: string; agentId: string }

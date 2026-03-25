@@ -411,15 +411,6 @@ export async function handleContinue(sessionId: string, cwd: string): Promise<vo
   await state.continueSession(cwd, sessionId);
 }
 
-export async function handleRegisterClaudeSession(
-  cwd: string,
-  sessionId: string,
-  agentId: string,
-  claudeSessionId: string,
-): Promise<void> {
-  await state.updateAgent(cwd, sessionId, agentId, { claudeSessionId });
-}
-
 export async function handleKill(sessionId: string, cwd: string): Promise<number> {
   const session = state.getSession(cwd, sessionId);
   const windowId = orchestrator.getWindowId(sessionId);

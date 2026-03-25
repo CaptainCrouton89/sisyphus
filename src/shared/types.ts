@@ -70,6 +70,7 @@ export interface OrchestratorCycle {
   completedAt?: string;
   agentsSpawned: string[];
   paneId?: string;
+  claudeSessionId?: string;
   nextPrompt?: string;
   mode?: string;
 }
