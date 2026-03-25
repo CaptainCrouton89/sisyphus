@@ -50,7 +50,7 @@
 - Dashboard template (`dashboard-claude.md`) rendered with `{{CWD}}` only
 - `openEditorPopup(cwd, editor, filePath, size?)` — Terminal editors use `tmux display-popup`, GUI editors run directly
 - `editInPopup()` — Creates temp file, opens in editor, returns edited content
-- Utility popups: `openLogPopup()` (tail daemon logs), `openShellPopup(cwd, cmd)`, `openInFileManager(path)`
+- Utility popups: `openLogPopup()` (tail daemon logs), `openShellPopup(cwd, cmd)`, `openInFileManager(path)`, `openClaudeResumePopup(cwd, sessionId)` (resume Claude session)
 - Window/pane helpers: `getWindowId()`, `selectWindow()`, `selectPane()`, `windowExists()`, `switchToSession()`
 
 ## Constraints

@@ -397,6 +397,9 @@ function buildCycleLines(cycle: OrchestratorCycle, agents: Agent[], width: numbe
     `  ${formatTime(cycle.timestamp)}${cycle.completedAt ? ` → ${formatTime(cycle.completedAt)}` : ''}`,
     { dim: true },
   ));
+  if (cycle.claudeSessionId) {
+    lines.push(singleLine(`  Session: ${cycle.claudeSessionId}`, { dim: true }));
+  }
 
   lines.push(singleLine(' '));
   lines.push([seg('  ▎ ⊞ AGENTS', { color: 'green', bold: true })]);
@@ -542,6 +545,9 @@ function buildAgentLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, 
   lines.push(singleLine(`    Spawned: ${formatTime(agent.spawnedAt)}`, { dim: true }));
   if (agent.completedAt) {
     lines.push(singleLine(`    Completed: ${formatTime(agent.completedAt)}`, { dim: true }));
+  }
+  if (agent.claudeSessionId) {
+    lines.push(singleLine(`    Session: ${agent.claudeSessionId}`, { dim: true }));
   }
   if (agent.paneId) {
     lines.push(singleLine(`    Pane: ${agent.paneId}`, { dim: true }));

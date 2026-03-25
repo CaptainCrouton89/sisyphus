@@ -106,6 +106,15 @@ export function openInFileManager(path: string): void {
   execSync(`open ${shellQuote(path)}`, { stdio: 'inherit', env: EXEC_ENV });
 }
 
+export function openClaudeResumePopup(cwd: string, claudeSessionId: string): void {
+  const pathEnv = augmentedPath();
+  const cmd = `PATH=${shellQuote(pathEnv)} claude --resume ${shellQuote(claudeSessionId)}`;
+  execSync(
+    `tmux display-popup -E -w 90% -h 80% -d ${shellQuote(cwd)} ${shellQuote(cmd)}`,
+    { stdio: 'inherit', env: EXEC_ENV },
+  );
+}
+
 export function openEditorPopup(cwd: string, editor: string, filePath: string, size?: { w: string; h: string }): void {
   const { w = '90%', h = '90%' } = size ?? {};
   const editorBin = editor.split(/\s+/)[0]!.split('/').pop()!;

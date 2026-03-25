@@ -75,6 +75,7 @@ export interface InputActions {
   openEditorPopup: typeof import('./lib/tmux.js').openEditorPopup;
   editInPopup: typeof import('./lib/tmux.js').editInPopup;
   openCompanionPane: typeof import('./lib/tmux.js').openCompanionPane;
+  openClaudeResumePopup: typeof import('./lib/tmux.js').openClaudeResumePopup;
   selectWindow: typeof import('./lib/tmux.js').selectWindow;
   selectPane: typeof import('./lib/tmux.js').selectPane;
   switchToSession: typeof import('./lib/tmux.js').switchToSession;
@@ -686,6 +687,26 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
         notify(state, `Error: ${(err as Error).message}`);
       }
     })();
+    return;
+  }
+
+  // o: open/resume claude session for agent or orchestrator cycle
+  if (input === 'o') {
+    if (!cursorNode) { notify(state, 'No node selected'); return; }
+    let claudeSessionId: string | undefined;
+    if (cursorNode.type === 'agent' || cursorNode.type === 'report') {
+      const agent = actions.getAgentForNode(cursorNode);
+      claudeSessionId = agent?.claudeSessionId ?? undefined;
+    } else if (cursorNode.type === 'cycle' && session) {
+      const cycle = session.orchestratorCycles.find(c => c.cycle === cursorNode.cycleNumber);
+      claudeSessionId = cycle?.claudeSessionId;
+    }
+    if (!claudeSessionId) { notify(state, 'No Claude session ID available'); return; }
+    try {
+      actions.openClaudeResumePopup(state.cwd, claudeSessionId);
+    } catch {
+      notify(state, 'Failed to open Claude session');
+    }
     return;
   }
 
