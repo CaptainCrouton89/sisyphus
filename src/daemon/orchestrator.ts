@@ -94,6 +94,11 @@ function loadOrchestratorPrompt(cwd: string, mode: string): string {
     return base + '\n\n' + readFileSync(implPath, 'utf-8');
   }
 
+  if (mode === 'validation') {
+    const validationPath = resolve(import.meta.dirname, '../templates/orchestrator-validation.md');
+    return base + '\n\n' + readFileSync(validationPath, 'utf-8');
+  }
+
   // Default: planning mode
   const planningPath = resolve(import.meta.dirname, '../templates/orchestrator-planning.md');
   return base + '\n\n' + readFileSync(planningPath, 'utf-8');

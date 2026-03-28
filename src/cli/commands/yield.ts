@@ -9,7 +9,7 @@ export function registerYield(program: Command): void {
     .command('yield')
     .description('Yield control back to daemon (orchestrator only)')
     .option('--prompt <text>', 'Instructions for the next orchestrator cycle (or pipe via stdin)')
-    .option('--mode <mode>', 'System prompt mode for next cycle (planning, implementation)')
+    .option('--mode <mode>', 'System prompt mode for next cycle (planning, implementation, validation)')
     .action(async (opts: { prompt?: string; mode?: string }) => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;

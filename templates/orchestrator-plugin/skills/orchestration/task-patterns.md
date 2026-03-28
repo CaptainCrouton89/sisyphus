@@ -94,8 +94,8 @@ Note: critique and validation are embedded between implementation phases, not de
 - **Cycle 5**: Spawn `sisyphus:implement` for Phase 2. Phase 1 is types — low risk, doesn't need its own validation. Yield.
 - **Cycle 6**: Spawn `sisyphus:review` for critique of phases 1-2. This is the checkpoint before integration builds on top. Yield.
 - **Cycle 7**: Address critique findings + spawn `sisyphus:implement` for Phase 3. Yield.
-- **Cycle 8**: Spawn `sisyphus:validate` for e2e smoketest. Yield.
-- **Cycle 9**: Address validation failures or complete.
+- **Cycle 8**: `sisyphus yield --mode validation` for e2e smoketest. Validation mode proves the feature works — operator for UI, evidence for every claim.
+- **Cycle 9**: Address validation failures (back to `--mode implementation`) or complete.
 
 ### Failure modes
 - **Spec needs human input**: Mark session as needing human review. Orchestrator notes open questions.
@@ -148,7 +148,7 @@ Note: verification checkpoints are embedded in the stage outline, not deferred t
 - **Cycle 6**: Address critique findings. Spawn `sisyphus:implement` for stage 3. Yield.
 - **Cycle 7**: Spawn `sisyphus:implement` for stage 4. Spawn `sisyphus:review` to critique stage 3 in parallel. Yield.
 - **Cycle 8**: Spawn `sisyphus:validate` for stages 3-4 — core logic checkpoint before integration. Address stage 3 critique. Yield.
-- **Cycle 9+**: Implement integration stage. Validate e2e. Final review.
+- **Cycle 9+**: Implement integration stage. Final review. Then `sisyphus yield --mode validation` for comprehensive e2e proof.
 
 ### Failure modes
 - **Detail-plan agent can't produce quality output**: The stage is still too large. Break it into sub-stages in the outline and detail-plan each sub-stage individually.
