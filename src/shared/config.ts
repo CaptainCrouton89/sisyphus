@@ -1,16 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { globalConfigPath, projectConfigPath } from './paths.js';
 
-export interface WorktreeConfig {
-  copy?: string[];
-  clone?: string[];
-  symlink?: string[];
-  init?: string;
-}
-
 export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
-
-export type KeyedWorktreeConfig = Record<string, WorktreeConfig>;
 
 export interface Config {
   model?: string;

@@ -121,7 +121,6 @@ export function buildTree(
           spawnedAt: agent.spawnedAt,
           completedAt: agent.completedAt,
           reportCount: agent.reports.length,
-          mergeStatus: agent.mergeStatus,
         } satisfies AgentTreeNode);
 
         if (!agentExpanded || !hasReports) continue;

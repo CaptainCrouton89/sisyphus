@@ -23,8 +23,8 @@ export function register{Command}(program: Command): void {
 - **start.ts** — Requires tmux (checks `TMUX` env var; skip with `--no-tmux-check`). Options: `--context` (background info), `--name` (session label). Respects `SISYPHUS_CWD` env var (falls back to `process.cwd()`). Auto-launches dashboard in current tmux session (only if not already open). Sets `@sisyphus_cwd` tmux option.
 - **continue.ts** — Clears roadmap and reactivates completed session (stays in current cycle); requires `SISYPHUS_SESSION_ID` env var.
 - **resume.ts** — Takes session ID as **positional argument** (not env var). Optional second arg for additional orchestrator instructions. Returns tmux session name for attaching.
-- **submit.ts** — Blocks if git worktree has uncommitted changes. Agent must commit first.
-- **spawn.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID`. Instruction from positional arg, `--instruction` flag, or stdin. Options: `--agent-type` (default: `worker`), `--name` (required). **`--worktree`** spawns agent in isolated git worktree (requires `.git` at target repo). **`--repo <name>`** specifies subdirectory for multi-repo workflows (directory name only, no paths; required if session root isn't a git repo).
+- **submit.ts** — Blocks if running inside a git worktree with uncommitted changes. Agent must commit first.
+- **spawn.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID`. Instruction from positional arg, `--instruction` flag, or stdin. Options: `--agent-type` (default: `worker`), `--name` (required). **`--repo <name>`** specifies subdirectory for multi-repo workflows (directory name only, no paths; required if session root isn't a git repo).
 - **yield.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID` environment variable.
 - **rollback.ts** — Arguments: `<sessionId> <cycle>` (cycle must be positive integer). Pauses session; use `resume` to respawn.
 - **dashboard.ts** — Checks if dashboard window exists before launching (prevents duplicates). Launches in current tmux session via TUI binary.
@@ -35,7 +35,7 @@ export function register{Command}(program: Command): void {
 ## Key Interactions
 
 - `start.ts` → creates new session, spawns orchestrator, auto-launches dashboard
-- `spawn.ts` → orchestrator spawns agents into panes (or isolated worktrees with `--worktree`)
+- `spawn.ts` → orchestrator spawns agents into panes
 - **`continue.ts` vs `resume.ts`** — Both reactivate sessions; use `continue` for same direction, `resume` for new instructions
 - `submit.ts`, `yield.ts`, `complete.ts` — Lifecycle commands; require active session
 - `status.ts`, `dashboard.ts` — Query/monitor; read-only

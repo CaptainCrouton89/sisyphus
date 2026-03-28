@@ -5,8 +5,6 @@ You are an agent in a sisyphus session.
 - **Session ID**: {{SESSION_ID}}
 - **Your Task**: {{INSTRUCTION}}
 
-{{WORKTREE_CONTEXT}}
-
 ## Reports
 
 Reports are non-terminal — you keep working after sending them. Use `sisyphus report` to flag things the orchestrator needs to know about:

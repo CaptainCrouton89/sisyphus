@@ -36,7 +36,6 @@ import {
   messageSourceLabel,
   messageSourceColor,
   extractFirstSentence,
-  mergeStatusDisplay,
   divider,
   abbreviateMode,
   type DetailLine,
@@ -178,8 +177,6 @@ function buildSessionLines(
   const cycles = session.orchestratorCycles;
   const messages = session.messages;
   const isDead = session.status === 'active' && !paneAlive;
-  const conflicts = agents.filter((a) => a.mergeStatus === 'conflict');
-
   // Goal text
   const goalText = goalContent
     ? cleanMarkdown(stripFrontmatter(goalContent).trim())
@@ -222,22 +219,6 @@ function buildSessionLines(
       seg(' ✕ DEAD ', { color: 'red', bold: true }),
       seg(' tmux window closed — [w] reopen  [R] resume', { color: 'red' }),
     ]);
-  }
-
-  // Conflict banner
-  if (conflicts.length > 0) {
-    lines.push(
-      singleLine(
-        `  ⚠ ${conflicts.length} merge conflict${conflicts.length > 1 ? 's' : ''}`,
-        { color: 'red', bold: true },
-      ),
-    );
-    lines.push(
-      singleLine(
-        '  resolve in worktree, then [x] restart agent',
-        { color: 'red', dim: true },
-      ),
-    );
   }
 
   // Plan section
@@ -468,38 +449,20 @@ function buildAgentLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, 
   const icon = agentStatusIcon(agent.status);
   const color = statusColor(agent.status);
   const nameLabel = agentDisplayName(agent);
-  const maxMergeLines = 3;
-
   lines.push([
     seg(' '),
     seg(icon, { color }),
     seg(` ${agent.id} · ${nameLabel}`, { bold: true }),
   ]);
 
-  const merge = agent.mergeStatus ? mergeStatusDisplay(agent.mergeStatus) : null;
   lines.push([
     seg('  '),
     seg(agent.status, { color }),
     seg(` · ${dur} · ${agent.agentType}`, { dim: true }),
-    ...(merge
-      ? [seg(' · ', { dim: true }), seg(`${merge.icon} ${merge.label}`, { color: merge.color })]
-      : agent.mergeStatus
-        ? [seg(' · ', { dim: true }), seg(agent.mergeStatus, { dim: true })]
-        : []),
   ]);
 
   if (agent.killedReason) {
     lines.push(singleLine(`  ⚠ ${agent.killedReason}`, { color: 'red' }));
-  }
-
-  if (agent.mergeStatus === 'conflict' && agent.mergeDetails) {
-    for (const ml of wrapText(agent.mergeDetails, contentWidth - 6).slice(0, maxMergeLines)) {
-      lines.push(singleLine(`  ⚠ ${ml}`, { color: 'red' }));
-    }
-  }
-
-  if (agent.mergeStatus === 'conflict') {
-    lines.push(singleLine('  resolve conflicts in worktree dir, then restart', { color: 'red', dim: true }));
   }
 
   lines.push(singleLine(' '));
@@ -552,13 +515,6 @@ function buildAgentLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, 
   if (agent.paneId) {
     lines.push(singleLine(`    Pane: ${agent.paneId}`, { dim: true }));
   }
-  if (agent.worktreePath) {
-    lines.push(singleLine(`    Worktree: ${agent.worktreePath}`, { dim: true }));
-  }
-  if (agent.branchName) {
-    lines.push(singleLine(`    Branch: ${agent.branchName}`, { dim: true }));
-  }
-
   return lines;
 }
 

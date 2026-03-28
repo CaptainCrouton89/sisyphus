@@ -13,8 +13,6 @@ import { discoverAgentTypes } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
-// Removed until we can flesh out the worktree system
-// import { loadWorktreeConfig } from './worktree.js';
 
 
 interface RepoInfo {
@@ -183,9 +181,6 @@ function formatStateForOrchestrator(session: Session): string {
   if (repos.length === 0) {
     repositoriesSection += '\nNo git repositories detected.\n';
   } else {
-    // Removed worktree config loading until we can flesh out the worktree system
-    // const worktreeConfig = loadWorktreeConfig(session.cwd);
-
     for (const repo of repos) {
       const dirtyTag = repo.isDirty ? ' (dirty)' : '';
       repositoriesSection += `\n### ${repo.name === '.' ? 'Session Root (.)' : repo.name}\n`;

@@ -212,7 +212,7 @@ Each session lives at `$SISYPHUS_SESSION_DIR/` with this structure:
 
 ## File Conflicts
 
-If multiple agents run concurrently, ensure they don't edit the same files. If overlap is unavoidable, serialize across cycles. Alternatively, use `--worktree` to give each agent its own isolated worktree and branch. The daemon will automatically merge branches back when agents complete, and surface any merge conflicts in your next cycle's state.
+If multiple agents run concurrently, ensure they don't edit the same files. If overlap is unavoidable, serialize across cycles.
 
 ## Spawning Agents
 
@@ -224,9 +224,6 @@ sisyphus spawn --name "impl-auth" --agent-type sisyphus:implement "Add session m
 
 # Pipe instruction via stdin (for long/multiline instructions)
 echo "Investigate the login bug..." | sisyphus spawn --name "debug-login" --agent-type sisyphus:debug
-
-# With worktree isolation
-sisyphus spawn --name "feat-api" --agent-type sisyphus:implement --worktree "Add REST endpoints"
 ```
 
 ### Available Agent Types

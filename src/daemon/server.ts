@@ -84,7 +84,7 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'spawn': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
-        const result = await sessionManager.handleSpawn(req.sessionId, tracking.cwd, req.agentType, req.name, req.instruction, req.worktree, req.repo);
+        const result = await sessionManager.handleSpawn(req.sessionId, tracking.cwd, req.agentType, req.name, req.instruction, req.repo);
         return { ok: true, data: { agentId: result.agentId } };
       }
 

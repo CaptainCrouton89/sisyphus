@@ -8,7 +8,6 @@ import * as tmux from './tmux.js';
 import { getNextColor, normalizeTmuxColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
 import { promptsDir, reportsDir, reportFilePath, sessionDir } from '../shared/paths.js';
-import { createWorktreeShell, bootstrapWorktree, loadWorktreeConfig, countWorktreeAgents } from './worktree.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 import { summarizeReport } from './summarize.js';
 import { resolveAgentConfig, detectProvider } from './frontmatter.js';
@@ -37,13 +36,7 @@ export function clearAgentCounter(sessionId: string): void {
   agentCounters.delete(sessionId);
 }
 
-interface WorktreeContext {
-  offset: number;
-  total: number;
-  branchName: string;
-}
-
-function renderAgentSuffix(sessionId: string, instruction: string, worktreeContext?: WorktreeContext): string {
+function renderAgentSuffix(sessionId: string, instruction: string): string {
   const templatePath = resolve(import.meta.dirname, '../templates/agent-suffix.md');
   let template: string;
   try {
@@ -52,13 +45,10 @@ function renderAgentSuffix(sessionId: string, instruction: string, worktreeConte
     template = `# Sisyphus Agent\nSession: {{SESSION_ID}}\nTask: {{INSTRUCTION}}`;
   }
 
-  // Removed until we can flesh out the worktree system
-  const worktreeBlock = '';
-
   return template
     .replace(/\{\{SESSION_ID\}\}/g, sessionId)
     .replace(/\{\{INSTRUCTION\}\}/g, instruction)
-    .replace(/\{\{WORKTREE_CONTEXT\}\}/g, worktreeBlock);
+    .replace(/\{\{WORKTREE_CONTEXT\}\}/g, '');
 }
 
 function createAgentPlugin(
@@ -105,10 +95,15 @@ function createAgentPlugin(
     PreToolUse: [
       { matcher: 'SendMessage', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/intercept-send-message.sh' }] },
     ],
-    Stop: [
-      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/require-submit.sh' }] },
-    ],
   };
+
+  // Interactive agents (e.g. spec-draft, plan) are designed for user back-and-forth
+  // and should not be blocked from stopping by the submit requirement.
+  if (!agentConfig?.frontmatter.interactive) {
+    hooksConfig.Stop = [
+      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/require-submit.sh' }] },
+    ];
+  }
 
   const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
   const userPromptHooks: Record<string, string> = {
@@ -144,13 +139,12 @@ interface SetupAgentPaneOpts {
   color: string;
   provider: Provider;
   agentConfig: ReturnType<typeof resolveAgentConfig>;
-  worktreeContext?: WorktreeContext;
   paneCwd: string;
   claudeSessionId?: string;
 }
 
 function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: string } {
-  const { sessionId, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, worktreeContext, paneCwd, claudeSessionId } = opts;
+  const { sessionId, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, paneCwd, claudeSessionId } = opts;
 
   const paneId = tmux.createPane(windowId, paneCwd);
   registerPane(paneId, sessionId, 'agent', agentId);
@@ -161,7 +155,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
 
-  const suffix = renderAgentSuffix(sessionId, instruction, worktreeContext);
+  const suffix = renderAgentSuffix(sessionId, instruction);
   const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
   writeFileSync(suffixFilePath, suffix, 'utf-8');
 
@@ -174,7 +168,6 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     `export SISYPHUS_AGENT_ID='${agentId}'`,
     `export SISYPHUS_CWD='${cwd}'`,
     `export SISYPHUS_SESSION_DIR='${sesDir}'`,
-    ...(worktreeContext ? [`export SISYPHUS_PORT_OFFSET='${worktreeContext.offset}'`] : []),
     `export PATH="${npmBinDir}:$PATH"`,
   ]);
 
@@ -219,7 +212,6 @@ export interface SpawnAgentOpts {
   name: string;
   instruction: string;
   windowId: string;
-  worktree?: boolean;
   repo?: string;
 }
 
@@ -245,28 +237,13 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   const repo = opts.repo !== undefined ? opts.repo : '.';
   const repoRoot = repo === '.' ? cwd : join(cwd, repo);
-  let paneCwd = repoRoot;
-  let worktreePath: string | undefined;
-  let branchName: string | undefined;
-  let worktreeContext: WorktreeContext | undefined;
-
-  if (opts.worktree) {
-    // Fast: git branch + worktree add + symlinks only (no bootstrap/init)
-    const wt = createWorktreeShell(repoRoot, sessionId, agentId);
-    worktreePath = wt.worktreePath;
-    branchName = wt.branchName;
-    paneCwd = worktreePath;
-
-    const session = state.getSession(cwd, sessionId);
-    const portOffset = countWorktreeAgents(session.agents) + 1;
-    worktreeContext = { offset: portOffset, total: portOffset, branchName };
-  }
+  const paneCwd = repoRoot;
 
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
   const { paneId, fullCmd } = setupAgentPane({
     sessionId, cwd, agentId, agentType, name, instruction,
-    windowId, color, provider, agentConfig, worktreeContext, paneCwd, claudeSessionId,
+    windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 
   const agent: Agent = {
@@ -283,33 +260,11 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     reports: [],
     paneId,
     repo,
-    ...(worktreePath ? { worktreePath, branchName, mergeStatus: 'pending' as const } : {}),
   };
 
   await state.addAgent(cwd, sessionId, agent);
 
-  if (opts.worktree && worktreePath) {
-    // Defer bootstrap so the daemon can respond to the CLI before running
-    // the potentially slow init command (e.g. npm install).
-    // The pane is already visible; Claude command is sent after bootstrap.
-    const config = loadWorktreeConfig(cwd);
-    const repoConfig = config ? config[repo] : undefined;
-    if (repoConfig) {
-      const wtPath = worktreePath;
-      setImmediate(() => {
-        try {
-          bootstrapWorktree(repoRoot, wtPath, repoConfig);
-        } catch (err) {
-          console.error(`[sisyphus] worktree bootstrap failed for ${agentId}: ${err instanceof Error ? err.message : err}`);
-        }
-        tmux.sendKeys(paneId, fullCmd);
-      });
-    } else {
-      tmux.sendKeys(paneId, fullCmd);
-    }
-  } else {
-    tmux.sendKeys(paneId, fullCmd);
-  }
+  tmux.sendKeys(paneId, fullCmd);
 
   return agent;
 }
@@ -345,17 +300,8 @@ export async function restartAgent(
   const provider = detectProvider(agentConfig?.frontmatter.model);
 
   let paneCwd = cwd;
-  let worktreeContext: WorktreeContext | undefined;
 
-  if (agent.worktreePath) {
-    paneCwd = agent.worktreePath;
-    const portOffset = countWorktreeAgents(session.agents);
-    worktreeContext = {
-      offset: portOffset,
-      total: portOffset,
-      branchName: agent.branchName!,
-    };
-  } else if (agent.repo !== '.') {
+  if (agent.repo !== '.') {
     paneCwd = join(cwd, agent.repo);
   }
 
@@ -369,7 +315,7 @@ export async function restartAgent(
 
   const { paneId, fullCmd } = setupAgentPane({
     sessionId, cwd, agentId, agentType, name, instruction,
-    windowId, color, provider, agentConfig, worktreeContext, paneCwd, claudeSessionId,
+    windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 
   // Update agent state in-place

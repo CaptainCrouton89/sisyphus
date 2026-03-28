@@ -58,10 +58,6 @@ export interface Agent {
   paneId: string;
   repo: string;
   killedReason?: string;
-  worktreePath?: string;
-  branchName?: string;
-  mergeStatus?: 'pending' | 'merged' | 'no-changes' | 'conflict';
-  mergeDetails?: string;
 }
 
 export interface OrchestratorCycle {

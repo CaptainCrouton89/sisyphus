@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 
 export function globalDir(): string {
   return join(homedir(), '.sisyphus');
@@ -98,10 +98,3 @@ export function snapshotDir(cwd: string, sessionId: string, cycle: number): stri
   return join(snapshotsDir(cwd, sessionId), `cycle-${cycle}`);
 }
 
-export function worktreeConfigPath(cwd: string): string {
-  return join(projectDir(cwd), 'worktree.json');
-}
-
-export function worktreeBaseDir(cwd: string): string {
-  return join(cwd, '..', `${basename(cwd)}-sisyphus-wt`);
-}

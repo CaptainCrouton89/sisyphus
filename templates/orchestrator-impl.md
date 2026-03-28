@@ -4,7 +4,7 @@
 
 ### Maximize parallelism
 
-Before starting each cycle, ask: **which stages or tasks are independent right now?** If two stages touch different subsystems (e.g., backend vs frontend, separate services, unrelated modules), spawn them concurrently — don't serialize work that doesn't need to be serialized. Use `--worktree` when parallel agents might touch overlapping files.
+Before starting each cycle, ask: **which stages or tasks are independent right now?** If two stages touch different subsystems (e.g., backend vs frontend, separate services, unrelated modules), spawn them concurrently — don't serialize work that doesn't need to be serialized.
 
 Maximize parallelism **within your development cycle, not by skipping parts of it.** Running a review alongside the next stage's implementation is good parallelism. Skipping review because the next stage is ready is not — that's cutting corners faster, not working faster. A cycle with one agent running is a wasted cycle if other work was ready, but "other work" includes critique and validation agents, not just the next implementation stage.
 
@@ -101,15 +101,6 @@ If the recipe involves UI, the validation agent should use `capture` to screensh
 If the project lacks validation tooling, **create it**. A smoke-test script, a seed command, a health-check endpoint — these pay for themselves immediately and every future validation agent reuses them.
 
 When you've chosen to validate a stage, **don't advance past it until validation passes.** If it fails, log the failures, spawn fix agents, and re-validate. A validation checkpoint you ignore is worse than no checkpoint — it creates false confidence.
-
-## Worktree Preference
-
-When spawning two or more implementation agents in the same cycle, prefer `--worktree` for each. Worktree isolation eliminates file conflict risk — agents can't clobber each other's changes, each gets a clean branch, and they can commit incrementally. The daemon merges branches back when agents complete and surfaces conflicts in your next cycle's state.
-
-```bash
-sisyphus spawn --name "impl-auth" --agent-type sisyphus:implement --worktree "Add session middleware — see context/conventions.md"
-sisyphus spawn --name "impl-routes" --agent-type sisyphus:implement --worktree "Add login routes — see context/conventions.md and context/explore-architecture.md"
-```
 
 ## Returning to Planning
 

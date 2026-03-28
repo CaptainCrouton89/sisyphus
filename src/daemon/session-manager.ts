@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
@@ -10,7 +9,6 @@ import { resetColors } from './colors.js';
 import { sessionDir, sessionsDir } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
-import { mergeWorktrees, cleanupWorktree } from './worktree.js';
 import { sendTerminalNotification } from './notify.js';
 import { generateSessionName } from './summarize.js';
 import { registerSessionTmux } from './server.js';
@@ -267,19 +265,6 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
   pendingRespawns.add(sessionId);
   orchestratorDone.delete(sessionId);
 
-  // Merge any worktree agents before respawning orchestrator
-  const worktreeAgents = session.agents.filter(a => a.worktreePath && a.mergeStatus === 'pending');
-  if (worktreeAgents.length > 0) {
-    const results = mergeWorktrees(cwd, worktreeAgents);
-    for (const result of results) {
-      const mergeStatus = result.status as 'merged' | 'no-changes' | 'conflict';
-      state.updateAgent(cwd, sessionId, result.agentId, {
-        mergeStatus,
-        mergeDetails: result.conflictDetails,
-      }).catch((err: unknown) => console.error(`[sisyphus] Failed to update merge status for ${result.agentId}:`, err));
-    }
-  }
-
   // Snapshot state at cycle boundary before respawning orchestrator
   const cycleNumber = session.orchestratorCycles.length;
   if (cycleNumber > 0) {
@@ -338,7 +323,6 @@ export async function handleSpawn(
   agentType: string,
   name: string,
   instruction: string,
-  worktree?: boolean,
   repo?: string,
 ): Promise<{ agentId: string }> {
   const windowId = orchestrator.getWindowId(sessionId);
@@ -358,7 +342,6 @@ export async function handleSpawn(
     name,
     instruction,
     windowId,
-    worktree,
     repo,
   });
 
@@ -428,14 +411,6 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
     }
   }
 
-  // Clean up worktrees for agents that had them
-  for (const agent of session.agents) {
-    if (agent.worktreePath && agent.branchName) {
-      const repoRoot = agent.repo !== '.' ? join(cwd, agent.repo) : cwd;
-      cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
-    }
-  }
-
   // Kill the orchestrator pane if it exists
   const orchPaneId = orchestrator.getOrchestratorPaneId(sessionId);
   if (orchPaneId) {
@@ -491,12 +466,6 @@ export async function handleKillAgent(sessionId: string, cwd: string, agentId: s
     tmux.killPane(agent.paneId);
   }
 
-  // Clean up worktree if applicable
-  if (agent.worktreePath && agent.branchName) {
-    const repoRoot = agent.repo !== '.' ? join(cwd, agent.repo) : cwd;
-    cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
-  }
-
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'killed',
     killedReason: 'killed by user',
@@ -531,14 +500,6 @@ export async function handleRollback(sessionId: string, cwd: string, toCycle: nu
         killedReason: 'session rolled back',
         completedAt: new Date().toISOString(),
       });
-    }
-  }
-
-  // Clean up worktrees
-  for (const agent of session.agents) {
-    if (agent.worktreePath && agent.branchName) {
-      const repoRoot = agent.repo !== '.' ? join(cwd, agent.repo) : cwd;
-      cleanupWorktree(repoRoot, agent.worktreePath, agent.branchName);
     }
   }
 

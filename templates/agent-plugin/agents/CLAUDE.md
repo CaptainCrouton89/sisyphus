@@ -8,8 +8,8 @@ Each `.md` file defines a specialized role and strategy:
 - `operator.md` — QA/testing agent; browser automation, UI validation, real-world interaction
 - `debug.md` — Debug-focused investigation
 - `implement.md` — Implementation-focused execution
-- `plan.md` — Planning & design
-- `spec-draft.md` — Specification drafting
+- `plan.md` — Planning & design; delegates sub-plans to specialists and synthesizes
+- `spec-draft.md` — Specification drafting; explores constraints and proposes design
 - `review.md` — Code review
 - `review-plan.md` — Plan review & critique
 - `test-spec.md` — Test specification
@@ -18,12 +18,13 @@ Each `.md` file defines a specialized role and strategy:
 
 Each agent file starts with YAML frontmatter:
 ```yaml
-name: operator
+name: plan
 description: >
   Brief description of agent role and capabilities
 model: opus
-color: teal
-effort: high
+color: yellow
+effort: max
+interactive: true
 skills: [capture]
 permissionMode: bypassPermissions
 ```
@@ -34,6 +35,7 @@ Frontmatter properties:
 - `model` — Claude model (`opus`, `sonnet`, etc.)
 - `color` — Tmux pane color
 - `effort` — Complexity estimate (`low`, `medium`, `high`, `max`)
+- `interactive` — (optional) `true` if agent waits for user input/sign-off before proceeding
 - `skills` — Claude Code skills array (e.g., `[capture]`)
 - `permissionMode` — Permission mode (`bypassPermissions`, `default`, etc.)
 
@@ -52,3 +54,4 @@ Frontmatter properties:
 - Do not hardcode session IDs or names—use placeholders only
 - Prompts should complement (not duplicate) agent-suffix.md shared context
 - Frontmatter is required and used by plugin discovery/rendering
+- Interactive agents (spec-draft, plan) may delegate work to specialists and spawn reviewers

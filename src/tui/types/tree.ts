@@ -41,7 +41,6 @@ export interface AgentTreeNode extends BaseTreeNode {
   spawnedAt: string;
   completedAt: string | null;
   reportCount: number;
-  mergeStatus?: string;
 }
 
 export interface ReportTreeNode extends BaseTreeNode {

@@ -13,7 +13,6 @@ import {
   durationColor,
   agentDisplayName,
   modeColor,
-  mergeStatusDisplay,
   abbreviateMode,
 } from '../lib/format.js';
 
@@ -73,21 +72,7 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
         agentType: node.agentType,
       });
 
-      // Worktree indicator: ⎇ while running/pending, merge status icon when done
-      let suffix: string | undefined;
-      let suffixColor: string | undefined;
-      if (node.mergeStatus) {
-        const ms = node.mergeStatus === 'pending'
-          ? { icon: '⎇', color: 'yellow' }
-          : mergeStatusDisplay(node.mergeStatus);
-        if (ms) {
-          suffix = ms.icon;
-          suffixColor = ms.color;
-        }
-      }
-
-      const suffixLen = suffix ? 2 : 0; // icon + space
-      const maxLabel = Math.max(8, maxWidth - dur.length - suffixLen - 4);
+      const maxLabel = Math.max(8, maxWidth - dur.length - 4);
       return {
         icon,
         label: truncate(displayName, maxLabel),
@@ -95,8 +80,6 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
         color,
         dim,
         metaColor: durClr,
-        suffix,
-        suffixColor,
       };
     }
     case 'report': {
@@ -240,7 +223,7 @@ export function renderTreePanel(
       else content += ` \x1b[2m${meta}\x1b[0m`;
     }
 
-    // worktree suffix
+    // suffix
     if (suffix && suffixColor) {
       content += ` \x1b[${colorToSGR(suffixColor)}m${suffix}\x1b[0m`;
     }

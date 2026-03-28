@@ -2,7 +2,7 @@ import type { MessageSource } from './types.js';
 
 export type Request =
   | { type: 'start'; task: string; context?: string; cwd: string; name?: string }
-  | { type: 'spawn'; sessionId: string; agentType: string; name: string; instruction: string; worktree?: boolean; repo?: string }
+  | { type: 'spawn'; sessionId: string; agentType: string; name: string; instruction: string; repo?: string }
   | { type: 'submit'; sessionId: string; agentId: string; report: string }
   | { type: 'report'; sessionId: string; agentId: string; content: string }
   | { type: 'yield'; sessionId: string; agentId: string; nextPrompt?: string; mode?: string }

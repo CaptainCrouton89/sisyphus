@@ -38,11 +38,11 @@ export function registerSubmit(program: Command): void {
         process.exit(1);
       }
 
-      // Block submit if worktree has uncommitted changes — they'd be lost on merge
+      // Block submit if in a git worktree with uncommitted changes — commit first
       if (isInWorktree()) {
         const changes = getUncommittedChanges();
         if (changes) {
-          console.error('Error: uncommitted changes in worktree. Your branch is merged automatically after submit — uncommitted work will be lost.');
+          console.error('Error: uncommitted changes in worktree. Commit your changes before submitting.');
           console.error('\nCommit first:\n  git add -A && git commit -m "description of changes"\n');
           console.error('Or discard:\n  git checkout -- .\n');
           console.error('Uncommitted changes:');

@@ -14,9 +14,8 @@ export function registerSpawn(program: Command): void {
     .option('--agent-type <type>', 'Agent role label (default: worker)', 'worker')
     .requiredOption('--name <name>', 'Agent name')
     .option('--instruction <instruction>', 'Task instruction for the agent (or pipe via stdin)')
-    .option('--worktree', 'Spawn agent in an isolated git worktree')
     .option('--repo <name>', 'Repo subdirectory to use for this agent')
-    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; worktree?: boolean; repo?: string }) => {
+    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; repo?: string }) => {
       assertTmux();
       const sessionId = process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -43,10 +42,6 @@ export function registerSpawn(program: Command): void {
           console.error(`Error: repo directory does not exist: ${repoPath}`);
           process.exit(1);
         }
-        if (opts.worktree && !existsSync(join(repoPath, '.git'))) {
-          console.error(`Error: --worktree requires a git repo; no .git found at ${repoPath}`);
-          process.exit(1);
-        }
       } else if (!opts.repo) {
         if (!existsSync(join(sisyphusCwd, '.git'))) {
           console.error('Error: --repo is required when session root is not a git repo.');
@@ -60,7 +55,6 @@ export function registerSpawn(program: Command): void {
         agentType: opts.agentType,
         name: opts.name,
         instruction,
-        ...(opts.worktree ? { worktree: true } : {}),
         ...(opts.repo ? { repo: opts.repo } : {}),
       };
       const response = await sendRequest(request);

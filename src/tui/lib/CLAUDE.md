@@ -24,7 +24,6 @@
 - **Mode**: `modeColor(mode)` → blue/green/cyan for planning/implementation/default; `abbreviateMode(mode)` → "impl"/"plan"
 - **Message display**: `messageSourceLabel(source, agentId?)` → "You"/"agent-001"/"system"; `messageSourceColor(source)` → yellow/cyan/gray
 - **Report**: `reportBadge(type)` → {label: "FINAL"|"UPDATE", color: "cyan"|"yellow"}
-- **Merge status**: `mergeStatusDisplay(status)` → {icon, label, color} or null (merged/pending/no-changes/conflict)
 - **Agent**: `agentDisplayName(agent)` — returns name or agentType if unavailable
 - **ANSI**: `ansiBold(text)`, `ansiDim(text)`, `ansiColor(text, color, bold?)`, `divider(width, char?)`
 

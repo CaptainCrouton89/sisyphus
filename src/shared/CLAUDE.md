@@ -6,8 +6,8 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
 - **protocol.ts** — `Request` and `Response` union types; all CLI↔Daemon operations
 - **types.ts** — Core domain types (`Session`, `Agent`, `OrchestratorCycle`, `MessageSource`)
-- **paths.ts** — Path helpers for global (`~/.sisyphus/`), project (`.sisyphus/`), and session directories; includes worktree paths
-- **config.ts** — Layered config resolution with effort levels and worktree controls
+- **paths.ts** — Path helpers for global (`~/.sisyphus/`), project (`.sisyphus/`), and session directories
+- **config.ts** — Layered config resolution with effort levels
 
 ## Critical Constraints
 

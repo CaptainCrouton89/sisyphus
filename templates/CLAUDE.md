@@ -6,8 +6,8 @@ System prompt templates for orchestrator and agent initialization.
 
 - **orchestrator-base.md** — Core orchestrator system prompt. Defines orchestrator role (coordinator, not implementer), cycle workflow, context persistence via roadmap.md/logs.md, and validation patterns. Rendered as foundation for all orchestrator prompts.
 - **orchestrator-planning.md** — Planning-phase orchestrator guidance. Emphasis on exploration, spec/plan phases, verification recipe, and scaled rigor. Appended when `--mode planning` (default).
-- **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, verification patterns, and worktree preferences. Appended when `--mode implementation`.
-- **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}`, `{{INSTRUCTION}}`, and `{{WORKTREE_CONTEXT}}` placeholders. Rendered once per agent spawn.
+- **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, and verification patterns. Appended when `--mode implementation`.
+- **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Rendered once per agent spawn.
 - **dashboard-claude.md** — Dashboard companion prompt. Guides a Claude instance embedded in the TUI to help users manage sessions. Contains `{{CWD}}` and `{{SESSIONS_CONTEXT}}` placeholders.
 - **banner.txt** — ASCII banner (cosmetic).
 
@@ -34,9 +34,8 @@ System prompt templates for orchestrator and agent initialization.
 1. Read `agent-suffix.md`
 2. Replace `{{SESSION_ID}}` with session UUID
 3. Replace `{{INSTRUCTION}}` with task instruction
-4. Replace `{{WORKTREE_CONTEXT}}` with branch/worktree info (if `--worktree` used)
-5. Load settings from `agent-settings.json` (or project override)
-6. Pass via `--append-system-prompt` flag
+4. Load settings from `agent-settings.json` (or project override)
+5. Pass via `--append-system-prompt` flag
 
 **Plugin prompts** (`agent-plugin/*.md`):
 - Used only when agent spawned with `--agent-type sisyphus:{type}`
@@ -47,6 +46,5 @@ System prompt templates for orchestrator and agent initialization.
 
 - **Phase modes**: `--mode planning` (default) uses orchestrator-base.md + orchestrator-planning.md; `--mode implementation` uses orchestrator-base.md + orchestrator-impl.md
 - **Context files**: agents save findings to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` and pass references to downstream agents
-- **Worktree context**: `{{WORKTREE_CONTEXT}}` is auto-populated with isolated branch/worktree info when agent spawned with `--worktree`
-- **Placeholders**: always use `{{SESSION_ID}}`, `{{INSTRUCTION}}`, `{{WORKTREE_CONTEXT}}`—never hardcode values
+- **Placeholders**: always use `{{SESSION_ID}}`, `{{INSTRUCTION}}`—never hardcode values
 - Settings files are valid JSON; use project overrides to customize per-workspace
