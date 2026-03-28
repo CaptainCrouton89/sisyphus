@@ -11,6 +11,7 @@ export interface AgentTypeFrontmatter {
   skills?: string[];
   permissionMode?: string;
   effort?: string;
+  interactive?: boolean;
 }
 
 export { type Provider } from '../shared/types.js';
@@ -39,6 +40,9 @@ export function parseAgentFrontmatter(content: string): AgentTypeFrontmatter {
   fm.description = str('description');
   fm.permissionMode = str('permissionMode');
   fm.effort = str('effort');
+
+  const interactive = str('interactive');
+  if (interactive === 'true') fm.interactive = true;
 
   // Parse skills as a YAML list
   const skillsMatch = block.match(/^skills:\s*\n((?:\s+-\s+.+\n?)*)/m);
