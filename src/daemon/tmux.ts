@@ -100,7 +100,8 @@ export function setPaneTitle(paneTarget: string, title: string): void {
 export function setPaneStyle(paneTarget: string, color: string): void {
   const gitBranch = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null)`;
   const branchSuffix = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null | grep -q . && echo ' |') ${gitBranch}`;
-  const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]#{pane_current_path}${branchSuffix} #[default]`;
+  const homePath = `#(echo '#{pane_current_path}' | sed "s|^$HOME|~|")`;
+  const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]${homePath}${branchSuffix} #[default]`;
   execSafe(`tmux set -p -t "${paneTarget}" pane-border-format ${shellQuote(fmt)}`);
   // Store color as a per-pane user variable. The window-level border styles use a
   // format string that resolves #{@pane_color} per-pane at render time, giving each

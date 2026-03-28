@@ -48,6 +48,9 @@ export function createSession(id: string, task: string, cwd: string, context?: s
   mkdirSync(logsDir(cwd, id), { recursive: true });
   writeFileSync(goalPath(cwd, id), task, 'utf-8');
   writeFileSync(join(contextDir(cwd, id), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
+  if (context) {
+    writeFileSync(join(contextDir(cwd, id), 'initial-context.md'), context, 'utf-8');
+  }
 
   const session: Session = {
     id,

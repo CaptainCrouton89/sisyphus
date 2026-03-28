@@ -24,7 +24,7 @@ export function register{Command}(program: Command): void {
 - **continue.ts** — Clears roadmap and reactivates completed session (stays in current cycle); requires `SISYPHUS_SESSION_ID` env var.
 - **resume.ts** — Takes session ID as **positional argument** (not env var). Optional second arg for additional orchestrator instructions. Returns tmux session name for attaching.
 - **submit.ts** — Blocks if running inside a git worktree with uncommitted changes. Agent must commit first.
-- **spawn.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID`. Instruction from positional arg, `--instruction` flag, or stdin. Options: `--agent-type` (default: `worker`), `--name` (required). **`--repo <name>`** specifies subdirectory for multi-repo workflows (directory name only, no paths; required if session root isn't a git repo).
+- **spawn.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID`. Instruction from positional arg, `--instruction` flag, or stdin. Options: `--agent-type` (default: `worker`), `--name` (required). **`--repo <name>`** specifies subdirectory for multi-repo workflows (directory name only, no paths). If omitted, agents work in the session root.
 - **yield.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID` environment variable.
 - **rollback.ts** — Arguments: `<sessionId> <cycle>` (cycle must be positive integer). Pauses session; use `resume` to respawn.
 - **dashboard.ts** — Checks if dashboard window exists before launching (prevents duplicates). Launches in current tmux session via TUI binary.

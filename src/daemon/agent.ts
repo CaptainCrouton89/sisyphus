@@ -114,6 +114,7 @@ function createAgentPlugin(
     'debug': 'debug-user-prompt.sh',
     'operator': 'operator-user-prompt.sh',
     'test-spec': 'test-spec-user-prompt.sh',
+    'explore': 'explore-user-prompt.sh',
   };
   const hookScript = userPromptHooks[normalizedType];
   if (hookScript) {
@@ -130,6 +131,7 @@ function createAgentPlugin(
 
 interface SetupAgentPaneOpts {
   sessionId: string;
+  sessionName?: string;
   cwd: string;
   agentId: string;
   agentType: string;
@@ -152,7 +154,8 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     ? agentType.replace(/^sisyphus:/, '')
     : '';
   const paneLabel = shortType ? `${name}-${shortType}` : name;
-  tmux.setPaneTitle(paneId, `${paneLabel} (${agentId})`);
+  const sessionLabel = opts.sessionName ?? sessionId.slice(0, 8);
+  tmux.setPaneTitle(paneId, `s:${sessionLabel} ${paneLabel} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
 
   const suffix = renderAgentSuffix(sessionId, instruction);
@@ -207,6 +210,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
 
 export interface SpawnAgentOpts {
   sessionId: string;
+  sessionName?: string;
   cwd: string;
   agentType: string;
   name: string;
@@ -242,7 +246,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
   const { paneId, fullCmd } = setupAgentPane({
-    sessionId, cwd, agentId, agentType, name, instruction,
+    sessionId, sessionName: opts.sessionName, cwd, agentId, agentType, name, instruction,
     windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 
@@ -314,7 +318,7 @@ export async function restartAgent(
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
   const { paneId, fullCmd } = setupAgentPane({
-    sessionId, cwd, agentId, agentType, name, instruction,
+    sessionId, sessionName: session.name, cwd, agentId, agentType, name, instruction,
     windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 

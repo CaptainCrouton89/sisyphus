@@ -337,6 +337,7 @@ export async function handleSpawn(
 
   const agent = await spawnAgent({
     sessionId,
+    sessionName: session.name,
     cwd,
     agentType,
     name,

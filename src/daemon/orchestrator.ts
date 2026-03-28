@@ -246,10 +246,6 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const agentPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
   const agentTypes = discoverAgentTypes(agentPluginPath, session.cwd);
 
-  // Built-in Claude Code agents available via --agent flag
-  agentTypes.push(
-    { qualifiedName: 'Explore', source: 'bundled', model: 'haiku', description: 'Fast codebase exploration — find files, search code, answer questions about architecture. Use for research and context gathering.' },
-  );
 
   const agentTypeLines = agentTypes.length > 0
     ? agentTypes.map(t => {
@@ -307,7 +303,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
-  tmux.setPaneTitle(paneId, session.name ? `${session.name} (orch)` : 'Sisyphus');
+  tmux.setPaneTitle(paneId, `s:${session.name ?? sessionId.slice(0, 8)} orch`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
   const bannerCmd = resolveBannerCmd();

@@ -42,11 +42,6 @@ export function registerSpawn(program: Command): void {
           console.error(`Error: repo directory does not exist: ${repoPath}`);
           process.exit(1);
         }
-      } else if (!opts.repo) {
-        if (!existsSync(join(sisyphusCwd, '.git'))) {
-          console.error('Error: --repo is required when session root is not a git repo.');
-          process.exit(1);
-        }
       }
 
       const request: Request = {
