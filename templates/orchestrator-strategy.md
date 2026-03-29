@@ -201,11 +201,11 @@ Updates happen every few cycles, not every cycle. If the orchestrator is just pr
 After writing goal.md and strategy.md, initialize roadmap.md:
 
 ```markdown
-## Current Node
-[Which step within the current stage, e.g. `discovery > engage user with questions`]
+## Current Stage
+[Stage name from strategy.md and brief status]
 
-## Artifacts Produced
-[None yet — populated as agents deliver documents]
+## Exit Criteria
+[Concrete, evaluable conditions for leaving this stage]
 
 ## Active Context
 [No context files yet — populated as work begins]

@@ -33,7 +33,7 @@ Not every stage needs standalone requirements — a well-defined stage might jus
 
 <plan-delegation>
 
-Once you have context docs and aligned requirements/design, revisit the roadmap — this is the first point where you understand real scope. Adjust phase boundaries, add unanticipated phases, reorder for dependencies.
+Once you have context docs and aligned requirements/design, revisit the roadmap — this is the first point where you understand real scope. Roadmap refinement means updating the four canonical sections: current stage, exit criteria, active context references, and next steps. Decisions from exploration, requirements, and design fold into context documents — not the roadmap.
 
 Spawn **one plan lead** per feature. Point it at inputs (requirements, design, context docs) — not a pre-made structure. The plan lead handles its own decomposition: it assesses scope, delegates sub-plans if needed, runs adversarial reviews, and delivers a synthesized master plan. **Delegate outcomes, not implementations** — tell the plan lead what needs planning and why, not how to structure the plan.
 

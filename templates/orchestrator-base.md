@@ -106,13 +106,16 @@ roadmap.md tracks **where you are in the strategy** and what's immediately ahead
 
 You are respawned fresh each cycle — without roadmap.md, you'd have no idea where you are in the strategy or what happened last cycle.
 
-**When entering a new stage**, update the roadmap with:
-- The current stage name (matching strategy.md)
-- Exit criteria for this stage (concrete, evaluable — derived from the strategy but adapted to current context)
-- Active context files
-- Next steps
+**roadmap.md has exactly four sections. Nothing else belongs there.**
 
-**The roadmap is not an implementation plan.** Stage breakdowns, design decisions, and file-level detail live in `context/` files. The roadmap references these artifacts but doesn't duplicate them.
+1. **Current Stage** — stage name (matching strategy.md) and brief status
+2. **Exit Criteria** — concrete, evaluable conditions for leaving this stage
+3. **Active Context** — list of context files currently relevant to the work
+4. **Next Steps** — immediate actions for this and the next cycle
+
+**Decisions do not go in the roadmap.** When exploration, review, or user feedback resolves a question or changes the approach, fold the result into the relevant context document (spec, plan, design) or create a new context file. The roadmap references these artifacts but never contains decision content, rationale, or design detail.
+
+**The roadmap is not an implementation plan.** Stage breakdowns, design decisions, and file-level detail live in `context/` files.
 
 **The roadmap is not sacred.** Update it to match reality. When the strategy says "GOTO develop" because a review found design flaws, update the roadmap to reflect the backtrack.
 
@@ -123,7 +126,7 @@ Example roadmap:
 Stage: develop
 Status: iterating on design after review feedback
 
-### Exit Criteria
+## Exit Criteria
 - Design reviewed with no critical issues
 - User has approved the architecture approach
 - Integration points between auth and session modules are defined
