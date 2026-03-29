@@ -69,16 +69,22 @@ function createAgentPlugin(
     'utf-8',
   );
 
+  // Substitute session env vars in agent type templates
+  const sesDir = sessionDir(cwd, sessionId);
+  const substituteEnvVars = (text: string) => text
+    .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
+    .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
+
   if (agentConfig?.filePath && agentType && agentType !== 'worker') {
     const shortName = agentType.replace(/^sisyphus:/, '');
-    copyFileSync(agentConfig.filePath, `${base}/agents/${shortName}.md`);
+    writeFileSync(`${base}/agents/${shortName}.md`, substituteEnvVars(readFileSync(agentConfig.filePath, 'utf-8')), 'utf-8');
 
     // Copy sub-agent definitions if a subdirectory exists
     const subAgentDir = join(dirname(agentConfig.filePath), shortName);
     if (existsSync(subAgentDir)) {
       for (const f of readdirSync(subAgentDir)) {
         if (f.endsWith('.md') && f !== 'CLAUDE.md') {
-          copyFileSync(join(subAgentDir, f), `${base}/agents/${f}`);
+          writeFileSync(`${base}/agents/${f}`, substituteEnvVars(readFileSync(join(subAgentDir, f), 'utf-8')), 'utf-8');
         }
       }
     }
@@ -97,7 +103,7 @@ function createAgentPlugin(
     ],
   };
 
-  // Interactive agents (e.g. spec-draft, plan) are designed for user back-and-forth
+  // Interactive agents (e.g. problem, requirements, design, plan) are designed for user back-and-forth
   // and should not be blocked from stopping by the submit requirement.
   if (!agentConfig?.frontmatter.interactive) {
     hooksConfig.Stop = [
@@ -108,7 +114,6 @@ function createAgentPlugin(
   const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
   const userPromptHooks: Record<string, string> = {
     'plan': 'plan-user-prompt.sh',
-    'spec-draft': 'spec-user-prompt.sh',
     'review': 'review-user-prompt.sh',
     'review-plan': 'review-plan-user-prompt.sh',
     'debug': 'debug-user-prompt.sh',
@@ -155,7 +160,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     : '';
   const paneLabel = shortType ? `${name}-${shortType}` : name;
   const sessionLabel = opts.sessionName ?? sessionId.slice(0, 8);
-  tmux.setPaneTitle(paneId, `s:${sessionLabel} ${paneLabel} (${agentId})`);
+  tmux.setPaneTitle(paneId, `ssph:${sessionLabel} ${paneLabel} (${agentId})`);
   tmux.setPaneStyle(paneId, color);
 
   const suffix = renderAgentSuffix(sessionId, instruction);

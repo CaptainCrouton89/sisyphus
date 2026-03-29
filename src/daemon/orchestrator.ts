@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir } from '../shared/paths.js';
+import { contextDir, goalPath, strategyPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -80,7 +80,7 @@ export function setOrchestratorPaneId(sessionId: string, paneId: string): void {
   sessionOrchestratorPane.set(sessionId, paneId);
 }
 
-function loadOrchestratorPrompt(cwd: string, mode: string): string {
+function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): string {
   const projectPath = projectOrchestratorPromptPath(cwd);
   if (existsSync(projectPath)) {
     return readFileSync(projectPath, 'utf-8');
@@ -89,19 +89,24 @@ function loadOrchestratorPrompt(cwd: string, mode: string): string {
   const basePath = resolve(import.meta.dirname, '../templates/orchestrator-base.md');
   const base = readFileSync(basePath, 'utf-8');
 
-  if (mode === 'implementation') {
+  let modePrompt: string;
+
+  if (mode === 'strategy') {
+    const strategyTemplatePath = resolve(import.meta.dirname, '../templates/orchestrator-strategy.md');
+    modePrompt = readFileSync(strategyTemplatePath, 'utf-8');
+  } else if (mode === 'implementation') {
     const implPath = resolve(import.meta.dirname, '../templates/orchestrator-impl.md');
-    return base + '\n\n' + readFileSync(implPath, 'utf-8');
-  }
-
-  if (mode === 'validation') {
+    modePrompt = readFileSync(implPath, 'utf-8');
+  } else if (mode === 'validation') {
     const validationPath = resolve(import.meta.dirname, '../templates/orchestrator-validation.md');
-    return base + '\n\n' + readFileSync(validationPath, 'utf-8');
+    modePrompt = readFileSync(validationPath, 'utf-8');
+  } else {
+    // Default: planning mode
+    const planningPath = resolve(import.meta.dirname, '../templates/orchestrator-planning.md');
+    modePrompt = readFileSync(planningPath, 'utf-8');
   }
 
-  // Default: planning mode
-  const planningPath = resolve(import.meta.dirname, '../templates/orchestrator-planning.md');
-  return base + '\n\n' + readFileSync(planningPath, 'utf-8');
+  return base + '\n\n' + modePrompt;
 }
 
 function formatStateForOrchestrator(session: Session): string {
@@ -176,6 +181,10 @@ function formatStateForOrchestrator(session: Session): string {
     mostRecentCycleSection = `\n### Most Recent Cycle\n\n${agentLines}\n`;
   }
 
+  // Strategy section
+  const strategyFile = strategyPath(session.cwd, session.id);
+  const strategyRef = existsSync(strategyFile) ? `@${strategyFile}` : '(empty)';
+
   // Roadmap section
   const roadmapRef = existsSync(roadmapFile) ? `@${roadmapFile}` : '(empty)';
 
@@ -211,6 +220,7 @@ function formatStateForOrchestrator(session: Session): string {
   const goalFile = goalPath(session.cwd, session.id);
   const goalContent = existsSync(goalFile) ? readFileSync(goalFile, 'utf-8').trim() : session.task;
 
+
   return `## Goal
 
 ${goalContent}
@@ -219,6 +229,10 @@ ${contextSection}${messagesSection}
 
 Write your cycle summary to: ${logFile}
 ${previousCyclesSection}${mostRecentCycleSection}
+## Strategy
+
+${strategyRef}
+
 ## Roadmap
 
 ${roadmapRef}
@@ -237,9 +251,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   // Read mode and nextPrompt from last completed cycle
   const lastCycle = [...session.orchestratorCycles].reverse().find(c => c.completedAt);
-  const mode = lastCycle?.mode ?? 'planning';
+  const mode = lastCycle?.mode ?? 'strategy';
 
-  const basePrompt = loadOrchestratorPrompt(cwd, mode);
+  const basePrompt = loadOrchestratorPrompt(cwd, sessionId, mode);
   const formattedState = formatStateForOrchestrator(session);
 
   // Inject available agent types into system prompt
@@ -254,7 +268,13 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
         return `- \`${t.qualifiedName}\`${modelTag}${desc}`;
       }).join('\n')
     : '  (none)';
-  const systemPrompt = basePrompt.replace('{{AGENT_TYPES}}', agentTypeLines);
+
+  const sesDir = sessionDir(cwd, sessionId);
+  const substituteEnvVars = (text: string) => text
+    .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
+    .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
+
+  const systemPrompt = substituteEnvVars(basePrompt.replace('{{AGENT_TYPES}}', agentTypeLines));
 
   // System prompt: template + agent types (no state)
   const cycleNum = session.orchestratorCycles.length + 1;
@@ -265,7 +285,6 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   const npmBinDir = resolveNpmBinDir();
 
-  const sesDir = sessionDir(cwd, sessionId);
   const envExports = buildEnvExports([
     `export SISYPHUS_SESSION_ID='${sessionId}'`,
     `export SISYPHUS_AGENT_ID='orchestrator'`,
@@ -285,7 +304,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   }
 
   const userPromptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;
-  writeFileSync(userPromptFilePath, userPrompt, 'utf-8');
+  writeFileSync(userPromptFilePath, substituteEnvVars(userPrompt), 'utf-8');
 
   // Drain rendered messages so they don't reappear in future cycles
   if (session.messages && session.messages.length > 0) {
@@ -297,13 +316,13 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'high';
   const claudeSessionId = randomUUID();
-  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "sisyphus:orch-${session.name ?? sessionId.slice(0, 8)}-cycle-${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}" --name "ssph:orch ${session.name ?? sessionId.slice(0, 8)} c${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
-  tmux.setPaneTitle(paneId, `s:${session.name ?? sessionId.slice(0, 8)} orch`);
+  tmux.setPaneTitle(paneId, `ssph:orch ${session.name ?? sessionId.slice(0, 8)} c${cycleNum}`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
 
   const bannerCmd = resolveBannerCmd();

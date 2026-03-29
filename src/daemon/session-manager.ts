@@ -7,7 +7,7 @@ import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter
 import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionDir, sessionsDir } from '../shared/paths.js';
-import { unregisterSessionPanes, unregisterAgentPane } from './pane-registry.js';
+import { unregisterSessionPanes, unregisterAgentPane, getSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { sendTerminalNotification } from './notify.js';
 import { generateSessionName } from './summarize.js';
@@ -52,7 +52,10 @@ export async function startSession(task: string, cwd: string, context?: string, 
   // Fire-and-forget: auto-generate a descriptive session name via Haiku
   if (!name) {
     generateSessionName(task).then(async (generatedName) => {
-      if (!generatedName) return;
+      if (!generatedName) {
+        console.log(`[sisyphus] Name generation returned null for session ${sessionId}`);
+        return;
+      }
       let finalName = generatedName;
       let candidate = `sisyphus-${finalName}`;
       let attempt = 0;
@@ -71,7 +74,27 @@ export async function startSession(task: string, cwd: string, context?: string, 
       await state.updateSessionTmux(cwd, sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
       trackSession(sessionId, cwd, candidate);
       registerSessionTmux(sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
-    }).catch(() => {});
+
+      // Update pane titles for all live panes in this session
+      const session = state.getSession(cwd, sessionId);
+      for (const pane of getSessionPanes(sessionId)) {
+        if (pane.role === 'orchestrator') {
+          tmux.setPaneTitle(pane.paneId, `ssph:orch ${finalName} c${session.orchestratorCycles.length}`);
+        } else if (pane.role === 'agent' && pane.agentId) {
+          const agent = session.agents.find(a => a.id === pane.agentId);
+          if (agent) {
+            const shortType = agent.agentType && agent.agentType !== 'worker'
+              ? agent.agentType.replace(/^sisyphus:/, '')
+              : '';
+            const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
+            tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} (${pane.agentId})`);
+          }
+        }
+      }
+      console.log(`[sisyphus] Session ${sessionId} named: ${finalName}`);
+    }).catch((err) => {
+      console.error(`[sisyphus] Name generation failed for session ${sessionId}:`, err);
+    });
   }
 
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };

@@ -34,3 +34,13 @@ export function unregisterSessionPanes(sessionId: string): void {
 export function lookupPane(paneId: string): PaneEntry | undefined {
   return paneMap.get(paneId);
 }
+
+export function getSessionPanes(sessionId: string): Array<{ paneId: string } & PaneEntry> {
+  const result: Array<{ paneId: string } & PaneEntry> = [];
+  for (const [paneId, entry] of paneMap) {
+    if (entry.sessionId === sessionId) {
+      result.push({ paneId, ...entry });
+    }
+  }
+  return result;
+}

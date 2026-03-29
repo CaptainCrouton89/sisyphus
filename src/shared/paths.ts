@@ -77,6 +77,10 @@ export function goalPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'goal.md');
 }
 
+export function strategyPath(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'strategy.md');
+}
+
 export function logsDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'logs');
 }

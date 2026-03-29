@@ -1,6 +1,7 @@
 import { query } from '@r-cli/sdk';
 
-let disabled = false;
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown after auth failures
+let disabledUntil = 0;
 
 /**
  * Summarize an agent report using Haiku via the SDK.
@@ -12,7 +13,7 @@ let disabled = false;
  * Non-blocking: callers should fire-and-forget.
  */
 export async function generateSessionName(task: string): Promise<string | null> {
-  if (disabled) return null;
+  if (Date.now() < disabledUntil) return null;
 
   try {
     const session = await query({
@@ -39,14 +40,14 @@ export async function generateSessionName(task: string): Promise<string | null> 
     console.error(`[sisyphus] Haiku name generation failed: ${err instanceof Error ? err.message : err}`);
     const status = (err as { status?: number }).status;
     if (status === 401 || status === 403) {
-      disabled = true;
+      disabledUntil = Date.now() + COOLDOWN_MS;
     }
     return null;
   }
 }
 
 export async function summarizeReport(reportText: string): Promise<string | null> {
-  if (disabled) return null;
+  if (Date.now() < disabledUntil) return null;
 
   try {
     const session = await query({
@@ -70,10 +71,9 @@ export async function summarizeReport(reportText: string): Promise<string | null
     return summary.length > 0 ? summary : null;
   } catch (err) {
     console.error(`[sisyphus] Haiku summarization failed: ${err instanceof Error ? err.message : err}`);
-    // Disable on auth failures
     const status = (err as { status?: number }).status;
     if (status === 401 || status === 403) {
-      disabled = true;
+      disabledUntil = Date.now() + COOLDOWN_MS;
     }
     return null;
   }
