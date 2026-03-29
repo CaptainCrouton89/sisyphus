@@ -1,0 +1,1 @@
+Run `pnpm run build` then `sisyphusd restart`.

@@ -94,13 +94,15 @@ Action: complete — "Fixed WebSocket message loss during reconnection. Messages
 
 **Starting task**: "Add rate limiting to the REST API — per-user, configurable limits"
 
-### Cycle 1 — Spec
+### Cycle 1 — Problem exploration
 ```
 roadmap.md:
   ## Feature: API Rate Limiting
 
-  ### Spec & Planning
-  - [ ] Draft spec for API rate limiting
+  ### Requirements & Design
+  - [ ] Problem exploration — understand rate limiting needs
+  - [ ] Requirements — define acceptance criteria
+  - [ ] Design — architecture for rate limiting
   - [ ] Plan implementation
   - [ ] Review plan
 
@@ -114,45 +116,75 @@ roadmap.md:
   - [ ] Review implementation
 
 Agents spawned:
-  spec-draft agent → "Investigate codebase and draft spec for per-user API rate
-    limiting. Check existing middleware patterns in src/api/middleware/.
-    Questions to resolve: storage backend (Redis vs in-memory), limit granularity
-    (per-endpoint vs global), response format for rate-limited requests."
+  problem agent → "Explore the codebase and understand the API rate limiting landscape.
+    Check existing middleware patterns in src/api/middleware/.
+    Questions to explore: current request handling, existing auth/middleware chain,
+    what storage backends are available (Redis?), user identification mechanisms."
 ```
 
-### Cycle 2 — Plan (after human reviews spec)
+### Cycle 2 — Requirements (after human reviews problem doc)
 ```
-Agent report: "Spec saved to context/spec-rate-limiting.md.
-  Approach: Redis-backed sliding window. Per-user with endpoint-specific overrides.
-  Standard 429 response with Retry-After header. Config via environment variables.
-  Open questions resolved with user: Redis is already in stack, use it."
+Agent report: "Problem document saved to context/problem-rate-limiting.md.
+  Current middleware chain uses Express middleware pattern. Redis is already in stack.
+  Users are identified by JWT sub claim. No existing rate limiting."
 
-roadmap.md updated (spec item marked done):
-  - [x] ~~Draft spec for API rate limiting~~
+roadmap.md updated:
+  - [x] ~~Problem exploration~~
+  - [ ] Requirements — define acceptance criteria
+  ...
+
+Agents spawned:
+  requirements agent → "Draft acceptance criteria for per-user API rate limiting.
+    Read context/problem-rate-limiting.md for context.
+    Questions to resolve: limit granularity (per-endpoint vs global),
+    response format for rate-limited requests, override mechanisms."
+```
+
+### Cycle 3 — Design (after human reviews requirements)
+```
+Agent report: "Requirements saved to context/requirements-rate-limiting.md.
+  Covers: per-user limits, endpoint-specific overrides, 429 response format,
+  Retry-After headers. User confirmed Redis-backed approach."
+
+Agents spawned:
+  design agent → "Create technical design for rate limiting based on
+    context/requirements-rate-limiting.md and context/problem-rate-limiting.md."
+```
+
+### Cycle 4 — Plan (after human reviews design)
+```
+Agent report: "Design saved to context/design-rate-limiting.md.
+  Approach: Redis-backed sliding window middleware. Per-user with endpoint-specific
+  overrides. Standard 429 response with Retry-After header. Config via environment variables."
+
+roadmap.md updated:
+  - [x] ~~Problem exploration~~, [x] ~~Requirements~~, [x] ~~Design~~
   - [ ] Plan implementation
   ...
 
 Agents spawned:
-  plan agent → "Create implementation plan from spec at context/spec-rate-limiting.md"
-  test-spec agent → "Define behavioral properties for rate limiting from spec"
+  plan agent → "Create implementation plan from context/requirements-rate-limiting.md
+    and context/design-rate-limiting.md"
+  test-spec agent → "Define behavioral properties for rate limiting from
+    context/requirements-rate-limiting.md"
 ```
 
-### Cycle 3 — Review plan
+### Cycle 5 — Review plan
 ```
 Both agents complete. Plan at context/plan-rate-limiting.md.
 Plan has 3 phases: middleware, config, response format.
 
 Agents spawned:
   review-plan agent → "Validate plan at context/plan-rate-limiting.md
-    against spec at context/spec-rate-limiting.md"
+    against context/requirements-rate-limiting.md and context/design-rate-limiting.md"
 ```
 
-### Cycle 4 — Implement phases 1+2 (parallel, low-risk foundation)
+### Cycle 6 — Implement phases 1+2 (parallel, low-risk foundation)
 ```
 Plan review: PASS.
 
 roadmap.md updated (plan review done, starting implementation):
-  - [x] ~~Draft spec~~, [x] ~~Plan~~, [x] ~~Review plan~~
+  - [x] ~~Requirements~~, [x] ~~Design~~, [x] ~~Plan~~, [x] ~~Review plan~~
   - [ ] Implement rate limiting middleware
   - [ ] Implement rate limit configuration
   - [ ] Critique phases 1-2 — review before integration phase
@@ -167,7 +199,7 @@ Agents spawned (parallel — phases touch different files):
     rate limit configuration in src/config/rate-limits.ts"
 ```
 
-### Cycle 5 — Critique before integration builds on top
+### Cycle 7 — Critique before integration builds on top
 ```
 Both implementation agents complete.
 
@@ -185,7 +217,7 @@ Agents spawned:
     config schema matches what middleware expects."
 ```
 
-### Cycle 6 — Implement phase 3 + address critique
+### Cycle 8 — Implement phase 3 + address critique
 ```
 Review: 2 findings — middleware doesn't handle Redis connection failure gracefully,
   config schema allows negative rate limits.
@@ -197,7 +229,7 @@ Agents spawned (parallel):
     rate limit headers and 429 error responses in src/api/middleware/rate-limit.ts"
 ```
 
-### Cycle 7 — Validate end-to-end
+### Cycle 9 — Validate end-to-end
 ```
 Phase 3 and fixes complete.
 
@@ -210,7 +242,7 @@ Agents spawned:
     Test per-user isolation, endpoint-specific overrides, Redis failover behavior."
 ```
 
-### Cycle 8 — Complete
+### Cycle 10 — Complete
 ```
 Validation: PASS. Final review agent confirms no issues.
 Complete — "Added per-user API rate limiting with Redis-backed sliding window,

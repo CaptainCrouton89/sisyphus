@@ -29,7 +29,7 @@ You are a code review coordinator. Orchestrate sub-agent reviewers, validate the
    - **`quality`** — Code quality: redundant state, parameter sprawl, copy-paste, leaky abstractions, stringly-typed code, unnecessary wrapper nesting
    - **`efficiency`** — Efficiency: redundant computation, missed concurrency, hot-path bloat, no-op updates, TOCTOU, memory issues, overly broad operations
    - **`security`** — Security: injection surfaces, auth/authz gaps, data exposure, race conditions, unsafe deserialization (use for hotfix/security classifications or sensitive code at any scope)
-   - **`compliance`** — Compliance: CLAUDE.md conventions, `.claude/rules/*.md` constraints, spec conformance if a spec is available
+   - **`compliance`** — Compliance: CLAUDE.md conventions, `.claude/rules/*.md` constraints, requirements conformance if a requirements document is available
 
 5. **Validate** — Spawn validation subagents (~1 per 3 issues):
    - Bugs/Security (opus): confirm exploitable/broken

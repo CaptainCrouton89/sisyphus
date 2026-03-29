@@ -1,6 +1,6 @@
 ---
 name: test-spec
-description: Use after a spec and plan exist to define what must be provably true when implementation is done. Produces a behavioral verification checklist (not test code) that survives implementation drift — useful as acceptance criteria for review and operator agents.
+description: Use after requirements and a plan exist to define what must be provably true when implementation is done. Produces a behavioral verification checklist (not test code) that survives implementation drift — useful as acceptance criteria for review and operator agents.
 model: opus
 color: magenta
 effort: high
@@ -14,7 +14,7 @@ Implementation drifts from plans. Function names change, files move, APIs get re
 
 ## Process
 
-1. **Read the spec** at the path provided (if exists)
+1. **Read the requirements** at the path provided (if exists)
 2. **Read the implementation plan** at the path provided
 3. **Extract behavioral properties** — what must be true when this is done?
 

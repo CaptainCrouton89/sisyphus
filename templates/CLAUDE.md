@@ -5,7 +5,7 @@ System prompt templates for orchestrator and agent initialization.
 ## Core Templates
 
 - **orchestrator-base.md** — Core orchestrator system prompt. Defines orchestrator role (coordinator, not implementer), cycle workflow, context persistence via roadmap.md/logs.md, and validation patterns. Rendered as foundation for all orchestrator prompts.
-- **orchestrator-planning.md** — Planning-phase orchestrator guidance. Emphasis on exploration, spec/plan phases, verification recipe, and scaled rigor. Appended when `--mode planning` (default).
+- **orchestrator-planning.md** — Planning-phase orchestrator guidance. Emphasis on exploration, requirements/design/plan phases, verification recipe, and scaled rigor. Appended when `--mode planning` (default).
 - **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, and verification patterns. Appended when `--mode implementation`.
 - **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Rendered once per agent spawn.
 - **dashboard-claude.md** — Dashboard companion prompt. Guides a Claude instance embedded in the TUI to help users manage sessions. Contains `{{CWD}}` and `{{SESSIONS_CONTEXT}}` placeholders.

@@ -10,7 +10,7 @@ Maximize parallelism **within your development cycle, not by skipping parts of i
 
 If the plan has stages that share no file dependencies, run them in parallel from the start. The development cycle for each stage:
 
-1. **Detail-plan it** — expand the outline into specific file changes. If complex, spawn a spec agent first.
+1. **Detail-plan it** — expand the outline into specific file changes. If complex, spawn a requirements or design agent first.
 2. **Implement it** — spawn agents with self-contained instructions.
 3. **Critique and refine it** — spawn review agents, fix what they find.
 4. **Validate it** — verify the stage actually works end-to-end.
@@ -70,7 +70,7 @@ The planning phase produced context files — conventions, e2e recipe, architect
 </bad>
 <rationale>Vague. The agent must re-explore the codebase to find conventions and patterns.</rationale>
 <good>
-"Implement auth middleware per context/spec-auth.md. Reference context/conventions.md for middleware patterns. E2E recipe at context/e2e-recipe.md."
+"Implement auth middleware per context/requirements-auth.md and context/design-auth.md. Reference context/conventions.md for middleware patterns. E2E recipe at context/e2e-recipe.md."
 </good>
 </example>
 

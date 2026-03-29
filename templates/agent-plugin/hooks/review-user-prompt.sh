@@ -10,7 +10,7 @@ You are a review coordinator — do NOT review code directly. Spawn sub-agents u
 - `quality` — code quality (redundant state, parameter sprawl, copy-paste, leaky abstractions)
 - `efficiency` — efficiency (redundant computation, missed concurrency, hot-path bloat, TOCTOU)
 - `security` (opus) — injection surfaces, auth/authz gaps, data exposure, race conditions
-- `compliance` — CLAUDE.md conventions, .claude/rules/*.md constraints, spec conformance
+- `compliance` — CLAUDE.md conventions, .claude/rules/*.md constraints, requirements conformance
 
 Always spawn core three (reuse, quality, efficiency). Add security for hotfix/security or sensitive code. Add compliance when CLAUDE.md/rules are extensive or scope is 5+ files.
 

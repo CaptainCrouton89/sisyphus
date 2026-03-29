@@ -16,7 +16,7 @@ Example:
 }
 ```
 
-- **Keys**: Phase names (e.g., `plan`, `spec`, `implement`) — must correspond to phase modes in agent spawn workflow
+- **Keys**: Phase names (e.g., `plan`, `requirements`, `implement`) — must correspond to phase modes in agent spawn workflow
 - **Values**: Object mapping hook types to shell script names
 - **Hook types**: `userPrompt`, `systemPrompt` (extensible for future hooks)
 
@@ -35,7 +35,7 @@ Each script receives environment variables and outputs text to stdout.
 - `$SISYPHUS_SESSION_ID` — Session UUID
 - `$SISYPHUS_AGENT_ID` — Agent ID (e.g., `agent-001`)
 - `$INSTRUCTION` — Task instruction from spawn command
-- `$AGENT_TYPE` — Agent type (e.g., `plan`, `spec`, `implement`)
+- `$AGENT_TYPE` — Agent type (e.g., `plan`, `requirements`, `implement`)
 - Context files at `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/`
 
 **Output**: Must write complete prompt text to stdout (no errors to stderr)

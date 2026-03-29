@@ -39,7 +39,7 @@ Usually serial — diagnosis must complete before fix, fix before validation. Ex
 ## Feature Build (Small — 1-3 files)
 
 ### When to use
-Clear requirements, small scope, no spec needed.
+Clear requirements, small scope, no formal requirements document needed.
 
 ### Plan structure
 ```
@@ -70,10 +70,12 @@ Feature with moderate complexity. Requirements may need clarification. Multiple 
 ```
 ## Feature: [description]
 
-### Spec & Planning
-- [ ] Draft spec — investigate codebase, propose approach
-- [ ] Create implementation plan from spec
-- [ ] Review plan against spec
+### Requirements & Design
+- [ ] Problem exploration — understand goals, constraints, assumptions
+- [ ] Requirements — define acceptance criteria
+- [ ] Design — architecture, component boundaries, data models
+- [ ] Create implementation plan from requirements + design
+- [ ] Review plan against requirements + design
 
 ### Implementation
 - [ ] Phase 1 — [foundation/types/interfaces]
@@ -87,18 +89,20 @@ Feature with moderate complexity. Requirements may need clarification. Multiple 
 Note: critique and validation are embedded between implementation phases, not deferred to the end. Phase 1 (types) is low-risk and doesn't need its own review, but critique catches issues before Phase 3 builds on them. Validation happens after integration, when all the pieces come together.
 
 ### Cycle plan
-- **Cycle 1**: Spawn `sisyphus:spec-draft` for spec. Yield. (Human iterates on spec between cycles.)
-- **Cycle 2**: Spawn `sisyphus:plan` for plan. Yield.
-- **Cycle 3**: Spawn `sisyphus:review-plan` for review. If fail, respawn plan with issues. Yield.
-- **Cycle 4**: Spawn `sisyphus:implement` for Phase 1. Yield.
-- **Cycle 5**: Spawn `sisyphus:implement` for Phase 2. Phase 1 is types — low risk, doesn't need its own validation. Yield.
-- **Cycle 6**: Spawn `sisyphus:review` for critique of phases 1-2. This is the checkpoint before integration builds on top. Yield.
-- **Cycle 7**: Address critique findings + spawn `sisyphus:implement` for Phase 3. Yield.
-- **Cycle 8**: `sisyphus yield --mode validation` for e2e smoketest. Validation mode proves the feature works — operator for UI, evidence for every claim.
-- **Cycle 9**: Address validation failures (back to `--mode implementation`) or complete.
+- **Cycle 1**: Spawn `sisyphus:problem` for problem exploration. Yield. (Human iterates between cycles.)
+- **Cycle 2**: Spawn `sisyphus:requirements` for requirements analysis. Yield. (Human reviews/iterates.)
+- **Cycle 3**: Spawn `sisyphus:design` for technical design. Yield. (Human reviews/iterates.)
+- **Cycle 4**: Spawn `sisyphus:plan` for plan. Yield.
+- **Cycle 5**: Spawn `sisyphus:review-plan` for review. If fail, respawn plan with issues. Yield.
+- **Cycle 6**: Spawn `sisyphus:implement` for Phase 1. Yield.
+- **Cycle 7**: Spawn `sisyphus:implement` for Phase 2. Phase 1 is types — low risk, doesn't need its own validation. Yield.
+- **Cycle 8**: Spawn `sisyphus:review` for critique of phases 1-2. This is the checkpoint before integration builds on top. Yield.
+- **Cycle 9**: Address critique findings + spawn `sisyphus:implement` for Phase 3. Yield.
+- **Cycle 10**: `sisyphus yield --mode validation` for e2e smoketest. Validation mode proves the feature works — operator for UI, evidence for every claim.
+- **Cycle 11**: Address validation failures (back to `--mode implementation`) or complete.
 
 ### Failure modes
-- **Spec needs human input**: Mark session as needing human review. Orchestrator notes open questions.
+- **Requirements/design needs human input**: Mark session as needing human review. Orchestrator notes open questions.
 - **Plan fails review**: Feed review issues back, respawn planner.
 - **Critique finds issues in foundation**: Fix before starting integration — don't build on shaky ground.
 - **Validation fails**: Feed specifics back to implement agent for the failing area.
@@ -117,9 +121,10 @@ Cross-cutting feature, multiple domains, needs team coordination. Uses **progres
 ```
 ## Feature: [description]
 
-### Spec
-- [ ] Draft spec
-- [ ] Review spec
+### Requirements & Design
+- [ ] Problem exploration
+- [ ] Requirements
+- [ ] Design
 
 ### Stage Outline (high-level only — no file-level detail yet)
 1. [domain A foundation] — no deps — ~N cycles
@@ -140,15 +145,17 @@ See context/plan-stage-N-{name}.md for detail plan.
 Note: verification checkpoints are embedded in the stage outline, not deferred to a final phase. The level of rigor varies — foundation stages get a light critique, core logic gets critique + validation, integration gets full e2e validation. This is judgment, not formula.
 
 ### Cycle plan
-- **Cycle 1**: Spawn `sisyphus:spec-draft` for spec. Yield.
-- **Cycle 2**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Include verification checkpoints between stages based on risk." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
-- **Cycle 3**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). Output to `context/plan-stage-1-{name}.md`. Yield.
-- **Cycle 4**: Spawn `sisyphus:implement` for stage 1. If stage 2 is independent, spawn `sisyphus:plan` to detail-plan stage 2 in parallel. Yield.
-- **Cycle 5**: Spawn `sisyphus:implement` for stage 2 (if detail-planned). Spawn `sisyphus:review` to critique stages 1-2 in parallel — foundation review before core logic builds on it. Detail-plan stage 3 in parallel. Yield.
-- **Cycle 6**: Address critique findings. Spawn `sisyphus:implement` for stage 3. Yield.
-- **Cycle 7**: Spawn `sisyphus:implement` for stage 4. Spawn `sisyphus:review` to critique stage 3 in parallel. Yield.
-- **Cycle 8**: Spawn `sisyphus:validate` for stages 3-4 — core logic checkpoint before integration. Address stage 3 critique. Yield.
-- **Cycle 9+**: Implement integration stage. Final review. Then `sisyphus yield --mode validation` for comprehensive e2e proof.
+- **Cycle 1**: Spawn `sisyphus:problem` for problem exploration. Yield.
+- **Cycle 2**: Spawn `sisyphus:requirements` for requirements. Yield.
+- **Cycle 3**: Spawn `sisyphus:design` for design. Yield.
+- **Cycle 4**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Include verification checkpoints between stages based on risk." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
+- **Cycle 5**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). Output to `context/plan-stage-1-{name}.md`. Yield.
+- **Cycle 6**: Spawn `sisyphus:implement` for stage 1. If stage 2 is independent, spawn `sisyphus:plan` to detail-plan stage 2 in parallel. Yield.
+- **Cycle 7**: Spawn `sisyphus:implement` for stage 2 (if detail-planned). Spawn `sisyphus:review` to critique stages 1-2 in parallel — foundation review before core logic builds on it. Detail-plan stage 3 in parallel. Yield.
+- **Cycle 8**: Address critique findings. Spawn `sisyphus:implement` for stage 3. Yield.
+- **Cycle 9**: Spawn `sisyphus:implement` for stage 4. Spawn `sisyphus:review` to critique stage 3 in parallel. Yield.
+- **Cycle 10**: Spawn `sisyphus:validate` for stages 3-4 — core logic checkpoint before integration. Address stage 3 critique. Yield.
+- **Cycle 11+**: Implement integration stage. Final review. Then `sisyphus yield --mode validation` for comprehensive e2e proof.
 
 ### Failure modes
 - **Detail-plan agent can't produce quality output**: The stage is still too large. Break it into sub-stages in the outline and detail-plan each sub-stage individually.

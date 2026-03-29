@@ -2,7 +2,7 @@
 
 <planning-workflow>
 
-The natural sequence: **context → spec → roadmap refinement → detailed planning.** Context documents come first because they feed everything downstream — spec writers, planners, and implementers all benefit from not having to re-explore the codebase. After the spec is aligned, revisit the roadmap — that's when you actually understand scope well enough to flesh out phases honestly.
+The natural sequence: **context → requirements → design → roadmap refinement → detailed planning.** Context documents come first because they feed everything downstream — requirements analysts, designers, planners, and implementers all benefit from not having to re-explore the codebase. After the requirements and design are aligned, revisit the roadmap — that's when you actually understand scope well enough to flesh out phases honestly.
 
 </planning-workflow>
 
@@ -17,25 +17,25 @@ Use explore agents to build understanding before making decisions. Each agent sa
 
 </exploration>
 
-<spec-alignment>
+<requirements-alignment>
 
-Before investing in a detailed spec, make sure the goal is well-defined. If you're making assumptions about scope, requirements, or constraints — surface them to the user.
+Before investing in detailed requirements, make sure the goal is well-defined. If you're making assumptions about scope, requirements, or constraints — surface them to the user.
 
-For significant features, spec refinement is iterative:
-- Draft the spec based on exploration findings
+For significant features, requirements refinement is iterative:
+- Draft requirements based on exploration findings
 - Have agents review for feasibility (can this actually work given the codebase?)
 - Seek user alignment on the high-level approach
-- **Apply corrections back to the spec itself** — the spec is the single source of truth. Don't create a separate corrections file; update the spec and delete the corrections. Plan agents should read one authoritative document, not reconcile two contradictory ones.
+- **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback change the understanding, update the requirements and design documents directly — they are the single source of truth. Don't create correction files, addendum files, or decision logs alongside them. Remove superseded material rather than annotating it. Plan agents should read clean, current documents — not reconcile contradictions or skip over resolved questions.
 
-Not every stage needs a standalone spec — a well-defined stage might just be a detailed section in the implementation plan.
+Not every stage needs standalone requirements — a well-defined stage might just be a detailed section in the implementation plan.
 
-</spec-alignment>
+</requirements-alignment>
 
 <plan-delegation>
 
-Once you have context docs and an aligned spec, revisit the roadmap — this is the first point where you understand real scope. Adjust phase boundaries, add unanticipated phases, reorder for dependencies.
+Once you have context docs and aligned requirements/design, revisit the roadmap — this is the first point where you understand real scope. Adjust phase boundaries, add unanticipated phases, reorder for dependencies.
 
-Spawn **one plan lead** per feature. Point it at inputs (spec, context docs) — not a pre-made structure. The plan lead handles its own decomposition: it assesses scope, delegates sub-plans if needed, runs adversarial reviews, and delivers a synthesized master plan. **Delegate outcomes, not implementations** — tell the plan lead what needs planning and why, not how to structure the plan.
+Spawn **one plan lead** per feature. Point it at inputs (requirements, design, context docs) — not a pre-made structure. The plan lead handles its own decomposition: it assesses scope, delegates sub-plans if needed, runs adversarial reviews, and delivers a synthesized master plan. **Delegate outcomes, not implementations** — tell the plan lead what needs planning and why, not how to structure the plan.
 
 **Don't split planning yourself.** If the orchestrator pre-splits into "backend plan agent" and "frontend plan agent," the plan lead's synthesis step — resolving cross-domain conflicts, finding gaps, stress-testing edge cases — never happens.
 
@@ -50,7 +50,7 @@ Not all tasks need the same process depth.
 - **Small task** (1-3 files, single domain): Skip phases — roadmap is a short checklist (diagnose, fix, validate). Single plan agent, single implement agent.
 - **Large task** (3+ stages, multiple domains): Full phased development. The roadmap tracks phases, each producing artifacts in `context/`.
 
-Signs you need phased development: multiple unfamiliar subsystems, the task spans different concerns (backend, frontend, IPC), or a spec has more than 3 distinct work areas.
+Signs you need phased development: multiple unfamiliar subsystems, the task spans different concerns (backend, frontend, IPC), or the requirements have more than 3 distinct work areas.
 
 Implementation stages are context artifacts — saved to `context/plan-stage-N-*.md`. Detail-plan one stage at a time; what you learn implementing stage N informs stage N+1.
 

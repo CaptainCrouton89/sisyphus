@@ -16,7 +16,7 @@ You are a security reviewer for implementation plans. Your job is to find securi
 
 ## How to Review
 
-1. Read the spec and plan(s) you've been given
+1. Read the requirements, design, and plan(s) you've been given
 2. Read codebase context (CLAUDE.md, rules, existing code in target areas)
 3. For each planned endpoint, data flow, or state mutation, check the categories above
 4. Cross-reference with existing security patterns in the codebase
