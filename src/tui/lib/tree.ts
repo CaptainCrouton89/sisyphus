@@ -96,6 +96,7 @@ export function buildTree(
         cycleNumber: cycle.cycle,
         timestamp: cycle.timestamp,
         completedAt: cycle.completedAt,
+        activeMs: cycle.activeMs,
         agentCount: allCycleAgents.length,
         mode: cycle.mode,
       } satisfies CycleTreeNode);
@@ -120,6 +121,7 @@ export function buildTree(
           status: agent.status,
           spawnedAt: agent.spawnedAt,
           completedAt: agent.completedAt,
+          activeMs: agent.activeMs,
           reportCount: agent.reports.length,
         } satisfies AgentTreeNode);
 

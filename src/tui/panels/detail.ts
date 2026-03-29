@@ -308,7 +308,7 @@ function buildSessionLines(
       const dot = isRunning ? '●' : '○';
       const dotColor = isRunning ? 'green' : isNewest ? 'white' : 'gray';
       const rowDim = !isRunning && !isNewest && !isSecond;
-      const duration = isRunning ? 'running' : formatDuration(cycle.timestamp, cycle.completedAt);
+      const duration = isRunning ? 'running' : formatDuration(cycle.activeMs);
       const n = cycle.agentsSpawned.length;
       const startTime = formatTime(cycle.timestamp);
 
@@ -382,9 +382,7 @@ function buildCycleLines(cycle: OrchestratorCycle, agents: Agent[], width: numbe
   const lines: DetailLine[] = [];
   const contentWidth = width - 4;
   const isRunning = !cycle.completedAt;
-  const dur = cycle.completedAt
-    ? formatDuration(cycle.timestamp, cycle.completedAt)
-    : 'running';
+  const dur = isRunning ? 'running' : formatDuration(cycle.activeMs);
   const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
 
   lines.push(singleLine(` Cycle ${cycle.cycle}`, { bold: true }));
@@ -417,8 +415,8 @@ function buildCycleLines(cycle: OrchestratorCycle, agents: Agent[], width: numbe
       const reportSummary = latestReport !== null && agent.status === 'completed'
         ? extractFirstSentence(latestReport.summary, contentWidth - 14)
         : null;
-      const agentDur = formatDuration(agent.spawnedAt, agent.completedAt);
-      const durClrRaw = durationColor(agent.spawnedAt, agent.completedAt);
+      const agentDur = formatDuration(agent.activeMs);
+      const durClrRaw = durationColor(agent.activeMs);
       const durClr = durClrRaw !== '' ? durClrRaw : undefined;
       const typeClrRaw = agentTypeColor(agent.agentType);
       const typeClr = typeClrRaw !== undefined ? typeClrRaw : undefined;
@@ -467,7 +465,7 @@ function buildCycleLines(cycle: OrchestratorCycle, agents: Agent[], width: numbe
 function buildAgentLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, width: number): DetailLine[] {
   const lines: DetailLine[] = [];
   const contentWidth = width - 4;
-  const dur = formatDuration(agent.spawnedAt, agent.completedAt);
+  const dur = formatDuration(agent.activeMs);
   const icon = agentStatusIcon(agent.status);
   const color = statusColor(agent.status);
   const nameLabel = agentDisplayName(agent);
@@ -547,7 +545,7 @@ function buildAgentLines(agent: Agent, reportBlocks: ReportBlock[] | undefined, 
 function buildReportViewLines(agent: Agent, reportBlocks: ReportBlock[], width: number): DetailLine[] {
   const lines: DetailLine[] = [];
   const contentWidth = width - 6;
-  const dur = formatDuration(agent.spawnedAt, agent.completedAt);
+  const dur = formatDuration(agent.activeMs);
   const icon = agentStatusIcon(agent.status);
   const color = statusColor(agent.status);
   const totalReports = agent.reports.length;

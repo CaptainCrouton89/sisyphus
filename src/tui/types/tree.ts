@@ -27,6 +27,7 @@ export interface CycleTreeNode extends BaseTreeNode {
   cycleNumber: number;
   timestamp: string;
   completedAt?: string;
+  activeMs: number;
   agentCount: number;
   mode?: string;
 }
@@ -40,6 +41,7 @@ export interface AgentTreeNode extends BaseTreeNode {
   status: string;
   spawnedAt: string;
   completedAt: string | null;
+  activeMs: number;
   reportCount: number;
 }
 

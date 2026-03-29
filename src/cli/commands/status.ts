@@ -48,7 +48,7 @@ function formatAgent(agent: Agent): string {
   const status = colorize(agent.status, agent.status);
   const name = `${BOLD}${agent.name}${RESET}`;
   const type = `${DIM}(${agent.agentType})${RESET}`;
-  const duration = formatDuration(agent.spawnedAt, agent.completedAt);
+  const duration = formatDuration(agent.activeMs);
   let line = `    ${agent.id} ${name} ${type} — ${status} ${DIM}(${duration})${RESET}`;
   if (agent.reports.length > 0) {
     for (const r of agent.reports) {
@@ -65,9 +65,9 @@ function formatAgent(agent: Agent): string {
 function formatCycle(cycle: OrchestratorCycle, phase?: string): string {
   let duration: string;
   if (cycle.completedAt) {
-    duration = ` ${DIM}(${formatDuration(cycle.timestamp, cycle.completedAt)})${RESET}`;
+    duration = ` ${DIM}(${formatDuration(cycle.activeMs)})${RESET}`;
   } else {
-    const elapsed = formatDuration(cycle.timestamp, null);
+    const elapsed = formatDuration(cycle.activeMs);
     duration = ` ${DIM}(running, ${elapsed})${RESET}`;
   }
   const agents = cycle.agentsSpawned.length > 0
@@ -139,7 +139,7 @@ function printSession(session: Session): void {
     for (const agent of runningAgents) {
       const name = `${BOLD}${agent.name}${RESET}`;
       const type = `${DIM}(${agent.agentType})${RESET}`;
-      const duration = formatDuration(agent.spawnedAt, null);
+      const duration = formatDuration(agent.activeMs);
       console.log(`  ${agent.id}  ${name}  ${type}  running ${duration}`);
     }
   }

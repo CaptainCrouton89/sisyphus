@@ -46,9 +46,7 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
     }
     case 'cycle': {
       const isRunning = !node.completedAt;
-      const dur = node.completedAt
-        ? formatDuration(node.timestamp, node.completedAt)
-        : 'running';
+      const dur = isRunning ? 'running' : formatDuration(node.activeMs);
       const agents = `${node.agentCount} agent${node.agentCount !== 1 ? 's' : ''}`;
       const modeShort = abbreviateMode(node.mode);
       const mode = modeShort ? ` · ${modeShort}` : '';
@@ -63,8 +61,8 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
     case 'agent': {
       const icon = agentStatusIcon(node.status);
       const color = statusColor(node.status);
-      const dur = formatDuration(node.spawnedAt, node.completedAt);
-      const durClr = durationColor(node.spawnedAt, node.completedAt) || undefined;
+      const dur = formatDuration(node.activeMs);
+      const durClr = durationColor(node.activeMs) || undefined;
       const dim = node.status === 'completed';
       const displayName = agentDisplayName({
         name: node.name,
