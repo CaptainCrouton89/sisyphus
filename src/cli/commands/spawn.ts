@@ -15,11 +15,12 @@ export function registerSpawn(program: Command): void {
     .requiredOption('--name <name>', 'Agent name')
     .option('--instruction <instruction>', 'Task instruction for the agent (or pipe via stdin)')
     .option('--repo <name>', 'Repo subdirectory to use for this agent')
-    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; repo?: string }) => {
+    .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
+    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name: string; instruction?: string; repo?: string; session?: string }) => {
       assertTmux();
-      const sessionId = process.env.SISYPHUS_SESSION_ID;
+      const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
-        console.error('Error: SISYPHUS_SESSION_ID environment variable not set');
+        console.error('Error: provide --session or set SISYPHUS_SESSION_ID environment variable');
         process.exit(1);
       }
 

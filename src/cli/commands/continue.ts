@@ -8,11 +8,12 @@ export function registerContinue(program: Command): void {
     .command('continue')
     .description('Clear roadmap and continue working on a completed session (stays in current cycle)')
     .addHelpText('after', '\n  Use `continue` when a session completed but you want to add more work.\n  Use `resume` when you want to restart with specific new instructions.\n')
-    .action(async () => {
+    .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
+    .action(async (opts: { session?: string }) => {
       assertTmux();
-      const sessionId = process.env.SISYPHUS_SESSION_ID;
+      const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
-        console.error('Error: SISYPHUS_SESSION_ID environment variable not set');
+        console.error('Error: provide --session or set SISYPHUS_SESSION_ID environment variable');
         process.exit(1);
       }
 

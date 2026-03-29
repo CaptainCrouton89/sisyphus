@@ -10,11 +10,12 @@ export function registerYield(program: Command): void {
     .description('Yield control back to daemon (orchestrator only)')
     .option('--prompt <text>', 'Instructions for the next orchestrator cycle (or pipe via stdin)')
     .option('--mode <mode>', 'System prompt mode for next cycle (planning, implementation, validation)')
-    .action(async (opts: { prompt?: string; mode?: string }) => {
+    .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
+    .action(async (opts: { prompt?: string; mode?: string; session?: string }) => {
       assertTmux();
-      const sessionId = process.env.SISYPHUS_SESSION_ID;
+      const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
-        console.error('Error: SISYPHUS_SESSION_ID environment variable not set');
+        console.error('Error: provide --session or set SISYPHUS_SESSION_ID environment variable');
         process.exit(1);
       }
 

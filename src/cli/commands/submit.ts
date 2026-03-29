@@ -29,12 +29,13 @@ export function registerSubmit(program: Command): void {
     .command('submit')
     .description('Submit work report and exit (agent only)')
     .option('--report <report>', 'Work report (or pipe via stdin)')
-    .action(async (opts: { report?: string }) => {
+    .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
+    .action(async (opts: { report?: string; session?: string }) => {
       assertTmux();
-      const sessionId = process.env.SISYPHUS_SESSION_ID;
+      const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       const agentId = process.env.SISYPHUS_AGENT_ID;
       if (!sessionId || !agentId) {
-        console.error('Error: SISYPHUS_SESSION_ID and SISYPHUS_AGENT_ID environment variables must be set');
+        console.error('Error: provide --session or set SISYPHUS_SESSION_ID (and SISYPHUS_AGENT_ID) environment variables');
         process.exit(1);
       }
 
