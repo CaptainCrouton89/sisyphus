@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsup';
-import { cpSync } from 'node:fs';
+import { cpSync, rmSync } from 'node:fs';
 
 export default defineConfig({
   entry: {
@@ -20,6 +20,7 @@ export default defineConfig({
     return {};
   },
   onSuccess: async () => {
+    rmSync('dist/templates', { recursive: true, force: true });
     cpSync('templates', 'dist/templates', { recursive: true });
   },
 });
