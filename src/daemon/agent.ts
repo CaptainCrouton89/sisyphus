@@ -137,6 +137,7 @@ function createAgentPlugin(
 interface SetupAgentPaneOpts {
   sessionId: string;
   sessionName?: string;
+  cycleNum: number;
   cwd: string;
   agentId: string;
   agentType: string;
@@ -151,7 +152,7 @@ interface SetupAgentPaneOpts {
 }
 
 function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: string } {
-  const { sessionId, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, paneCwd, claudeSessionId } = opts;
+  const { sessionId, cycleNum, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, paneCwd, claudeSessionId } = opts;
 
   const paneId = tmux.createPane(windowId, paneCwd);
   registerPane(paneId, sessionId, 'agent', agentId);
@@ -160,7 +161,8 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     : '';
   const paneLabel = shortType ? `${name}-${shortType}` : name;
   const sessionLabel = opts.sessionName ?? sessionId.slice(0, 8);
-  tmux.setPaneTitle(paneId, `ssph:${sessionLabel} ${paneLabel} (${agentId})`);
+  const agentTitle = `ssph:${sessionLabel} ${paneLabel} c${cycleNum}`;
+  tmux.setPaneTitle(paneId, agentTitle);
   tmux.setPaneStyle(paneId, color);
 
   const suffix = renderAgentSuffix(sessionId, instruction);
@@ -198,7 +200,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
     const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag} --name ${shellQuote(`sisyphus:${name}`)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag} --name ${shellQuote(agentTitle)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
   const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [
@@ -216,6 +218,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
 export interface SpawnAgentOpts {
   sessionId: string;
   sessionName?: string;
+  cycleNum: number;
   cwd: string;
   agentType: string;
   name: string;
@@ -251,7 +254,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
   const { paneId, fullCmd } = setupAgentPane({
-    sessionId, sessionName: opts.sessionName, cwd, agentId, agentType, name, instruction,
+    sessionId, sessionName: opts.sessionName, cycleNum: opts.cycleNum, cwd, agentId, agentType, name, instruction,
     windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 
@@ -323,7 +326,7 @@ export async function restartAgent(
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
   const { paneId, fullCmd } = setupAgentPane({
-    sessionId, sessionName: session.name, cwd, agentId, agentType, name, instruction,
+    sessionId, sessionName: session.name, cycleNum: session.orchestratorCycles.length, cwd, agentId, agentType, name, instruction,
     windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 

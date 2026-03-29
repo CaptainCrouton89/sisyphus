@@ -87,7 +87,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
               ? agent.agentType.replace(/^sisyphus:/, '')
               : '';
             const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
-            tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} (${pane.agentId})`);
+            tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} c${session.orchestratorCycles.length}`);
           }
         }
       }
@@ -361,6 +361,7 @@ export async function handleSpawn(
   const agent = await spawnAgent({
     sessionId,
     sessionName: session.name,
+    cycleNum: session.orchestratorCycles.length,
     cwd,
     agentType,
     name,
