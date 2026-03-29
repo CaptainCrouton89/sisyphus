@@ -1,4 +1,5 @@
 import { query } from '@r-cli/sdk';
+import { execEnv } from '../shared/env.js';
 
 const COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown after auth failures
 let disabledUntil = 0;
@@ -21,6 +22,7 @@ export async function generateSessionName(task: string): Promise<string | null> 
       options: {
         model: 'haiku',
         maxTurns: 1,
+        env: execEnv(),
       },
     });
 
@@ -55,6 +57,7 @@ export async function summarizeReport(reportText: string): Promise<string | null
       options: {
         model: 'haiku',
         maxTurns: 1,
+        env: execEnv(),
       },
     });
 

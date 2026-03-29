@@ -342,13 +342,18 @@ export function startServer(): Promise<Server> {
           }
 
           handleRequest(req).then((res) => {
-            conn.write(JSON.stringify(res) + '\n');
+            if (!conn.destroyed) {
+              conn.write(JSON.stringify(res) + '\n');
+            }
           });
         }
       });
 
       conn.on('error', (err) => {
-        console.error('[sisyphus] Connection error:', err.message);
+        // Suppress EPIPE — client disconnected before response was written
+        if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
+          console.error('[sisyphus] Connection error:', err.message);
+        }
       });
     });
 
