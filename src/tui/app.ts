@@ -37,7 +37,7 @@ import { renderDetailContent, renderLogsContent, type DetailContext } from './pa
 import { renderNotificationRow, renderInputBar, renderStatusLine } from './panels/bottom.js';
 import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay } from './panels/overlays.js';
 import { loadConfig } from '../shared/config.js';
-import { roadmapPath, goalPath, logsDir, contextDir } from '../shared/paths.js';
+import { roadmapPath, goalPath, strategyPath, logsDir, contextDir } from '../shared/paths.js';
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
 
@@ -78,6 +78,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     try {
       let selectedSession: Session | null = null;
       let planContent = '';
+      let strategyContent = '';
       let goalContent = '';
       let logsContent = '';
       let logsCycles: CycleLog[] = [];
@@ -139,6 +140,15 @@ export function startApp(state: AppState, cleanup: () => void): void {
         }
 
         try {
+          const sp = strategyPath(state.cwd, state.selectedSessionId);
+          if (existsSync(sp)) {
+            strategyContent = readFileSync(sp, 'utf-8');
+          }
+        } catch {
+          // strategy.md may not exist yet
+        }
+
+        try {
           const ld = logsDir(state.cwd, state.selectedSessionId);
           if (existsSync(ld)) {
             const files = readdirSync(ld)
@@ -179,6 +189,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.sessions = sessions;
       state.selectedSession = selectedSession;
       state.planContent = planContent;
+      state.strategyContent = strategyContent;
       state.goalContent = goalContent;
       state.logsContent = logsContent;
       state.logsCycles = logsCycles;

@@ -9,7 +9,7 @@ import {
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
 import type { Response } from '../shared/protocol.js';
-import { sessionDir, goalPath, roadmapPath } from '../shared/paths.js';
+import { sessionDir, goalPath, roadmapPath, strategyPath } from '../shared/paths.js';
 import type { Request } from '../shared/protocol.js';
 import { findParentIndex } from './lib/tree.js';
 
@@ -842,6 +842,30 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
       actions.openEditorPopup(state.cwd, editor, cursorNode.filePath);
     } catch {
       notify(state, 'Failed to open file in editor');
+    }
+    return;
+  }
+
+  // s: toggle strategy view
+  if (input === 's') {
+    if (!state.strategyContent) {
+      notify(state, 'No strategy for this session');
+      return;
+    }
+    state.showStrategy = !state.showStrategy;
+    requestRender();
+    return;
+  }
+
+  // S: edit strategy
+  if (input === 'S') {
+    if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
+    const sp = strategyPath(state.cwd, state.selectedSessionId);
+    const editor = actions.resolveEditor();
+    try {
+      actions.openEditorPopup(state.cwd, editor, sp);
+    } catch {
+      notify(state, `Failed to open strategy in ${editor}`);
     }
     return;
   }

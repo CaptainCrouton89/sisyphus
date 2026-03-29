@@ -112,6 +112,7 @@ export function renderStatusLine(
       B('[g]') + D('oal  ') +
       B('[n]') + D('ew  ') +
       B('[p]') + D('lan  ') +
+      B('[s]') + D('trat  ') +
       B('[w]') + D('indow  ') +
       B('[R]') + D('esume  ') +
       B('[q]') + D('uit');

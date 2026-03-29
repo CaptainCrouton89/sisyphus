@@ -217,6 +217,8 @@ export function abbreviateMode(mode: string | undefined | null): string {
   if (!mode) return '';
   if (mode === 'implementation') return 'impl';
   if (mode === 'planning') return 'plan';
+  if (mode === 'strategy') return 'strat';
+  if (mode === 'validation') return 'valid';
   return mode;
 }
 
@@ -241,6 +243,8 @@ export function ansiColor(text: string, color: string, bold = false): string {
 export function modeColor(mode?: string): string {
   if (mode === 'planning') return 'blue';
   if (mode === 'implementation') return 'green';
+  if (mode === 'strategy') return 'yellow';
+  if (mode === 'validation') return 'magenta';
   return 'cyan';
 }
 

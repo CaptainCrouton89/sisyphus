@@ -165,6 +165,7 @@ export interface AppState {
   notification: string | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
   showLogs: boolean;
+  showStrategy: boolean;
 
   // Input bar
   inputText: string;
@@ -178,6 +179,7 @@ export interface AppState {
   sessions: SessionSummary[];
   selectedSession: Session | null;
   planContent: string;
+  strategyContent: string;
   goalContent: string;
   logsContent: string;
   logsCycles: CycleLog[];
@@ -219,6 +221,7 @@ export function createAppState(cwd: string): AppState {
     notification: null,
     notificationTimer: null,
     showLogs: false,
+    showStrategy: false,
     inputText: '',
     inputCursorPos: 0,
     detailScroll,
@@ -226,6 +229,7 @@ export function createAppState(cwd: string): AppState {
     sessions: [],
     selectedSession: null,
     planContent: '',
+    strategyContent: '',
     goalContent: '',
     logsContent: '',
     logsCycles: [],

@@ -170,6 +170,8 @@ function buildSessionLines(
   goalContent: string | undefined,
   width: number,
   paneAlive: boolean,
+  strategyContent: string = '',
+  showStrategy: boolean = false,
 ): DetailLine[] {
   const lines: DetailLine[] = [];
   const contentWidth = width - 4;
@@ -221,15 +223,35 @@ function buildSessionLines(
     ]);
   }
 
-  // Plan section
+  // Plan / Strategy section
   lines.push(singleLine(' '));
-  lines.push([seg('  ▎ ◈ PLAN', { color: 'yellow', bold: true })]);
-  const planLines = buildPlanLines(planContent, 99999, width);
-  if (planLines.length === 0) {
-    lines.push(singleLine('    orchestrator will create one', { dim: true, italic: true }));
+  if (showStrategy && strategyContent) {
+    const stratHint = strategyContent ? '  [s] toggle plan' : '';
+    lines.push([
+      seg('  ▎ ◈ STRATEGY', { color: 'yellow', bold: true }),
+      seg(stratHint, { dim: true }),
+    ]);
+    const stratLines = buildPlanLines(strategyContent, 99999, width);
+    if (stratLines.length === 0) {
+      lines.push(singleLine('    (empty)', { dim: true, italic: true }));
+    } else {
+      for (const pl of stratLines) {
+        lines.push(singleLine(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
+      }
+    }
   } else {
-    for (const pl of planLines) {
-      lines.push(singleLine(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
+    const toggleHint = strategyContent ? '  [s] toggle strategy' : '';
+    lines.push([
+      seg('  ▎ ◈ PLAN', { color: 'yellow', bold: true }),
+      seg(toggleHint, { dim: true }),
+    ]);
+    const planLines = buildPlanLines(planContent, 99999, width);
+    if (planLines.length === 0) {
+      lines.push(singleLine('    orchestrator will create one', { dim: true, italic: true }));
+    } else {
+      for (const pl of planLines) {
+        lines.push(singleLine(pl.text, { bold: pl.bold, dim: pl.dim, color: pl.color }));
+      }
     }
   }
 
@@ -655,7 +677,7 @@ export function renderDetailContent(
 
   switch (cursorNode.type) {
     case 'session': {
-      lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive);
+      lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
       break;
     }
 
@@ -663,7 +685,7 @@ export function renderDetailContent(
       const cycleNode = cursorNode as CycleTreeNode;
       const cycle = session.orchestratorCycles.find((c) => c.cycle === cycleNode.cycleNumber);
       if (!cycle) {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
       } else {
         lines = buildCycleLines(cycle, session.agents, rect.w);
       }
@@ -674,7 +696,7 @@ export function renderDetailContent(
       const agentNode = cursorNode as AgentTreeNode;
       const agent = agents.find((a) => a.id === agentNode.agentId);
       if (!agent) {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
       } else {
         lines = buildAgentLines(agent, detailReportBlocks, rect.w);
       }
@@ -685,7 +707,7 @@ export function renderDetailContent(
       const reportNode = cursorNode as ReportTreeNode;
       const agent = agents.find((a) => a.id === reportNode.agentId);
       if (!agent) {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
         break;
       }
       const reportIdx = reportNode.reportIndex;
@@ -782,7 +804,7 @@ export function renderDetailContent(
     }
 
     default: {
-      lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive);
+      lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
       break;
     }
   }
