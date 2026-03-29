@@ -237,6 +237,7 @@ export async function completeOrchestratorCycle(cwd: string, sessionId: string, 
     const cycles = session.orchestratorCycles;
     if (cycles.length === 0) return;
     const cycle = cycles[cycles.length - 1]!;
+    if (cycle.completedAt) return;
     cycle.completedAt = new Date().toISOString();
     if (nextPrompt) cycle.nextPrompt = nextPrompt;
     if (mode) cycle.mode = mode;

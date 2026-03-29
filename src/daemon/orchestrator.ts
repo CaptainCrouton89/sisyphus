@@ -322,8 +322,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
-  tmux.setPaneTitle(paneId, `ssph:orch ${session.name ?? sessionId.slice(0, 8)} c${cycleNum}`);
-  tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR);
+  const sessionLabel = session.name ?? sessionId.slice(0, 8);
+  tmux.setPaneTitle(paneId, `ssph:orch ${sessionLabel} c${cycleNum}`);
+  tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR, { role: 'orch', session: sessionLabel, cycle: `c${cycleNum}` });
 
   const bannerCmd = resolveBannerCmd();
   const notifyCmd = buildNotifyCmd(paneId);

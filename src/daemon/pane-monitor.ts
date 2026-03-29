@@ -115,6 +115,7 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
   const orchPaneId = getOrchestratorPaneId(sessionId);
   if (orchPaneId && !livePaneIds.has(orchPaneId)) {
     // Orchestrator pane disappeared without a yield command
+    await state.completeOrchestratorCycle(cwd, sessionId);
     const runningAgents = session.agents.filter(a => a.status === 'running');
     if (runningAgents.length === 0) {
       // No agents running and orchestrator gone — pause

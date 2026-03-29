@@ -184,6 +184,7 @@ async function recoverSessions(): Promise<void> {
                 const orchestratorPaneId = getOrchestratorPaneId(sessionId);
                 const orchestratorAlive = orchestratorPaneId && livePaneIds.has(orchestratorPaneId);
                 if (!orchestratorAlive) {
+                  await stateModule.completeOrchestratorCycle(cwd, sessionId);
                   console.log(`[sisyphus] Detected stuck session ${sessionId} on recovery: triggering orchestrator respawn`);
                   await onAllAgentsDone(sessionId, cwd, session.tmuxWindowId!);
                 }

@@ -163,7 +163,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   const sessionLabel = opts.sessionName ?? sessionId.slice(0, 8);
   const agentTitle = `ssph:${sessionLabel} ${paneLabel} c${cycleNum}`;
   tmux.setPaneTitle(paneId, agentTitle);
-  tmux.setPaneStyle(paneId, color);
+  tmux.setPaneStyle(paneId, color, { role: paneLabel, session: sessionLabel, cycle: `c${cycleNum}` });
 
   const suffix = renderAgentSuffix(sessionId, instruction);
   const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;

@@ -97,11 +97,32 @@ export function setPaneTitle(paneTarget: string, title: string): void {
   execSafe(`tmux select-pane -t "${paneTarget}" -T ${shellQuote(title)}`);
 }
 
-export function setPaneStyle(paneTarget: string, color: string): void {
+export interface PaneMeta {
+  role: string;      // "orch" or agent paneLabel (e.g. "impl", "review-plan")
+  session: string;   // session name or truncated UUID
+  cycle: string;     // e.g. "c3"
+}
+
+export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta): void {
   const gitBranch = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null)`;
   const branchSuffix = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null | grep -q . && echo ' |') ${gitBranch}`;
   const homePath = `#(echo '#{pane_current_path}' | sed "s|^$HOME|~|")`;
-  const fmt = `#[fg=${color},bold] #{pane_title} #[fg=${color}]${homePath}${branchSuffix} #[default]`;
+
+  // Store structured metadata as per-pane user variables so the format string
+  // resolves them independently per pane (one format, per-pane values).
+  execSafe(`tmux set -p -t "${paneTarget}" @pane_role ${shellQuote(meta.role)}`);
+  execSafe(`tmux set -p -t "${paneTarget}" @pane_session ${shellQuote(meta.session)}`);
+  execSafe(`tmux set -p -t "${paneTarget}" @pane_cycle ${shellQuote(meta.cycle)}`);
+
+  // Visual hierarchy: role badge (bg color) > session name (fg color) > cycle + path (dim)
+  const fmt = [
+    `#[bg=${color},fg=black,bold] #{@pane_role} #[default]`,
+    ` #[fg=${color},bold]#{@pane_session}`,
+    ` #[default,dim]#{@pane_cycle}`,
+    `  ${homePath}${branchSuffix}`,
+    `#[default]`,
+  ].join('');
+
   execSafe(`tmux set -p -t "${paneTarget}" pane-border-format ${shellQuote(fmt)}`);
   // Store color as a per-pane user variable. The window-level border styles use a
   // format string that resolves #{@pane_color} per-pane at render time, giving each
@@ -109,6 +130,16 @@ export function setPaneStyle(paneTarget: string, color: string): void {
   execSafe(`tmux set -p -t "${paneTarget}" @pane_color "${color}"`);
   execSafe(`tmux set -w -t "${paneTarget}" pane-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
   execSafe(`tmux set -w -t "${paneTarget}" pane-active-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
+}
+
+/**
+ * Update pane metadata variables without rebuilding the full style.
+ * Used by auto-naming to update session name across all live panes.
+ */
+export function updatePaneMeta(paneTarget: string, updates: Partial<PaneMeta>): void {
+  if (updates.role !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_role ${shellQuote(updates.role)}`);
+  if (updates.session !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_session ${shellQuote(updates.session)}`);
+  if (updates.cycle !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_cycle ${shellQuote(updates.cycle)}`);
 }
 
 export function selectLayout(windowTarget: string, layout: string = 'even-horizontal'): void {

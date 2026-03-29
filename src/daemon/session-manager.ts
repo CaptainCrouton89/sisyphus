@@ -75,9 +75,12 @@ export async function startSession(task: string, cwd: string, context?: string, 
       trackSession(sessionId, cwd, candidate);
       registerSessionTmux(sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
 
-      // Update pane titles for all live panes in this session
+      // Update pane labels for all live panes in this session
       const session = state.getSession(cwd, sessionId);
       for (const pane of getSessionPanes(sessionId)) {
+        // Update the structured session variable (border format resolves it per-pane)
+        tmux.updatePaneMeta(pane.paneId, { session: finalName });
+        // Keep underlying pane title in sync for tmux list-panes / debugging
         if (pane.role === 'orchestrator') {
           tmux.setPaneTitle(pane.paneId, `ssph:orch ${finalName} c${session.orchestratorCycles.length}`);
         } else if (pane.role === 'agent' && pane.agentId) {
@@ -578,6 +581,7 @@ export async function handlePaneExited(
     // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
     const sessionName = session.name ?? sessionId.slice(0, 8);
     sendTerminalNotification('Sisyphus', `Orchestrator exited without yielding (${sessionName})`);
+    await state.completeOrchestratorCycle(cwd, sessionId);
     orchestratorDone.add(sessionId);
     const hasRunningAgents = session.agents.some(a => a.status === 'running');
     if (!hasRunningAgents && session.agents.length > 0) {
