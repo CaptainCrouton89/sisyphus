@@ -20,9 +20,8 @@ export function registerComplete(program: Command): void {
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Session completed.');
-        console.log(`\nFollow up:`);
-        console.log(`  sisyphus continue                                # reactivate and keep working`);
-        console.log(`  sisyphus resume ${sessionId} "new instructions"   # respawn orchestrator externally`);
+        console.log(`\nTo keep working in this session:`);
+        console.log(`  sisyphus continue   # reactivate session and clear roadmap for new work`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

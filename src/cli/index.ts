@@ -69,7 +69,7 @@ registerInit(program);
 program.addHelpText('after', `
 Examples:
   $ sisyphus start "Implement auth system"     Start a new session
-  $ sisyphus start "Build @spec.md" -n auth    Start with a name and spec reference
+  $ sisyphus start "Build @requirements.md" -n auth    Start with a name and requirements reference
   $ sisyphus status                            Check current sessions
   $ sisyphus dashboard                         Open the TUI
   $ sisyphus doctor                            Verify installation

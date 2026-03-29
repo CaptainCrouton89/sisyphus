@@ -32,8 +32,9 @@ export function registerList(program: Command): void {
     .command('list')
     .description('List sessions (defaults to current project)')
     .option('-a, --all', 'Show sessions from all projects')
-    .action(async (opts: { all?: boolean }) => {
-      const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+    .option('--cwd <path>', 'Project directory to list sessions for (overrides SISYPHUS_CWD)')
+    .action(async (opts: { all?: boolean; cwd?: string }) => {
+      const cwd = opts.cwd ?? process.env['SISYPHUS_CWD'] ?? process.cwd();
       const request: Request = { type: 'list', cwd, all: opts.all };
       const response = await sendRequest(request);
       if (response.ok) {

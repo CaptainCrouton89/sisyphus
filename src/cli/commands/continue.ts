@@ -19,7 +19,9 @@ export function registerContinue(program: Command): void {
       const request: Request = { type: 'continue', sessionId };
       const response = await sendRequest(request);
       if (response.ok) {
-        console.log('Session reactivated. Plan cleared.');
+        console.log('Session reactivated. Roadmap cleared.');
+        console.log('\nThe previous roadmap has been wiped — you are starting fresh.');
+        console.log('Consider writing a new roadmap before spawning agents.');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

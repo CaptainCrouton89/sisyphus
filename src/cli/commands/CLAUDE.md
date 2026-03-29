@@ -28,7 +28,7 @@ export function register{Command}(program: Command): void {
 - **yield.ts** — Orchestrator-only; requires `SISYPHUS_SESSION_ID` environment variable.
 - **rollback.ts** — Arguments: `<sessionId> <cycle>` (cycle must be positive integer). Pauses session; use `resume` to respawn.
 - **dashboard.ts** — Checks if dashboard window exists before launching (prevents duplicates). Launches in current tmux session via TUI binary.
-- **list.ts** — Lists sessions for current project (default) or all projects (`--all`). Color-codes status: green=active, yellow=paused, cyan=completed. Respects `SISYPHUS_CWD` for project filtering.
+- **list.ts** — Lists sessions for current project (default) or all projects (`--all`). Color-codes status: green=active, yellow=paused, cyan=completed. Respects `SISYPHUS_CWD` for project filtering; override with `--cwd <path>`.
 - **doctor.ts** — Platform-aware health checks; verifies dependencies and tmux/daemon setup.
 - **getting-started.ts** — Interactive guide; checks tmux install/status and displays workflow guidance.
 
