@@ -4,7 +4,7 @@ import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
 import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
-import { trackSession, untrackSession, updateTrackedWindow } from './pane-monitor.js';
+import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { sessionDir, sessionsDir } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane, getSessionPanes } from './pane-registry.js';
@@ -414,6 +414,7 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {
   const session = state.getSession(cwd, sessionId);
+  await flushTimers(sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
   switchToHomeSession(session);
 }
@@ -423,6 +424,7 @@ export async function handleContinue(sessionId: string, cwd: string): Promise<vo
 }
 
 export async function handleKill(sessionId: string, cwd: string): Promise<number> {
+  await flushTimers(sessionId);
   const session = state.getSession(cwd, sessionId);
   const windowId = orchestrator.getWindowId(sessionId);
 
@@ -581,7 +583,8 @@ export async function handlePaneExited(
     // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
     const sessionName = session.name ?? sessionId.slice(0, 8);
     sendTerminalNotification('Sisyphus', `Orchestrator exited without yielding (${sessionName})`);
-    await state.completeOrchestratorCycle(cwd, sessionId);
+    const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
+    await state.completeOrchestratorCycle(cwd, sessionId, undefined, undefined, cycleActiveMs);
     orchestratorDone.add(sessionId);
     const hasRunningAgents = session.agents.some(a => a.status === 'running');
     if (!hasRunningAgents && session.agents.length > 0) {

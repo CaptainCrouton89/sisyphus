@@ -60,6 +60,7 @@ export function createSession(id: string, task: string, cwd: string, context?: s
     cwd,
     status: 'active',
     createdAt: new Date().toISOString(),
+    activeMs: 0,
     agents: [],
     orchestratorCycles: [],
     messages: [],
@@ -72,9 +73,14 @@ export function createSession(id: string, task: string, cwd: string, context?: s
 export function getSession(cwd: string, sessionId: string): Session {
   const content = readFileSync(statePath(cwd, sessionId), 'utf-8');
   const session = JSON.parse(content) as Session;
-  // Normalize agents from pre-multi-repo sessions that lack repo field
+  // Normalize fields from pre-existing sessions that may lack newer properties
+  if (session.activeMs == null) session.activeMs = 0;
   for (const agent of session.agents) {
     if (!agent.repo) agent.repo = '.';
+    if (agent.activeMs == null) agent.activeMs = 0;
+  }
+  for (const cycle of session.orchestratorCycles) {
+    if (cycle.activeMs == null) cycle.activeMs = 0;
   }
   return session;
 }
@@ -231,7 +237,7 @@ export async function updateTask(cwd: string, sessionId: string, task: string): 
   });
 }
 
-export async function completeOrchestratorCycle(cwd: string, sessionId: string, nextPrompt?: string, mode?: string): Promise<void> {
+export async function completeOrchestratorCycle(cwd: string, sessionId: string, nextPrompt?: string, mode?: string, activeMs?: number): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
     const cycles = session.orchestratorCycles;
@@ -241,6 +247,29 @@ export async function completeOrchestratorCycle(cwd: string, sessionId: string, 
     cycle.completedAt = new Date().toISOString();
     if (nextPrompt) cycle.nextPrompt = nextPrompt;
     if (mode) cycle.mode = mode;
+    if (activeMs != null) cycle.activeMs += activeMs;
+    saveSession(session);
+  });
+}
+
+export async function incrementActiveTime(
+  cwd: string,
+  sessionId: string,
+  sessionDelta: number,
+  agentDeltas: Map<string, number>,
+  cycleDeltas: Map<number, number>,
+): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    session.activeMs += sessionDelta;
+    for (const [agentId, delta] of agentDeltas) {
+      const agent = session.agents.slice().reverse().find(a => a.id === agentId);
+      if (agent) agent.activeMs += delta;
+    }
+    for (const [cycleNum, delta] of cycleDeltas) {
+      const cycle = session.orchestratorCycles.find(c => c.cycle === cycleNum);
+      if (cycle) cycle.activeMs += delta;
+    }
     saveSession(session);
   });
 }

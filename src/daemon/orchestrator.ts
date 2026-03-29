@@ -13,6 +13,7 @@ import { discoverAgentTypes } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
+import { flushCycleTimer } from './pane-monitor.js';
 
 
 interface RepoInfo {
@@ -341,6 +342,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,
     timestamp: new Date().toISOString(),
+    activeMs: 0,
     agentsSpawned: [],
     paneId,
     claudeSessionId,
@@ -366,17 +368,21 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
   const windowId = sessionWindowMap.get(sessionId);
   if (windowId) tmux.selectLayout(windowId);
 
-  await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt, mode);
-
   const session = state.getSession(cwd, sessionId);
-  const runningAgents = session.agents.filter(a => a.status === 'running');
+  const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
+  await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt, mode, cycleActiveMs);
+
+  const freshSession = state.getSession(cwd, sessionId);
+  const runningAgents = freshSession.agents.filter(a => a.status === 'running');
   if (runningAgents.length === 0) {
     console.log(`[sisyphus] Orchestrator yielded with no running agents for session ${sessionId}`);
   }
 }
 
 export async function handleOrchestratorComplete(sessionId: string, cwd: string, report: string): Promise<void> {
-  await state.completeOrchestratorCycle(cwd, sessionId);
+  const session = state.getSession(cwd, sessionId);
+  const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
+  await state.completeOrchestratorCycle(cwd, sessionId, undefined, undefined, cycleActiveMs);
   await state.completeSession(cwd, sessionId, report);
 
   console.log(`[sisyphus] Session ${sessionId} completed: ${report}`);

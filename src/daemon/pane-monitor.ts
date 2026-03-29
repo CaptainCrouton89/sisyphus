@@ -2,11 +2,96 @@ import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
+import type { Session } from '../shared/types.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
 let onAllAgentsDone: RespawnCallback | null = null;
+
+// ─── Active time tracking ──────────────────────────────────────────────────────
+
+let lastPollTime = 0;
+let storedPollIntervalMs = 5000;
+
+interface ActiveTimerEntry {
+  sessionMs: number;
+  agentMs: Map<string, number>;
+  cycleMs: Map<number, number>;
+}
+const activeTimers = new Map<string, ActiveTimerEntry>();
+
+export function initTimers(sessionId: string, session: Session): void {
+  const entry: ActiveTimerEntry = {
+    sessionMs: session.activeMs,
+    agentMs: new Map(),
+    cycleMs: new Map(),
+  };
+  for (const agent of session.agents) {
+    entry.agentMs.set(agent.id, agent.activeMs);
+  }
+  for (const cycle of session.orchestratorCycles) {
+    entry.cycleMs.set(cycle.cycle, cycle.activeMs);
+  }
+  activeTimers.set(sessionId, entry);
+}
+
+export function getActiveTimers(sessionId: string): ActiveTimerEntry | undefined {
+  return activeTimers.get(sessionId);
+}
+
+export async function flushTimers(sessionId: string): Promise<void> {
+  const entry = activeTimers.get(sessionId);
+  if (!entry) return;
+  const tracked = trackedSessions.get(sessionId);
+  if (!tracked) return;
+
+  // Compute deltas from last persisted values
+  let session: Session;
+  try {
+    session = state.getSession(tracked.cwd, sessionId);
+  } catch {
+    return;
+  }
+
+  const sessionDelta = entry.sessionMs - session.activeMs;
+  const agentDeltas = new Map<string, number>();
+  for (const [agentId, ms] of entry.agentMs) {
+    const agent = session.agents.slice().reverse().find(a => a.id === agentId);
+    const persisted = agent?.activeMs ?? 0;
+    const delta = ms - persisted;
+    if (delta > 0) agentDeltas.set(agentId, delta);
+  }
+  const cycleDeltas = new Map<number, number>();
+  for (const [cycleNum, ms] of entry.cycleMs) {
+    const cycle = session.orchestratorCycles.find(c => c.cycle === cycleNum);
+    const persisted = cycle?.activeMs ?? 0;
+    const delta = ms - persisted;
+    if (delta > 0) cycleDeltas.set(cycleNum, delta);
+  }
+
+  if (sessionDelta > 0 || agentDeltas.size > 0 || cycleDeltas.size > 0) {
+    await state.incrementActiveTime(tracked.cwd, sessionId, Math.max(0, sessionDelta), agentDeltas, cycleDeltas);
+  }
+}
+
+export function flushAgentTimer(sessionId: string, agentId: string): number {
+  const entry = activeTimers.get(sessionId);
+  if (!entry) return 0;
+  return entry.agentMs.get(agentId) ?? 0;
+}
+
+export function flushCycleTimer(sessionId: string, cycleNumber: number): number {
+  const entry = activeTimers.get(sessionId);
+  if (!entry) return 0;
+  return entry.cycleMs.get(cycleNumber) ?? 0;
+}
+
+export function getTrackedSessionIds(): string[] {
+  return [...trackedSessions.keys()];
+}
+
+// ─── Monitor lifecycle ─────────────────────────────────────────────────────────
 
 export function setRespawnCallback(cb: RespawnCallback): void {
   onAllAgentsDone = cb;
@@ -14,6 +99,8 @@ export function setRespawnCallback(cb: RespawnCallback): void {
 
 export function startMonitor(pollIntervalMs: number = 5000): void {
   if (monitorInterval) return;
+  storedPollIntervalMs = pollIntervalMs;
+  lastPollTime = Date.now();
   monitorInterval = setInterval(() => {
     pollAllSessions().catch(err => {
       console.error('[sisyphus] Pane monitor error:', err);
@@ -47,14 +134,21 @@ export function untrackSession(sessionId: string): void {
 }
 
 async function pollAllSessions(): Promise<void> {
+  // Compute sleep-aware increment
+  const now = Date.now();
+  const elapsed = now - lastPollTime;
+  const threshold = storedPollIntervalMs * 3;
+  const increment = elapsed > threshold ? storedPollIntervalMs : elapsed;
+  lastPollTime = now;
+
   for (const { id: sessionId, cwd, windowId } of trackedSessions.values()) {
     if (windowId) {
-      await pollSession(sessionId, cwd, windowId);
+      await pollSession(sessionId, cwd, windowId, increment);
     }
   }
 }
 
-async function pollSession(sessionId: string, cwd: string, windowId: string): Promise<void> {
+async function pollSession(sessionId: string, cwd: string, windowId: string, increment: number): Promise<void> {
   let session;
   try {
     session = state.getSession(cwd, sessionId);
@@ -88,6 +182,7 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
     // Check if the entire tmux session was destroyed
     const tracked = trackedSessions.get(sessionId);
     if (tracked && !tmux.sessionExists(tracked.tmuxSession)) {
+      await flushTimers(sessionId);
       await state.updateSessionStatus(cwd, sessionId, 'paused');
       untrackSession(sessionId);
       console.log(`[sisyphus] Session ${sessionId} paused: tmux session destroyed`);
@@ -96,6 +191,37 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
   }
 
   const livePaneIds = new Set(livePanes.map(p => p.paneId));
+
+  // ─── Accumulate active time ────────────────────────────────────────────
+  let timerEntry = activeTimers.get(sessionId);
+  if (!timerEntry) {
+    initTimers(sessionId, session);
+    timerEntry = activeTimers.get(sessionId)!;
+  }
+
+  let anyAlive = false;
+
+  for (const agent of session.agents) {
+    if (agent.status === 'running' && livePaneIds.has(agent.paneId)) {
+      timerEntry.agentMs.set(agent.id, (timerEntry.agentMs.get(agent.id) ?? 0) + increment);
+      anyAlive = true;
+    }
+  }
+
+  const orchPaneId = getOrchestratorPaneId(sessionId);
+  if (orchPaneId && livePaneIds.has(orchPaneId)) {
+    const currentCycle = session.orchestratorCycles.length;
+    if (currentCycle > 0) {
+      timerEntry.cycleMs.set(currentCycle, (timerEntry.cycleMs.get(currentCycle) ?? 0) + increment);
+    }
+    anyAlive = true;
+  }
+
+  if (anyAlive) {
+    timerEntry.sessionMs += increment;
+  }
+
+  // ─── Pane liveness checks ─────────────────────────────────────────────
 
   let paneRemoved = false;
   for (const agent of session.agents) {
@@ -112,13 +238,14 @@ async function pollSession(sessionId: string, cwd: string, windowId: string): Pr
   if (paneRemoved) tmux.selectLayout(windowId);
 
   // Check orchestrator pane
-  const orchPaneId = getOrchestratorPaneId(sessionId);
   if (orchPaneId && !livePaneIds.has(orchPaneId)) {
     // Orchestrator pane disappeared without a yield command
-    await state.completeOrchestratorCycle(cwd, sessionId);
+    const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
+    await state.completeOrchestratorCycle(cwd, sessionId, undefined, undefined, cycleActiveMs);
     const runningAgents = session.agents.filter(a => a.status === 'running');
     if (runningAgents.length === 0) {
       // No agents running and orchestrator gone — pause
+      await flushTimers(sessionId);
       await state.updateSessionStatus(cwd, sessionId, 'paused');
       console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane disappeared`);
     }

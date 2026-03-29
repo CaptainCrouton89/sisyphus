@@ -34,6 +34,7 @@ export interface Session {
   status: SessionStatus;
   createdAt: string;
   completedAt?: string;
+  activeMs: number;
   agents: Agent[];
   orchestratorCycles: OrchestratorCycle[];
   messages: Message[];
@@ -54,6 +55,7 @@ export interface Agent {
   status: AgentStatus;
   spawnedAt: string;
   completedAt: string | null;
+  activeMs: number;
   reports: AgentReport[];
   paneId: string;
   repo: string;
@@ -64,6 +66,7 @@ export interface OrchestratorCycle {
   cycle: number;
   timestamp: string;
   completedAt?: string;
+  activeMs: number;
   agentsSpawned: string[];
   paneId?: string;
   claudeSessionId?: string;

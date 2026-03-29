@@ -7,6 +7,7 @@ import type { MessageSource } from '../shared/types.js';
 import * as sessionManager from './session-manager.js';
 import * as state from './state.js';
 import { lookupPane, unregisterPane } from './pane-registry.js';
+import { getActiveTimers } from './pane-monitor.js';
 
 let server: Server | null = null;
 
@@ -129,6 +130,19 @@ async function handleRequest(req: Request): Promise<Response> {
           const cwd = sessionTrackingMap.get(req.sessionId)?.cwd ?? req.cwd;
           if (!cwd) return unknownSessionError(req.sessionId);
           const session = sessionManager.getSessionStatus(cwd, req.sessionId);
+          // Overlay live in-memory timer values for real-time accuracy
+          const timers = getActiveTimers(req.sessionId);
+          if (timers) {
+            session.activeMs = timers.sessionMs;
+            for (const agent of session.agents) {
+              const agentMs = timers.agentMs.get(agent.id);
+              if (agentMs != null) agent.activeMs = agentMs;
+            }
+            for (const cycle of session.orchestratorCycles) {
+              const cycleMs = timers.cycleMs.get(cycle.cycle);
+              if (cycleMs != null) cycle.activeMs = cycleMs;
+            }
+          }
           return { ok: true, data: { session: session as unknown as Record<string, unknown> } };
         }
         return { ok: true, data: { message: 'daemon running' } };

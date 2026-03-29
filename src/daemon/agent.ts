@@ -9,6 +9,7 @@ import { getNextColor, normalizeTmuxColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
 import { promptsDir, reportsDir, reportFilePath, sessionDir } from '../shared/paths.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
+import { flushAgentTimer } from './pane-monitor.js';
 import { summarizeReport } from './summarize.js';
 import { resolveAgentConfig, detectProvider } from './frontmatter.js';
 import type { Provider } from './frontmatter.js';
@@ -269,6 +270,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     status: 'running',
     spawnedAt: new Date().toISOString(),
     completedAt: null,
+    activeMs: 0,
     reports: [],
     paneId,
     repo,
@@ -410,9 +412,11 @@ export async function handleAgentSubmit(
     }
   }).catch(() => {});
 
+  const flushedActiveMs = flushAgentTimer(sessionId, agentId);
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'completed',
     completedAt: new Date().toISOString(),
+    activeMs: flushedActiveMs,
   });
 
   // Kill the pane — Claude doesn't exit on its own after running a bash command.
@@ -438,10 +442,12 @@ export async function handleAgentKilled(
   reason: string,
 ): Promise<boolean> {
   unregisterAgentPane(sessionId, agentId);
+  const flushedActiveMs = flushAgentTimer(sessionId, agentId);
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'killed',
     killedReason: reason,
     completedAt: new Date().toISOString(),
+    activeMs: flushedActiveMs,
   });
 
   const session = state.getSession(cwd, sessionId);

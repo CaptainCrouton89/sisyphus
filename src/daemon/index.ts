@@ -17,7 +17,7 @@ console.log = (...args: unknown[]) => origLog(`[${ts()}]`, ...args);
 console.error = (...args: unknown[]) => origError(`[${ts()}]`, ...args);
 import { loadConfig } from '../shared/config.js';
 import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry } from './server.js';
-import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrackedWindow } from './pane-monitor.js';
+import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrackedWindow, flushTimers, initTimers, getTrackedSessionIds } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
@@ -153,6 +153,7 @@ async function recoverSessions(): Promise<void> {
             setWindowId(sessionId, session.tmuxWindowId);
             trackSession(sessionId, cwd, session.tmuxSessionName);
             updateTrackedWindow(sessionId, session.tmuxWindowId);
+            initTimers(sessionId, session);
 
             // Recover orchestrator pane from last incomplete cycle
             const lastIncompleteCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt && c.paneId);
@@ -230,6 +231,10 @@ async function startDaemon(): Promise<void> {
   const shutdown = async () => {
     console.log('[sisyphus] Shutting down...');
     stopMonitor();
+    // Persist all in-memory active time accumulators before exiting
+    for (const sessionId of getTrackedSessionIds()) {
+      try { await flushTimers(sessionId); } catch { /* best-effort */ }
+    }
     await stopServer();
     releasePidLock();
     process.exit(0);
