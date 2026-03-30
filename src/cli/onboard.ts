@@ -141,6 +141,40 @@ set -g set-clipboard on
 
 # Focus events (for editors)
 set -g focus-events on
+
+# --- Pane navigation (no prefix needed) ---
+bind -n C-h select-pane -L
+bind -n C-j select-pane -D
+bind -n C-k select-pane -U
+bind -n C-l select-pane -R
+
+# --- Window navigation (no prefix needed) ---
+bind -n C-n next-window
+bind -n C-p previous-window
+
+# --- New window / splits preserve cwd ---
+bind c new-window -c "#{pane_current_path}"
+bind '"' split-window -v -c "#{pane_current_path}"
+bind % split-window -h -c "#{pane_current_path}"
+
+# --- Kill pane + rebalance ---
+bind x kill-pane \\; select-layout even-horizontal
+
+# --- Auto-rebalance on pane close ---
+set-hook -g after-kill-pane "select-layout even-horizontal"
+set-hook -g pane-exited "select-layout even-horizontal"
+
+# --- Manual re-tile ---
+bind = select-layout even-horizontal
+
+# --- Scroll (no prefix needed) ---
+bind -n C-u copy-mode \\; send-keys -X halfpage-up
+bind -n C-d copy-mode \\; send-keys -X halfpage-down
+
+# --- Vi copy mode ---
+setw -g mode-keys vi
+bind -T copy-mode-vi v send-keys -X begin-selection
+bind -T copy-mode-vi y send-keys -X copy-selection-and-cancel
 `;
 
 function writeTmuxDefaults(): void {

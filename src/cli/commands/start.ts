@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { sendRequest } from '../client.js';
 import { getTmuxSession, isTmuxInstalled } from '../tmux.js';
 import { shellQuote } from '../../shared/shell.js';
-import { ensureDashboard } from './dashboard.js';
+import { openDashboardWindow } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
 
 
@@ -45,7 +45,7 @@ export function registerStart(program: Command): void {
 
           try {
             const tmuxSession = getTmuxSession();
-            if (ensureDashboard(tmuxSession, cwd)) {
+            if (openDashboardWindow(tmuxSession, cwd)) {
               console.log(`Dashboard opened in tmux window "sisyphus-dashboard"`);
             }
           } catch { /* dashboard launch failed — non-fatal */ }

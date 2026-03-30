@@ -1,6 +1,12 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Command } from 'commander';
 import { isTmuxInstalled } from '../tmux.js';
 import { isNvimAvailable } from '../onboard.js';
+
+function templatePath(name: string): string {
+  return join(dirname(fileURLToPath(import.meta.url)), 'templates', name);
+}
 
 function isClaudeCode(): boolean {
   return !!process.env['CLAUDECODE'];
@@ -148,9 +154,12 @@ tmux split-window -h
 Tell them: "I just split your terminal. You should see two panes side by side."
 
 Explain navigation:
-- \`Ctrl-b\` then \`→\` (right arrow): move to the right pane
-- \`Ctrl-b\` then \`←\` (left arrow): move to the left pane
-- The prefix \`Ctrl-b\` is always pressed first, then released, then the arrow key
+- \`Ctrl+l\`: move to the right pane
+- \`Ctrl+h\`: move to the left pane
+- \`Ctrl+j\`: move to the pane below
+- \`Ctrl+k\`: move to the pane above
+- No prefix key needed — just hold Ctrl and press the direction letter
+- For windows: \`Ctrl+n\` next window, \`Ctrl+p\` previous window
 
 Ask them to try navigating between panes.
 
@@ -167,11 +176,14 @@ Or tell them they can type \`exit\` in the extra pane to close it.
 
 - **Detach**: \`Ctrl-b d\` — leaves tmux running in background, returns to normal terminal
 - **Reattach**: \`tmux attach\` (or \`tmux a\`) — reconnects to the running session
-- **Scroll mode**: \`Ctrl-b [\` — lets you scroll up through output. Press \`q\` to exit scroll mode.
+- **Scroll up/down**: \`Ctrl+u\` / \`Ctrl+d\` — scroll half-page up/down (no prefix needed). Press \`q\` to exit scroll mode.
+- **New window**: \`Ctrl-b n\` — opens a new window in the current directory
+- **Kill pane**: \`Ctrl-b x\` — closes the current pane and rebalances layout
+- **Re-tile**: \`Ctrl-b =\` — rebalance all panes to equal widths
 
 ### 5. Verification
 
-Ask the user to confirm: "Can you navigate between panes with Ctrl-b + arrow keys?"
+Ask the user to confirm: "Can you navigate between panes with Ctrl+h and Ctrl+l?"
 
 Once confirmed, proceed:
 \`\`\`
@@ -193,40 +205,39 @@ function printStep2(): void {
 
 ## Instructions for Claude
 
-This step is OPTIONAL. Nvim is useful for reviewing agent work in tmux panes but not required.
+This step is OPTIONAL. Nvim is useful for reviewing and editing files when you jump into agent panes, but not required.
+
+Note: The sisyphus dashboard has keys that auto-open files in nvim — users don't need to know how to open files from the command line. Focus on what they'll need once they're INSIDE nvim.
 
 ### If nvim is NOT installed (nvimInstalled: false)
 
-Ask the user: "Neovim is handy for reviewing files in tmux panes. Want me to install it, or skip this step?"
+Ask the user: "Neovim is handy for reviewing and editing files in tmux panes. Want me to install it, or skip this step?"
 
 - **Install**: Run \`brew install neovim\` (macOS) or suggest their package manager
 - **Skip**: That's fine — they can use \`cat\`, \`less\`, or any editor they prefer. Proceed to step 3.
 
 ### If nvim IS installed (nvimInstalled: true)
 
-Teach exactly 3 things — no more:
+Briefly explain the key concept — nvim has two modes:
 
-1. **Open a file**: \`nvim filename.txt\`
-2. **Save and close**: \`ZZ\` (capital Z twice — hold Shift, press Z twice)
-3. **Quit without saving**: \`:q!\` (colon, q, exclamation mark, Enter)
+- **Normal mode** (default): Keys are commands, not text. This is where you navigate.
+- **Insert mode**: Press \`i\` to enter. Now you type normally. \`Esc\` goes back to normal.
 
-### Hands-on exercise
+Then tell the user: "I'm going to open an interactive tutorial file in a pane to your right. It walks you through everything — navigation, editing, saving. Follow the instructions inside the file."
 
-Create a temporary file for practice:
+Open the bundled tutorial file in a split pane:
 \`\`\`
-echo "Hello from the sisyphus tutorial!" > /tmp/sisyphus-tutorial-test.txt
+cp ${templatePath('nvim-tutorial.txt')} /tmp/sisyphus-nvim-tutorial.txt
+tmux split-window -h "nvim /tmp/sisyphus-nvim-tutorial.txt"
 \`\`\`
 
-Walk them through:
-1. Open it: \`nvim /tmp/sisyphus-tutorial-test.txt\`
-2. Look around (they're in normal mode — arrow keys work for navigation)
-3. Close it: type \`ZZ\`
+Tell them to click on the right pane (or \`Ctrl+l\`) and follow the instructions in the file. When they \`:wq\` or \`ZZ\`, the pane closes and they're back in Claude.
 
-Tell them: "That's all you need. When you jump into a sisyphus agent's pane, you can use \`nvim\` to inspect files the agent is working on."
+Tell them: "When you jump into an agent's pane and the dashboard opens a file, you'll land in normal mode. Now you know how to look around, make edits, and get out."
 
 ### Verification
 
-Ask if they were able to open and close the file (or if they skipped).
+Ask if they were able to edit and save the file (or if they skipped).
 
 Proceed:
 \`\`\`

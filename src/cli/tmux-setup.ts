@@ -64,8 +64,9 @@ while IFS= read -r name; do
   scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
   if [ "$scwd" = "$cwd" ]; then
     tmux switch-client -t "$name"
-    # Focus the dashboard window if it exists
-    tmux select-window -t "$name:sisyphus-dashboard" 2>/dev/null
+    # Focus the dashboard window by stored ID (not name)
+    dwid=$(tmux show-option -t "$name" -v @sisyphus_dashboard 2>/dev/null)
+    [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
     exit 0
   fi
 done < <(tmux list-sessions -F '#{session_name}')
@@ -86,7 +87,8 @@ if [ "$pane_count" -le 1 ]; then
       scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
       if [ "$scwd" = "$cwd" ]; then
         tmux switch-client -t "$name"
-        tmux select-window -t "$name:sisyphus-dashboard" 2>/dev/null
+        dwid=$(tmux show-option -t "$name" -v @sisyphus_dashboard 2>/dev/null)
+        [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
         tmux kill-session -t "$session"
         exit 0
       fi

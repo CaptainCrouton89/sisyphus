@@ -6,26 +6,36 @@ import { shellQuote } from '../../shared/shell.js';
 
 
 /**
- * Ensures a dashboard window exists in the given tmux session.
- * If one is already open, focuses it. Otherwise launches a new one.
+ * Opens the dashboard in a new tmux window (for background use, e.g. from `start`).
+ *
+ * Tracks the window by its tmux window ID stored in the @sisyphus_dashboard
+ * session option — not by window name, which is fragile (renames, collisions).
+ * The "; exit" suffix closes the window when the TUI exits.
+ *
  * Returns true if a new dashboard was created, false if an existing one was focused.
  */
-export function ensureDashboard(tmuxSession: string, cwd: string): boolean {
+export function openDashboardWindow(tmuxSession: string, cwd: string): boolean {
+  // Check for existing dashboard by stored window ID
   try {
-    const windows = execSync(
-      `tmux list-windows -t ${shellQuote(tmuxSession)} -F "#{window_name}"`,
-      { encoding: 'utf-8' },
-    );
-    const isOpen = windows.split('\n').some(name => name.trim() === 'sisyphus-dashboard');
+    const storedId = execSync(
+      `tmux show-option -t ${shellQuote(tmuxSession)} -v @sisyphus_dashboard`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    ).trim();
 
-    if (isOpen) {
-      execSync(
-        `tmux select-window -t ${shellQuote(tmuxSession)}:sisyphus-dashboard`,
-      );
-      return false;
+    if (storedId) {
+      try {
+        execSync(
+          `tmux display-message -t ${shellQuote(storedId)} -p "#{window_id}"`,
+          { stdio: 'pipe' },
+        );
+        execSync(`tmux select-window -t ${shellQuote(storedId)}`, { stdio: 'pipe' });
+        return false;
+      } catch {
+        // Window is gone — fall through to create a new one
+      }
     }
   } catch {
-    // tmux error — proceed to launch
+    // Option not set — fall through to create
   }
 
   const tuiPath = join(import.meta.dirname, 'tui.js');
@@ -35,9 +45,14 @@ export function ensureDashboard(tmuxSession: string, cwd: string): boolean {
     { encoding: 'utf-8' },
   ).trim();
 
-  const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)}`;
+  const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)}; exit`;
   execSync(
     `tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`,
+  );
+
+  execSync(
+    `tmux set-option -t ${shellQuote(tmuxSession)} @sisyphus_dashboard ${shellQuote(windowId)}`,
+    { stdio: 'pipe' },
   );
 
   return true;
@@ -49,7 +64,9 @@ export function registerDashboard(program: Command): void {
     .description('Launch the TUI dashboard for monitoring and managing sessions')
     .action(async () => {
       assertTmux();
-      const tmuxSession = getTmuxSession();
-      ensureDashboard(tmuxSession, process.cwd());
+      const tuiPath = join(import.meta.dirname, 'tui.js');
+      execSync(`node ${shellQuote(tuiPath)} --cwd ${shellQuote(process.cwd())}`, {
+        stdio: 'inherit',
+      });
     });
 }

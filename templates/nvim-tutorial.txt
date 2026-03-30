@@ -1,0 +1,68 @@
+Welcome to Neovim!
+===================
+
+You're looking at this file in nvim. Right now you're in NORMAL MODE.
+That means keys are commands, not text. Let's learn the basics.
+
+
+--- MOVING AROUND (Normal Mode) ---
+
+Try these now:
+  gg        Jump to the top of this file
+  G         Jump to the bottom of this file
+  Ctrl+u    Scroll up half a page
+  Ctrl+d    Scroll down half a page
+  /Welcome  Search for "Welcome" (press Enter, then n for next match)
+
+Arrow keys work too, but h/j/k/l are the vim way:
+  h = left    j = down    k = up    l = right
+
+
+--- ENTERING INSERT MODE ---
+
+Press i right now. You should see -- INSERT -- at the bottom.
+Now you can type normally! Try typing something on the line below:
+
+> [type here]
+
+Press Esc when you're done to go back to normal mode.
+
+Other ways to enter insert mode:
+  i    Insert at cursor
+  a    Insert after cursor
+  o    Open new line below and insert
+  O    Open new line above and insert
+
+
+--- PRACTICE: EDIT THIS SECTION ---
+
+Fix the typos below (hint: navigate to the typo, press i, fix it, press Esc):
+
+  1. The quikc brown fox jumps over the lazy dog.
+  2. Sisyphus is a multi-agnet orchestrator.
+  3. Tmux lets you spilt your terminal into panes.
+
+
+--- SAVING AND QUITTING ---
+
+You're almost done! Here's how to get out:
+
+  :w  Enter     Save the file (write)
+  :q  Enter     Quit (fails if unsaved changes)
+  :wq Enter     Save and quit
+  :q! Enter     Quit WITHOUT saving
+  ZZ            Shortcut for save and quit (Shift+z twice)
+
+Try it now: type :wq and press Enter to save your changes and close nvim.
+The pane will close automatically and you'll be back in Claude.
+
+
+--- BONUS (optional) ---
+
+  u         Undo last change
+  Ctrl+r    Redo
+  dd        Delete entire line
+  yy        Copy (yank) entire line
+  p         Paste below cursor
+  :123      Jump to line 123
+  *         Search for the word under cursor
