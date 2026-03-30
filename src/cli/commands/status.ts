@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
 import { computeActiveTimeMs } from '../../shared/utils.js';
-import { roadmapPath } from '../../shared/paths.js';
+import { roadmapPath, cycleLogPath } from '../../shared/paths.js';
 import { formatDuration, statusColor } from '../../shared/format.js';
 
 const COLOR_CODES: Record<string, string> = {
@@ -44,12 +45,16 @@ function inferOrchestratorPhase(session: Session): string {
   }
 }
 
-function formatAgent(agent: Agent): string {
+function formatAgent(agent: Agent, verbose: boolean): string {
   const status = colorize(agent.status, agent.status);
   const name = `${BOLD}${agent.name}${RESET}`;
   const type = `${DIM}(${agent.agentType})${RESET}`;
   const duration = formatDuration(agent.activeMs);
   let line = `    ${agent.id} ${name} ${type} — ${status} ${DIM}(${duration})${RESET}`;
+  if (verbose && agent.instruction) {
+    const truncated = agent.instruction.length > 200 ? agent.instruction.slice(0, 200) + '...' : agent.instruction;
+    line += `\n      ${DIM}Instruction: ${truncated}${RESET}`;
+  }
   if (agent.reports.length > 0) {
     for (const r of agent.reports) {
       const label = r.type === 'final' ? 'Final' : 'Update';
@@ -110,14 +115,43 @@ function readRoadmapTodos(cwd: string, sessionId: string): string[] {
   }
 }
 
-function printSession(session: Session): void {
+function readFullRoadmap(cwd: string, sessionId: string): string | null {
+  try {
+    return readFileSync(roadmapPath(cwd, sessionId), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function readCycleLog(cwd: string, sessionId: string, cycle: number): string | null {
+  try {
+    const path = cycleLogPath(cwd, sessionId, cycle);
+    if (!existsSync(path)) return null;
+    return readFileSync(path, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function capturePaneOutput(paneId: string, lines: number = 50): string | null {
+  try {
+    return execSync(
+      `tmux capture-pane -t "${paneId}" -p -S -${lines}`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    ).trimEnd();
+  } catch {
+    return null;
+  }
+}
+
+function printSession(session: Session, verbose: boolean): void {
   const status = colorize(session.status, session.status);
   const sessionDuration = formatDuration(session.createdAt, session.completedAt);
   console.log(`\n${BOLD}Session: ${session.id}${RESET}`);
   console.log(`  Status: ${status}`);
   console.log(`  Task: ${session.task}`);
   if (session.context) {
-    const truncated = session.context.length > 120 ? session.context.slice(0, 120) + '...' : session.context;
+    const truncated = !verbose && session.context.length > 120 ? session.context.slice(0, 120) + '...' : session.context;
     console.log(`  Context: ${truncated}`);
   }
   console.log(`  CWD: ${session.cwd}`);
@@ -141,15 +175,27 @@ function printSession(session: Session): void {
       const type = `${DIM}(${agent.agentType})${RESET}`;
       const duration = formatDuration(agent.activeMs);
       console.log(`  ${agent.id}  ${name}  ${type}  running ${duration}`);
+      if (verbose && agent.instruction) {
+        const truncated = agent.instruction.length > 200 ? agent.instruction.slice(0, 200) + '...' : agent.instruction;
+        console.log(`    ${DIM}Instruction: ${truncated}${RESET}`);
+      }
     }
   }
 
-  // Roadmap pending todos
-  const todos = readRoadmapTodos(session.cwd, session.id);
-  if (todos.length > 0) {
-    console.log(`\n${BOLD}Remaining (${todos.length} unchecked):${RESET}`);
-    for (const todo of todos) {
-      console.log(`  - ${todo}`);
+  // Roadmap
+  if (verbose) {
+    const roadmap = readFullRoadmap(session.cwd, session.id);
+    if (roadmap) {
+      console.log(`\n${BOLD}Roadmap:${RESET}`);
+      console.log(roadmap);
+    }
+  } else {
+    const todos = readRoadmapTodos(session.cwd, session.id);
+    if (todos.length > 0) {
+      console.log(`\n${BOLD}Remaining (${todos.length} unchecked):${RESET}`);
+      for (const todo of todos) {
+        console.log(`  - ${todo}`);
+      }
     }
   }
 
@@ -160,14 +206,62 @@ function printSession(session: Session): void {
       const isLast = i === cycles.length - 1;
       const phase = isLast && session.status === 'active' ? inferOrchestratorPhase(session) : undefined;
       console.log(formatCycle(cycles[i], phase));
+
+      // Verbose: show cycle log
+      if (verbose) {
+        const log = readCycleLog(session.cwd, session.id, cycles[i].cycle);
+        if (log) {
+          const lines = log.split('\n');
+          const preview = lines.slice(0, 20).join('\n');
+          console.log(`      ${DIM}--- cycle log ---${RESET}`);
+          for (const line of preview.split('\n')) {
+            console.log(`      ${DIM}${line}${RESET}`);
+          }
+          if (lines.length > 20) {
+            console.log(`      ${DIM}... (${lines.length - 20} more lines)${RESET}`);
+          }
+        }
+      }
     }
   }
 
   if (session.agents.length > 0) {
     console.log(`\n  ${BOLD}Agents:${RESET}`);
     for (const agent of session.agents) {
-      console.log(formatAgent(agent));
+      console.log(formatAgent(agent, verbose));
     }
+  }
+
+  // Verbose: capture live pane output
+  if (verbose) {
+    // Orchestrator pane (from last running cycle)
+    const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+    if (lastCycle && !lastCycle.completedAt && lastCycle.paneId) {
+      const output = capturePaneOutput(lastCycle.paneId);
+      if (output) {
+        console.log(`\n<orchestrator-pane-output lines="50">`);
+        console.log(output);
+        console.log(`</orchestrator-pane-output>`);
+      }
+    }
+
+    // Running agent panes
+    for (const agent of runningAgents) {
+      if (agent.paneId) {
+        const output = capturePaneOutput(agent.paneId, 30);
+        if (output) {
+          console.log(`\n<agent-pane-output agent="${agent.id}" name="${agent.name}" lines="30">`);
+          console.log(output);
+          console.log(`</agent-pane-output>`);
+        }
+      }
+    }
+  }
+
+  // Completion report
+  if (verbose && session.completionReport) {
+    console.log(`\n${BOLD}Completion Report:${RESET}`);
+    console.log(session.completionReport);
   }
 }
 
@@ -176,15 +270,17 @@ export function registerStatus(program: Command): void {
     .command('status')
     .description('Show session status')
     .argument('[session-id]', 'Session ID (defaults to SISYPHUS_SESSION_ID env)')
-    .action(async (sessionIdArg?: string) => {
+    .option('-v, --verbose', 'Show detailed output (roadmap, pane output, agent instructions)')
+    .action(async (sessionIdArg?: string, opts?: { verbose?: boolean }) => {
       const sessionId = sessionIdArg ?? process.env.SISYPHUS_SESSION_ID;
+      const verbose = opts?.verbose ?? false;
 
       const request: Request = { type: 'status', sessionId };
       const response = await sendRequest(request);
       if (response.ok) {
         const session = response.data?.session as Session | undefined;
         if (session) {
-          printSession(session);
+          printSession(session, verbose);
         } else {
           console.log('No session found');
         }
