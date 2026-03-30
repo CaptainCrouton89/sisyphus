@@ -1,0 +1,10 @@
+{
+  "name": "sisyphus-todo-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A minimal todo app — sisyphus tutorial demo",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test.js"
+  }
+}
