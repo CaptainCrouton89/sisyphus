@@ -267,33 +267,43 @@ export function wrapText(text: string, width: number): string[] {
       result.push(rawLine);
       continue;
     }
-    let remaining = rawLine;
-    while (stringWidth(remaining) > width) {
-      // Find a break point that fits within display width
-      let breakAt = -1;
-      // Start from an estimated position and scan for a space
-      let estimate = Math.min(remaining.length, width);
-      for (let i = estimate; i >= 0; i--) {
-        if (remaining[i] === ' ' && stringWidth(remaining.slice(0, i)) <= width) {
-          breakAt = i;
-          break;
+
+    // Single-pass: walk characters tracking cumulative display width
+    let lineStart = 0;
+    let lastSpace = -1;
+    let displayWidth = 0;
+
+    for (let i = 0; i < rawLine.length; i++) {
+      const charWidth = stringWidth(rawLine[i]!);
+      displayWidth += charWidth;
+
+      if (rawLine[i] === ' ') lastSpace = i;
+
+      if (displayWidth > width) {
+        let breakAt: number;
+        if (lastSpace > lineStart) {
+          // Break at last space that fits
+          breakAt = lastSpace;
+          result.push(rawLine.slice(lineStart, breakAt));
+          // Skip past the space and any leading spaces
+          lineStart = breakAt + 1;
+          while (lineStart < rawLine.length && rawLine[lineStart] === ' ') lineStart++;
+        } else {
+          // No space — hard break at previous char
+          breakAt = Math.max(lineStart + 1, i);
+          result.push(rawLine.slice(lineStart, breakAt));
+          lineStart = breakAt;
         }
+
+        // Recalculate display width for the carried-over portion
+        displayWidth = stringWidth(rawLine.slice(lineStart, i + 1));
+        lastSpace = -1;
       }
-      if (breakAt <= 0) {
-        // No space found — find the max chars that fit
-        breakAt = remaining.length;
-        for (let i = 1; i <= remaining.length; i++) {
-          if (stringWidth(remaining.slice(0, i)) > width) {
-            breakAt = i - 1;
-            break;
-          }
-        }
-        if (breakAt <= 0) breakAt = 1; // always make progress
-      }
-      result.push(remaining.slice(0, breakAt));
-      remaining = remaining.slice(breakAt).trimStart();
     }
-    if (remaining) result.push(remaining);
+
+    if (lineStart < rawLine.length) {
+      result.push(rawLine.slice(lineStart));
+    }
   }
   return result;
 }

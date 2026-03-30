@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -53,6 +53,11 @@ let cachedContextFileContent: string | null = null;
 // ── Previous frame for diffing ────────────────────────────────────────────────
 
 let prevFrame: string[] = [];
+
+// ── Cycle logs cache (avoids re-reading unchanged files every poll) ───────────
+
+let cachedLogSessionId: string | null = null;
+let cachedLogFiles: Map<string, { mtime: number; cycle: number; content: string }> = new Map();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -151,14 +156,38 @@ export function startApp(state: AppState, cleanup: () => void): void {
         try {
           const ld = logsDir(state.cwd, state.selectedSessionId);
           if (existsSync(ld)) {
+            // Reset cache when session changes
+            if (state.selectedSessionId !== cachedLogSessionId) {
+              cachedLogFiles = new Map();
+              cachedLogSessionId = state.selectedSessionId;
+            }
+
             const files = readdirSync(ld)
               .filter((f) => f.startsWith('cycle-'))
               .sort();
+
+            // Remove cache entries for deleted files
+            const fileSet = new Set(files);
+            for (const key of cachedLogFiles.keys()) {
+              if (!fileSet.has(key)) cachedLogFiles.delete(key);
+            }
+
+            // Only re-read files whose mtime changed
+            for (const f of files) {
+              const filePath = join(ld, f);
+              const mtime = statSync(filePath).mtimeMs;
+              const cached = cachedLogFiles.get(f);
+              if (!cached || cached.mtime !== mtime) {
+                const match = f.match(/cycle-(\d+)\.md$/);
+                const cycle = match ? parseInt(match[1]!, 10) : 0;
+                const content = readFileSync(filePath, 'utf-8');
+                cachedLogFiles.set(f, { mtime, cycle, content });
+              }
+            }
+
             logsCycles = files.map((f) => {
-              const match = f.match(/cycle-(\d+)\.md$/);
-              const cycle = match ? parseInt(match[1]!, 10) : 0;
-              const content = readFileSync(join(ld, f), 'utf-8');
-              return { cycle, content };
+              const entry = cachedLogFiles.get(f)!;
+              return { cycle: entry.cycle, content: entry.content };
             });
             logsContent = logsCycles.map((c) => c.content).join('\n');
           }
@@ -415,11 +444,11 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
   setRenderFunction(render);
 
-  startKeypressListener((input, key) => {
+  const stopKeypress = startKeypressListener((input, key) => {
     handleKeypress(input, key, state, inputActions);
   });
 
-  onResize(() => {
+  const stopResize = onResize(() => {
     const stdoutRows = process.stdout.rows;
     const stdoutCols = process.stdout.columns;
     state.rows = (typeof stdoutRows === 'number' && stdoutRows > 0) ? stdoutRows : 24;
@@ -430,7 +459,18 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
   // Initial poll + recurring interval
   void poll();
-  setInterval(() => void poll(), 2500);
+  const pollInterval = setInterval(() => void poll(), 2500);
+
+  // Register teardown so cleanup() releases all resources
+  const origCleanup = inputActions.cleanup;
+  inputActions.cleanup = () => {
+    clearInterval(pollInterval);
+    stopKeypress();
+    stopResize();
+    state.detailScroll.destroy();
+    state.logsScroll.destroy();
+    origCleanup();
+  };
 
   // Initial render
   requestRender();
