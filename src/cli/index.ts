@@ -5,7 +5,9 @@ if (nodeVersion < 22) {
 }
 
 import { Command } from 'commander';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { registerStart } from './commands/start.js';
 import { registerSpawn } from './commands/spawn.js';
 import { registerSubmit } from './commands/submit.js';
@@ -36,7 +38,11 @@ const program = new Command();
 program
   .name('sisyphus')
   .description('tmux-integrated orchestration daemon for Claude Code')
-  .version('0.1.0');
+  .version(
+    JSON.parse(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf-8'),
+    ).version,
+  );
 
 program.configureHelp({
   sortSubcommands: false,
