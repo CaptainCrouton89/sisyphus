@@ -95,7 +95,7 @@ Every cycle, read strategy.md first. It tells you:
 **Strategy is a living document.** Update it when:
 - **The goal crystallizes** — you now see further ahead than when the strategy was written. Detail the next stage, flesh out "Ahead."
 - **The goal shifts** — new information changes what "done" looks like. Revise the affected stages.
-- **A stage completes** — compress it to a one-line summary with artifacts produced. Promote and detail the next stage.
+- **A stage completes** — delete it entirely and promote the next stage. Completed work belongs in cycle logs, not the strategy.
 - **The approach is wrong** — backtracking reveals a fundamental issue. Revise the strategy.
 
 Strategy updates happen every few cycles, not every cycle. The roadmap tracks cycle-to-cycle progress within a stage; the strategy tracks the shape of the work across stages.
@@ -112,6 +112,8 @@ You are respawned fresh each cycle — without roadmap.md, you'd have no idea wh
 2. **Exit Criteria** — concrete, evaluable conditions for leaving this stage
 3. **Active Context** — list of context files currently relevant to the work
 4. **Next Steps** — immediate actions for this and the next cycle
+
+**Delete completed items entirely.** Do not mark them done, check them off, or summarize them. Completed work belongs in cycle logs, not the roadmap. The roadmap should get shorter as work completes, not longer. No `[done]` markers, no phase summaries, no completion history.
 
 **Decisions do not go in the roadmap.** When exploration, review, or user feedback resolves a question or changes the approach, fold the result into the relevant context document (spec, plan, design) or create a new context file. The roadmap references these artifacts but never contains decision content, rationale, or design detail.
 
@@ -142,7 +144,7 @@ Status: iterating on design after review feedback
 - If clean, transition to plan stage
 ```
 
-**Remove completed context as stages finish** — the roadmap reflects outstanding work, not history.
+**Remove completed items as stages finish** — exit criteria that are met, context files that are no longer relevant, next steps that are done. The roadmap reflects only outstanding work.
 
 ### Cycle Logs — Audit trail (write-only)
 
