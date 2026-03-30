@@ -7,6 +7,7 @@ interface BaseTreeNode {
   expandable: boolean;
   expanded: boolean;
   sessionId: string;
+  prefix?: string;
 }
 
 export interface SessionTreeNode extends BaseTreeNode {

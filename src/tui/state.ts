@@ -196,6 +196,12 @@ export interface AppState {
   cachedReportBlocks: Map<string, ReportBlock[]>;
   cachedTreeNodes: TreeNode[] | null;
   treeCacheKey: string;
+  cachedDetailLines: import('./lib/format.js').DetailLine[] | null;
+  detailCacheKey: string;
+  detailRenderedCache: import('./render.js').RenderedCache;
+  cachedLogsLines: import('./lib/format.js').DetailLine[] | null;
+  logsCacheKey: string;
+  logsRenderedCache: import('./render.js').RenderedCache;
 
   // Config
   cwd: string;
@@ -242,6 +248,12 @@ export function createAppState(cwd: string): AppState {
     cachedReportBlocks: new Map(),
     cachedTreeNodes: null,
     treeCacheKey: '',
+    cachedDetailLines: null,
+    detailCacheKey: '',
+    detailRenderedCache: { lines: [], ansi: [] },
+    cachedLogsLines: null,
+    logsCacheKey: '',
+    logsRenderedCache: { lines: [], ansi: [] },
     cwd,
   };
 }

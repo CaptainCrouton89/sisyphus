@@ -24,6 +24,15 @@ export function windowExists(windowId: string): boolean {
   return execSafe(`tmux display-message -t "${windowId}" -p "#{window_id}"`) !== null;
 }
 
+export function listAllWindowIds(): Set<string> {
+  try {
+    const output = execSync('tmux list-windows -a -F "#{window_id}"', { encoding: 'utf-8', env: EXEC_ENV });
+    return new Set(output.trim().split('\n').filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
 let companionPaneId: string | null = null;
 
 function setupCompanionPlugin(): string {

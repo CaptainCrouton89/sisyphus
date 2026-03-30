@@ -195,7 +195,7 @@ export function renderTreePanel(
     const node = visible[i]!;
     const realIdx = scrollOffset + i;
     const isSelected = realIdx === cursorIndex;
-    const prefix = renderTreePrefix(node, nodes, realIdx);
+    const prefix = node.prefix ?? renderTreePrefix(node, nodes, realIdx);
     const contentWidth = innerW;
     const { icon, label, meta, color, dim, metaColor, suffix, suffixColor } = renderNodeContent(
       node,

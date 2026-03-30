@@ -12,13 +12,14 @@ import {
   notify,
 } from './state.js';
 import { handleKeypress, type InputActions } from './input.js';
-import { createFrameBuffer, flushFrame, writeCenter } from './render.js';
+import { createFrameBuffer, flushFrame, writeCenter, copyRows } from './render.js';
 import { writeToStdout, startKeypressListener, onResize } from './terminal.js';
 import { buildTree } from './lib/tree.js';
+import { precomputePrefixes } from './lib/tree-render.js';
 import { resolveReports } from './lib/reports.js';
 import { send } from './lib/client.js';
 import {
-  windowExists,
+  listAllWindowIds,
   openEditorPopup,
   editInPopup,
   openCompanionPane,
@@ -33,7 +34,7 @@ import {
 import { copyToClipboard } from './lib/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
 import { renderTreePanel } from './panels/tree.js';
-import { renderDetailContent, renderLogsContent, type DetailContext } from './panels/detail.js';
+import { renderDetailRows, renderLogsRows, type DetailContext } from './panels/detail.js';
 import { renderNotificationRow, renderInputBar, renderStatusLine } from './panels/bottom.js';
 import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay } from './panels/overlays.js';
 import { loadConfig } from '../shared/config.js';
@@ -53,6 +54,15 @@ let cachedContextFileContent: string | null = null;
 // ── Previous frame for diffing ────────────────────────────────────────────────
 
 let prevFrame: string[] = [];
+
+// ── Panel dirty tracking ─────────────────────────────────────────────────────
+// Tracks the inputs that affect each panel. When only the scroll offset changes,
+// we can skip re-rendering panels whose inputs haven't changed.
+
+let prevTreeInputs = '';
+let prevBottomInputs = '';
+let prevOverlayMode = '';
+let cachedTreeRows: string[] = [];
 
 // ── Cycle logs cache (avoids re-reading unchanged files every poll) ───────────
 
@@ -76,6 +86,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
   // Track selectedSessionId to detect changes across renders (for immediate poll)
   let prevSelectedSessionId: string | null | undefined = undefined;
+  let debouncedPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ── Polling ─────────────────────────────────────────────────────────────────
 
@@ -104,14 +115,11 @@ export function startApp(state: AppState, cleanup: () => void): void {
         ? ((listRes.data?.sessions as SessionSummary[] | undefined) ?? [])
         : [];
 
-      // Cache window existence for non-completed sessions (avoids execSync in render path)
+      // Batch-check window existence in a single tmux call
+      const aliveWindows = listAllWindowIds();
       for (const s of sessions) {
         if (s.status !== 'completed' && s.tmuxWindowId) {
-          try {
-            s.windowAlive = windowExists(s.tmuxWindowId);
-          } catch {
-            s.windowAlive = false;
-          }
+          s.windowAlive = aliveWindows.has(s.tmuxWindowId);
         }
       }
 
@@ -247,7 +255,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       writeCenter(buf, Math.floor(state.rows / 2), 'Terminal too small — resize to continue');
       const out = flushFrame(buf.lines, prevFrame);
       writeToStdout(out);
-      prevFrame = [...buf.lines];
+      prevFrame = buf.lines;
       return;
     }
 
@@ -285,6 +293,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
         state.cwd,
         state.contextFiles,
       );
+      precomputePrefixes(nodes);
       state.cachedTreeNodes = nodes;
       state.treeCacheKey = cacheKey;
     }
@@ -305,13 +314,21 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.selectedSessionId = newSessionId;
       state.detailScroll.reset();
       state.logsScroll.reset();
+      state.cachedDetailLines = null;
+      state.detailCacheKey = '';
+      state.cachedLogsLines = null;
+      state.logsCacheKey = '';
     }
 
-    // Trigger immediate poll when session changes
+    // Trigger debounced poll when session changes (avoids poll storm during rapid scrolling)
     if (state.selectedSessionId !== prevSelectedSessionId) {
       prevSelectedSessionId = state.selectedSessionId;
+      if (debouncedPollTimer !== null) clearTimeout(debouncedPollTimer);
       if (state.selectedSessionId !== null) {
-        void poll();
+        debouncedPollTimer = setTimeout(() => {
+          debouncedPollTimer = null;
+          void poll();
+        }, 80);
       }
     }
 
@@ -354,15 +371,46 @@ export function startApp(state: AppState, cleanup: () => void): void {
       cachedContextFileContent = null;
     }
 
-    // Render panels
-    renderTreePanel(
-      buf,
-      treeRect,
-      nodes,
-      state.cursorIndex,
-      state.mode === 'navigate' && state.focusPane === 'tree',
-    );
+    // Panel dirty tracking — compute fingerprints for each panel's inputs
+    const treeFocused = state.mode === 'navigate' && state.focusPane === 'tree';
+    const treeInputs = `${state.treeCacheKey}:${state.cursorIndex}:${treeFocused}`;
+    const bottomInputs = `${state.notification}:${state.error}:${state.mode}:${state.inputText}:${state.inputCursorPos}:${cursorNode?.type}`;
+    const overlayMode = state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help' ? state.mode : '';
 
+    const hasPrev = prevFrame.length === buf.height;
+    const treeDirty = !hasPrev || treeInputs !== prevTreeInputs;
+    const bottomDirty = !hasPrev || bottomInputs !== prevBottomInputs;
+    const overlayDirty = !hasPrev || overlayMode !== prevOverlayMode;
+
+    prevTreeInputs = treeInputs;
+    prevBottomInputs = bottomInputs;
+    prevOverlayMode = overlayMode;
+
+    // Render tree into a narrow buffer (treeWidth-wide) so rows are the right size
+    // for concatenation. Cached when clean.
+    let treeRows: string[];
+    if (treeDirty) {
+      const treeBlank = ' '.repeat(treeWidth);
+      const treeBuf: import('./render.js').FrameBuffer = {
+        lines: Array.from({ length: contentHeight }, () => treeBlank),
+        width: treeWidth,
+        height: contentHeight,
+      };
+      renderTreePanel(
+        treeBuf,
+        { x: 0, y: 0, w: treeWidth, h: contentHeight },
+        nodes,
+        state.cursorIndex,
+        treeFocused,
+      );
+      cachedTreeRows = treeBuf.lines;
+      treeRows = treeBuf.lines;
+    } else {
+      treeRows = cachedTreeRows;
+    }
+
+    // Render detail + logs as self-contained row strings, then compose by concatenation.
+    // This eliminates all sliceDisplayCols calls — the main scroll bottleneck.
     const detailCtx: DetailContext = {
       nodes,
       session: state.selectedSession,
@@ -371,26 +419,38 @@ export function startApp(state: AppState, cleanup: () => void): void {
       detailReportBlocks,
       contextFileContent,
     };
-    renderDetailContent(buf, detailRect, state, detailCtx);
+    const detailRows = renderDetailRows(detailRect, state, detailCtx);
+    const logsRows = logsRect ? renderLogsRows(logsRect, state) : null;
 
-    if (logsRect) {
-      renderLogsContent(buf, logsRect, state);
+    // Compose panel rows into buffer by concatenation (no slicing/splicing)
+    for (let i = 0; i < contentHeight; i++) {
+      if (logsRows) {
+        buf.lines[i] = treeRows[i]! + detailRows[i]! + logsRows[i]!;
+      } else {
+        buf.lines[i] = treeRows[i]! + detailRows[i]!;
+      }
     }
 
     // Bottom rows
-    renderNotificationRow(buf, bottomY, state.notification, state.error);
-    renderInputBar(buf, bottomY + 1, state);
-    renderStatusLine(buf, bottomY + 2, state, cursorNode?.type);
+    if (bottomDirty || overlayDirty) {
+      renderNotificationRow(buf, bottomY, state.notification, state.error);
+      renderInputBar(buf, bottomY + 1, state);
+      renderStatusLine(buf, bottomY + 2, state, cursorNode?.type);
+    } else {
+      copyRows(buf, prevFrame, bottomY, 3);
+    }
 
     // Overlays (rendered AFTER panels — overwrites panel content)
-    if (state.mode === 'leader') renderLeaderOverlay(buf, state.rows, state.cols);
-    if (state.mode === 'copy-menu') renderCopyMenuOverlay(buf, state.rows, state.cols);
-    if (state.mode === 'help') renderHelpOverlay(buf, state.rows, state.cols);
+    if (overlayMode) {
+      if (state.mode === 'leader') renderLeaderOverlay(buf, state.rows, state.cols);
+      if (state.mode === 'copy-menu') renderCopyMenuOverlay(buf, state.rows, state.cols);
+      if (state.mode === 'help') renderHelpOverlay(buf, state.rows, state.cols);
+    }
 
     // Flush diff to stdout
     const out = flushFrame(buf.lines, prevFrame);
     writeToStdout(out);
-    prevFrame = [...buf.lines];
+    prevFrame = buf.lines;
   }
 
   // ── InputActions ─────────────────────────────────────────────────────────────
@@ -465,6 +525,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
   const origCleanup = inputActions.cleanup;
   inputActions.cleanup = () => {
     clearInterval(pollInterval);
+    if (debouncedPollTimer !== null) clearTimeout(debouncedPollTimer);
     stopKeypress();
     stopResize();
     state.detailScroll.destroy();

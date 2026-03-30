@@ -1,8 +1,6 @@
 import {
-  renderPanel,
-  drawBorder,
-  writeCenter,
-  type FrameBuffer,
+  buildPanelRows,
+  buildEmptyPanelRows,
   type Rect,
 } from '../render.js';
 import type { AppState, CycleLog } from '../state.js';
@@ -641,12 +639,11 @@ function buildLogsLines(cycleLogs: CycleLog[], width: number): DetailLine[] {
 // Main entry points
 // ---------------------------------------------------------------------------
 
-export function renderDetailContent(
-  buf: FrameBuffer,
+export function renderDetailRows(
   rect: Rect,
   state: AppState,
   detailCtx: DetailContext,
-): void {
+): string[] {
   const { session, agents, reportBlocks, detailReportBlocks, contextFileContent } = detailCtx;
   const scrollOffset = state.detailScroll.offset;
   const focused = state.focusPane === 'detail';
@@ -656,175 +653,228 @@ export function renderDetailContent(
     const reportAgent = agents.find((a) => a.id === state.targetAgentId);
     if (reportAgent) {
       const lines = buildReportViewLines(reportAgent, reportBlocks, rect.w);
-      renderPanel(buf, rect, lines, scrollOffset, focused, 'cyan');
-      return;
+      return buildPanelRows(rect, lines, scrollOffset, focused, 'cyan');
     }
   }
 
   // No cursor / no session → empty state
   const cursorNode: TreeNode | undefined = detailCtx.nodes[state.cursorIndex];
   if (!cursorNode || !session) {
-    drawBorder(buf, rect.x, rect.y, rect.w, rect.h, 'gray');
-    const midRow = rect.y + Math.floor(rect.h / 2);
-    writeCenter(buf, midRow, '\x1b[2mSelect a session to view details\x1b[0m');
-    return;
+    return buildEmptyPanelRows(rect, false, 'gray', '\x1b[2mSelect a session to view details\x1b[0m');
   }
+
+  // Session data hasn't arrived yet (poll debounced during rapid scrolling)
+  if (cursorNode.sessionId !== session.id) {
+    return buildEmptyPanelRows(rect, false, 'gray');
+  }
+
+  // Compute cache key from all inputs that affect line building
+  const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+  const cacheKey = [
+    cursorNode.id,
+    cursorNode.type,
+    state.mode,
+    state.targetAgentId,
+    state.showStrategy,
+    rect.w,
+    session.id,
+    session.agents.length,
+    session.orchestratorCycles.length,
+    lastCycle?.completedAt ?? '',
+    lastCycle?.agentsSpawned.length ?? 0,
+    state.planContent.length,
+    state.goalContent.length,
+    state.strategyContent.length,
+    state.paneAlive,
+    detailReportBlocks.length,
+    session.messages.length,
+    state.contextFiles.length,
+    contextFileContent?.length ?? -1,
+  ].join(':');
 
   let lines: DetailLine[];
   let borderColor = 'gray';
 
-  switch (cursorNode.type) {
-    case 'session': {
-      lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
-      break;
-    }
-
-    case 'cycle': {
-      const cycleNode = cursorNode as CycleTreeNode;
-      const cycle = session.orchestratorCycles.find((c) => c.cycle === cycleNode.cycleNumber);
-      if (!cycle) {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
-      } else {
-        lines = buildCycleLines(cycle, session.agents, rect.w);
-      }
-      break;
-    }
-
-    case 'agent': {
-      const agentNode = cursorNode as AgentTreeNode;
-      const agent = agents.find((a) => a.id === agentNode.agentId);
-      if (!agent) {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
-      } else {
-        lines = buildAgentLines(agent, detailReportBlocks, rect.w);
-      }
-      break;
-    }
-
-    case 'report': {
-      const reportNode = cursorNode as ReportTreeNode;
-      const agent = agents.find((a) => a.id === reportNode.agentId);
-      if (!agent) {
+  if (cacheKey === state.detailCacheKey && state.cachedDetailLines !== null) {
+    lines = state.cachedDetailLines;
+  } else {
+    switch (cursorNode.type) {
+      case 'session': {
         lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
         break;
       }
+
+      case 'cycle': {
+        const cycleNode = cursorNode as CycleTreeNode;
+        const cycle = session.orchestratorCycles.find((c) => c.cycle === cycleNode.cycleNumber);
+        if (!cycle) {
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+        } else {
+          lines = buildCycleLines(cycle, session.agents, rect.w);
+        }
+        break;
+      }
+
+      case 'agent': {
+        const agentNode = cursorNode as AgentTreeNode;
+        const agent = agents.find((a) => a.id === agentNode.agentId);
+        if (!agent) {
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+        } else {
+          lines = buildAgentLines(agent, detailReportBlocks, rect.w);
+        }
+        break;
+      }
+
+      case 'report': {
+        const reportNode = cursorNode as ReportTreeNode;
+        const agent = agents.find((a) => a.id === reportNode.agentId);
+        if (!agent) {
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+          break;
+        }
+        const reportIdx = reportNode.reportIndex;
+        const specificBlock = detailReportBlocks.find((_b, i) => {
+          const originalIdx = agent.reports.length - 1 - i;
+          return originalIdx === reportIdx;
+        });
+        if (specificBlock) {
+          const { label: badge, color: badgeColor } = reportBadge(specificBlock.type);
+          lines = [
+            [seg(' '), seg(badge, { color: badgeColor }), seg(` ${agent.id} · ${agentDisplayName(agent)}`, { bold: true })],
+            singleLine(`  ${formatTime(specificBlock.timestamp)}`, { dim: true }),
+            singleLine(' '),
+            [seg('  ▎ CONTENT', { color: badgeColor, bold: true })],
+            ...wrapText(specificBlock.content.trim(), rect.w - 8).map((l) => singleLine(`    ${l}`)),
+          ];
+          borderColor = badgeColor;
+        } else {
+          lines = buildAgentLines(agent, detailReportBlocks, rect.w);
+        }
+        break;
+      }
+
+      case 'messages': {
+        lines = [singleLine(` Messages (${session.messages.length})`, { bold: true })];
+        if (session.messages.length === 0) {
+          lines.push(singleLine('  No messages', { dim: true, italic: true }));
+        } else {
+          for (const msg of session.messages) {
+            const time = formatTime(msg.timestamp);
+            const agentId = msg.source.type === 'agent' ? msg.source.agentId : undefined;
+            const label = messageSourceLabel(msg.source.type, agentId);
+            const labelColor = messageSourceColor(msg.source.type);
+            const maxContent = Math.max(10, rect.w - label.length - 20);
+            lines.push([
+              seg(`  [${time}] `, { dim: true }),
+              seg(`${label}: `, { color: labelColor, bold: true }),
+              seg(wrapText(msg.summary.length > 0 ? msg.summary : msg.content, maxContent)[0]!, {}),
+            ]);
+          }
+        }
+        break;
+      }
+
+      case 'message': {
+        const msgNode = cursorNode as MessageTreeNode;
+        const msg = session.messages.find((m) => m.id === msgNode.messageId);
+        lines = [singleLine(' Message', { bold: true })];
+        if (msg) {
+          lines.push(singleLine(`  ${msgNode.source} · ${msgNode.timestamp}`, { dim: true }));
+          for (const l of wrapText(msg.content, rect.w - 8)) {
+            lines.push(singleLine(`  ${l}`));
+          }
+        } else {
+          lines.push(singleLine('  Message not found', { dim: true }));
+        }
+        break;
+      }
+
+      case 'context': {
+        lines = [
+          [seg(' '), seg('⊞', { color: 'white' }), seg(` Context (${state.contextFiles.length})`, { bold: true })],
+        ];
+        if (state.contextFiles.length === 0) {
+          lines.push(singleLine('  No context files found.', { dim: true }));
+        } else {
+          for (const f of state.contextFiles) {
+            lines.push(singleLine(`  · ${f}`, { dim: true }));
+          }
+        }
+        break;
+      }
+
+      case 'context-file': {
+        const ctxFileNode = cursorNode as ContextFileTreeNode;
+        lines = [
+          [seg(' '), seg('⊞', { color: 'white' }), seg(` ${ctxFileNode.label}`, { bold: true })],
+          singleLine(' '),
+        ];
+        if (contextFileContent == null) {
+          lines.push(singleLine('  File not found or unreadable.', { dim: true }));
+        } else {
+          const wrapped = wrapText(stripFrontmatter(contextFileContent), rect.w - 8);
+          if (wrapped.length === 0) {
+            lines.push(singleLine('  (empty)', { dim: true }));
+          } else {
+            for (const l of wrapped) {
+              lines.push(singleLine(`    ${l}`));
+            }
+          }
+        }
+        borderColor = 'white';
+        break;
+      }
+
+      default: {
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+        break;
+      }
+    }
+
+    state.cachedDetailLines = lines;
+    state.detailCacheKey = cacheKey;
+  }
+
+  // Compute borderColor from node type (cheap, no need to cache)
+  if (cursorNode.type === 'context-file') {
+    borderColor = 'white';
+  } else if (cursorNode.type === 'report') {
+    const reportNode = cursorNode as ReportTreeNode;
+    const agent = agents.find((a) => a.id === reportNode.agentId);
+    if (agent) {
       const reportIdx = reportNode.reportIndex;
       const specificBlock = detailReportBlocks.find((_b, i) => {
         const originalIdx = agent.reports.length - 1 - i;
         return originalIdx === reportIdx;
       });
-      if (specificBlock) {
-        const { label: badge, color: badgeColor } = reportBadge(specificBlock.type);
-        lines = [
-          [seg(' '), seg(badge, { color: badgeColor }), seg(` ${agent.id} · ${agentDisplayName(agent)}`, { bold: true })],
-          singleLine(`  ${formatTime(specificBlock.timestamp)}`, { dim: true }),
-          singleLine(' '),
-          [seg('  ▎ CONTENT', { color: badgeColor, bold: true })],
-          ...wrapText(specificBlock.content.trim(), rect.w - 8).map((l) => singleLine(`    ${l}`)),
-        ];
-        borderColor = badgeColor;
-      } else {
-        lines = buildAgentLines(agent, detailReportBlocks, rect.w);
-      }
-      break;
-    }
-
-    case 'messages': {
-      lines = [singleLine(` Messages (${session.messages.length})`, { bold: true })];
-      if (session.messages.length === 0) {
-        lines.push(singleLine('  No messages', { dim: true, italic: true }));
-      } else {
-        for (const msg of session.messages) {
-          const time = formatTime(msg.timestamp);
-          const agentId = msg.source.type === 'agent' ? msg.source.agentId : undefined;
-          const label = messageSourceLabel(msg.source.type, agentId);
-          const labelColor = messageSourceColor(msg.source.type);
-          const maxContent = Math.max(10, rect.w - label.length - 20);
-          lines.push([
-            seg(`  [${time}] `, { dim: true }),
-            seg(`${label}: `, { color: labelColor, bold: true }),
-            seg(wrapText(msg.summary.length > 0 ? msg.summary : msg.content, maxContent)[0]!, {}),
-          ]);
-        }
-      }
-      break;
-    }
-
-    case 'message': {
-      const msgNode = cursorNode as MessageTreeNode;
-      const msg = session.messages.find((m) => m.id === msgNode.messageId);
-      lines = [singleLine(' Message', { bold: true })];
-      if (msg) {
-        lines.push(singleLine(`  ${msgNode.source} · ${msgNode.timestamp}`, { dim: true }));
-        for (const l of wrapText(msg.content, rect.w - 8)) {
-          lines.push(singleLine(`  ${l}`));
-        }
-      } else {
-        lines.push(singleLine('  Message not found', { dim: true }));
-      }
-      break;
-    }
-
-    case 'context': {
-      lines = [
-        [seg(' '), seg('⊞', { color: 'white' }), seg(` Context (${state.contextFiles.length})`, { bold: true })],
-      ];
-      if (state.contextFiles.length === 0) {
-        lines.push(singleLine('  No context files found.', { dim: true }));
-      } else {
-        for (const f of state.contextFiles) {
-          lines.push(singleLine(`  · ${f}`, { dim: true }));
-        }
-      }
-      break;
-    }
-
-    case 'context-file': {
-      const ctxFileNode = cursorNode as ContextFileTreeNode;
-      lines = [
-        [seg(' '), seg('⊞', { color: 'white' }), seg(` ${ctxFileNode.label}`, { bold: true })],
-        singleLine(' '),
-      ];
-      if (contextFileContent == null) {
-        lines.push(singleLine('  File not found or unreadable.', { dim: true }));
-      } else {
-        const wrapped = wrapText(stripFrontmatter(contextFileContent), rect.w - 8);
-        if (wrapped.length === 0) {
-          lines.push(singleLine('  (empty)', { dim: true }));
-        } else {
-          for (const l of wrapped) {
-            lines.push(singleLine(`    ${l}`));
-          }
-        }
-      }
-      borderColor = 'white';
-      break;
-    }
-
-    default: {
-      lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
-      break;
+      if (specificBlock) borderColor = reportBadge(specificBlock.type).color;
     }
   }
 
-  renderPanel(buf, rect, lines, scrollOffset, focused, borderColor);
+  return buildPanelRows(rect, lines, scrollOffset, focused, borderColor, state.detailRenderedCache);
 }
 
-export function renderLogsContent(
-  buf: FrameBuffer,
+export function renderLogsRows(
   rect: Rect,
   state: AppState,
-): void {
+): string[] {
   const focused = state.focusPane === 'logs';
   const scrollOffset = state.logsScroll.offset;
 
   if (state.logsCycles.length === 0) {
-    drawBorder(buf, rect.x, rect.y, rect.w, rect.h, focused ? 'blue' : 'gray');
-    const midRow = rect.y + Math.floor(rect.h / 2);
-    writeCenter(buf, midRow, '\x1b[2mNo logs\x1b[0m');
-    return;
+    return buildEmptyPanelRows(rect, focused, 'gray', '\x1b[2mNo logs\x1b[0m');
   }
 
-  const lines = buildLogsLines(state.logsCycles, rect.w);
-  renderPanel(buf, rect, lines, scrollOffset, focused, 'gray');
+  const logsCacheKey = `${state.logsCycles.length}:${rect.w}:${state.logsCycles.map((c) => c.cycle).join(',')}`;
+  let lines: DetailLine[];
+  if (logsCacheKey === state.logsCacheKey && state.cachedLogsLines !== null) {
+    lines = state.cachedLogsLines;
+  } else {
+    lines = buildLogsLines(state.logsCycles, rect.w);
+    state.cachedLogsLines = lines;
+    state.logsCacheKey = logsCacheKey;
+  }
+
+  return buildPanelRows(rect, lines, scrollOffset, focused, 'gray', state.logsRenderedCache);
 }

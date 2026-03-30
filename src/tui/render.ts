@@ -51,13 +51,26 @@ export interface FrameBuffer {
   height: number;
 }
 
+let cachedBlank = '';
+let cachedBlankWidth = 0;
+
 export function createFrameBuffer(width: number, height: number): FrameBuffer {
-  const blank = ' '.repeat(width);
-  return {
-    lines: Array.from({ length: height }, () => blank),
-    width,
-    height,
-  };
+  if (width !== cachedBlankWidth) {
+    cachedBlank = ' '.repeat(width);
+    cachedBlankWidth = width;
+  }
+  const lines = new Array<string>(height);
+  for (let i = 0; i < height; i++) lines[i] = cachedBlank;
+  return { lines, width, height };
+}
+
+/**
+ * Copy rows from a previous frame into the buffer (skip re-render for clean panels).
+ */
+export function copyRows(buf: FrameBuffer, src: string[], startRow: number, count: number): void {
+  for (let i = 0; i < count && startRow + i < buf.height; i++) {
+    buf.lines[startRow + i] = src[startRow + i]!;
+  }
 }
 
 // ─── Frame Diffing (§1.3) ────────────────────────────────────────────────────
@@ -78,6 +91,90 @@ export function flushFrame(frame: string[], prevFrame: string[]): string {
 // ─── ANSI escape sequence regex ───────────────────────────────────────────────
 
 const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
+// ─── Clip ANSI string to display width (no buffer interaction) ──────────────
+
+/**
+ * Clip an ANSI string to exactly `maxWidth` display columns, padding with spaces.
+ * Pure function — no buffer splicing.
+ */
+export function clipAnsi(content: string, maxWidth: number): string {
+  let out = '';
+  let displayWidth = 0;
+  let i = 0;
+
+  while (i < content.length) {
+    if (content[i] === '\x1b' && content[i + 1] === '[') {
+      const seqLen = ansiLen(content, i);
+      if (seqLen > 0) {
+        out += content.substring(i, i + seqLen);
+        i += seqLen;
+        continue;
+      }
+    }
+    const cp = content.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    const chWidth = cp < 128 ? 1 : stringWidth(ch);
+    if (displayWidth + chWidth > maxWidth) break;
+    out += ch;
+    displayWidth += chWidth;
+    i += ch.length;
+  }
+
+  if (out.includes('\x1b[') && !out.endsWith('\x1b[0m')) {
+    out += '\x1b[0m';
+  }
+
+  const remaining = maxWidth - displayWidth;
+  if (remaining > 0) out += ' '.repeat(remaining);
+  return out;
+}
+
+/**
+ * Fast display-width calculation that skips ANSI escapes without regex allocation.
+ */
+function displayWidthFast(s: string): number {
+  let w = 0;
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === '\x1b' && s[i + 1] === '[') {
+      const len = ansiLen(s, i);
+      if (len > 0) { i += len; continue; }
+    }
+    const cp = s.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    w += cp < 128 ? 1 : stringWidth(ch);
+    i += ch.length;
+  }
+  return w;
+}
+
+/**
+ * Parse ANSI escape sequence at position i. Returns length of sequence or 0.
+ * Avoids s.slice(i).match(regex) which allocates a new string each call.
+ */
+function ansiLen(s: string, i: number): number {
+  // Caller already verified s[i] === '\x1b' && s[i+1] === '['
+  let j = i + 2;
+  const len = s.length;
+  // Consume parameter bytes: digits 0-9 and semicolons
+  while (j < len) {
+    const c = s.charCodeAt(j);
+    if ((c >= 0x30 && c <= 0x39) || c === 0x3b) { // '0'-'9' or ';'
+      j++;
+    } else {
+      break;
+    }
+  }
+  // Must end with a letter (final byte)
+  if (j < len) {
+    const c = s.charCodeAt(j);
+    if ((c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) { // A-Z or a-z
+      return j + 1 - i;
+    }
+  }
+  return 0;
+}
 
 // ─── Write functions ──────────────────────────────────────────────────────────
 
@@ -131,10 +228,10 @@ export function writeClipped(
   while (i < content.length) {
     // Check for ANSI escape sequence — pass through without counting width
     if (content[i] === '\x1b' && content[i + 1] === '[') {
-      const match = content.slice(i).match(/^\x1b\[[0-9;]*[a-zA-Z]/);
-      if (match) {
-        out += match[0];
-        i += match[0].length;
+      const seqLen = ansiLen(content, i);
+      if (seqLen > 0) {
+        out += content.substring(i, i + seqLen);
+        i += seqLen;
         continue;
       }
     }
@@ -142,7 +239,7 @@ export function writeClipped(
     // Get the next character (handle surrogate pairs)
     const cp = content.codePointAt(i)!;
     const ch = String.fromCodePoint(cp);
-    const chWidth = stringWidth(ch);
+    const chWidth = cp < 128 ? 1 : stringWidth(ch);
 
     if (displayWidth + chWidth > maxWidth) break;
 
@@ -162,7 +259,14 @@ export function writeClipped(
     out += ' '.repeat(remaining);
   }
 
-  writeAt(buf, x, y, out);
+  // Splice directly into buffer line — we already know exact display width is maxWidth,
+  // so skip writeAt's redundant stringWidth + double sliceDisplayCols re-parse.
+  const existing = buf.lines[y]!;
+  const prefix = sliceDisplayCols(existing, 0, x);
+  const suffix = sliceDisplayCols(existing, x + maxWidth, buf.width);
+  const prefixDisplayW = displayWidthFast(prefix);
+  const paddedPrefix = prefixDisplayW < x ? prefix + ' '.repeat(x - prefixDisplayW) : prefix;
+  buf.lines[y] = paddedPrefix + out + suffix;
 }
 
 /**
@@ -207,6 +311,16 @@ export interface Rect {
   h: number;
 }
 
+/**
+ * Cache for pre-rendered ANSI strings. Keyed by the DetailLine[] identity —
+ * when the caller provides a `renderedCache`, renderPanel will populate it
+ * on first render and reuse on subsequent frames (avoiding renderLine per line).
+ */
+export interface RenderedCache {
+  lines: DetailLine[];
+  ansi: string[];
+}
+
 export function renderPanel(
   buf: FrameBuffer,
   rect: Rect,
@@ -214,6 +328,7 @@ export function renderPanel(
   scrollOffset: number,
   focused: boolean,
   borderColor: string,
+  renderedCache?: RenderedCache | null,
 ): void {
   const { x, y, w, h } = rect;
 
@@ -228,25 +343,149 @@ export function renderPanel(
 
   if (innerW <= 0 || innerH <= 0) return;
 
-  // 3. Windowed slice (same logic as ScrollablePanel.tsx:31-38)
+  // 3. Pre-render ANSI strings (cached across frames)
+  let ansiLines: string[];
+  if (renderedCache && renderedCache.lines === lines) {
+    ansiLines = renderedCache.ansi;
+  } else {
+    ansiLines = new Array<string>(lines.length);
+    for (let i = 0; i < lines.length; i++) {
+      ansiLines[i] = renderLine(lines[i]!);
+    }
+    if (renderedCache) {
+      renderedCache.lines = lines;
+      renderedCache.ansi = ansiLines;
+    }
+  }
+
+  // 4. Windowed slice
   const hasOverflow = lines.length > innerH;
   const viewableH = hasOverflow ? innerH - 1 : innerH;
   const maxScroll = Math.max(0, lines.length - viewableH);
   const effectiveOffset = Math.min(scrollOffset, maxScroll);
-  const visible = lines.slice(effectiveOffset, effectiveOffset + viewableH);
 
-  // 4. Render visible lines
-  for (let i = 0; i < visible.length; i++) {
-    const ansi = renderLine(visible[i]!);
-    writeClipped(buf, innerX, innerY + i, ansi, innerW);
+  // 5. Render visible lines
+  for (let i = 0; i < viewableH && effectiveOffset + i < ansiLines.length; i++) {
+    writeClipped(buf, innerX, innerY + i, ansiLines[effectiveOffset + i]!, innerW);
   }
 
-  // 5. Scroll indicator
+  // 6. Scroll indicator
   if (hasOverflow) {
     const scrollPct = maxScroll > 0 ? Math.round((effectiveOffset / maxScroll) * 100) : 100;
     const indicator = `  ↕ ${scrollPct}% · ${lines.length} lines`;
     writeClipped(buf, innerX, innerY + viewableH, `\x1b[2m${indicator}\x1b[0m`, innerW);
   }
+}
+
+/**
+ * Build panel as self-contained row strings (w display-columns each, including borders).
+ * Returns h strings. No buffer interaction — avoids sliceDisplayCols entirely.
+ */
+export function buildPanelRows(
+  rect: Rect,
+  lines: DetailLine[],
+  scrollOffset: number,
+  focused: boolean,
+  borderColor: string,
+  renderedCache?: RenderedCache | null,
+): string[] {
+  const { w, h } = rect;
+  const rows = new Array<string>(h);
+
+  const color = focused ? 'blue' : borderColor;
+  const sgr = `\x1b[${colorToSGR(color)}m`;
+  const reset = '\x1b[0m';
+  const innerW = w - 4;
+  const innerH = h - 2;
+  const blankInner = ' '.repeat(innerW);
+
+  // Top border
+  rows[0] = sgr + '╭' + '─'.repeat(w - 2) + '╮' + reset;
+  // Bottom border
+  rows[h - 1] = sgr + '╰' + '─'.repeat(w - 2) + '╯' + reset;
+
+  // Pre-fill interior rows with empty content
+  const borderL = sgr + '│' + reset + ' ';
+  const borderR = ' ' + sgr + '│' + reset;
+  const emptyRow = borderL + blankInner + borderR;
+  for (let i = 1; i < h - 1; i++) rows[i] = emptyRow;
+
+  if (innerW <= 0 || innerH <= 0) return rows;
+
+  // Pre-render ANSI strings (cached across frames)
+  let ansiLines: string[];
+  if (renderedCache && renderedCache.lines === lines) {
+    ansiLines = renderedCache.ansi;
+  } else {
+    ansiLines = new Array<string>(lines.length);
+    for (let i = 0; i < lines.length; i++) {
+      ansiLines[i] = renderLine(lines[i]!);
+    }
+    if (renderedCache) {
+      renderedCache.lines = lines;
+      renderedCache.ansi = ansiLines;
+    }
+  }
+
+  // Windowed slice
+  const hasOverflow = lines.length > innerH;
+  const viewableH = hasOverflow ? innerH - 1 : innerH;
+  const maxScroll = Math.max(0, lines.length - viewableH);
+  const effectiveOffset = Math.min(scrollOffset, maxScroll);
+
+  // Content rows — clip and compose without buffer splicing
+  for (let i = 0; i < viewableH && effectiveOffset + i < ansiLines.length; i++) {
+    const clipped = clipAnsi(ansiLines[effectiveOffset + i]!, innerW);
+    rows[1 + i] = borderL + clipped + borderR;
+  }
+
+  // Scroll indicator
+  if (hasOverflow) {
+    const scrollPct = maxScroll > 0 ? Math.round((effectiveOffset / maxScroll) * 100) : 100;
+    const indicator = `  ↕ ${scrollPct}% · ${lines.length} lines`;
+    const clipped = clipAnsi(`\x1b[2m${indicator}\x1b[0m`, innerW);
+    rows[1 + viewableH] = borderL + clipped + borderR;
+  }
+
+  return rows;
+}
+
+/**
+ * Build empty panel rows (border only, no content).
+ */
+export function buildEmptyPanelRows(
+  rect: Rect,
+  focused: boolean,
+  borderColor: string,
+  centerText?: string,
+): string[] {
+  const { w, h } = rect;
+  const rows = new Array<string>(h);
+  const color = focused ? 'blue' : borderColor;
+  const sgr = `\x1b[${colorToSGR(color)}m`;
+  const reset = '\x1b[0m';
+  const innerW = w - 4;
+  const borderL = sgr + '│' + reset + ' ';
+  const borderR = ' ' + sgr + '│' + reset;
+  const emptyRow = borderL + ' '.repeat(innerW) + borderR;
+
+  rows[0] = sgr + '╭' + '─'.repeat(w - 2) + '╮' + reset;
+  rows[h - 1] = sgr + '╰' + '─'.repeat(w - 2) + '╯' + reset;
+  for (let i = 1; i < h - 1; i++) rows[i] = emptyRow;
+
+  if (centerText) {
+    const midRow = Math.floor(h / 2);
+    if (midRow > 0 && midRow < h - 1) {
+      const clipped = clipAnsi(centerText, innerW);
+      // Center within panel
+      const textW = displayWidthFast(centerText);
+      const pad = Math.max(0, Math.floor((innerW - textW) / 2));
+      const centered = ' '.repeat(pad) + clipped;
+      rows[midRow] = borderL + clipAnsi(centered, innerW) + borderR;
+    }
+  }
+
+  return rows;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -265,21 +504,22 @@ function sliceDisplayCols(s: string, start: number, end: number): string {
   while (i < s.length && col < end) {
     // ANSI escape: pass through if we're in the slice
     if (s[i] === '\x1b' && s[i + 1] === '[') {
-      const match = s.slice(i).match(/^\x1b\[[0-9;]*[a-zA-Z]/);
-      if (match) {
+      const seqLen = ansiLen(s, i);
+      if (seqLen > 0) {
         if (col >= start) {
-          out += match[0];
+          const seq = s.substring(i, i + seqLen);
+          out += seq;
           // Track if we have open SGR (non-reset)
-          hasOpenSGR = match[0] !== '\x1b[0m' && match[0] !== '\x1b[m';
+          hasOpenSGR = seq !== '\x1b[0m' && seq !== '\x1b[m';
         }
-        i += match[0].length;
+        i += seqLen;
         continue;
       }
     }
 
     const cp = s.codePointAt(i)!;
     const ch = String.fromCodePoint(cp);
-    const chWidth = stringWidth(ch);
+    const chWidth = cp < 128 ? 1 : stringWidth(ch);
 
     if (col >= start) {
       inSlice = true;
