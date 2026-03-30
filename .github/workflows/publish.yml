@@ -22,6 +22,7 @@ jobs:
         with:
           node-version: 22
 
+      - run: npm install -g npm@latest
       - run: npm ci
 
       - name: Bump version
