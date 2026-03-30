@@ -3,6 +3,7 @@ import { existsSync, statSync } from 'node:fs';
 import type { Command } from 'commander';
 import { daemonLogPath, daemonPidPath, globalDir, socketPath } from '../../shared/paths.js';
 import { isInstalled } from '../install.js';
+import { detectTerminal, checkItermOptionKey, isNvimAvailable, isBeginCommandInstalled } from '../onboard.js';
 import { cycleScriptPath, DEFAULT_KEY, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath } from '../tmux-setup.js';
 
 interface Check {
@@ -188,6 +189,65 @@ function checkGlobalDir(): Check {
   return { name: 'Data directory', status: 'warn', detail: `${dir} does not exist (created on first use)` };
 }
 
+function checkTerminal(): Check {
+  if (process.platform !== 'darwin') {
+    return { name: 'Terminal', status: 'ok', detail: 'Non-macOS (skipped)' };
+  }
+  const terminal = detectTerminal();
+  if (terminal.isIterm) {
+    return { name: 'Terminal', status: 'ok', detail: terminal.name };
+  }
+  return {
+    name: 'Terminal',
+    status: 'warn',
+    detail: terminal.name ? terminal.name : 'unknown',
+    fix: 'iTerm2 recommended for best experience: https://iterm2.com',
+  };
+}
+
+function checkItermRightOptionKey(): Check | null {
+  if (process.platform !== 'darwin') return null;
+  const terminal = detectTerminal();
+  if (!terminal.isIterm) return null;
+  const result = checkItermOptionKey();
+  if (!result.checked) return null;
+  if (result.allCorrect) {
+    return { name: 'Right Option Key', status: 'ok', detail: 'Esc+' };
+  }
+  const profiles = result.incorrectProfiles.map((p) => `"${p}"`).join(', ');
+  return {
+    name: 'Right Option Key',
+    status: 'warn',
+    detail: `Not Esc+ for ${profiles}`,
+    fix: 'iTerm2 \u2192 Settings \u2192 Profiles \u2192 Keys \u2192 Right Option Key \u2192 Esc+',
+  };
+}
+
+function checkBeginCommand(): Check {
+  if (isBeginCommandInstalled()) {
+    return { name: '/begin command', status: 'ok', detail: 'Installed' };
+  }
+  return {
+    name: '/begin command',
+    status: 'warn',
+    detail: 'Not installed',
+    fix: 'sisyphus setup',
+  };
+}
+
+function checkNvim(): Check {
+  if (!isNvimAvailable()) {
+    const fix = process.platform === 'darwin' ? 'brew install neovim' : 'Install neovim from https://neovim.io';
+    return { name: 'nvim', status: 'warn', detail: 'Not installed', fix };
+  }
+  try {
+    const version = execSync('nvim --version', { encoding: 'utf-8', stdio: 'pipe' }).split('\n')[0]?.replace('NVIM ', '');
+    return { name: 'nvim', status: 'ok', detail: version ?? 'installed' };
+  } catch {
+    return { name: 'nvim', status: 'ok', detail: 'installed' };
+  }
+}
+
 const SYMBOLS = { ok: '\u2713', warn: '!', fail: '\u2717' } as const;
 
 export function registerDoctor(program: Command): void {
@@ -195,17 +255,22 @@ export function registerDoctor(program: Command): void {
     .command('doctor')
     .description('Check sisyphus installation health')
     .action(async () => {
+      const itermCheck = checkItermRightOptionKey();
       const checks: Check[] = [
         checkNodeVersion(),
         checkClaudeCli(),
         checkGit(),
         checkTmux(),
         checkTmuxVersion(),
+        checkTerminal(),
+        ...(itermCheck ? [itermCheck] : []),
         checkGlobalDir(),
         checkDaemonInstalled(),
         checkDaemonRunning(),
         checkCycleScript(),
         checkTmuxKeybind(),
+        checkBeginCommand(),
+        checkNvim(),
       ];
 
       let hasIssues = false;

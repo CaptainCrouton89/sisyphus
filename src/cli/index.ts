@@ -31,6 +31,7 @@ import { registerDoctor } from './commands/doctor.js';
 import { registerCompanionContext } from './commands/companion-context.js';
 import { registerGettingStarted } from './commands/getting-started.js';
 import { registerInit } from './commands/init.js';
+import { registerSetup } from './commands/setup.js';
 import { globalDir } from '../shared/paths.js';
 
 const program = new Command();
@@ -71,6 +72,7 @@ registerDoctor(program);
 registerCompanionContext(program);
 registerGettingStarted(program);
 registerInit(program);
+registerSetup(program);
 
 program.addHelpText('after', `
 Examples:
@@ -86,15 +88,11 @@ Run 'sisyphus getting-started' for a complete usage guide.
 // Show welcome on first run (before ~/.sisyphus exists)
 const args = process.argv.slice(2);
 const firstArg = args[0];
-const skipWelcome = ['doctor', 'getting-started', 'help', '--help', '-h', 'init', 'uninstall', '--version', '-V'];
+const skipWelcome = ['doctor', 'getting-started', 'help', '--help', '-h', 'init', 'setup', 'uninstall', '--version', '-V'];
 if (!existsSync(globalDir()) && firstArg && !skipWelcome.includes(firstArg)) {
   mkdirSync(globalDir(), { recursive: true });
   console.log('');
-  console.log('  Welcome to Sisyphus — multi-agent orchestration for Claude Code.');
-  console.log('');
-  console.log('  First time? Run these commands:');
-  console.log('    sisyphus doctor           Check your setup');
-  console.log('    sisyphus getting-started   Learn the basics');
+  console.log("  Welcome to Sisyphus. Run 'sisyphus setup' to get started.");
   console.log('');
 }
 
