@@ -1,28 +1,8 @@
-import { execSync } from 'node:child_process';
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { readStdin } from '../stdin.js';
 import { assertTmux } from '../tmux.js';
-
-function isInWorktree(): boolean {
-  try {
-    const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
-    const commonDir = execSync('git rev-parse --git-common-dir', { encoding: 'utf-8' }).trim();
-    return gitDir !== commonDir;
-  } catch {
-    return false;
-  }
-}
-
-function getUncommittedChanges(): string | null {
-  try {
-    const status = execSync('git status --porcelain', { encoding: 'utf-8' }).trim();
-    return status || null;
-  } catch {
-    return null;
-  }
-}
 
 export function registerSubmit(program: Command): void {
   program
@@ -37,19 +17,6 @@ export function registerSubmit(program: Command): void {
       if (!sessionId || !agentId) {
         console.error('Error: provide --session or set SISYPHUS_SESSION_ID (and SISYPHUS_AGENT_ID) environment variables');
         process.exit(1);
-      }
-
-      // Block submit if in a git worktree with uncommitted changes — commit first
-      if (isInWorktree()) {
-        const changes = getUncommittedChanges();
-        if (changes) {
-          console.error('Error: uncommitted changes in worktree. Commit your changes before submitting.');
-          console.error('\nCommit first:\n  git add -A && git commit -m "description of changes"\n');
-          console.error('Or discard:\n  git checkout -- .\n');
-          console.error('Uncommitted changes:');
-          console.error(changes);
-          process.exit(1);
-        }
       }
 
       const report = opts.report ?? await readStdin();
