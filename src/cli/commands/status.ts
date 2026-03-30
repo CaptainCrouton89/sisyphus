@@ -102,20 +102,7 @@ function computeLastActivity(session: Session): Date | null {
   return new Date(Math.max(...timestamps));
 }
 
-function readRoadmapTodos(cwd: string, sessionId: string): string[] {
-  try {
-    const content = readFileSync(roadmapPath(cwd, sessionId), 'utf8');
-    return content
-      .split('\n')
-      .filter(line => /^\s*- \[ \]/.test(line))
-      .map(line => line.replace(/^\s*- \[ \]\s*/, ''))
-      .slice(0, 5);
-  } catch {
-    return [];
-  }
-}
-
-function readFullRoadmap(cwd: string, sessionId: string): string | null {
+function readRoadmap(cwd: string, sessionId: string): string | null {
   try {
     return readFileSync(roadmapPath(cwd, sessionId), 'utf8');
   } catch {
@@ -183,20 +170,10 @@ function printSession(session: Session, verbose: boolean): void {
   }
 
   // Roadmap
-  if (verbose) {
-    const roadmap = readFullRoadmap(session.cwd, session.id);
-    if (roadmap) {
-      console.log(`\n${BOLD}Roadmap:${RESET}`);
-      console.log(roadmap);
-    }
-  } else {
-    const todos = readRoadmapTodos(session.cwd, session.id);
-    if (todos.length > 0) {
-      console.log(`\n${BOLD}Remaining (${todos.length} unchecked):${RESET}`);
-      for (const todo of todos) {
-        console.log(`  - ${todo}`);
-      }
-    }
+  const roadmap = readRoadmap(session.cwd, session.id);
+  if (roadmap) {
+    console.log(`\n${BOLD}Roadmap:${RESET}`);
+    console.log(roadmap);
   }
 
   if (session.orchestratorCycles.length > 0) {
