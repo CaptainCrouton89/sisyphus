@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { resolve, join } from 'node:path';
+import { resolve, join, relative } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { contextDir, goalPath, strategyPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
@@ -9,7 +9,7 @@ import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { shellQuote } from '../shared/shell.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
-import { discoverAgentTypes } from './frontmatter.js';
+import { discoverAgentTypes, parseAgentFrontmatter, extractAgentBody } from './frontmatter.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
@@ -81,6 +81,26 @@ export function setOrchestratorPaneId(sessionId: string, paneId: string): void {
   sessionOrchestratorPane.set(sessionId, paneId);
 }
 
+interface DiscoveredMode {
+  name: string;
+  description?: string;
+  filePath: string;
+}
+
+function discoverOrchestratorModes(): DiscoveredMode[] {
+  const templatesDir = resolve(import.meta.dirname, '../templates');
+  const files = readdirSync(templatesDir).filter(
+    f => f.startsWith('orchestrator-') && f.endsWith('.md') && f !== 'orchestrator-base.md'
+  );
+
+  return files.map(file => {
+    const content = readFileSync(join(templatesDir, file), 'utf-8');
+    const fm = parseAgentFrontmatter(content);
+    const name = fm.name ?? file.replace(/^orchestrator-/, '').replace(/\.md$/, '');
+    return { name, description: fm.description, filePath: join(templatesDir, file) };
+  });
+}
+
 function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): string {
   const projectPath = projectOrchestratorPromptPath(cwd);
   if (existsSync(projectPath)) {
@@ -90,27 +110,17 @@ function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): s
   const basePath = resolve(import.meta.dirname, '../templates/orchestrator-base.md');
   const base = readFileSync(basePath, 'utf-8');
 
-  let modePrompt: string;
+  const modes = discoverOrchestratorModes();
+  const selected = modes.find(m => m.name === mode) ?? modes.find(m => m.name === 'strategy');
 
-  if (mode === 'strategy') {
-    const strategyTemplatePath = resolve(import.meta.dirname, '../templates/orchestrator-strategy.md');
-    modePrompt = readFileSync(strategyTemplatePath, 'utf-8');
-  } else if (mode === 'implementation') {
-    const implPath = resolve(import.meta.dirname, '../templates/orchestrator-impl.md');
-    modePrompt = readFileSync(implPath, 'utf-8');
-  } else if (mode === 'validation') {
-    const validationPath = resolve(import.meta.dirname, '../templates/orchestrator-validation.md');
-    modePrompt = readFileSync(validationPath, 'utf-8');
-  } else if (mode === 'completion') {
-    const completionPath = resolve(import.meta.dirname, '../templates/orchestrator-completion.md');
-    modePrompt = readFileSync(completionPath, 'utf-8');
-  } else {
-    // Default: planning mode
-    const planningPath = resolve(import.meta.dirname, '../templates/orchestrator-planning.md');
-    modePrompt = readFileSync(planningPath, 'utf-8');
+  if (!selected) {
+    throw new Error(`Unknown orchestrator mode '${mode}' and no fallback found. Available: ${modes.map(m => m.name).join(', ')}`);
   }
 
-  return base + '\n\n' + modePrompt;
+  const modeContent = readFileSync(selected.filePath, 'utf-8');
+  const modeBody = extractAgentBody(modeContent);
+
+  return base + '\n\n' + modeBody;
 }
 
 function formatStateForOrchestrator(session: Session): string {
@@ -132,8 +142,7 @@ function formatStateForOrchestrator(session: Session): string {
       ctxFiles = readdirSync(ctxDir).filter(f => f !== 'CLAUDE.md');
     }
     if (ctxFiles.length > 0) {
-      const ctxLines = ctxFiles.map(f => `- ${join(ctxDir, f)}`).join('\n');
-      contextSection = `\n## Context\n\n${ctxLines}\n`;
+      contextSection = `\n## Context\n\n@${relative(session.cwd, ctxDir)}\n`;
     }
   }
 
@@ -146,25 +155,11 @@ function formatStateForOrchestrator(session: Session): string {
           : m.source.type === 'system' && m.source.detail
             ? `system:${m.source.detail}`
             : m.source.type;
-        const fileRef = m.filePath ? ` → ${m.filePath}` : '';
+        const fileRef = m.filePath ? ` → ${relative(session.cwd, m.filePath)}` : '';
         return `- [${sourceLabel} @ ${m.timestamp}] "${m.summary}"${fileRef}`;
       }).join('\n') + '\n'
     : '';
 
-  // Previous cycles: all except last, compact format
-  let previousCyclesSection = '';
-  if (session.orchestratorCycles.length > 1) {
-    const previousCycles = session.orchestratorCycles.slice(0, -1);
-    const agentMap = new Map(session.agents.map((a: Agent) => [a.id, a]));
-    const lines = previousCycles.map(c => {
-      const agentDescs = c.agentsSpawned.map(id => {
-        const agent = agentMap.get(id);
-        return agent ? `${id} (${agent.name})` : id;
-      }).join(', ');
-      return `Cycle ${c.cycle}: ${agentDescs || '(none)'}`;
-    });
-    previousCyclesSection = `\n### Previous Cycles\n\n${lines.join('\n')}\n`;
-  }
 
   // Most recent cycle: agent reports as file references
   let mostRecentCycleSection = '';
@@ -177,7 +172,7 @@ function formatStateForOrchestrator(session: Session): string {
 
       const finalReport = agent.reports.find(r => r.type === 'final');
       const reportToUse = finalReport ?? agent.reports[agent.reports.length - 1];
-      const reportRef = reportToUse ? `@${reportToUse.filePath}` : '(no reports)';
+      const reportRef = reportToUse ? `@${relative(session.cwd, reportToUse.filePath)}` : '(no reports)';
 
       return `- **${id}** (${agent.name}) [${agent.status}]: ${reportRef}`;
     }).join('\n');
@@ -187,10 +182,10 @@ function formatStateForOrchestrator(session: Session): string {
 
   // Strategy section
   const strategyFile = strategyPath(session.cwd, session.id);
-  const strategyRef = existsSync(strategyFile) ? `@${strategyFile}` : '(empty)';
+  const strategyRef = existsSync(strategyFile) ? `@${relative(session.cwd, strategyFile)}` : '(empty)';
 
   // Roadmap section
-  const roadmapRef = existsSync(roadmapFile) ? `@${roadmapFile}` : '(empty)';
+  const roadmapRef = existsSync(roadmapFile) ? `@${relative(session.cwd, roadmapFile)}` : '(empty)';
 
   // Repositories section — always present
   const repos = detectRepos(session.cwd);
@@ -231,8 +226,8 @@ ${goalContent}
 ${contextSection}${messagesSection}
 ### Cycle Log
 
-Write your cycle summary to: ${logFile}
-${previousCyclesSection}${mostRecentCycleSection}
+Write your cycle summary to: ${relative(session.cwd, logFile)}
+${mostRecentCycleSection}
 ## Strategy
 
 ${strategyRef}
@@ -278,7 +273,18 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
     .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
 
-  const systemPrompt = substituteEnvVars(basePrompt.replace('{{AGENT_TYPES}}', agentTypeLines));
+  // Inject available orchestrator modes into system prompt
+  const modes = discoverOrchestratorModes();
+  const modeLines = modes.map(m => {
+    const desc = m.description ? ` — ${m.description}` : '';
+    return `- \`${m.name}\`${desc}`;
+  }).join('\n');
+
+  const systemPrompt = substituteEnvVars(
+    basePrompt
+      .replace('{{AGENT_TYPES}}', agentTypeLines)
+      .replace('{{ORCHESTRATOR_MODES}}', modeLines)
+  );
 
   // System prompt: template + agent types (no state)
   const cycleNum = session.orchestratorCycles.length + 1;
@@ -328,7 +334,15 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   registerPane(paneId, sessionId, 'orchestrator');
   const sessionLabel = session.name ?? sessionId.slice(0, 8);
   tmux.setPaneTitle(paneId, `ssph:orch ${sessionLabel} c${cycleNum}`);
-  tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR, { role: 'orch', session: sessionLabel, cycle: `c${cycleNum}` });
+  tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR, { role: 'orch', session: sessionLabel, cycle: `c${cycleNum}`, mode });
+
+  const notifyEnabled = config.notifications?.enabled !== false ? '1' : '0';
+  const notifySound = config.notifications?.sound ?? '/System/Library/Sounds/Hero.aiff';
+  const notifyEnvExports = buildEnvExports([
+    `export SISYPHUS_NOTIFY_ENABLED='${notifyEnabled}'`,
+    `export SISYPHUS_NOTIFY_SOUND='${notifySound}'`,
+    `export SISYPHUS_SESSION_NAME='${sessionLabel}'`,
+  ]);
 
   const bannerCmd = resolveBannerCmd();
   const notifyCmd = buildNotifyCmd(paneId);
@@ -337,6 +351,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     '#!/usr/bin/env bash',
     ...(bannerCmd ? [bannerCmd] : []),
     envExports,
+    notifyEnvExports,
     claudeCmd,
     notifyCmd,
   ]);
@@ -349,6 +364,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     agentsSpawned: [],
     paneId,
     claudeSessionId,
+    mode,
   });
 }
 

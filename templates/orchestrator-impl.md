@@ -1,3 +1,8 @@
+---
+name: implementation
+description: Execute the plan — spawn agents, maximize parallelism, review results. Use when planning is complete and the roadmap is ready for execution.
+---
+
 # Implementation Phase
 
 <stage-execution>

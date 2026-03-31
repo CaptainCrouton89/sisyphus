@@ -1,3 +1,8 @@
+---
+name: validation
+description: Prove that what was built actually works via end-to-end verification. Use when all implementation stages are complete and before transitioning to completion.
+---
+
 # Validation Phase
 
 You are in validation mode. Your job is not to build — it is to **prove that what was built actually works.** No new implementation unless a validation failure demands it. No assumptions about correctness. No hedging.

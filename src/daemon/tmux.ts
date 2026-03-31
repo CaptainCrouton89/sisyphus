@@ -101,6 +101,7 @@ export interface PaneMeta {
   role: string;      // "orch" or agent paneLabel (e.g. "impl", "review-plan")
   session: string;   // session name or truncated UUID
   cycle: string;     // e.g. "c3"
+  mode?: string;     // orchestrator mode (e.g. "strategy", "implementation")
 }
 
 export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta): void {
@@ -113,11 +114,17 @@ export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta):
   execSafe(`tmux set -p -t "${paneTarget}" @pane_role ${shellQuote(meta.role)}`);
   execSafe(`tmux set -p -t "${paneTarget}" @pane_session ${shellQuote(meta.session)}`);
   execSafe(`tmux set -p -t "${paneTarget}" @pane_cycle ${shellQuote(meta.cycle)}`);
+  if (meta.mode) {
+    execSafe(`tmux set -p -t "${paneTarget}" @pane_mode ${shellQuote(meta.mode)}`);
+  }
 
-  // Visual hierarchy: role badge (bg color) > session name (fg color) > cycle + path (dim)
+  // Visual hierarchy: role badge (bg color) > session name (fg color) > mode (italic) > cycle + path (dim)
+  // Mode only renders for orchestrator panes (where @pane_mode is set).
+  const modeSegment = `#{?#{@pane_mode}, #[fg=${color}\\,italics]#{@pane_mode}#[default],}`;
   const fmt = [
     `#[bg=${color},fg=black,bold] #{@pane_role} #[default]`,
     ` #[fg=${color},bold]#{@pane_session}`,
+    modeSegment,
     ` #[default,dim]#{@pane_cycle}`,
     `  ${homePath}${branchSuffix}`,
     `#[default]`,
@@ -140,6 +147,7 @@ export function updatePaneMeta(paneTarget: string, updates: Partial<PaneMeta>): 
   if (updates.role !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_role ${shellQuote(updates.role)}`);
   if (updates.session !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_session ${shellQuote(updates.session)}`);
   if (updates.cycle !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_cycle ${shellQuote(updates.cycle)}`);
+  if (updates.mode !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_mode ${shellQuote(updates.mode)}`);
 }
 
 export function selectLayout(windowTarget: string, layout: string = 'even-horizontal'): void {

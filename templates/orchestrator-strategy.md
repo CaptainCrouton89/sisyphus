@@ -1,3 +1,8 @@
+---
+name: strategy
+description: Understand the goal and map out how to get there. Use when starting a new session, when the goal has fundamentally shifted, or when the current approach needs rethinking.
+---
+
 # Strategy Phase
 
 You are in strategy mode. Your job is to understand the goal and produce a strategy that maps out how to get there — but only as far as you can currently see.

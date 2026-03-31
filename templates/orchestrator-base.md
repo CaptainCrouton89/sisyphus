@@ -62,7 +62,13 @@ Wait for the user to respond. After receiving their answer, update roadmap, spaw
 
 The rule:
 - **Need user input?** Ask and wait. Continue after they respond.
-- **Done with cycle work?** Yield with a prompt for next cycle.
+- **Done with cycle work?** Yield with a prompt for next cycle. Include `--mode` when transitioning phases.
+
+### Mode Transitions
+
+Each yield can switch your mode — the mode determines the system prompt for the next cycle. Omitting `--mode` keeps the current mode.
+
+{{ORCHESTRATOR_MODES}}
 
 **Seek user alignment when:**
 - The goal is ambiguous or under-specified
@@ -218,7 +224,7 @@ You have unlimited cycles. Failed implementations, deferred issues, and skipped 
 
 - **Critique** — spawn review agents to find flaws, code smells, missed edge cases. They report problems, not fixes.
 - **Refine** — spawn agents to fix what reviewers found.
-- **Validate** — e2e verification that the feature actually works. When all stages are done, transition to validation mode (`--mode validation`) for the comprehensive final pass.
+- **Validate** — e2e verification that the feature actually works. When all stages are done, transition to `validation` mode for the comprehensive final pass.
 
 </development-heuristics>
 
@@ -259,11 +265,7 @@ sisyphus spawn --name "debug-auth" --agent-type sisyphus:debug "/devcore:debuggi
 ```bash
 sisyphus yield                                           # yield — NEVER use when waiting for user input
 sisyphus yield --prompt "focus on auth middleware next"   # yield with guidance for next cycle
-sisyphus yield --mode strategy --prompt "re-evaluate"    # return to strategy mode (goal fundamentally changed)
-sisyphus yield --mode planning --prompt "re-evaluate"    # switch to planning mode
-sisyphus yield --mode implementation --prompt "begin"    # switch to implementation mode
-sisyphus yield --mode validation --prompt "validate"     # switch to validation mode
-sisyphus yield --mode completion --prompt "validated"     # switch to completion mode (user sign-off)
+sisyphus yield --mode <mode> --prompt "guidance"          # switch mode for next cycle
 sisyphus complete --report "summary of accomplishments"  # complete the session (only from completion mode)
 sisyphus continue                                        # reactivate a completed session
 sisyphus status                                          # check session status

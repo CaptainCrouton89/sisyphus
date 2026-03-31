@@ -1,3 +1,8 @@
+---
+name: completion
+description: Present accomplishments and get explicit user confirmation before finalizing. Use only after validation passes and all checks are satisfied.
+---
+
 # Completion Phase
 
 You are in completion mode. Your job is to **present what was accomplished and get explicit user confirmation before finalizing the session.** This is the handoff — the user sees the results, asks questions, requests fixes, and confirms when they're satisfied.

@@ -1,3 +1,8 @@
+---
+name: planning
+description: Deep exploration, requirements gathering, design, and detailed roadmap creation. Use after strategy is established and before implementation begins.
+---
+
 # Planning Phase
 
 <planning-workflow>

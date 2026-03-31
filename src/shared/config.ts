@@ -3,6 +3,11 @@ import { globalConfigPath, projectConfigPath } from './paths.js';
 
 export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
 
+export interface NotificationConfig {
+  enabled?: boolean;
+  sound?: string;
+}
+
 export interface Config {
   model?: string;
   tmuxSession?: string;
@@ -13,12 +18,17 @@ export interface Config {
   agentEffort?: EffortLevel;
   editor?: string;
   repos?: string[];
+  notifications?: NotificationConfig;
 }
 
 const DEFAULT_CONFIG: Config = {
   pollIntervalMs: 5000,
   orchestratorEffort: 'high',
   agentEffort: 'medium',
+  notifications: {
+    enabled: true,
+    sound: '/System/Library/Sounds/Hero.aiff',
+  },
 };
 
 function readJsonFile(filePath: string): Partial<Config> {
