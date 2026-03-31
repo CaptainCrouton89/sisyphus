@@ -174,7 +174,12 @@ Apply the same principle to context files: when agent reports reveal stale secti
 
 The context directory (`$SISYPHUS_SESSION_DIR/context/`) stores persistent artifacts too large for agent instructions: requirements, design documents, implementation plans, exploration findings, test strategies, e2e verification recipes.
 
-Context files are curated tokens — every section earns its place by being useful to the agents that read it. Documents represent current understanding: when a decision resolves an open question, fold the answer into the relevant section and remove the question. When new knowledge supersedes a section, update it. When a phase completes, remove material that only served the transition.
+Context files are curated tokens — every section earns its place by being useful to the agents that read it. Documents represent current understanding, not conversation history. When a question gets answered:
+
+1. **Delete the question** from whatever section lists it (Open Questions, TBD, etc.)
+2. **Find the section where the answer belongs** — the section that covers that topic — and update it to incorporate the new information as settled fact
+
+Do not update the question in place, annotate it with an answer, or create a separate decisions file. The document should read as if the answer was always known. When new knowledge supersedes a section, rewrite it. When a phase completes, remove material that only served the transition.
 
 Each cycle, before spawning agents, check the context files you're about to reference: if a file has accumulated stale material, update it before agents read it. If a file no longer serves active work, remove it from the roadmap's active context list.
 

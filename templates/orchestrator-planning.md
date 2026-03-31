@@ -30,7 +30,7 @@ For significant features, requirements refinement is iterative:
 - Draft requirements based on exploration findings
 - Have agents review for feasibility (can this actually work given the codebase?)
 - Seek user alignment on the high-level approach
-- **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback change the understanding, update the requirements and design documents directly — they are the single source of truth. Don't create correction files, addendum files, or decision logs alongside them. Remove superseded material rather than annotating it. Plan agents should read clean, current documents — not reconcile contradictions or skip over resolved questions.
+- **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback resolve questions or change the understanding, update the requirements and design documents directly — they are the single source of truth. Delete resolved questions from their listing sections, then update the topical sections where those answers belong so the document reads as settled fact. Don't create correction files, addendum files, or decision logs alongside them. Don't annotate questions with answers — remove the questions entirely and weave the answers into the body. Plan agents should read clean, current documents — not reconcile contradictions or skip over resolved questions.
 
 Not every stage needs standalone requirements — a well-defined stage might just be a detailed section in the implementation plan.
 
