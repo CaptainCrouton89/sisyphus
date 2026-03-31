@@ -523,6 +523,21 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
     let detailRows: string[];
     const composing = state.mode === 'compose';
+
+    // Auto-respawn nvim if it died (user quit while viewing goal, roadmap, etc.)
+    if (state.nvimEnabled && state.nvimBridge && !state.nvimBridge.ready && !state.nvimBridge.respawning) {
+      state.nvimBridge.respawning = true;
+      state.prevNvimFile = null; // force re-resolve after respawn
+      state.nvimBridge.respawn().then(() => {
+        state.nvimBridge!.respawning = false;
+        requestRender();
+      }).catch(() => {
+        state.nvimBridge!.respawning = false;
+        state.nvimEnabled = false;
+        requestRender();
+      });
+    }
+
     if (state.nvimEnabled && state.nvimBridge?.ready) {
       if (composing) {
         // In compose mode, don't resolve nvim files — nvim is showing the compose temp file

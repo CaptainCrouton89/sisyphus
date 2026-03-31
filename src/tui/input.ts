@@ -210,7 +210,16 @@ function checkComposeSignal(state: AppState, actions: InputActions): void {
 
   if (!existsSync(state.composeSignalFile)) return;
 
-  // Signal detected — read content
+  // Read signal type: "1" = submit, "cancel" = cancel (from :q / QuitPre)
+  let signalContent = '';
+  try { signalContent = readFileSync(state.composeSignalFile, 'utf-8').trim(); } catch { /* ignore */ }
+
+  if (signalContent === 'cancel') {
+    cancelCompose(state);
+    return;
+  }
+
+  // Signal detected — read compose content
   let content = '';
   if (state.composeTempFile) {
     try { content = readFileSync(state.composeTempFile, 'utf-8').trim(); } catch { /* ignore */ }

@@ -24,6 +24,7 @@ export class NvimBridge {
   ready: boolean = false;
   dirty: boolean = true;
   available: boolean = false;
+  respawning: boolean = false;
   /** DECSCUSR cursor style: 0=default, 1=blinking block, 2=steady block, 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar */
   cursorStyle: number = 0;
   private cachedRows: string[] | null = null;
@@ -139,6 +140,21 @@ export class NvimBridge {
     }, 500);
   }
 
+  /**
+   * Respawn nvim after it exited (e.g. user quit during compose).
+   * Cleans up dead instances and re-runs spawn().
+   */
+  async respawn(): Promise<void> {
+    if (!this.available) return;
+    if (this.xterm) { this.xterm.dispose(); this.xterm = null; }
+    if (this.pty) { try { this.pty.kill(); } catch { /* already dead */ } this.pty = null; }
+    this.ready = false;
+    this.dirty = true;
+    this.cachedRows = null;
+    this.currentFile = null;
+    await this.spawn();
+  }
+
   private debouncedRender(): void {
     if (this.renderTimer !== null) return;
     this.renderTimer = setTimeout(() => {
@@ -230,6 +246,7 @@ export class NvimBridge {
     }
 
     const escapeLua = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const eSig = escapeLua(signalPath);
     const lua = [
       // Clear all existing buffers
       'for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, {force=true}) end',
@@ -237,8 +254,10 @@ export class NvimBridge {
       `vim.cmd('edit! ${escapeLua(tempPath)}')`,
       'vim.bo.readonly = false',
       'vim.bo.modifiable = true',
-      // Install BufWritePost autocmd that writes signal file
-      `vim.api.nvim_create_autocmd('BufWritePost', { buffer = 0, callback = function() local f = io.open('${escapeLua(signalPath)}', 'w'); if f then f:write('1'); f:close() end end })`,
+      // Install BufWritePost autocmd — writes submit signal on :w
+      `vim.api.nvim_create_autocmd('BufWritePost', { buffer = 0, callback = function() local f = io.open('${eSig}', 'w'); if f then f:write('1'); f:close() end end })`,
+      // Install QuitPre autocmd — writes cancel signal if no submit signal exists (quit proceeds, nvim may exit)
+      `vim.api.nvim_create_autocmd('QuitPre', { buffer = 0, callback = function() local sf = io.open('${eSig}', 'r'); if sf then sf:close() else local f = io.open('${eSig}', 'w'); if f then f:write('cancel'); f:close() end end end })`,
       // Enter insert mode
       "vim.cmd('startinsert')",
     ].join('; ');
