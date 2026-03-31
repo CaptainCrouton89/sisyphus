@@ -8,6 +8,7 @@
 - **tree.ts** — Session tree building and sorting
 - **tree-render.ts** — ASCII rendering with box-drawing connectors
 - **tmux.ts** — Tmux integration: pane/window selection, editor popups, daemon log viewer, companion pane management
+- **nvim-bridge.ts** — Neovim PTY instance with xterm rendering, file/tab management, Lua command execution (100ms polling via temp file)
 - **context.ts** — XML context builders for Claude companion prompt
 - **client.ts** — Daemon socket client (5s timeout, JSON requests)
 - **reports.ts** — Load and handle agent report files
@@ -52,6 +53,15 @@
 - Utility popups: `openLogPopup()` (tail daemon logs), `openShellPopup(cwd, cmd)`, `openInFileManager(path)`, `openClaudeResumePopup(cwd, sessionId)` (resume Claude session)
 - Window/pane helpers: `getWindowId()`, `selectWindow()`, `selectPane()`, `windowExists()`, `switchToSession()`
 
+### Neovim Bridge (nvim-bridge.ts)
+- `NvimBridge(cols, rows, onRender)` — Spawns Neovim in a PTY, xterm buffer, auto-detects nvim via `which nvim`, ready after 500ms
+- **State**: `available` (nvim found), `ready` (spawned and settled), `dirty` (buffer changed), `cursorStyle` (DECSCUSR tracking)
+- **File ops**: `openFile(path, readonly)` — single file; `openTabFiles(files[])` — multiple tabs with 150ms debounce to prevent LSP churn
+- **Lua execution**: `execLua(lua)` — writes to temp file (`/tmp/sisyphus-nvim/cmd-{pid}.lua`), libuv timer polls every 50ms (100ms initial)
+- **Rendering**: `getRows()` — returns ANSI-escaped row strings (cached until dirty); `getCursorPos()` → {x, y}
+- **Nvim settings**: Pre-init disables swap/backup, post-init hides UI elements (status line, line numbers, ruler), LSP suppressed, shortmess+=F
+- **Lifecycle**: `resize(cols, rows)` — resize PTY and xterm; `destroy()` — cleanup PTY, xterm, timers, temp file
+
 ## Constraints
 
 - **Markdown loss**: `stripMarkdown()` is lossy (collapses whitespace); use `cleanMarkdown()` for structure-preserving inline cleanup
@@ -60,3 +70,4 @@
 - **Companion pane** auto-reuses if alive; killing requires resetting `companionPaneId`
 - **File reads** via `readFileSafe()` must handle missing files (goal.md, roadmap.md may not exist)
 - **Context XML** must escape all user-provided content via `escapeXml()`
+- **Neovim PTY**: Temp files in `/tmp/sisyphus-nvim/` must be cleaned up; call `destroy()` when done. Tab debouncing (150ms) prevents LSP churn; escape Lua strings via `replace(/\\/g, '\\\\').replace(/'/g, "\\'")`
