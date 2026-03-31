@@ -525,7 +525,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     const composing = state.mode === 'compose';
 
     // Auto-respawn nvim if it died (user quit while viewing goal, roadmap, etc.)
-    if (state.nvimEnabled && state.nvimBridge && !state.nvimBridge.ready && !state.nvimBridge.respawning) {
+    if (state.nvimEnabled && state.nvimBridge && state.nvimBridge.wasReady && !state.nvimBridge.ready && !state.nvimBridge.respawning) {
       state.nvimBridge.respawning = true;
       state.prevNvimFile = null; // force re-resolve after respawn
       state.nvimBridge.respawn().then(() => {

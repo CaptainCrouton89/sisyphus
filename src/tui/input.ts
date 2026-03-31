@@ -103,6 +103,14 @@ export interface InputActions {
 
 function activateNvimBypass(state: AppState): void {
   setRawBypass((data: string) => {
+    // If nvim died, deactivate bypass and let input fall through
+    if (!state.nvimBridge?.ready) {
+      deactivateNvimBypass();
+      state.focusPane = 'tree';
+      if (state.mode === 'compose') cancelCompose(state);
+      requestRender();
+      return false; // not consumed — re-process as normal input
+    }
     // Tab (0x09) escapes neovim focus — in compose mode, cancels compose
     if (data === '\t') {
       if (state.mode === 'compose') {

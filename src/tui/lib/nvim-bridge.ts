@@ -25,6 +25,8 @@ export class NvimBridge {
   dirty: boolean = true;
   available: boolean = false;
   respawning: boolean = false;
+  /** Set true once nvim has been ready at least once — prevents respawn during initial startup */
+  wasReady: boolean = false;
   /** DECSCUSR cursor style: 0=default, 1=blinking block, 2=steady block, 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar */
   cursorStyle: number = 0;
   private cachedRows: string[] | null = null;
@@ -62,82 +64,95 @@ export class NvimBridge {
     });
   }
 
-  private async spawn(): Promise<void> {
-    const { spawn } = await import('node-pty');
-    // @xterm/headless is CJS — Terminal lives on the default export when imported from ESM
-    const xtermModule = await import('@xterm/headless');
-    const { Terminal } = xtermModule.default as typeof import('@xterm/headless');
+  private spawn(): Promise<void> {
+    return Promise.all([
+      import('node-pty'),
+      import('@xterm/headless'),
+    ]).then(([nodePty, xtermModule]) => new Promise<void>((resolve) => {
+      const { spawn } = nodePty;
+      // @xterm/headless is CJS — Terminal lives on the default export when imported from ESM
+      const { Terminal } = xtermModule.default as typeof import('@xterm/headless');
 
-    this.xterm = new Terminal({
-      cols: this._cols,
-      rows: this._rows,
-      allowProposedApi: true,
-    });
+      this.xterm = new Terminal({
+        cols: this._cols,
+        rows: this._rows,
+        allowProposedApi: true,
+      });
 
-    const nvimArgs = [
-      // Pre-init: only settings needed before user config loads
-      '--cmd',
-      [
-        'set noswapfile',
-        'set nobackup',
-        'set nowritebackup',
-        'set hidden',
-        'set autoread',
-      ].join(' | '),
-      // Post-init: cosmetic overrides applied AFTER user config (LazyVim, etc.)
-      '-c',
-      [
-        'set laststatus=0',
-        'set showtabline=2',
-        'set signcolumn=no',
-        'set nonumber',
-        'set noruler',
-        'set noshowcmd',
-        'set noshowmode',
-        'set shortmess+=F',
-        'set fillchars=eob:\\ ',
-        'set scrolloff=3',
-      ].join(' | '),
-      // Suppress LSP — prevent servers from ever starting (avoids exit warnings)
-      '--cmd',
-      'lua vim.lsp.start = function() end',
-      // Poll-based command executor: reads lua from temp file — no command-line flash
-      '-c',
-      `lua local _t = vim.loop.new_timer(); _t:start(100, 50, vim.schedule_wrap(function() local f = io.open('${this.cmdFile.replace(/'/g, "\\'")}', 'r'); if not f then return end; local c = f:read('*a'); f:close(); os.remove('${this.cmdFile.replace(/'/g, "\\'")}'); if c and #c > 0 then local fn = loadstring(c); if fn then pcall(fn) end end end))`,
-    ];
+      const nvimArgs = [
+        // Pre-init: only settings needed before user config loads
+        '--cmd',
+        [
+          'set noswapfile',
+          'set nobackup',
+          'set nowritebackup',
+          'set hidden',
+          'set autoread',
+        ].join(' | '),
+        // Post-init: cosmetic overrides applied AFTER user config (LazyVim, etc.)
+        '-c',
+        [
+          'set laststatus=0',
+          'set showtabline=2',
+          'set signcolumn=no',
+          'set nonumber',
+          'set noruler',
+          'set noshowcmd',
+          'set noshowmode',
+          'set shortmess+=F',
+          'set fillchars=eob:\\ ',
+          'set scrolloff=3',
+        ].join(' | '),
+        // Suppress LSP — prevent servers from ever starting (avoids exit warnings)
+        '--cmd',
+        'lua vim.lsp.start = function() end',
+        // Poll-based command executor: reads lua from temp file — no command-line flash
+        '-c',
+        `lua local _t = vim.loop.new_timer(); _t:start(100, 50, vim.schedule_wrap(function() local f = io.open('${this.cmdFile.replace(/'/g, "\\'")}', 'r'); if not f then return end; local c = f:read('*a'); f:close(); os.remove('${this.cmdFile.replace(/'/g, "\\'")}'); if c and #c > 0 then local fn = loadstring(c); if fn then pcall(fn) end end end))`,
+      ];
 
-    this.pty = spawn(this.nvimPath, nvimArgs, {
-      name: 'xterm-256color',
-      cols: this._cols,
-      rows: this._rows,
-      env: { ...process.env, TERM: 'xterm-256color' } as Record<string, string>,
-    });
+      this.pty = spawn(this.nvimPath, nvimArgs, {
+        name: 'xterm-256color',
+        cols: this._cols,
+        rows: this._rows,
+        env: { ...process.env, TERM: 'xterm-256color' } as Record<string, string>,
+      });
 
-    this.pty.onData((data: string) => {
-      // Track DECSCUSR cursor shape sequences (\x1b[N q) so we can
-      // forward them to the real terminal alongside cursor positioning
-      const csMatch = data.match(/\x1b\[(\d+) q/);
-      if (csMatch) this.cursorStyle = parseInt(csMatch[1], 10);
+      let settled = false;
 
-      this.xterm!.write(data);
-      this.dirty = true;
-      this.cachedRows = null;
-      this.debouncedRender();
-    });
+      this.pty.onData((data: string) => {
+        // Track DECSCUSR cursor shape sequences (\x1b[N q) so we can
+        // forward them to the real terminal alongside cursor positioning
+        const csMatch = data.match(/\x1b\[(\d+) q/);
+        if (csMatch) this.cursorStyle = parseInt(csMatch[1], 10);
 
-    this.pty.onExit(() => {
-      this.ready = false;
-    });
+        this.xterm!.write(data);
+        this.dirty = true;
+        this.cachedRows = null;
+        this.debouncedRender();
+      });
 
-    // Mark ready after nvim + user config have settled
-    setTimeout(() => {
-      if (this.pty) {
-        this.ready = true;
+      this.pty.onExit(() => {
+        this.ready = false;
         this.dirty = true;
         this.cachedRows = null;
         this.onRender();
-      }
-    }, 500);
+        // Resolve if nvim dies before settling (prevents hanging promise)
+        if (!settled) { settled = true; resolve(); }
+      });
+
+      // Mark ready after nvim + user config have settled
+      setTimeout(() => {
+        if (this.pty) {
+          this.ready = true;
+          this.wasReady = true;
+          this.dirty = true;
+          this.cachedRows = null;
+          this.onRender();
+        }
+        if (!settled) { settled = true; resolve(); }
+      }, 500);
+    }));
   }
 
   /**

@@ -55,14 +55,14 @@
 
 ### Neovim Bridge (nvim-bridge.ts)
 - `NvimBridge(cols, rows, onRender)` — Spawns Neovim in a PTY, xterm buffer, auto-detects nvim via `which nvim`, ready after 500ms
-- **State**: `available` (nvim found), `ready` (spawned and settled), `dirty` (buffer changed), `cursorStyle` (DECSCUSR tracking)
-- **File ops**: `openFile(path, readonly)`, `openTabFiles(files[])` (150ms debounce), `openTabFile()` (direct terminal), `closeAllTabs()`
-- **File tracking**: `trackEditableFiles()` snapshots editable files on disk for merge base; stored in `/tmp/sisyphus-nvim/base-*.md` with mtime tracking
+- **State**: `available` (nvim found), `ready` (spawned and settled), `dirty` (buffer changed), `cursorStyle` (DECSCUSR), `respawning` (respawn in progress), `wasReady` (prevents respawn during startup)
+- **Lifecycle**: `respawn()` — cleanup and re-spawn nvim (e.g., after user quit); `resize(cols, rows)`, `destroy()` — cleanup PTY, xterm, timers
+- **File ops**: `openFile(path, readonly)`, `openTabFiles(files[])` (150ms debounce), `openTabFile(path, readonly)` (direct terminal), `openComposeFile(tempPath, signalPath)` (compose mode: signal-based submit/cancel), `closeAllTabs()`
+- **File tracking**: `trackEditableFiles()` snapshots editable files on disk for merge base; stored in `/tmp/sisyphus-nvim/base-*.md`
 - **Lua execution**: `execLua()` writes to temp file (`/tmp/sisyphus-nvim/cmd-{pid}.lua`), libuv timer polls every 50ms (100ms initial)
-- **3-way merge**: `mergeCheckOrReload()` — detects external file changes on disk, performs 3-way merge (git merge-file --union) for dirty buffers, reloads clean buffers via checktime, returns 'clean'/'union' if merge completed, updates merge base after merge succeeds
+- **3-way merge**: `mergeCheckOrReload()` — detects external file changes on disk, performs 3-way merge (git merge-file --union) for dirty buffers, reloads clean buffers via checktime, returns 'clean'/'union' if merge completed
 - **Rendering**: `getRows()` — returns ANSI-escaped row strings with full color/attribute handling (cached until dirty); `getCursorPos()` → {x, y}; `checktime()` — reload changed files
 - **Nvim settings**: Pre-init disables swap/backup, post-init hides UI elements (status line, line numbers, ruler), LSP suppressed, shortmess+=F
-- **Lifecycle**: `resize(cols, rows)`, `destroy()` — cleanup PTY, xterm, timers, merge status file, all file snapshots
 
 ## Constraints
 
@@ -72,4 +72,4 @@
 - **Companion pane** auto-reuses if alive; killing requires resetting `companionPaneId`
 - **File reads** via `readFileSafe()` must handle missing files (goal.md, roadmap.md may not exist)
 - **Context XML** must escape all user-provided content via `escapeXml()`
-- **Neovim PTY**: Temp files in `/tmp/sisyphus-nvim/` must be cleaned up by `destroy()` — includes cmd file, merge status file, and file snapshots (base-*.md). Tab debouncing (150ms) prevents LSP churn. Merge snapshots auto-cleared on new `openTabFiles()`. Escape Lua strings via `replace(/\\/g, '\\\\').replace(/'/g, "\\'")`. Merge status from previous cycle polled once per `mergeCheckOrReload()` call
+- **Neovim PTY**: Temp files in `/tmp/sisyphus-nvim/` must be cleaned up by `destroy()` — includes cmd file, merge status file, and file snapshots. Tab debouncing (150ms) prevents LSP churn. Compose mode uses BufWritePost/QuitPre autocmds to signal completion via temp file. Escape Lua strings via `replace(/\\/g, '\\\\').replace(/'/g, "\\'")`. Merge status from previous cycle polled once per `mergeCheckOrReload()` call
