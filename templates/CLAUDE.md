@@ -32,6 +32,7 @@ System prompt templates for orchestrator and agent initialization.
    - `--mode strategy`: orchestrator-strategy.md
    - `--mode implementation`: orchestrator-impl.md
    - `--mode validation`: orchestrator-validation.md
+   - `--mode completion`: orchestrator-completion.md
 3. Inject session state with agent reports, cycle count, roadmap.md/logs.md references
 4. Load settings from `orchestrator-settings.json` (or project override)
 5. Pass via `--append-system-prompt` flag

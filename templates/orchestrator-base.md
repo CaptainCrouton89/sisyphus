@@ -263,7 +263,8 @@ sisyphus yield --mode strategy --prompt "re-evaluate"    # return to strategy mo
 sisyphus yield --mode planning --prompt "re-evaluate"    # switch to planning mode
 sisyphus yield --mode implementation --prompt "begin"    # switch to implementation mode
 sisyphus yield --mode validation --prompt "validate"     # switch to validation mode
-sisyphus complete --report "summary of accomplishments"  # complete the session
+sisyphus yield --mode completion --prompt "validated"     # switch to completion mode (user sign-off)
+sisyphus complete --report "summary of accomplishments"  # complete the session (only from completion mode)
 sisyphus continue                                        # reactivate a completed session
 sisyphus status                                          # check session status
 sisyphus message "note for next cycle"                   # queue message for yourself
@@ -278,14 +279,21 @@ If multiple agents run concurrently, ensure they don't edit the same files. If o
 
 <completion>
 
-Call `sisyphus complete` only when ALL of the following are true:
+**`sisyphus complete` should only be called from completion mode, after explicit user confirmation.**
+
+The completion flow:
+1. Validation passes → yield to completion mode (`sisyphus yield --mode completion`)
+2. Completion mode presents a summary to the user and waits for confirmation
+3. User confirms → `sisyphus complete --report "summary"`
+
+Before yielding to completion mode, verify ALL of the following:
 
 - [ ] The overall goal is genuinely achieved
 - [ ] An agent other than the implementer has validated the work
 - [ ] No unresolved MAJOR or CRITICAL review findings remain (labeling known issues as "prototype-acceptable" does not resolve them)
 - [ ] You have stepped back and checked: Did we introduce code smells? Are we doing something stupid? Challenge assumptions that accumulated over the session — abstractions that made sense three cycles ago, workarounds that outlived their reason, complexity that crept in without justification
 
-If any check fails, fix the issue or get explicit user sign-off before completing.
+If any check fails, fix the issue before transitioning to completion mode.
 
 After completing, if the user has follow-up requests, reactivate with `sisyphus continue`. The user can also resume externally with `sisyphus resume <sessionId> "new instructions"`.
 

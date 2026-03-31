@@ -101,6 +101,9 @@ function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): s
   } else if (mode === 'validation') {
     const validationPath = resolve(import.meta.dirname, '../templates/orchestrator-validation.md');
     modePrompt = readFileSync(validationPath, 'utf-8');
+  } else if (mode === 'completion') {
+    const completionPath = resolve(import.meta.dirname, '../templates/orchestrator-completion.md');
+    modePrompt = readFileSync(completionPath, 'utf-8');
   } else {
     // Default: planning mode
     const planningPath = resolve(import.meta.dirname, '../templates/orchestrator-planning.md');
