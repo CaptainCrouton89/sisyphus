@@ -12,6 +12,7 @@ Raw ANSI terminal UI for real-time session monitoring and control. No frameworks
 
 ## Directory Structure
 
+- **`index.ts`** — Entry point: parses `--cwd` CLI arg, initializes terminal, state, and app loop
 - **`app.ts`** — Main controller: polling, render loop, input dispatch, event loop
 - **`render.ts`** — Frame-buffer primitives, ANSI parsing (optimized), panel rendering with RenderedCache
 - **`state.ts`** — AppState interface, ThrottledScroll (16ms throttle), cursor stabilization, render scheduling
