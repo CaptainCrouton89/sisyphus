@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 /**
  * Build a PATH string that includes common binary directories
  * across package managers and platforms.
@@ -12,7 +14,10 @@ export function augmentedPath(): string {
 
   // Common binary directories across platforms/package managers.
   // Only prepend ones that aren't already in PATH.
+  const home = process.env['HOME'];
   const candidates = [
+    ...(home ? [`${home}/.local/bin`] : []),  // Claude CLI, pipx, user-local installs
+    resolve(process.execPath, '..'),           // Node.js bin dir (ensures node/npm available)
     '/opt/homebrew/bin',              // Homebrew (Apple Silicon macOS)
     '/opt/homebrew/sbin',             // Homebrew sbin
     '/usr/local/bin',                 // Homebrew (Intel macOS), manual installs
