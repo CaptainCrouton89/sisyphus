@@ -33,6 +33,14 @@ export function listAllWindowIds(): Set<string> {
   }
 }
 
+/**
+ * Register this TUI window as the dashboard for the current tmux session.
+ * Called on TUI startup so M-S (sisyphus-home) can find the dashboard window.
+ */
+export function registerDashboardWindow(): void {
+  execSafe(`tmux set-option @sisyphus_dashboard ${getWindowId()}`);
+}
+
 let companionPaneId: string | null = null;
 
 function setupCompanionPlugin(): string {
