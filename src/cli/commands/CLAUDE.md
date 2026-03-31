@@ -20,6 +20,7 @@ export function register{Command}(program: Command): void {
 
 ## Key Constraints
 
+- **init.ts** — Creates `.sisyphus/config.json` and optional `orchestrator.md` template. Option: `--orchestrator` (create custom prompt). Idempotent (logs and exits if config exists).
 - **start.ts** — Requires tmux (checks `TMUX` env var; skip with `--no-tmux-check`). Options: `--context` (background info), `--name` (session label). Respects `SISYPHUS_CWD` env var (falls back to `process.cwd()`). Auto-launches dashboard in current tmux session (only if not already open). Sets `@sisyphus_cwd` tmux option.
 - **continue.ts** — Clears roadmap and reactivates completed session (stays in current cycle); requires `SISYPHUS_SESSION_ID` env var.
 - **resume.ts** — Takes session ID as **positional argument** (not env var). Optional second arg for additional orchestrator instructions. Returns tmux session name for attaching.
@@ -34,6 +35,7 @@ export function register{Command}(program: Command): void {
 
 ## Key Interactions
 
+- `init.ts` → (optional) run before `start.ts` to create project config
 - `start.ts` → creates new session, spawns orchestrator, auto-launches dashboard
 - `spawn.ts` → orchestrator spawns agents into panes
 - **`continue.ts` vs `resume.ts`** — Both reactivate sessions; use `continue` for same direction, `resume` for new instructions
