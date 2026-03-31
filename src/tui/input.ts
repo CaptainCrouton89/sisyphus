@@ -1,9 +1,14 @@
+import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { Key } from './terminal.js';
 import { setRawBypass } from './terminal.js';
 import {
   type AppState,
+  type ComposeAction,
   INPUT_MODES,
   OPTIONAL_INPUT,
+  OPTIONAL_COMPOSE,
   requestRender,
   notify,
 } from './state.js';
@@ -77,6 +82,7 @@ export interface InputActions {
   editInPopup: typeof import('./lib/tmux.js').editInPopup;
   openCompanionPane: typeof import('./lib/tmux.js').openCompanionPane;
   openClaudeResumePopup: typeof import('./lib/tmux.js').openClaudeResumePopup;
+  openClaudeResumeSession: typeof import('./lib/tmux.js').openClaudeResumeSession;
   selectWindow: typeof import('./lib/tmux.js').selectWindow;
   selectPane: typeof import('./lib/tmux.js').selectPane;
   switchToSession: typeof import('./lib/tmux.js').switchToSession;
@@ -97,8 +103,12 @@ export interface InputActions {
 
 function activateNvimBypass(state: AppState): void {
   setRawBypass((data: string) => {
-    // Tab (0x09) escapes neovim focus
+    // Tab (0x09) escapes neovim focus — in compose mode, cancels compose
     if (data === '\t') {
+      if (state.mode === 'compose') {
+        cancelCompose(state);
+        return true;
+      }
       deactivateNvimBypass();
       state.focusPane = state.showCombinedView ? 'logs' : 'tree';
       requestRender();
@@ -112,6 +122,183 @@ function activateNvimBypass(state: AppState): void {
 
 function deactivateNvimBypass(): void {
   setRawBypass(null);
+}
+
+// ── Compose mode helpers ─────────────────────────────────────────────────────
+
+const COMPOSE_DIR = join(tmpdir(), 'sisyphus-nvim');
+
+/**
+ * Enter compose mode: opens a temp file in the nvim detail pane for multi-line input.
+ * Returns false if nvim is unavailable (caller should fall back to popup/inline).
+ */
+function enterComposeMode(state: AppState, action: ComposeAction, actions: InputActions): boolean {
+  if (!state.nvimEnabled || !state.nvimBridge?.ready) return false;
+
+  mkdirSync(COMPOSE_DIR, { recursive: true });
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const tempFile = join(COMPOSE_DIR, `compose-${id}.md`);
+  const signalFile = join(COMPOSE_DIR, `compose-signal-${id}`);
+
+  // Create empty temp file
+  writeFileSync(tempFile, '', 'utf-8');
+
+  // Save current nvim file key so we can force re-resolution on cancel
+  state.composePrevNvimFile = state.prevNvimFile;
+  state.composeAction = action;
+  state.composeTempFile = tempFile;
+  state.composeSignalFile = signalFile;
+  state.mode = 'compose';
+  state.focusPane = 'detail';
+
+  // Open in nvim
+  state.nvimBridge.openComposeFile(tempFile, signalFile);
+
+  // Activate nvim bypass so all input goes to nvim
+  activateNvimBypass(state);
+
+  // Start polling for signal file
+  state.composePollTimer = setInterval(() => {
+    checkComposeSignal(state, actions);
+  }, 100);
+
+  requestRender();
+  return true;
+}
+
+/**
+ * Cancel compose mode: clean up and restore previous state.
+ */
+function cancelCompose(state: AppState): void {
+  if (state.composePollTimer !== null) {
+    clearInterval(state.composePollTimer);
+    state.composePollTimer = null;
+  }
+
+  // Clean up temp files
+  if (state.composeTempFile) {
+    try { unlinkSync(state.composeTempFile); } catch { /* ignore */ }
+  }
+  if (state.composeSignalFile) {
+    try { unlinkSync(state.composeSignalFile); } catch { /* ignore */ }
+  }
+
+  // Force nvim to re-resolve files on next render by nulling prevNvimFile
+  state.prevNvimFile = null;
+  state.composePrevNvimFile = null;
+  state.composeAction = null;
+  state.composeTempFile = null;
+  state.composeSignalFile = null;
+  state.mode = 'navigate';
+  state.focusPane = 'tree';
+
+  deactivateNvimBypass();
+  requestRender();
+}
+
+/**
+ * Poll for compose signal file. On detection, read content and dispatch action.
+ */
+function checkComposeSignal(state: AppState, actions: InputActions): void {
+  if (!state.composeSignalFile || !state.composeAction) return;
+
+  // Auto-cancel if nvim died
+  if (!state.nvimBridge?.ready) {
+    cancelCompose(state);
+    return;
+  }
+
+  if (!existsSync(state.composeSignalFile)) return;
+
+  // Signal detected — read content
+  let content = '';
+  if (state.composeTempFile) {
+    try { content = readFileSync(state.composeTempFile, 'utf-8').trim(); } catch { /* ignore */ }
+  }
+
+  const action = state.composeAction;
+  const required = !OPTIONAL_COMPOSE.has(action.kind);
+
+  if (required && !content) {
+    // Delete signal file so user can try again
+    try { unlinkSync(state.composeSignalFile); } catch { /* ignore */ }
+    notify(state, 'Content required');
+    return;
+  }
+
+  // Dispatch the action
+  dispatchComposeAction(action, content, state, actions);
+
+  // Clean up
+  cancelCompose(state);
+}
+
+/**
+ * Map compose action kinds to daemon requests.
+ */
+function dispatchComposeAction(
+  action: ComposeAction,
+  content: string,
+  state: AppState,
+  actions: InputActions,
+): void {
+  switch (action.kind) {
+    case 'new-session':
+      actions.sendAndNotify(
+        { type: 'start', task: content, cwd: state.cwd },
+        'Session created',
+      );
+      break;
+
+    case 'message-orchestrator':
+      actions.sendAndNotify(
+        { type: 'message', sessionId: action.sessionId, content },
+        'Message queued',
+      );
+      break;
+
+    case 'resume':
+      actions.sendAndNotify(
+        { type: 'resume', sessionId: action.sessionId, cwd: state.cwd, message: content || undefined },
+        'Session resumed',
+      );
+      break;
+
+    case 'continue':
+      void (async () => {
+        try {
+          const contRes = await actions.send({ type: 'continue', sessionId: action.sessionId });
+          if (!contRes.ok) { notify(state, `Error: ${contRes.error}`); return; }
+          actions.sendAndNotify(
+            { type: 'resume', sessionId: action.sessionId, cwd: state.cwd, message: content || undefined },
+            'Session continued',
+          );
+        } catch (err) {
+          notify(state, `Error: ${(err as Error).message}`);
+        }
+      })();
+      break;
+
+    case 'spawn-agent':
+      actions.sendAndNotify(
+        {
+          type: 'spawn',
+          sessionId: action.sessionId,
+          agentType: 'default',
+          name: 'agent',
+          instruction: content,
+        },
+        'Agent spawned',
+      );
+      break;
+
+    case 'message-agent':
+      actions.sendAndNotify(
+        { type: 'message', sessionId: action.sessionId, content, source: { type: 'agent', agentId: action.agentId } },
+        `Message sent to ${action.agentId}`,
+      );
+      break;
+  }
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -443,6 +630,8 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'spawn-agent': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      if (enterComposeMode(state, { kind: 'spawn-agent', sessionId: selectedSessionId }, actions)) return;
+      // Fallback to inline
       state.mode = 'spawn-agent';
       requestRender();
       return;
@@ -451,6 +640,8 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'message-agent': {
       const agent = actions.getAgentForNode(cursorNode);
       if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
+      if (enterComposeMode(state, { kind: 'message-agent', sessionId: selectedSessionId!, agentId: agent.id }, actions)) return;
+      // Fallback to inline
       state.targetAgentId = agent.id;
       state.mode = 'message-agent';
       requestRender();
@@ -680,6 +871,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   // m: message orchestrator
   if (input === 'm') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
+    if (enterComposeMode(state, { kind: 'message-orchestrator', sessionId: state.selectedSessionId }, actions)) return;
+    // Fallback to popup
     const editor = actions.resolveEditor();
     try {
       const content = actions.editInPopup(state.cwd, editor);
@@ -695,9 +888,23 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // w: go to tmux window
+  // w: go to tmux window (or resume orchestrator Claude session if completed)
   if (input === 'w') {
     if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
+
+    if (session.status === 'completed') {
+      const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+      const claudeSessionId = lastCycle?.claudeSessionId;
+      if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
+      try {
+        const label = session.name ?? state.selectedSessionId!.slice(0, 8);
+        const sessionName = actions.openClaudeResumeSession(state.cwd, claudeSessionId, label);
+        actions.switchToSession(sessionName);
+      } catch {
+        notify(state, 'Failed to open Claude session');
+      }
+      return;
+    }
 
     if (state.paneAlive && session.tmuxWindowId) {
       if (session.tmuxSessionName) actions.switchToSession(session.tmuxSessionName);
@@ -755,6 +962,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // n: new session
   if (input === 'n') {
+    if (enterComposeMode(state, { kind: 'new-session' }, actions)) return;
+    // Fallback to popup
     const editor = actions.resolveEditor();
     try {
       const content = actions.editInPopup(state.cwd, editor);
@@ -819,6 +1028,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'R') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     if (session?.status === 'active' && state.paneAlive) { notify(state, 'Session already active'); return; }
+    if (enterComposeMode(state, { kind: 'resume', sessionId: state.selectedSessionId }, actions)) return;
+    // Fallback to inline
     state.mode = 'resume';
     state.inputText = '';
     state.inputCursorPos = 0;
@@ -830,6 +1041,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'C') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     if (session?.status !== 'completed') { notify(state, 'Session not completed'); return; }
+    if (enterComposeMode(state, { kind: 'continue', sessionId: state.selectedSessionId }, actions)) return;
+    // Fallback to inline
     state.mode = 'continue';
     state.inputText = '';
     state.inputCursorPos = 0;
@@ -904,6 +1117,9 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
 export function handleKeypress(input: string, key: Key, state: AppState, actions: InputActions): void {
+  // Compose mode: all input goes through nvim bypass — nothing to handle here
+  if (state.mode === 'compose') return;
+
   if (INPUT_MODES.has(state.mode)) {
     handleInputBarKey(input, key, state, actions);
   } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help') {

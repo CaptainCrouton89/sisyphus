@@ -40,7 +40,33 @@ export type InputMode =
   | 'search'
   | 'message-agent'
   | 'shell-command'
-  | 'help';
+  | 'help'
+  | 'compose';
+
+// ---------------------------------------------------------------------------
+// Compose mode types
+// ---------------------------------------------------------------------------
+
+export type ComposeAction =
+  | { kind: 'new-session' }
+  | { kind: 'message-orchestrator'; sessionId: string }
+  | { kind: 'resume'; sessionId: string }
+  | { kind: 'continue'; sessionId: string }
+  | { kind: 'spawn-agent'; sessionId: string }
+  | { kind: 'message-agent'; sessionId: string; agentId: string };
+
+/** Actions where empty content is allowed (submit without typing) */
+export const OPTIONAL_COMPOSE = new Set(['resume', 'continue']);
+
+/** Display labels for compose actions */
+export const COMPOSE_HEADERS: Record<ComposeAction['kind'], string> = {
+  'new-session': 'New Session',
+  'message-orchestrator': 'Message Orchestrator',
+  'resume': 'Resume Session',
+  'continue': 'Continue Session',
+  'spawn-agent': 'Spawn Agent',
+  'message-agent': 'Message Agent',
+};
 
 export const INPUT_MODES = new Set<InputMode>([
   'resume',
@@ -209,6 +235,13 @@ export interface AppState {
   nvimEditable: boolean;
   nvimOpenTabs: Map<string, { path: string; readonly: boolean }>;
 
+  // Compose mode
+  composeAction: ComposeAction | null;
+  composeTempFile: string | null;
+  composeSignalFile: string | null;
+  composePollTimer: ReturnType<typeof setInterval> | null;
+  composePrevNvimFile: string | null;
+
   // Config
   cwd: string;
 }
@@ -264,6 +297,11 @@ export function createAppState(cwd: string): AppState {
     prevNvimFile: null,
     nvimEditable: false,
     nvimOpenTabs: new Map(),
+    composeAction: null,
+    composeTempFile: null,
+    composeSignalFile: null,
+    composePollTimer: null,
+    composePrevNvimFile: null,
     cwd,
   };
 }

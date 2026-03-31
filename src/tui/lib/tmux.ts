@@ -124,6 +124,21 @@ export function openClaudeResumePopup(cwd: string, claudeSessionId: string): voi
   );
 }
 
+export function openClaudeResumeSession(cwd: string, claudeSessionId: string, sessionLabel: string): string {
+  const pathEnv = augmentedPath();
+  const cmd = `PATH=${shellQuote(pathEnv)} claude --resume ${shellQuote(claudeSessionId)}`;
+  const sessionName = `sisyphus-${sessionLabel}-resume`;
+  exec(`tmux new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(cwd)} ${shellQuote(cmd)}`);
+  execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
+  // Match session defaults from daemon tmux.ts configureSessionDefaults
+  const paneTarget = `${sessionName}:`;
+  execSafe(`tmux set -w -t ${shellQuote(paneTarget)} pane-border-status top`);
+  execSafe(`tmux set -w -t ${shellQuote(paneTarget)} allow-rename off`);
+  execSafe(`tmux set -w -t ${shellQuote(paneTarget)} automatic-rename off`);
+  execSafe(`tmux select-pane -t ${shellQuote(paneTarget)} -T ${shellQuote(`ssph:resume ${sessionLabel}`)}`);
+  return sessionName;
+}
+
 export function openEditorPopup(cwd: string, editor: string, filePath: string, size?: { w: string; h: string }): void {
   const { w = '90%', h = '90%' } = size ?? {};
   const editorBin = editor.split(/\s+/)[0]!.split('/').pop()!;

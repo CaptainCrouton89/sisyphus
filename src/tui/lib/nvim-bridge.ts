@@ -1,7 +1,16 @@
 import { execSync } from 'node:child_process';
-import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { writeFileSync, mkdirSync, unlinkSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
 
 export class NvimBridge {
   private pty: import('node-pty').IPty | null = null;
@@ -21,7 +30,11 @@ export class NvimBridge {
   private nvimPath: string = 'nvim';
   private pendingFiles: { files: { path: string; readonly: boolean }[]; key: string } | null = null;
   private fileDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private cmdDir: string;
   private cmdFile: string;
+  /** Tracked editable files: path → { basePath (snapshot), mtimeMs } */
+  private editableFiles: Map<string, { basePath: string; mtimeMs: number }> = new Map();
+  private mergeStatusFile: string;
 
   constructor(cols: number, rows: number, onRender: () => void) {
     this._cols = cols;
@@ -29,9 +42,10 @@ export class NvimBridge {
     this.onRender = onRender;
 
     // Temp file for passing lua commands to nvim without command-line flash
-    const cmdDir = join(tmpdir(), 'sisyphus-nvim');
-    mkdirSync(cmdDir, { recursive: true });
-    this.cmdFile = join(cmdDir, `cmd-${process.pid}.lua`);
+    this.cmdDir = join(tmpdir(), 'sisyphus-nvim');
+    mkdirSync(this.cmdDir, { recursive: true });
+    this.cmdFile = join(this.cmdDir, `cmd-${process.pid}.lua`);
+    this.mergeStatusFile = join(this.cmdDir, `merge-status-${process.pid}.txt`);
 
     try {
       this.nvimPath = execSync('which nvim', { stdio: 'pipe' }).toString().trim();
@@ -167,6 +181,10 @@ export class NvimBridge {
 
   private executeOpenFiles(files: { path: string; readonly: boolean }[]): void {
     if (!this.pty || !this.ready) return;
+
+    // Snapshot editable files for 3-way merge tracking
+    this.trackEditableFiles(files);
+
     const escapeLua = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const stmts: string[] = [
       'for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, {force=true}) end',
@@ -194,6 +212,38 @@ export class NvimBridge {
     } else {
       this.pty.write(':setlocal noreadonly modifiable\r');
     }
+  }
+
+  /**
+   * Open a temp file for compose mode: clears buffers, opens writable,
+   * installs BufWritePost autocmd that writes a signal file on :w,
+   * and enters insert mode.
+   */
+  openComposeFile(tempPath: string, signalPath: string): void {
+    if (!this.pty || !this.ready) return;
+
+    // Cancel any pending file debounce (prevents queued openTabFiles from overwriting)
+    if (this.fileDebounceTimer !== null) {
+      clearTimeout(this.fileDebounceTimer);
+      this.fileDebounceTimer = null;
+      this.pendingFiles = null;
+    }
+
+    const escapeLua = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const lua = [
+      // Clear all existing buffers
+      'for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, {force=true}) end',
+      // Open temp file as writable
+      `vim.cmd('edit! ${escapeLua(tempPath)}')`,
+      'vim.bo.readonly = false',
+      'vim.bo.modifiable = true',
+      // Install BufWritePost autocmd that writes signal file
+      `vim.api.nvim_create_autocmd('BufWritePost', { buffer = 0, callback = function() local f = io.open('${escapeLua(signalPath)}', 'w'); if f then f:write('1'); f:close() end end })`,
+      // Enter insert mode
+      "vim.cmd('startinsert')",
+    ].join('; ');
+    this.execLua(`(function() ${lua} end)()`);
+    this.currentFile = tempPath;
   }
 
   closeAllTabs(): void {
@@ -363,6 +413,121 @@ export class NvimBridge {
     };
   }
 
+  /**
+   * Snapshot editable files on disk so we have a base for 3-way merge.
+   * Called when files are opened in nvim tabs.
+   */
+  private trackEditableFiles(files: { path: string; readonly: boolean }[]): void {
+    // Clean up old snapshots
+    for (const [, info] of this.editableFiles) {
+      try { unlinkSync(info.basePath); } catch { /* ignore */ }
+    }
+    this.editableFiles.clear();
+
+    for (const file of files) {
+      if (file.readonly) continue;
+      try {
+        const content = readFileSync(file.path, 'utf-8');
+        const mtime = statSync(file.path).mtimeMs;
+        const basePath = join(this.cmdDir, `base-${simpleHash(file.path)}.md`);
+        writeFileSync(basePath, content, 'utf-8');
+        this.editableFiles.set(file.path, { basePath, mtimeMs: mtime });
+      } catch { /* file may not exist yet */ }
+    }
+  }
+
+  /**
+   * Check editable files for external changes and 3-way merge if the buffer
+   * is dirty. Falls back to regular checktime for clean/readonly buffers.
+   *
+   * Returns a merge status string from the *previous* cycle ('clean' or 'union')
+   * if a merge completed, or null.
+   */
+  mergeCheckOrReload(): string | null {
+    if (!this.pty || !this.ready) return null;
+
+    // Read merge status from previous cycle
+    let mergeResult: string | null = null;
+    try {
+      if (existsSync(this.mergeStatusFile)) {
+        const content = readFileSync(this.mergeStatusFile, 'utf-8').trim();
+        unlinkSync(this.mergeStatusFile);
+        if (content) {
+          const lines = content.split('\n');
+          mergeResult = lines.some(l => l === 'union') ? 'union' : 'clean';
+        }
+      }
+    } catch { /* ignore */ }
+
+    // If a merge just completed, refresh stored mtimes (merge wrote to disk)
+    if (mergeResult) {
+      for (const [filePath, info] of this.editableFiles) {
+        try { info.mtimeMs = statSync(filePath).mtimeMs; } catch { /* ignore */ }
+      }
+      this.execLua('vim.cmd("checktime")');
+      return mergeResult;
+    }
+
+    // Check which editable files changed on disk
+    const changedFiles: { filePath: string; basePath: string }[] = [];
+    for (const [filePath, info] of this.editableFiles) {
+      try {
+        const currentMtime = statSync(filePath).mtimeMs;
+        if (currentMtime !== info.mtimeMs) {
+          changedFiles.push({ filePath, basePath: info.basePath });
+          info.mtimeMs = currentMtime;
+        }
+      } catch { /* file gone */ }
+    }
+
+    // No editable files changed — regular checktime handles readonly buffers
+    if (changedFiles.length === 0) {
+      this.execLua('vim.cmd("checktime")');
+      return null;
+    }
+
+    // Generate Lua: run checktime first (reloads clean buffers), then merge dirty ones
+    const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+    const mergeBlocks = changedFiles.map(({ filePath, basePath }) => `
+    do
+      local bufnr = vim.fn.bufnr('${esc(filePath)}')
+      if bufnr ~= -1 and vim.api.nvim_buf_is_loaded(bufnr) then
+        if vim.bo[bufnr].modified then
+          local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+          local buf_content = table.concat(buf_lines, '\\n') .. '\\n'
+          local tmp = '${esc(this.cmdDir)}/merge-current-${process.pid}.md'
+          local f = io.open(tmp, 'w')
+          if f then f:write(buf_content); f:close() end
+          local result = vim.fn.system({'git', 'merge-file', '-p', '--union', tmp, '${esc(basePath)}', '${esc(filePath)}'})
+          local merged_lines = vim.split(result, '\\n', {trimempty = false})
+          if #merged_lines > 0 and merged_lines[#merged_lines] == '' then
+            table.remove(merged_lines)
+          end
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, merged_lines)
+          local out = io.open('${esc(filePath)}', 'w')
+          if out then out:write(result); out:close() end
+          vim.bo[bufnr].modified = false
+          local bf = io.open('${esc(basePath)}', 'w')
+          if bf then bf:write(result); bf:close() end
+          local sf = io.open('${esc(this.mergeStatusFile)}', 'a')
+          if sf then sf:write(vim.v.shell_error == 0 and 'clean' or 'union'); sf:write('\\n'); sf:close() end
+        else
+          local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+          local bf = io.open('${esc(basePath)}', 'w')
+          if bf then bf:write(table.concat(lines, '\\n') .. '\\n'); bf:close() end
+        end
+      end
+    end`).join('\n');
+
+    this.execLua(`(function()
+    pcall(function() vim.cmd('checktime') end)
+    ${mergeBlocks}
+    end)()`);
+
+    return null;
+  }
+
   checktime(): void {
     if (this.pty && this.ready) {
       this.execLua('vim.cmd("checktime")');
@@ -392,5 +557,10 @@ export class NvimBridge {
     }
     this.ready = false;
     try { unlinkSync(this.cmdFile); } catch { /* ignore */ }
+    try { unlinkSync(this.mergeStatusFile); } catch { /* ignore */ }
+    for (const [, info] of this.editableFiles) {
+      try { unlinkSync(info.basePath); } catch { /* ignore */ }
+    }
+    this.editableFiles.clear();
   }
 }

@@ -24,6 +24,7 @@ import {
   editInPopup,
   openCompanionPane,
   openClaudeResumePopup,
+  openClaudeResumeSession,
   selectWindow,
   selectPane,
   switchToSession,
@@ -42,7 +43,8 @@ import { NvimBridge } from './lib/nvim-bridge.js';
 import { resolveNvimFile } from './lib/overview-writer.js';
 import { loadConfig } from '../shared/config.js';
 import { roadmapPath, goalPath, strategyPath, logsDir, contextDir } from '../shared/paths.js';
-import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDisplayName, truncate, ansiColor, ansiDim } from './lib/format.js';
+import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDisplayName, truncate, ansiColor, ansiDim, ansiBold } from './lib/format.js';
+import { COMPOSE_HEADERS } from './state.js';
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
 
@@ -321,9 +323,14 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.contextFiles = contextFiles;
       state.error = null;
 
-      // Tell nvim to refresh if the same file is still displayed (content may have changed)
+      // Merge-check editable files; falls back to checktime for readonly buffers
       if (state.nvimEnabled && state.nvimBridge?.ready && state.prevNvimFile) {
-        state.nvimBridge.checktime();
+        const mergeStatus = state.nvimBridge.mergeCheckOrReload();
+        if (mergeStatus === 'clean') {
+          notify(state, 'Auto-merged external changes');
+        } else if (mergeStatus === 'union') {
+          notify(state, 'Auto-merged overlapping edits — review buffer');
+        }
       }
 
       requestRender();
@@ -515,22 +522,34 @@ export function startApp(state: AppState, cleanup: () => void): void {
     };
 
     let detailRows: string[];
+    const composing = state.mode === 'compose';
     if (state.nvimEnabled && state.nvimBridge?.ready) {
-      // Determine which file(s) neovim should display
-      const result = resolveNvimFile(state, cursorNode, detailCtx, state.cwd);
-      const resultKey = result ? result.files.map(f => f.path).join('|') : null;
-      if (resultKey && resultKey !== state.prevNvimFile) {
-        state.nvimBridge.openTabFiles(result!.files);
-        state.prevNvimFile = resultKey;
-        state.nvimEditable = result!.files.some(f => !f.readonly);
-      } else if (!resultKey) {
-        state.prevNvimFile = null;
-        state.nvimEditable = false;
-      }
+      if (composing) {
+        // In compose mode, don't resolve nvim files — nvim is showing the compose temp file
+        const action = state.composeAction;
+        const label = action ? COMPOSE_HEADERS[action.kind] : 'Compose';
+        const statusRows = [
+          ' ' + ansiColor(label, 'yellow', true),
+          ' ' + ansiDim(':w to submit · Tab to cancel'),
+        ];
+        detailRows = renderNvimDetailRows(detailRect, state.nvimBridge, true, false, statusRows, true);
+      } else {
+        // Determine which file(s) neovim should display
+        const result = resolveNvimFile(state, cursorNode, detailCtx, state.cwd);
+        const resultKey = result ? result.files.map(f => f.path).join('|') : null;
+        if (resultKey && resultKey !== state.prevNvimFile) {
+          state.nvimBridge.openTabFiles(result!.files);
+          state.prevNvimFile = resultKey;
+          state.nvimEditable = result!.files.some(f => !f.readonly);
+        } else if (!resultKey) {
+          state.prevNvimFile = null;
+          state.nvimEditable = false;
+        }
 
-      // Build status rows for the header
-      const statusRows = buildStatusRows(cursorNode, state.selectedSession, state);
-      detailRows = renderNvimDetailRows(detailRect, state.nvimBridge, state.focusPane === 'detail', state.nvimEditable, statusRows);
+        // Build status rows for the header
+        const statusRows = buildStatusRows(cursorNode, state.selectedSession, state);
+        detailRows = renderNvimDetailRows(detailRect, state.nvimBridge, state.focusPane === 'detail', state.nvimEditable, statusRows);
+      }
     } else {
       detailRows = renderDetailRows(detailRect, state, detailCtx);
     }
@@ -607,6 +626,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     editInPopup,
     openCompanionPane,
     openClaudeResumePopup,
+    openClaudeResumeSession,
     selectWindow,
     selectPane,
     switchToSession,
@@ -661,6 +681,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
   inputActions.cleanup = () => {
     clearInterval(pollInterval);
     if (debouncedPollTimer !== null) clearTimeout(debouncedPollTimer);
+    if (state.composePollTimer !== null) clearInterval(state.composePollTimer);
     stopKeypress();
     stopResize();
     state.detailScroll.destroy();

@@ -12,6 +12,7 @@ export function renderNvimDetailRows(
   focused: boolean,
   editable: boolean,
   statusRows: string[],
+  composing: boolean = false,
 ): string[] {
   const { w, h } = rect;
   const rows = new Array<string>(h);
@@ -22,9 +23,9 @@ export function renderNvimDetailRows(
   const reset = '\x1b[0m';
   const innerW = w - 4; // border + padding on each side
 
-  // Top border — insert NVIM/EDIT badge when focused
+  // Top border — insert badge when focused
   if (focused) {
-    const badgeText = editable ? ' EDIT ' : ' NVIM ';
+    const badgeText = composing ? ' COMPOSE ' : editable ? ' EDIT ' : ' NVIM ';
     const badgeLen = badgeText.length;
     const dashesLeft = 2;
     const dashesRight = Math.max(0, w - 2 - dashesLeft - badgeLen);

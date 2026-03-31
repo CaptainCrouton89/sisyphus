@@ -1,7 +1,7 @@
 import { writeClipped, type FrameBuffer } from '../render.js';
 import { ansiBold, ansiDim } from '../lib/format.js';
 import type { AppState } from '../state.js';
-import { INPUT_MODES, PROMPTS } from '../state.js';
+import { INPUT_MODES, PROMPTS, COMPOSE_HEADERS } from '../state.js';
 import type { TreeNodeType } from '../types/tree.js';
 
 // ─── Notification Row ─────────────────────────────────────────────────────────
@@ -34,6 +34,14 @@ export function renderInputBar(
   state: AppState,
 ): void {
   const { mode, inputText, inputCursorPos } = state;
+
+  if (mode === 'compose') {
+    const action = state.composeAction;
+    const label = action ? COMPOSE_HEADERS[action.kind] : 'Compose';
+    const content = `\x1b[1;33mCOMPOSE\x1b[0m\x1b[2m  ${label} · :w to submit · Tab to cancel\x1b[0m`;
+    writeClipped(buf, 1, y, content, buf.width - 2);
+    return;
+  }
 
   if (mode === 'navigate') {
     const content = `\x1b[2mPress [m] to message orchestrator, [n] for new session\x1b[0m`;
@@ -81,6 +89,7 @@ export function renderStatusLine(
   const { mode, focusPane } = state;
 
   if (mode === 'report-detail') return;
+  if (mode === 'compose') return; // compose status shown in input bar
 
   let content: string;
 
