@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
+import { ensureRequiredPlugins } from './plugins.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -70,6 +71,8 @@ export async function ensureDaemonInstalled(): Promise<void> {
     execSync(`launchctl load -w ${plistPath()}`);
 
     const keybindResult = setupTmuxKeybind();
+
+    await ensureRequiredPlugins(process.cwd());
 
     printGettingStarted(keybindResult);
   }

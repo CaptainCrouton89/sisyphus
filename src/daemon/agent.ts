@@ -17,6 +17,7 @@ import { loadConfig } from '../shared/config.js';
 import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
+import { resolveRequiredPluginDirs } from './plugins.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -200,8 +201,10 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const config = loadConfig(cwd);
     const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
     const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
+    const requiredPluginDirs = resolveRequiredPluginDirs(cwd);
+    const extraPluginFlags = requiredPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag} --name ${shellQuote(agentTitle)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name ${shellQuote(agentTitle)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
   }
 
   const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [

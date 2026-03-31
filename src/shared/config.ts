@@ -8,6 +8,11 @@ export interface NotificationConfig {
   sound?: string;
 }
 
+export interface RequiredPlugin {
+  name: string;
+  marketplace: string;
+}
+
 export interface Config {
   model?: string;
   tmuxSession?: string;
@@ -19,6 +24,7 @@ export interface Config {
   editor?: string;
   repos?: string[];
   notifications?: NotificationConfig;
+  requiredPlugins?: RequiredPlugin[];
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -29,6 +35,9 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     sound: '/System/Library/Sounds/Hero.aiff',
   },
+  requiredPlugins: [
+    { name: 'devcore', marketplace: 'crouton-kit' },
+  ],
 };
 
 function readJsonFile(filePath: string): Partial<Config> {
