@@ -10,6 +10,7 @@ export default defineConfig({
   format: ['esm'],
   target: 'node22',
   platform: 'node',
+  external: ['node-pty'],
   splitting: true,
   clean: true,
   sourcemap: true,

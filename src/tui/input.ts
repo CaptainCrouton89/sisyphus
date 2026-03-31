@@ -1,4 +1,5 @@
 import type { Key } from './terminal.js';
+import { setRawBypass } from './terminal.js';
 import {
   type AppState,
   INPUT_MODES,
@@ -90,6 +91,27 @@ export interface InputActions {
 
   // Lifecycle
   cleanup: () => void;
+}
+
+// ── Neovim bypass helpers ─────────────────────────────────────────────────────
+
+function activateNvimBypass(state: AppState): void {
+  setRawBypass((data: string) => {
+    // Tab (0x09) escapes neovim focus
+    if (data === '\t') {
+      deactivateNvimBypass();
+      state.focusPane = state.showCombinedView ? 'logs' : 'tree';
+      requestRender();
+      return true; // consumed, not forwarded to nvim
+    }
+    // Everything else → neovim
+    state.nvimBridge!.write(data);
+    return true;
+  });
+}
+
+function deactivateNvimBypass(): void {
+  setRawBypass(null);
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -561,10 +583,14 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (key.leftArrow || input === 'h') {
     if (state.focusPane === 'logs') {
       state.focusPane = 'detail';
+      if (state.nvimEnabled && state.nvimBridge?.ready) {
+        activateNvimBypass(state);
+      }
       requestRender();
       return;
     }
     if (state.focusPane === 'detail') {
+      deactivateNvimBypass();
       state.focusPane = 'tree';
       requestRender();
       return;
@@ -608,8 +634,12 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (key.tab) {
     if (state.focusPane === 'tree') {
       state.focusPane = 'detail';
+      if (state.nvimEnabled && state.nvimBridge?.ready) {
+        activateNvimBypass(state);
+      }
     } else if (state.focusPane === 'detail') {
-      state.focusPane = state.showLogs ? 'logs' : 'tree';
+      deactivateNvimBypass();
+      state.focusPane = state.showCombinedView ? 'logs' : 'tree';
     } else {
       state.focusPane = 'tree';
     }
@@ -846,17 +876,6 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // s: toggle strategy view
-  if (input === 's') {
-    if (!state.strategyContent) {
-      notify(state, 'No strategy for this session');
-      return;
-    }
-    state.showStrategy = !state.showStrategy;
-    requestRender();
-    return;
-  }
-
   // S: edit strategy
   if (input === 'S') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
@@ -872,11 +891,11 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // t: toggle logs panel
   if (input === 't') {
-    if (state.showLogs) {
+    if (state.showCombinedView) {
       if (state.focusPane === 'logs') state.focusPane = 'detail';
       state.logsScroll.reset();
     }
-    state.showLogs = !state.showLogs;
+    state.showCombinedView = !state.showCombinedView;
     requestRender();
     return;
   }

@@ -75,7 +75,7 @@ export function copyRows(buf: FrameBuffer, src: string[], startRow: number, coun
 
 // ─── Frame Diffing (§1.3) ────────────────────────────────────────────────────
 
-export function flushFrame(frame: string[], prevFrame: string[]): string {
+export function flushFrame(frame: string[], prevFrame: string[], suffix?: string): string {
   let out = '\x1b[?2026h'; // begin synchronized output
   for (let i = 0; i < frame.length; i++) {
     if (frame[i] !== prevFrame[i]) {
@@ -84,6 +84,7 @@ export function flushFrame(frame: string[], prevFrame: string[]): string {
       out += frame[i];
     }
   }
+  if (suffix) out += suffix;
   out += '\x1b[?2026l'; // end synchronized output
   return out;
 }

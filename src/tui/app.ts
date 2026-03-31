@@ -35,10 +35,14 @@ import { copyToClipboard } from './lib/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
 import { renderTreePanel } from './panels/tree.js';
 import { renderDetailRows, renderLogsRows, type DetailContext } from './panels/detail.js';
+import { renderNvimDetailRows } from './panels/nvim-detail.js';
 import { renderNotificationRow, renderInputBar, renderStatusLine } from './panels/bottom.js';
 import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay } from './panels/overlays.js';
+import { NvimBridge } from './lib/nvim-bridge.js';
+import { resolveNvimFile } from './lib/overview-writer.js';
 import { loadConfig } from '../shared/config.js';
 import { roadmapPath, goalPath, strategyPath, logsDir, contextDir } from '../shared/paths.js';
+import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDisplayName, truncate, ansiColor, ansiDim } from './lib/format.js';
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
 
@@ -69,6 +73,77 @@ let cachedTreeRows: string[] = [];
 let cachedLogSessionId: string | null = null;
 let cachedLogFiles: Map<string, { mtime: number; cycle: number; content: string }> = new Map();
 
+// ── Status header constants ──────────────────────────────────────────────────
+
+const STATUS_ROW_COUNT = 2; // Fixed height for status header (avoids nvim resize on cursor change)
+
+function buildStatusRows(
+  cursorNode: TreeNode | undefined,
+  session: Session | null,
+  state: AppState,
+): string[] {
+  if (!cursorNode || !session) {
+    return [ansiDim(' No session selected'), ''];
+  }
+
+  const dur = formatDuration(session.createdAt, session.completedAt);
+  const indicator = statusIndicator(session.status);
+  const sColor = statusColor(session.status);
+  const title = truncate(session.name ?? session.task, 40);
+
+  switch (cursorNode.type) {
+    case 'session': {
+      return [
+        ' ' + ansiColor(indicator, sColor, true) + ' ' + ansiColor(title, 'white', true),
+        ' ' + ansiDim(`${session.status} · ${session.orchestratorCycles.length} cycles · ${session.agents.length} agents · ${dur}`),
+      ];
+    }
+    case 'cycle': {
+      const cycle = session.orchestratorCycles.find(c => c.cycle === cursorNode.cycleNumber);
+      if (!cycle) return [' ' + ansiColor(title, 'white', true), ''];
+      const cDur = cycle.completedAt ? formatDuration(cycle.timestamp, cycle.completedAt) : 'running';
+      const cStatus = cycle.completedAt ? 'completed' : 'running';
+      return [
+        ' ' + ansiColor(indicator, sColor, true) + ' ' + ansiColor(title, 'white', true) + ansiDim(` · Cycle ${cycle.cycle}`),
+        ' ' + ansiDim(`${cStatus} · ${cDur} · ${cycle.agentsSpawned.length} agents`),
+      ];
+    }
+    case 'agent':
+    case 'report': {
+      const agentId = cursorNode.type === 'agent' ? cursorNode.agentId : cursorNode.agentId;
+      const agent = session.agents.find(a => a.id === agentId);
+      if (!agent) return [' ' + ansiColor(title, 'white', true), ''];
+      const aIcon = agentStatusIcon(agent.status);
+      const aDur = formatDuration(agent.spawnedAt, agent.completedAt);
+      const aName = agentDisplayName(agent);
+      return [
+        ' ' + ansiColor(aIcon, statusColor(agent.status === 'running' ? 'active' : agent.status), true) + ' ' + ansiColor(`${agent.id} · ${aName}`, 'white', true),
+        ' ' + ansiDim(`${agent.status} · ${agent.agentType || '—'} · ${aDur}`),
+      ];
+    }
+    case 'context-file': {
+      const name = cursorNode.filePath.split('/').pop() ?? cursorNode.filePath;
+      return [
+        ' ' + ansiColor('⊞', 'white') + ' ' + ansiColor(name, 'white', true),
+        ' ' + ansiDim(`context file · ${session.status}`),
+      ];
+    }
+    case 'messages':
+    case 'message': {
+      return [
+        ' ' + ansiColor(indicator, sColor, true) + ' ' + ansiColor(title, 'white', true),
+        ' ' + ansiDim(`${session.messages.length} messages`),
+      ];
+    }
+    default: {
+      return [
+        ' ' + ansiColor(indicator, sColor, true) + ' ' + ansiColor(title, 'white', true),
+        ' ' + ansiDim(`${session.status} · ${dur}`),
+      ];
+    }
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getAgentForNode(node: TreeNode | undefined, agents: Agent[]): Agent | null {
@@ -83,6 +158,18 @@ function getAgentForNode(node: TreeNode | undefined, agents: Agent[]): Agent | n
 
 export function startApp(state: AppState, cleanup: () => void): void {
   const config = loadConfig(state.cwd);
+
+  // Initialize NvimBridge
+  const treeWidth = 36;
+  const initialDetailW = (state.cols - treeWidth) - 4; // detail width minus borders
+  const initialDetailH = (state.rows - 3) - 2 - STATUS_ROW_COUNT - 1; // content height minus borders, status, separator
+  const bridge = new NvimBridge(
+    Math.max(1, initialDetailW),
+    Math.max(1, initialDetailH),
+    requestRender,
+  );
+  state.nvimBridge = bridge.available ? bridge : null;
+  state.nvimEnabled = bridge.available;
 
   // Track selectedSessionId to detect changes across renders (for immediate poll)
   let prevSelectedSessionId: string | null | undefined = undefined;
@@ -233,6 +320,12 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.paneAlive = paneAlive;
       state.contextFiles = contextFiles;
       state.error = null;
+
+      // Tell nvim to refresh if the same file is still displayed (content may have changed)
+      if (state.nvimEnabled && state.nvimBridge?.ready && state.prevNvimFile) {
+        state.nvimBridge.checktime();
+      }
+
       requestRender();
     } catch (err) {
       state.error = (err as Error).message;
@@ -262,13 +355,13 @@ export function startApp(state: AppState, cleanup: () => void): void {
     // Compute layout
     const treeWidth = 36;
     const remaining = state.cols - treeWidth;
-    const detailWidth = state.showLogs ? Math.floor(remaining * 0.6) : remaining;
-    const logsWidth = state.showLogs ? remaining - detailWidth : 0;
+    const detailWidth = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
+    const logsWidth = state.showCombinedView ? remaining - detailWidth : 0;
     const contentHeight = state.rows - 3;
 
     const treeRect = { x: 0, y: 0, w: treeWidth, h: contentHeight };
     const detailRect = { x: treeWidth, y: 0, w: detailWidth, h: contentHeight };
-    const logsRect = state.showLogs
+    const logsRect = state.showCombinedView
       ? { x: treeWidth + detailWidth, y: 0, w: logsWidth, h: contentHeight }
       : null;
     const bottomY = contentHeight;
@@ -316,6 +409,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.logsScroll.reset();
       state.cachedDetailLines = null;
       state.detailCacheKey = '';
+      state.prevNvimFile = null;
       state.cachedLogsLines = null;
       state.logsCacheKey = '';
     }
@@ -419,7 +513,27 @@ export function startApp(state: AppState, cleanup: () => void): void {
       detailReportBlocks,
       contextFileContent,
     };
-    const detailRows = renderDetailRows(detailRect, state, detailCtx);
+
+    let detailRows: string[];
+    if (state.nvimEnabled && state.nvimBridge?.ready) {
+      // Determine which file(s) neovim should display
+      const result = resolveNvimFile(state, cursorNode, detailCtx, state.cwd);
+      const resultKey = result ? result.files.map(f => f.path).join('|') : null;
+      if (resultKey && resultKey !== state.prevNvimFile) {
+        state.nvimBridge.openTabFiles(result!.files);
+        state.prevNvimFile = resultKey;
+        state.nvimEditable = result!.files.some(f => !f.readonly);
+      } else if (!resultKey) {
+        state.prevNvimFile = null;
+        state.nvimEditable = false;
+      }
+
+      // Build status rows for the header
+      const statusRows = buildStatusRows(cursorNode, state.selectedSession, state);
+      detailRows = renderNvimDetailRows(detailRect, state.nvimBridge, state.focusPane === 'detail', state.nvimEditable, statusRows);
+    } else {
+      detailRows = renderDetailRows(detailRect, state, detailCtx);
+    }
     const logsRows = logsRect ? renderLogsRows(logsRect, state) : null;
 
     // Compose panel rows into buffer by concatenation (no slicing/splicing)
@@ -447,8 +561,20 @@ export function startApp(state: AppState, cleanup: () => void): void {
       if (state.mode === 'help') renderHelpOverlay(buf, state.rows, state.cols);
     }
 
-    // Flush diff to stdout
-    const out = flushFrame(buf.lines, prevFrame);
+    // Build cursor suffix inside synchronized output block to prevent flicker
+    let cursorSuffix: string;
+    if (state.focusPane === 'detail' && state.nvimBridge?.ready) {
+      const cursor = state.nvimBridge.getCursorPos();
+      const absX = detailRect.x + 2 + cursor.x;
+      // Nvim content starts after: top border (1) + status rows (STATUS_ROW_COUNT) + separator (1)
+      const absY = detailRect.y + 1 + STATUS_ROW_COUNT + 1 + cursor.y;
+      cursorSuffix = `\x1b[?25h\x1b[${absY + 1};${absX + 1}H`;
+    } else {
+      cursorSuffix = '\x1b[?25l';
+    }
+
+    // Flush diff to stdout with cursor positioning inside sync block
+    const out = flushFrame(buf.lines, prevFrame, cursorSuffix);
     writeToStdout(out);
     prevFrame = buf.lines;
   }
@@ -514,6 +640,15 @@ export function startApp(state: AppState, cleanup: () => void): void {
     state.rows = (typeof stdoutRows === 'number' && stdoutRows > 0) ? stdoutRows : 24;
     state.cols = (typeof stdoutCols === 'number' && stdoutCols > 0) ? stdoutCols : 80;
     prevFrame = []; // force full redraw
+
+    // Resize nvim bridge to match new detail panel dimensions
+    // Account for: borders (2), status rows (STATUS_ROW_COUNT), separator (1)
+    if (state.nvimBridge) {
+      const detailW = state.cols - 36; // treeWidth=36
+      const contentH = state.rows - 3; // bottomBar=3
+      state.nvimBridge.resize(Math.max(1, detailW - 4), Math.max(1, contentH - 2 - STATUS_ROW_COUNT - 1));
+    }
+
     requestRender();
   });
 
@@ -530,6 +665,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     stopResize();
     state.detailScroll.destroy();
     state.logsScroll.destroy();
+    state.nvimBridge?.destroy();
     origCleanup();
   };
 

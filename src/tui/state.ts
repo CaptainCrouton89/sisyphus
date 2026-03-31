@@ -164,8 +164,7 @@ export interface AppState {
   // UI
   notification: string | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
-  showLogs: boolean;
-  showStrategy: boolean;
+  showCombinedView: boolean;
 
   // Input bar
   inputText: string;
@@ -203,6 +202,13 @@ export interface AppState {
   logsCacheKey: string;
   logsRenderedCache: import('./render.js').RenderedCache;
 
+  // Neovim integration
+  nvimBridge: import('./lib/nvim-bridge.js').NvimBridge | null;
+  nvimEnabled: boolean;
+  prevNvimFile: string | null;
+  nvimEditable: boolean;
+  nvimOpenTabs: Map<string, { path: string; readonly: boolean }>;
+
   // Config
   cwd: string;
 }
@@ -226,8 +232,7 @@ export function createAppState(cwd: string): AppState {
     targetAgentId: null,
     notification: null,
     notificationTimer: null,
-    showLogs: false,
-    showStrategy: false,
+    showCombinedView: false,
     inputText: '',
     inputCursorPos: 0,
     detailScroll,
@@ -254,6 +259,11 @@ export function createAppState(cwd: string): AppState {
     cachedLogsLines: null,
     logsCacheKey: '',
     logsRenderedCache: { lines: [], ansi: [] },
+    nvimBridge: null,
+    nvimEnabled: true,
+    prevNvimFile: null,
+    nvimEditable: false,
+    nvimOpenTabs: new Map(),
     cwd,
   };
 }

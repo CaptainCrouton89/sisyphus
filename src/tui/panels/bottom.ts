@@ -106,13 +106,12 @@ export function renderStatusLine(
     content =
       B('[jk/↑↓]') + D(' scroll  ') +
       B('[h/←/tab]') + D(' back  ') +
-      B('[t]') + D('oggle logs  ') +
+      B('[t]') + D('oggle view  ') +
       SEP +
       B('[m]') + D('sg  ') +
       B('[g]') + D('oal  ') +
       B('[n]') + D('ew  ') +
       B('[p]') + D('lan  ') +
-      B('[s]') + D('trat  ') +
       B('[w]') + D('indow  ') +
       B('[R]') + D('esume  ') +
       B('[q]') + D('uit');
@@ -128,7 +127,7 @@ export function renderStatusLine(
       contextFilePart +
       B('[space]') + D(' leader  ') +
       B('[tab]') + D(' detail  ') +
-      B('[t]') + D('oggle logs  ') +
+      B('[t]') + D('oggle view  ') +
       SEP +
       B('[m]') + D('sg  ') +
       B('[n]') + D('ew  ') +

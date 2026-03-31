@@ -169,7 +169,6 @@ function buildSessionLines(
   width: number,
   paneAlive: boolean,
   strategyContent: string = '',
-  showStrategy: boolean = false,
 ): DetailLine[] {
   const lines: DetailLine[] = [];
   const contentWidth = width - 4;
@@ -223,12 +222,8 @@ function buildSessionLines(
 
   // Plan / Strategy section
   lines.push(singleLine(' '));
-  if (showStrategy && strategyContent) {
-    const stratHint = strategyContent ? '  [s] toggle plan' : '';
-    lines.push([
-      seg('  ▎ ◈ STRATEGY', { color: 'yellow', bold: true }),
-      seg(stratHint, { dim: true }),
-    ]);
+  if (strategyContent) {
+    lines.push([seg('  ▎ ◈ STRATEGY', { color: 'yellow', bold: true })]);
     const stratLines = buildPlanLines(strategyContent, 99999, width);
     if (stratLines.length === 0) {
       lines.push(singleLine('    (empty)', { dim: true, italic: true }));
@@ -238,11 +233,7 @@ function buildSessionLines(
       }
     }
   } else {
-    const toggleHint = strategyContent ? '  [s] toggle strategy' : '';
-    lines.push([
-      seg('  ▎ ◈ PLAN', { color: 'yellow', bold: true }),
-      seg(toggleHint, { dim: true }),
-    ]);
+    lines.push([seg('  ▎ ◈ PLAN', { color: 'yellow', bold: true })]);
     const planLines = buildPlanLines(planContent, 99999, width);
     if (planLines.length === 0) {
       lines.push(singleLine('    orchestrator will create one', { dim: true, italic: true }));
@@ -675,7 +666,6 @@ export function renderDetailRows(
     cursorNode.type,
     state.mode,
     state.targetAgentId,
-    state.showStrategy,
     rect.w,
     session.id,
     session.agents.length,
@@ -700,7 +690,7 @@ export function renderDetailRows(
   } else {
     switch (cursorNode.type) {
       case 'session': {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
         break;
       }
 
@@ -708,7 +698,7 @@ export function renderDetailRows(
         const cycleNode = cursorNode as CycleTreeNode;
         const cycle = session.orchestratorCycles.find((c) => c.cycle === cycleNode.cycleNumber);
         if (!cycle) {
-          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
         } else {
           lines = buildCycleLines(cycle, session.agents, rect.w);
         }
@@ -719,7 +709,7 @@ export function renderDetailRows(
         const agentNode = cursorNode as AgentTreeNode;
         const agent = agents.find((a) => a.id === agentNode.agentId);
         if (!agent) {
-          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
         } else {
           lines = buildAgentLines(agent, detailReportBlocks, rect.w);
         }
@@ -730,7 +720,7 @@ export function renderDetailRows(
         const reportNode = cursorNode as ReportTreeNode;
         const agent = agents.find((a) => a.id === reportNode.agentId);
         if (!agent) {
-          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
           break;
         }
         const reportIdx = reportNode.reportIndex;
@@ -827,7 +817,7 @@ export function renderDetailRows(
       }
 
       default: {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.showStrategy);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
         break;
       }
     }

@@ -33,11 +33,14 @@
     "dev": "tsup --watch",
     "dev:daemon": "tsup --watch --onSuccess 'node dist/daemon.js restart'",
     "test": "node --import tsx --test src/__tests__/*.test.ts",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@r-cli/sdk": "^1.2.0",
+    "@xterm/headless": "^5.5.0",
     "commander": "^13.1.0",
+    "node-pty": "^1.0.0",
     "string-width": "^5.1.2",
     "uuid": "^11.1.0"
   },

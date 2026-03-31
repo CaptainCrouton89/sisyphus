@@ -102,3 +102,7 @@ export function snapshotDir(cwd: string, sessionId: string, cycle: number): stri
   return join(snapshotsDir(cwd, sessionId), `cycle-${cycle}`);
 }
 
+export function tuiScratchDir(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), '.tui');
+}
+

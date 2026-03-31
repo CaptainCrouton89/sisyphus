@@ -201,11 +201,25 @@ function parseBuffer(buf: string): { events: Array<[string, Key]>; remaining: st
   return { events, remaining: '' };
 }
 
+// ── Raw Stdin Bypass (for neovim PTY forwarding) ─────────────────────────────
+
+let rawBypassHandler: ((data: string) => boolean) | null = null;
+
+export function setRawBypass(handler: ((data: string) => boolean) | null): void {
+  rawBypassHandler = handler;
+}
+
 export function startKeypressListener(handler: KeypressHandler): () => void {
   let buffer = '';
   let escTimer: ReturnType<typeof setTimeout> | null = null;
 
   const onData = (data: string): void => {
+    // Raw bypass — forward to neovim PTY if active
+    if (rawBypassHandler) {
+      const handled = rawBypassHandler(data);
+      if (handled) return;
+    }
+
     // Cancel pending escape timer — more data arrived
     if (escTimer !== null) {
       clearTimeout(escTimer);
