@@ -17,8 +17,9 @@ console.log = (...args: unknown[]) => origLog(`[${ts()}]`, ...args);
 console.error = (...args: unknown[]) => origError(`[${ts()}]`, ...args);
 import { loadConfig } from '../shared/config.js';
 import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry } from './server.js';
-import { startMonitor, stopMonitor, setRespawnCallback, trackSession, updateTrackedWindow, flushTimers, initTimers, getTrackedSessionIds } from './pane-monitor.js';
+import { startMonitor, stopMonitor, setRespawnCallback, setDotsCallback, trackSession, updateTrackedWindow, flushTimers, initTimers, getTrackedSessionIds, getTrackedSessionEntries } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
+import { recomputeDots, setTrackedEntriesProvider } from './status-dots.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
 import { listPanes, sessionExists } from './tmux.js';
@@ -222,6 +223,8 @@ async function startDaemon(): Promise<void> {
   acquirePidLock();
 
   setRespawnCallback(onAllAgentsDone);
+  setDotsCallback(recomputeDots);
+  setTrackedEntriesProvider(getTrackedSessionEntries);
 
   await startServer();
   startMonitor(config.pollIntervalMs);

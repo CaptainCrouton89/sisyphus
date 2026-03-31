@@ -32,6 +32,8 @@ import { registerCompanionContext } from './commands/companion-context.js';
 import { registerGettingStarted } from './commands/getting-started.js';
 import { registerInit } from './commands/init.js';
 import { registerSetup } from './commands/setup.js';
+import { registerTmuxStatus } from './commands/tmux-status.js';
+import { registerTmuxSessions } from './commands/tmux-sessions.js';
 import { globalDir } from '../shared/paths.js';
 
 const program = new Command();
@@ -73,6 +75,8 @@ registerCompanionContext(program);
 registerGettingStarted(program);
 registerInit(program);
 registerSetup(program);
+registerTmuxStatus(program);
+registerTmuxSessions(program);
 
 program.addHelpText('after', `
 Examples:

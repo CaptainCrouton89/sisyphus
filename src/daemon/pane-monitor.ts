@@ -6,9 +6,11 @@ import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
+type DotsCallback = () => void;
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
 let onAllAgentsDone: RespawnCallback | null = null;
+let onDotsUpdate: DotsCallback | null = null;
 
 // ─── Active time tracking ──────────────────────────────────────────────────────
 
@@ -98,6 +100,14 @@ export function setRespawnCallback(cb: RespawnCallback): void {
   onAllAgentsDone = cb;
 }
 
+export function setDotsCallback(cb: DotsCallback): void {
+  onDotsUpdate = cb;
+}
+
+export function getTrackedSessionEntries(): Iterable<{ id: string; cwd: string; tmuxSession: string; windowId: string | null }> {
+  return trackedSessions.values();
+}
+
 export function startMonitor(pollIntervalMs: number = 5000): void {
   if (monitorInterval) return;
   storedPollIntervalMs = pollIntervalMs;
@@ -147,6 +157,9 @@ async function pollAllSessions(): Promise<void> {
       await pollSession(sessionId, cwd, windowId, increment);
     }
   }
+
+  // Recompute status dots after polling all sessions
+  try { onDotsUpdate?.(); } catch { /* best-effort */ }
 }
 
 async function pollSession(sessionId: string, cwd: string, windowId: string, increment: number): Promise<void> {

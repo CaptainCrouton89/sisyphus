@@ -154,6 +154,14 @@ export function selectLayout(windowTarget: string, layout: string = 'even-horizo
   execSafe(`tmux select-layout -t "${windowTarget}" ${layout}`);
 }
 
+export function setWindowOption(windowTarget: string, option: string, value: string): void {
+  execSafe(`tmux set-option -w -t "${windowTarget}" ${option} ${shellQuote(value)}`);
+}
+
+export function getSessionOption(sessionName: string, option: string): string | null {
+  return execSafe(`tmux show-options -t "${sessionName}" -v ${option}`);
+}
+
 /**
  * Sets window/session-level tmux options that Sisyphus depends on.
  * Without these, pane labels won't show and titles may get clobbered.

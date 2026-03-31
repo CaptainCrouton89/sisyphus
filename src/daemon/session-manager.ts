@@ -13,6 +13,7 @@ import { sendTerminalNotification } from './notify.js';
 import { generateSessionName } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
+import { recomputeDots, markSessionCompleted } from './status-dots.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -101,6 +102,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
     });
   }
 
+  try { recomputeDots(); } catch { /* best-effort */ }
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
 }
 
@@ -228,6 +230,7 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
     tmux.killPane(initialPaneId);
   }
 
+  try { recomputeDots(); } catch { /* best-effort */ }
   return state.getSession(cwd, sessionId);
 }
 
@@ -347,6 +350,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         }
       }
       tmux.selectLayout(activeWindowId);
+      try { recomputeDots(); } catch { /* best-effort */ }
     } catch (err) {
       console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err);
     } finally {
@@ -387,11 +391,13 @@ export async function handleSpawn(
 
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
 
+  try { recomputeDots(); } catch { /* best-effort */ }
   return { agentId: agent.id };
 }
 
 export async function handleSubmit(cwd: string, sessionId: string, agentId: string, report: string, windowId: string): Promise<void> {
   const allDone = await handleAgentSubmit(cwd, sessionId, agentId, report);
+  try { recomputeDots(); } catch { /* best-effort */ }
   if (allDone) {
     onAllAgentsDone(sessionId, cwd, windowId);
   }
@@ -417,6 +423,7 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 
   // Mark orchestrator as done for this cycle — unblocks respawn
   orchestratorDone.add(sessionId);
+  try { recomputeDots(); } catch { /* best-effort */ }
 
   const session = state.getSession(cwd, sessionId);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
@@ -439,6 +446,8 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   const session = state.getSession(cwd, sessionId);
   await flushTimers(sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
+  markSessionCompleted(sessionId, session.createdAt, cwd);
+  try { recomputeDots(); } catch { /* best-effort */ }
   switchToHomeSession(session);
 }
 
@@ -491,6 +500,7 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   clearAgentCounter(sessionId);
   orchestratorDone.delete(sessionId);
 
+  try { recomputeDots(); } catch { /* best-effort */ }
   return killedAgents;
 }
 
