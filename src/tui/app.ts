@@ -568,9 +568,9 @@ export function startApp(state: AppState, cleanup: () => void): void {
       const absX = detailRect.x + 2 + cursor.x;
       // Nvim content starts after: top border (1) + status rows (STATUS_ROW_COUNT) + separator (1)
       const absY = detailRect.y + 1 + STATUS_ROW_COUNT + 1 + cursor.y;
-      cursorSuffix = `\x1b[?25h\x1b[${absY + 1};${absX + 1}H`;
+      cursorSuffix = `\x1b[${state.nvimBridge.cursorStyle} q\x1b[?25h\x1b[${absY + 1};${absX + 1}H`;
     } else {
-      cursorSuffix = '\x1b[?25l';
+      cursorSuffix = '\x1b[0 q\x1b[?25l';
     }
 
     // Flush diff to stdout with cursor positioning inside sync block

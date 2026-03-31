@@ -15,6 +15,8 @@ export class NvimBridge {
   ready: boolean = false;
   dirty: boolean = true;
   available: boolean = false;
+  /** DECSCUSR cursor style: 0=default, 1=blinking block, 2=steady block, 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar */
+  cursorStyle: number = 0;
   private cachedRows: string[] | null = null;
   private nvimPath: string = 'nvim';
   private pendingFiles: { files: { path: string; readonly: boolean }[]; key: string } | null = null;
@@ -97,6 +99,11 @@ export class NvimBridge {
     });
 
     this.pty.onData((data: string) => {
+      // Track DECSCUSR cursor shape sequences (\x1b[N q) so we can
+      // forward them to the real terminal alongside cursor positioning
+      const csMatch = data.match(/\x1b\[(\d+) q/);
+      if (csMatch) this.cursorStyle = parseInt(csMatch[1], 10);
+
       this.xterm!.write(data);
       this.dirty = true;
       this.cachedRows = null;
