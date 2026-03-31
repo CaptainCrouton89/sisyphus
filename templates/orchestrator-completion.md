@@ -13,24 +13,16 @@ Before presenting anything, read thoroughly:
 
 Synthesize this into a clear picture of what was done and how it maps to what was asked for.
 
-## Present the Completion Report
+## Present the Summary
 
-Output the following directly in the tmux pane for the user to read:
+Output a concise summary directly in the tmux pane. The user already knows what they asked for — don't recap the goal. Focus on what's interesting:
 
-### 1. Goal Recap
-What was the original goal? How did it evolve during the session (if it did)?
+- **What was built** — the key deliverables, not an exhaustive file list. Highlight anything non-obvious or that diverged from the original ask.
+- **Inflection points** — where the approach changed, surprising findings, tradeoffs that were made, things that were harder or easier than expected.
+- **Gaps** — anything deferred, any known limitations. Be honest.
+- **Validation** — brief summary of what was tested. Reference reports if the user wants detail.
 
-### 2. What Was Built
-Structured summary of the work product. Be specific — files created/modified, features implemented, integrations wired up. Group logically. If a diagram would clarify the architecture, include one.
-
-### 3. Goal Coverage
-How does the work map to the goal? What's fully satisfied, what has limitations, what was intentionally deferred?
-
-### 4. Verification Results
-Reference the validation reports. Summarize what was tested and the results. If there were validation failures that were fixed, mention the fix cycle.
-
-### 5. Deferred Items
-Anything explicitly punted — and why. Be honest about gaps.
+Keep it tight. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
 
 ## Wait for User Confirmation
 
