@@ -25,7 +25,7 @@ import { listPanes, sessionExists } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
-import { checkAndApply } from './updater.js';
+import { checkAndApply, startPeriodicUpdateCheck, stopPeriodicUpdateCheck } from './updater.js';
 
 function ensureDirs(): void {
   mkdirSync(globalDir(), { recursive: true });
@@ -228,8 +228,13 @@ async function startDaemon(): Promise<void> {
 
   await recoverSessions();
 
+  if (config.autoUpdate !== false) {
+    startPeriodicUpdateCheck();
+  }
+
   const shutdown = async () => {
     console.log('[sisyphus] Shutting down...');
+    stopPeriodicUpdateCheck();
     stopMonitor();
     // Persist all in-memory active time accumulators before exiting
     for (const sessionId of getTrackedSessionIds()) {

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { get } from 'node:https';
 import { daemonUpdatingPath } from '../shared/paths.js';
 
-function isNewer(latest: string, current: string): boolean {
+export function isNewer(latest: string, current: string): boolean {
   const a = latest.split('.').map(Number);
   const b = current.split('.').map(Number);
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -38,6 +38,7 @@ export function getCurrentVersion(): string {
 export function checkForUpdate(): Promise<{ current: string; latest: string } | null> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
+      console.error('[sisyphus] Update check timed out (5s)');
       resolve(null);
     }, 5000);
 
@@ -53,14 +54,16 @@ export function checkForUpdate(): Promise<{ current: string; latest: string } | 
           } else {
             resolve(null);
           }
-        } catch {
+        } catch (err) {
+          console.error('[sisyphus] Failed to parse registry response:', err);
           resolve(null);
         }
       });
     });
 
-    req.on('error', () => {
+    req.on('error', (err) => {
       clearTimeout(timeout);
+      console.error('[sisyphus] Update check failed:', err.message);
       resolve(null);
     });
   });
@@ -128,5 +131,23 @@ export async function checkAndApply(): Promise<void> {
   } catch (err) {
     clearUpdating();
     console.error('[sisyphus] Auto-update check failed:', err);
+  }
+}
+
+const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+let updateTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startPeriodicUpdateCheck(): void {
+  if (isLinkedInstall()) return;
+  updateTimer = setInterval(() => {
+    void checkAndApply();
+  }, UPDATE_INTERVAL_MS);
+  updateTimer.unref(); // don't keep the process alive just for update checks
+}
+
+export function stopPeriodicUpdateCheck(): void {
+  if (updateTimer) {
+    clearInterval(updateTimer);
+    updateTimer = null;
   }
 }
