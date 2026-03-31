@@ -22,12 +22,32 @@ WINDOW_ID=$(tmux display-message -t "$TMUX_PANE" -p "#{window_index}" 2>/dev/nul
 
 if [ -n "$SESSION_NAME" ] && [ -n "$WINDOW_ID" ] && command -v terminal-notifier &>/dev/null; then
   # Write a one-shot switch script (self-deleting on execution)
+  # terminal-notifier -execute runs with minimal PATH, so resolve paths now
+  TMUX_BIN=$(command -v tmux)
+  # Find the tmux client tty attached to this session (for iTerm2 tab lookup)
+  CLIENT_TTY=$("$TMUX_BIN" list-clients -t "$SESSION_NAME" -F "#{client_tty}" 2>/dev/null | head -1)
   SWITCH_SCRIPT=$(mktemp /tmp/sisyphus-switch.XXXXXX.sh)
   cat > "$SWITCH_SCRIPT" <<EOF
 #!/bin/bash
-CLIENT=\$(tmux list-clients -F "#{client_activity} #{client_tty}" 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)
-[ -n "\$CLIENT" ] && tmux switch-client -c "\$CLIENT" -t "${SESSION_NAME}:${WINDOW_ID}" 2>/dev/null
-tmux select-window -t "${SESSION_NAME}:${WINDOW_ID}" 2>/dev/null
+# Activate the correct iTerm2 window+tab (matched by tty), or fall back to generic activate
+osascript -e '
+tell application "iTerm"
+  activate
+  repeat with w in windows
+    repeat with t in tabs of w
+      repeat with s in sessions of t
+        if tty of s is "${CLIENT_TTY}" then
+          select w
+          tell w to select t
+          return
+        end if
+      end repeat
+    end repeat
+  end repeat
+end tell' 2>/dev/null || osascript -e 'tell application "Terminal" to activate' 2>/dev/null
+# Switch tmux to the orchestrator window
+"${TMUX_BIN}" switch-client -c "${CLIENT_TTY}" -t "${SESSION_NAME}:${WINDOW_ID}" 2>/dev/null
+"${TMUX_BIN}" select-window -t "${SESSION_NAME}:${WINDOW_ID}" 2>/dev/null
 rm -f "\$0"
 EOF
   chmod +x "$SWITCH_SCRIPT"
