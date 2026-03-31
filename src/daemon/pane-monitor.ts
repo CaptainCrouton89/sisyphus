@@ -2,6 +2,7 @@ import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
+import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
@@ -179,6 +180,10 @@ async function pollSession(sessionId: string, cwd: string, windowId: string, inc
 
   const livePanes = tmux.listPanes(windowId);
   if (livePanes.length === 0) {
+    // Skip if session is in yield→respawn transition — the window is temporarily
+    // empty between killing the orchestrator pane and spawning a new one.
+    if (respawningSessions.has(sessionId)) return;
+
     // Check if the entire tmux session was destroyed
     const tracked = trackedSessions.get(sessionId);
     if (tracked && !tmux.sessionExists(tracked.tmuxSession)) {

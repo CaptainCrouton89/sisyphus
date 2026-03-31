@@ -12,6 +12,7 @@ import type { Session } from '../shared/types.js';
 import { sendTerminalNotification } from './notify.js';
 import { generateSessionName } from './summarize.js';
 import { registerSessionTmux } from './server.js';
+import { respawningSessions } from './respawn-guard.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -286,7 +287,10 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
   }
 
   const session = state.getSession(cwd, sessionId);
-  if (session.status !== 'active') return;
+  if (session.status !== 'active') {
+    respawningSessions.delete(sessionId);
+    return;
+  }
 
   pendingRespawns.add(sessionId);
   orchestratorDone.delete(sessionId);
@@ -301,9 +305,14 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
   setImmediate(async () => {
     pendingRespawns.delete(sessionId);
     try {
-      // Re-check status — pane monitor may have paused us in the meantime
+      // Re-activate if the pane monitor raced and paused us during a yield await
       const freshSession = state.getSession(cwd, sessionId);
-      if (freshSession.status !== 'active') return;
+      if (freshSession.status === 'paused' && respawningSessions.has(sessionId)) {
+        await state.updateSessionStatus(cwd, sessionId, 'active');
+      } else if (freshSession.status !== 'active') {
+        respawningSessions.delete(sessionId);
+        return;
+      }
 
       // Ensure the tmux session and window still exist.
       // Killing the last pane (orchestrator yield with no agents) destroys the window/session.
@@ -325,6 +334,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         initialPaneId = created.initialPaneId;
         await state.updateSessionTmux(cwd, sessionId, tmuxName!, activeWindowId);
         trackSession(sessionId, cwd, tmuxName!);
+        registerSessionTmux(sessionId, tmuxName!, activeWindowId);
       }
       await orchestrator.spawnOrchestrator(sessionId, cwd, activeWindowId);
       updateTrackedWindow(sessionId, activeWindowId);
@@ -339,6 +349,8 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       tmux.selectLayout(activeWindowId);
     } catch (err) {
       console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err);
+    } finally {
+      respawningSessions.delete(sessionId);
     }
   });
 }
@@ -396,6 +408,11 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
     await state.updateSessionStatus(cwd, sessionId, 'active');
   }
 
+  // Guard against pane monitor pausing us during the yield→respawn transition.
+  // Killing the orchestrator pane may destroy the tmux window (if it's the last pane),
+  // and the pane monitor could see 0 live panes and pause the session before we respawn.
+  respawningSessions.add(sessionId);
+
   await orchestrator.handleOrchestratorYield(sessionId, cwd, nextPrompt, mode);
 
   // Mark orchestrator as done for this cycle — unblocks respawn
@@ -408,7 +425,13 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
     const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
     if (windowId) {
       onAllAgentsDone(sessionId, cwd, windowId);
+      // Guard cleared inside onAllAgentsDone's setImmediate callback
+    } else {
+      respawningSessions.delete(sessionId);
     }
+  } else {
+    // Agents still running — their panes keep the window alive, no race possible
+    respawningSessions.delete(sessionId);
   }
 }
 
@@ -583,6 +606,10 @@ export async function handlePaneExited(
     // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
     const sessionName = session.name ?? sessionId.slice(0, 8);
     sendTerminalNotification('Sisyphus', `Orchestrator exited without yielding (${sessionName})`);
+
+    // Guard against pane monitor pausing us during the await below
+    respawningSessions.add(sessionId);
+
     const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
     await state.completeOrchestratorCycle(cwd, sessionId, undefined, undefined, cycleActiveMs);
     orchestratorDone.add(sessionId);
@@ -592,11 +619,18 @@ export async function handlePaneExited(
       if (windowId) {
         console.log(`[sisyphus] Orchestrator pane exited for session ${sessionId}, all agents done — triggering respawn`);
         onAllAgentsDone(sessionId, cwd, windowId);
+        // Guard cleared inside onAllAgentsDone's setImmediate callback
+      } else {
+        respawningSessions.delete(sessionId);
       }
     } else if (!hasRunningAgents) {
       // No agents at all — pause session
+      respawningSessions.delete(sessionId);
       await state.updateSessionStatus(cwd, sessionId, 'paused');
       console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane exited with no agents`);
+    } else {
+      // Agents still running — their panes keep the window alive
+      respawningSessions.delete(sessionId);
     }
   }
 }
