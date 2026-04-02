@@ -198,8 +198,9 @@ export function writeAt(buf: FrameBuffer, x: number, y: number, content: string)
 
   // Split the existing line into prefix (0..x) and suffix (x+contentDisplayWidth..)
   // We need to walk the existing line respecting display widths.
+  // suffix uses restoreState=true to preserve ANSI bg/fg from before the splice point.
   const prefix = sliceDisplayCols(existing, 0, x);
-  const suffix = sliceDisplayCols(existing, x + contentDisplayWidth, buf.width);
+  const suffix = sliceDisplayCols(existing, x + contentDisplayWidth, buf.width, true);
 
   // Pad prefix if it's shorter than expected (can happen at end of line)
   const prefixWidth = stringWidth(prefix.replace(ANSI_RE, ''));
@@ -264,7 +265,7 @@ export function writeClipped(
   // so skip writeAt's redundant stringWidth + double sliceDisplayCols re-parse.
   const existing = buf.lines[y]!;
   const prefix = sliceDisplayCols(existing, 0, x);
-  const suffix = sliceDisplayCols(existing, x + maxWidth, buf.width);
+  const suffix = sliceDisplayCols(existing, x + maxWidth, buf.width, true);
   const prefixDisplayW = displayWidthFast(prefix);
   const paddedPrefix = prefixDisplayW < x ? prefix + ' '.repeat(x - prefixDisplayW) : prefix;
   buf.lines[y] = paddedPrefix + out + suffix;
@@ -495,23 +496,34 @@ export function buildEmptyPanelRows(
  * Slice a string (which may contain ANSI escapes) to display columns [start, end).
  * ANSI sequences are passed through only within the slice range.
  */
-function sliceDisplayCols(s: string, start: number, end: number): string {
+function sliceDisplayCols(s: string, start: number, end: number, restoreState = false): string {
   let out = '';
   let col = 0;
   let i = 0;
   let inSlice = false;
   let hasOpenSGR = false;
 
+  // When restoreState is true, track the last ANSI state before the slice
+  // so it can be prepended — restores bg/fg colors that were set earlier in the line.
+  let pendingSGR = '';
+
   while (i < s.length && col < end) {
     // ANSI escape: pass through if we're in the slice
     if (s[i] === '\x1b' && s[i + 1] === '[') {
       const seqLen = ansiLen(s, i);
       if (seqLen > 0) {
+        const seq = s.substring(i, i + seqLen);
         if (col >= start) {
-          const seq = s.substring(i, i + seqLen);
           out += seq;
           // Track if we have open SGR (non-reset)
           hasOpenSGR = seq !== '\x1b[0m' && seq !== '\x1b[m';
+        } else if (restoreState) {
+          // Accumulate ANSI state from before the slice
+          if (seq === '\x1b[0m' || seq === '\x1b[m') {
+            pendingSGR = '';
+          } else {
+            pendingSGR += seq;
+          }
         }
         i += seqLen;
         continue;
@@ -536,6 +548,11 @@ function sliceDisplayCols(s: string, start: number, end: number): string {
   // Close any open SGR
   if (inSlice && hasOpenSGR) {
     out += '\x1b[0m';
+  }
+
+  // Prepend accumulated state so suffix inherits the correct colors
+  if (restoreState && pendingSGR) {
+    out = pendingSGR + out;
   }
 
   return out;

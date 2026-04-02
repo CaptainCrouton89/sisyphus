@@ -1,5 +1,7 @@
 import type { FrameBuffer, Rect } from '../render.js';
 import { drawBorder, writeClipped, colorToSGR } from '../render.js';
+import { renderCompanion } from '../../shared/companion-render.js';
+import type { CompanionState } from '../../shared/companion-types.js';
 import type { TreeNode } from '../types/tree.js';
 import { renderTreePrefix } from '../lib/tree-render.js';
 import {
@@ -138,6 +140,7 @@ export function renderTreePanel(
   nodes: TreeNode[],
   cursorIndex: number,
   focused: boolean,
+  companion?: CompanionState | null,
 ): void {
   const { x, y, w, h } = rect;
 
@@ -161,8 +164,27 @@ export function renderTreePanel(
     return;
   }
 
-  // 4. Scroll logic
-  const maxVisible = Math.max(1, innerH);
+  // 4. Scroll logic — reserve rows at bottom for companion (blank + face + wrapped commentary)
+  let companionRows = 0;
+  let _companionCommentaryLines: string[] = [];
+  if (companion) {
+    const commentaryText = companion.lastCommentary?.text;
+    if (commentaryText) {
+      const words = commentaryText.split(' ');
+      let current = '';
+      for (const word of words) {
+        if (current.length + word.length + 1 > innerW && current.length > 0) {
+          _companionCommentaryLines.push(current);
+          current = word;
+        } else {
+          current = current.length > 0 ? `${current} ${word}` : word;
+        }
+      }
+      if (current.length > 0) _companionCommentaryLines.push(current);
+    }
+    companionRows = 1 + 1 + _companionCommentaryLines.length; // blank + face + commentary lines
+  }
+  const maxVisible = Math.max(1, innerH - companionRows);
   const halfVisible = Math.floor(maxVisible / 2);
   const scrollOffset = Math.max(
     0,
@@ -243,5 +265,17 @@ export function renderTreePanel(
     const bottomMore = nodes.length - scrollOffset - maxVisible;
     const bottomRow = rowStart + availRows;
     writeClipped(buf, innerX, bottomRow, `\x1b[2m↓ ${bottomMore} more\x1b[0m`, innerW);
+  }
+
+  // 8. Companion pinned to bottom (blank + face + wrapped commentary)
+  if (companion) {
+    const commentaryCount = _companionCommentaryLines.length;
+    const faceRow = y + h - 2 - commentaryCount;
+    const faceLine = renderCompanion(companion, ['face', 'boulder'], { maxWidth: innerW, color: true });
+    writeClipped(buf, innerX, faceRow, faceLine, innerW);
+
+    for (let i = 0; i < commentaryCount; i++) {
+      writeClipped(buf, innerX, faceRow + 1 + i, `\x1b[2m${_companionCommentaryLines[i]}\x1b[0m`, innerW);
+    }
   }
 }

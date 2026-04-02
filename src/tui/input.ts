@@ -6,8 +6,6 @@ import { setRawBypass } from './terminal.js';
 import {
   type AppState,
   type ComposeAction,
-  INPUT_MODES,
-  OPTIONAL_INPUT,
   OPTIONAL_COMPOSE,
   requestRender,
   notify,
@@ -18,6 +16,7 @@ import type { Response } from '../shared/protocol.js';
 import { sessionDir, goalPath, roadmapPath, strategyPath } from '../shared/paths.js';
 import type { Request } from '../shared/protocol.js';
 import { findParentIndex } from './lib/tree.js';
+import { badgeGalleryLeft, badgeGalleryRight, closeBadgeGallery, companionOverlayNextPage, companionOverlayShowHelp, companionOverlayDismissHelp, getCompanionPage, badgeListScrollUp, badgeListScrollDown } from './panels/overlays.js';
 
 // ── Re-exported types (same definition, no React) ─────────────────────────────
 
@@ -35,6 +34,8 @@ export type LeaderAction =
   | { type: 'spawn-agent' }
   | { type: 'message-agent' }
   | { type: 'help' }
+  | { type: 'companion-overlay' }
+  | { type: 'companion-debug' }
   | { type: 'shell-command' }
   | { type: 'jump-to-pane' }
   | { type: 'kill' }
@@ -320,14 +321,6 @@ function dispatchComposeAction(
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function handleCancel(state: AppState): void {
-  state.mode = 'navigate';
-  state.targetAgentId = null;
-  state.inputText = '';
-  state.inputCursorPos = 0;
-  requestRender();
-}
-
 function expandSessionLatestCycle(state: AppState, node: TreeNode): void {
   if (node.type === 'session' && state.selectedSession?.id === node.sessionId) {
     const cycles = state.selectedSession.orchestratorCycles;
@@ -338,194 +331,12 @@ function expandSessionLatestCycle(state: AppState, node: TreeNode): void {
   }
 }
 
-// ── handleSubmit ──────────────────────────────────────────────────────────────
-
-async function handleSubmit(text: string, state: AppState, actions: InputActions): Promise<void> {
-  const selectedSessionId = state.selectedSessionId;
-
-  switch (state.mode) {
-    case 'resume': {
-      if (!selectedSessionId) break;
-      actions.sendAndNotify(
-        { type: 'resume', sessionId: selectedSessionId, cwd: state.cwd, message: text || undefined },
-        'Session resumed',
-      );
-      break;
-    }
-
-    case 'continue': {
-      if (!selectedSessionId) break;
-      try {
-        const contRes = await actions.send({ type: 'continue', sessionId: selectedSessionId });
-        if (!contRes.ok) { notify(state, `Error: ${contRes.error}`); break; }
-        actions.sendAndNotify(
-          { type: 'resume', sessionId: selectedSessionId, cwd: state.cwd, message: text || undefined },
-          'Session continued',
-        );
-      } catch (err) {
-        notify(state, `Error: ${(err as Error).message}`);
-      }
-      break;
-    }
-
-    case 'rollback': {
-      if (!selectedSessionId) break;
-      const toCycle = parseInt(text, 10);
-      if (isNaN(toCycle) || toCycle < 1) { notify(state, 'Invalid cycle number'); break; }
-      actions.sendAndNotify(
-        { type: 'rollback', sessionId: selectedSessionId, cwd: state.cwd, toCycle },
-        `Rolled back to cycle ${toCycle} — use [R]esume to respawn`,
-      );
-      break;
-    }
-
-    case 'delete-confirm': {
-      if (!selectedSessionId) break;
-      if (text !== 'yes') { notify(state, 'Delete cancelled (type "yes" to confirm)'); break; }
-      actions.sendAndNotify(
-        { type: 'delete', sessionId: selectedSessionId, cwd: state.cwd },
-        'Session deleted',
-      );
-      break;
-    }
-
-    case 'spawn-agent': {
-      if (!selectedSessionId) break;
-      if (!text.trim()) { notify(state, 'Instruction required'); break; }
-      actions.sendAndNotify(
-        {
-          type: 'spawn',
-          sessionId: selectedSessionId,
-          agentType: 'default',
-          name: 'agent',
-          instruction: text,
-        },
-        'Agent spawned',
-      );
-      break;
-    }
-
-    case 'search': {
-      state.searchFilter = text.trim() || null;
-      break;
-    }
-
-    case 'message-agent': {
-      if (!selectedSessionId || !state.targetAgentId) break;
-      actions.sendAndNotify(
-        { type: 'message', sessionId: selectedSessionId, content: text, source: { type: 'agent', agentId: state.targetAgentId } },
-        `Message sent to ${state.targetAgentId}`,
-      );
-      state.targetAgentId = null;
-      break;
-    }
-
-    case 'shell-command': {
-      if (!text.trim()) break;
-      try {
-        actions.openShellPopup(state.cwd, text);
-      } catch {
-        notify(state, 'Failed to run shell command');
-      }
-      break;
-    }
-  }
-
-  state.mode = 'navigate';
-  state.inputText = '';
-  state.inputCursorPos = 0;
-  requestRender();
-}
-
-// ── handleInputBarKey ─────────────────────────────────────────────────────────
-
-function handleInputBarKey(input: string, key: Key, state: AppState, actions: InputActions): void {
-  if (key.return) {
-    if (OPTIONAL_INPUT.has(state.mode) || state.inputText.trim()) {
-      void handleSubmit(state.inputText.trim(), state, actions);
-    }
-    return;
-  }
-
-  if (key.escape) {
-    handleCancel(state);
-    return;
-  }
-
-  if (key.leftArrow) {
-    state.inputCursorPos = Math.max(0, state.inputCursorPos - 1);
-    requestRender();
-    return;
-  }
-
-  if (key.rightArrow) {
-    state.inputCursorPos = Math.min(state.inputText.length, state.inputCursorPos + 1);
-    requestRender();
-    return;
-  }
-
-  if (key.ctrl && input === 'a') {
-    state.inputCursorPos = 0;
-    requestRender();
-    return;
-  }
-
-  if (key.ctrl && input === 'e') {
-    state.inputCursorPos = state.inputText.length;
-    requestRender();
-    return;
-  }
-
-  if (key.ctrl && input === 'k') {
-    state.inputText = state.inputText.slice(0, state.inputCursorPos);
-    // cursorPos stays the same (now at end)
-    requestRender();
-    return;
-  }
-
-  if (key.ctrl && input === 'u') {
-    state.inputText = state.inputText.slice(state.inputCursorPos);
-    state.inputCursorPos = 0;
-    requestRender();
-    return;
-  }
-
-  if (key.backspace) {
-    if (state.inputCursorPos > 0) {
-      state.inputText =
-        state.inputText.slice(0, state.inputCursorPos - 1) +
-        state.inputText.slice(state.inputCursorPos);
-      state.inputCursorPos -= 1;
-      requestRender();
-    }
-    return;
-  }
-
-  if (key.delete) {
-    if (state.inputCursorPos < state.inputText.length) {
-      state.inputText =
-        state.inputText.slice(0, state.inputCursorPos) +
-        state.inputText.slice(state.inputCursorPos + 1);
-      requestRender();
-    }
-    return;
-  }
-
-  if (input && !key.ctrl && !key.meta) {
-    state.inputText =
-      state.inputText.slice(0, state.inputCursorPos) +
-      input +
-      state.inputText.slice(state.inputCursorPos);
-    state.inputCursorPos += input.length;
-    requestRender();
-  }
-}
-
 // ── handleReportDetailKey ─────────────────────────────────────────────────────
 
-function handleReportDetailKey(input: string, key: Key, state: AppState, actions: InputActions): void {
+function handleReportDetailKey(input: string, key: Key, state: AppState, _actions: InputActions): void {
   if (key.escape || key.return) {
-    handleCancel(state);
+    state.mode = 'navigate';
+    requestRender();
     return;
   }
   if (key.upArrow) {
@@ -601,9 +412,18 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'delete-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      state.mode = 'delete-confirm';
-      requestRender();
-      return;
+      const editor = actions.resolveEditor();
+      try {
+        const text = actions.editInPopup(state.cwd, editor);
+        if (text?.trim() === 'yes') {
+          actions.sendAndNotify({ type: 'delete', sessionId: selectedSessionId, cwd: state.cwd }, 'Session deleted');
+        } else {
+          notify(state, 'Delete cancelled (type "yes" to confirm)');
+        }
+      } catch {
+        notify(state, 'Failed to open editor');
+      }
+      break;
     }
 
     case 'open-logs': {
@@ -625,10 +445,12 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       break;
     }
 
-    case 'search':
+    case 'search': {
       state.mode = 'search';
+      state.searchText = '';
       requestRender();
       return;
+    }
 
     case 'jump-to-session': {
       let count = 0;
@@ -648,21 +470,44 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'spawn-agent': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       if (enterComposeMode(state, { kind: 'spawn-agent', sessionId: selectedSessionId }, actions)) return;
-      // Fallback to inline
-      state.mode = 'spawn-agent';
-      requestRender();
-      return;
+      // Fallback to popup
+      {
+        const editor = actions.resolveEditor();
+        try {
+          const content = actions.editInPopup(state.cwd, editor);
+          if (content?.trim()) {
+            actions.sendAndNotify(
+              { type: 'spawn', sessionId: selectedSessionId, agentType: 'default', name: 'agent', instruction: content },
+              'Agent spawned',
+            );
+          }
+        } catch {
+          notify(state, 'Failed to open editor');
+        }
+      }
+      break;
     }
 
     case 'message-agent': {
       const agent = actions.getAgentForNode(cursorNode);
       if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
       if (enterComposeMode(state, { kind: 'message-agent', sessionId: selectedSessionId!, agentId: agent.id }, actions)) return;
-      // Fallback to inline
-      state.targetAgentId = agent.id;
-      state.mode = 'message-agent';
-      requestRender();
-      return;
+      // Fallback to popup
+      {
+        const editor = actions.resolveEditor();
+        try {
+          const content = actions.editInPopup(state.cwd, editor);
+          if (content?.trim()) {
+            actions.sendAndNotify(
+              { type: 'message', sessionId: selectedSessionId!, content, source: { type: 'agent', agentId: agent.id } },
+              `Message sent to ${agent.id}`,
+            );
+          }
+        } catch {
+          notify(state, 'Failed to open editor');
+        }
+      }
+      break;
     }
 
     case 'help':
@@ -670,11 +515,28 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       requestRender();
       return;
 
-    case 'shell-command': {
-      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      state.mode = 'shell-command';
+    case 'companion-overlay':
+      state.mode = 'companion-overlay';
       requestRender();
       return;
+
+    case 'companion-debug':
+      state.mode = 'companion-debug';
+      requestRender();
+      return;
+
+    case 'shell-command': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        const text = actions.editInPopup(state.cwd, editor);
+        if (text?.trim()) {
+          actions.openShellPopup(state.cwd, text.trim());
+        }
+      } catch {
+        notify(state, 'Failed to open editor');
+      }
+      break;
     }
 
     case 'jump-to-pane': {
@@ -705,6 +567,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       return;
 
     case 'dismiss':
+      closeBadgeGallery();
       break;
   }
 
@@ -723,6 +586,8 @@ function handleLeaderKey(input: string, key: Key, state: AppState, actions: Inpu
     if (input === 'a') { handleLeaderAction({ type: 'spawn-agent' }, state, actions); return; }
     if (input === 'm') { handleLeaderAction({ type: 'message-agent' }, state, actions); return; }
     if (input === '?') { handleLeaderAction({ type: 'help' }, state, actions); return; }
+    if (input === 'c') { handleLeaderAction({ type: 'companion-overlay' }, state, actions); return; }
+    if (input === 'D') { handleLeaderAction({ type: 'companion-debug' }, state, actions); return; }
     if (input === '!') { handleLeaderAction({ type: 'shell-command' }, state, actions); return; }
     if (input === 'j') { handleLeaderAction({ type: 'jump-to-pane' }, state, actions); return; }
     if (input === 'k') { handleLeaderAction({ type: 'kill' }, state, actions); return; }
@@ -749,6 +614,31 @@ function handleLeaderKey(input: string, key: Key, state: AppState, actions: Inpu
   if (state.mode === 'help') {
     if (key.escape || input === '?') { handleLeaderAction({ type: 'dismiss' }, state, actions); return; }
     // any other key: ignore
+  }
+
+  if (state.mode === 'companion-overlay') {
+    if (input === '?') {
+      if (getCompanionPage() === 'help') companionOverlayDismissHelp();
+      else companionOverlayShowHelp();
+      requestRender(); return;
+    }
+    if (key.escape) {
+      if (getCompanionPage() === 'help') { companionOverlayDismissHelp(); requestRender(); return; }
+      handleLeaderAction({ type: 'dismiss' }, state, actions); return;
+    }
+    if (key.tab) { companionOverlayNextPage(); requestRender(); return; }
+    if (getCompanionPage() === 'badges') {
+      if (key.upArrow || input === 'k') { badgeGalleryLeft(); requestRender(); return; }
+      if (key.downArrow || input === 'j') { badgeGalleryRight(); requestRender(); return; }
+      if (key.leftArrow || input === 'h') { badgeListScrollUp(); requestRender(); return; }
+      if (key.rightArrow || input === 'l') { badgeListScrollDown(); requestRender(); return; }
+    }
+    // any other key: ignore
+    return;
+  }
+
+  if (state.mode === 'companion-debug') {
+    handleLeaderAction({ type: 'dismiss' }, state, actions);
   }
 }
 
@@ -1033,29 +923,51 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // R: enter resume mode
+  // R: resume session
   if (input === 'R') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     if (session?.status === 'active' && state.paneAlive) { notify(state, 'Session already active'); return; }
     if (enterComposeMode(state, { kind: 'resume', sessionId: state.selectedSessionId }, actions)) return;
-    // Fallback to inline
-    state.mode = 'resume';
-    state.inputText = '';
-    state.inputCursorPos = 0;
-    requestRender();
+    // Fallback to popup
+    {
+      const sessionId = state.selectedSessionId;
+      const editor = actions.resolveEditor();
+      try {
+        const content = actions.editInPopup(state.cwd, editor);
+        actions.sendAndNotify(
+          { type: 'resume', sessionId, cwd: state.cwd, message: content?.trim() || undefined },
+          'Session resumed',
+        );
+      } catch {
+        notify(state, 'Failed to open editor');
+      }
+    }
     return;
   }
 
-  // C: enter continue mode
+  // C: continue session
   if (input === 'C') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     if (session?.status !== 'completed') { notify(state, 'Session not completed'); return; }
     if (enterComposeMode(state, { kind: 'continue', sessionId: state.selectedSessionId }, actions)) return;
-    // Fallback to inline
-    state.mode = 'continue';
-    state.inputText = '';
-    state.inputCursorPos = 0;
-    requestRender();
+    // Fallback to popup
+    {
+      const sessionId = state.selectedSessionId;
+      const editor = actions.resolveEditor();
+      void (async () => {
+        try {
+          const content = actions.editInPopup(state.cwd, editor);
+          const contRes = await actions.send({ type: 'continue', sessionId });
+          if (!contRes.ok) { notify(state, `Error: ${contRes.error}`); return; }
+          actions.sendAndNotify(
+            { type: 'resume', sessionId, cwd: state.cwd, message: content?.trim() || undefined },
+            'Session continued',
+          );
+        } catch (err) {
+          notify(state, `Error: ${(err as Error).message}`);
+        }
+      })();
+    }
     return;
   }
 
@@ -1070,19 +982,26 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // b: enter rollback mode — pre-fill with cycle number if cursor is on a cycle node
+  // b: rollback to cycle
   if (input === 'b') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
-    const defaultText = cursorNode?.type === 'cycle' ? String(cursorNode.cycleNumber) : undefined;
-    state.mode = 'rollback';
-    if (defaultText) {
-      state.inputText = defaultText;
-      state.inputCursorPos = defaultText.length;
-    } else {
-      state.inputText = '';
-      state.inputCursorPos = 0;
+    {
+      const sessionId = state.selectedSessionId;
+      const editor = actions.resolveEditor();
+      try {
+        const text = actions.editInPopup(state.cwd, editor);
+        if (text?.trim()) {
+          const toCycle = parseInt(text.trim(), 10);
+          if (isNaN(toCycle) || toCycle < 1) { notify(state, 'Invalid cycle number'); return; }
+          actions.sendAndNotify(
+            { type: 'rollback', sessionId, cwd: state.cwd, toCycle },
+            `Rolled back to cycle ${toCycle} — use [R]esume to respawn`,
+          );
+        }
+      } catch {
+        notify(state, 'Failed to open editor');
+      }
     }
-    requestRender();
     return;
   }
 
@@ -1111,6 +1030,14 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
+  // /: search (vim-like, direct from navigate)
+  if (input === '/') {
+    state.mode = 'search';
+    state.searchText = '';
+    requestRender();
+    return;
+  }
+
   // t: toggle logs panel
   if (input === 't') {
     if (state.showCombinedView) {
@@ -1123,15 +1050,49 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   }
 }
 
+// ── handleSearchKey ──────────────────────────────────────────────────────────
+
+function handleSearchKey(input: string, key: Key, state: AppState): void {
+  if (key.return) {
+    // Lock in the current filter
+    state.mode = 'navigate';
+    requestRender();
+    return;
+  }
+
+  if (key.escape) {
+    // Clear filter and exit
+    state.searchFilter = null;
+    state.searchText = '';
+    state.mode = 'navigate';
+    requestRender();
+    return;
+  }
+
+  if (key.backspace) {
+    state.searchText = state.searchText.slice(0, -1);
+    state.searchFilter = state.searchText || null;
+    requestRender();
+    return;
+  }
+
+  // Ignore control keys
+  if (key.ctrl || key.meta || !input || input.length !== 1) return;
+
+  state.searchText += input;
+  state.searchFilter = state.searchText;
+  requestRender();
+}
+
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
 export function handleKeypress(input: string, key: Key, state: AppState, actions: InputActions): void {
   // Compose mode: all input goes through nvim bypass — nothing to handle here
   if (state.mode === 'compose') return;
 
-  if (INPUT_MODES.has(state.mode)) {
-    handleInputBarKey(input, key, state, actions);
-  } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help') {
+  if (state.mode === 'search') {
+    handleSearchKey(input, key, state);
+  } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
     handleLeaderKey(input, key, state, actions);
   } else if (state.mode === 'report-detail') {
     handleReportDetailKey(input, key, state, actions);

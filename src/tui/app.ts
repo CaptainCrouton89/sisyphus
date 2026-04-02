@@ -37,8 +37,10 @@ import { buildSessionContext } from './lib/context.js';
 import { renderTreePanel } from './panels/tree.js';
 import { renderDetailRows, renderLogsRows, type DetailContext } from './panels/detail.js';
 import { renderNvimDetailRows } from './panels/nvim-detail.js';
-import { renderNotificationRow, renderInputBar, renderStatusLine } from './panels/bottom.js';
-import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay } from './panels/overlays.js';
+import { renderStatusLine } from './panels/bottom.js';
+import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay, renderCompanionOverlay, renderCompanionDebugOverlay } from './panels/overlays.js';
+import { companionPath } from '../shared/paths.js';
+import type { CompanionState } from '../shared/companion-types.js';
 import { NvimBridge } from './lib/nvim-bridge.js';
 import { resolveNvimFile } from './lib/overview-writer.js';
 import { loadConfig } from '../shared/config.js';
@@ -47,6 +49,23 @@ import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDis
 import { COMPOSE_HEADERS } from './state.js';
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
+
+// ── Module-level companion cache (reloads on mtime change, ~poll interval) ────
+
+let _cachedCompanion: CompanionState | null = null;
+let _companionMtime = 0;
+
+function getCompanion(): CompanionState | null {
+  try {
+    const { mtimeMs } = statSync(companionPath());
+    if (_cachedCompanion && mtimeMs === _companionMtime) return _cachedCompanion;
+    _companionMtime = mtimeMs;
+    _cachedCompanion = JSON.parse(readFileSync(companionPath(), 'utf-8')) as CompanionState;
+    return _cachedCompanion;
+  } catch {
+    return _cachedCompanion;
+  }
+}
 
 // ── Module-level cache for latest rendered nodes (needed by keypress handler) ─
 
@@ -164,7 +183,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
   // Initialize NvimBridge
   const treeWidth = 36;
   const initialDetailW = (state.cols - treeWidth) - 4; // detail width minus borders
-  const initialDetailH = (state.rows - 3) - 2 - STATUS_ROW_COUNT - 1; // content height minus borders, status, separator
+  const initialDetailH = (state.rows - 1) - 2 - STATUS_ROW_COUNT - 1; // content height minus borders, status, separator
   const bridge = new NvimBridge(
     Math.max(1, initialDetailW),
     Math.max(1, initialDetailH),
@@ -364,7 +383,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     const remaining = state.cols - treeWidth;
     const detailWidth = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
     const logsWidth = state.showCombinedView ? remaining - detailWidth : 0;
-    const contentHeight = state.rows - 3;
+    const contentHeight = state.rows - 1;
 
     const treeRect = { x: 0, y: 0, w: treeWidth, h: contentHeight };
     const detailRect = { x: treeWidth, y: 0, w: detailWidth, h: contentHeight };
@@ -475,17 +494,26 @@ export function startApp(state: AppState, cleanup: () => void): void {
     // Panel dirty tracking — compute fingerprints for each panel's inputs
     const treeFocused = state.mode === 'navigate' && state.focusPane === 'tree';
     const treeInputs = `${state.treeCacheKey}:${state.cursorIndex}:${treeFocused}`;
-    const bottomInputs = `${state.notification}:${state.error}:${state.mode}:${state.inputText}:${state.inputCursorPos}:${cursorNode?.type}`;
-    const overlayMode = state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help' ? state.mode : '';
+    const bottomInputs = `${state.notification}:${state.error}:${state.mode}:${state.searchText}:${cursorNode?.type}`;
+    const overlayMode = state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug' ? state.mode : '';
+    let companionFP = '';
+    if (state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
+      const c = getCompanion();
+      const ts = c && c.lastCommentary ? c.lastCommentary.timestamp : '';
+      const xp = c ? c.xp : 0;
+      const dm = c?.debugMood ? `${c.debugMood.winner}:${c.debugMood.scores[c.debugMood.winner]}` : '';
+      companionFP = `${ts}:${xp}:${dm}`;
+    }
+    const overlayInputs = `${overlayMode}:${companionFP}`;
 
     const hasPrev = prevFrame.length === buf.height;
     const treeDirty = !hasPrev || treeInputs !== prevTreeInputs;
     const bottomDirty = !hasPrev || bottomInputs !== prevBottomInputs;
-    const overlayDirty = !hasPrev || overlayMode !== prevOverlayMode;
+    const overlayDirty = !hasPrev || overlayInputs !== prevOverlayMode;
 
     prevTreeInputs = treeInputs;
     prevBottomInputs = bottomInputs;
-    prevOverlayMode = overlayMode;
+    prevOverlayMode = overlayInputs;
 
     // Render tree into a narrow buffer (treeWidth-wide) so rows are the right size
     // for concatenation. Cached when clean.
@@ -503,6 +531,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
         nodes,
         state.cursorIndex,
         treeFocused,
+        getCompanion(),
       );
       cachedTreeRows = treeBuf.lines;
       treeRows = treeBuf.lines;
@@ -579,13 +608,11 @@ export function startApp(state: AppState, cleanup: () => void): void {
       }
     }
 
-    // Bottom rows
+    // Bottom row (single status line — notifications replace keybindings transiently)
     if (bottomDirty || overlayDirty) {
-      renderNotificationRow(buf, bottomY, state.notification, state.error);
-      renderInputBar(buf, bottomY + 1, state);
-      renderStatusLine(buf, bottomY + 2, state, cursorNode?.type);
+      renderStatusLine(buf, bottomY, state, cursorNode?.type);
     } else {
-      copyRows(buf, prevFrame, bottomY, 3);
+      copyRows(buf, prevFrame, bottomY, 1);
     }
 
     // Overlays (rendered AFTER panels — overwrites panel content)
@@ -593,6 +620,14 @@ export function startApp(state: AppState, cleanup: () => void): void {
       if (state.mode === 'leader') renderLeaderOverlay(buf, state.rows, state.cols);
       if (state.mode === 'copy-menu') renderCopyMenuOverlay(buf, state.rows, state.cols);
       if (state.mode === 'help') renderHelpOverlay(buf, state.rows, state.cols);
+      if (state.mode === 'companion-overlay') {
+        const companion = getCompanion();
+        if (companion) renderCompanionOverlay(buf, state.rows, state.cols, companion);
+      }
+      if (state.mode === 'companion-debug') {
+        const companion = getCompanion();
+        if (companion) renderCompanionDebugOverlay(buf, state.rows, state.cols, companion);
+      }
     }
 
     // Build cursor suffix inside synchronized output block to prevent flicker
@@ -680,7 +715,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     // Account for: borders (2), status rows (STATUS_ROW_COUNT), separator (1)
     if (state.nvimBridge) {
       const detailW = state.cols - 36; // treeWidth=36
-      const contentH = state.rows - 3; // bottomBar=3
+      const contentH = state.rows - 1; // bottomBar=1
       state.nvimBridge.resize(Math.max(1, detailW - 4), Math.max(1, contentH - 2 - STATUS_ROW_COUNT - 1));
     }
 

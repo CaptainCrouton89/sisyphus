@@ -30,18 +30,13 @@ export interface CycleLog {
 export type InputMode =
   | 'navigate'
   | 'report-detail'
-  | 'resume'
-  | 'continue'
-  | 'rollback'
   | 'leader'
   | 'copy-menu'
-  | 'delete-confirm'
-  | 'spawn-agent'
-  | 'search'
-  | 'message-agent'
-  | 'shell-command'
   | 'help'
-  | 'compose';
+  | 'companion-overlay'
+  | 'companion-debug'
+  | 'compose'
+  | 'search';
 
 // ---------------------------------------------------------------------------
 // Compose mode types
@@ -66,30 +61,6 @@ export const COMPOSE_HEADERS: Record<ComposeAction['kind'], string> = {
   'continue': 'Continue Session',
   'spawn-agent': 'Spawn Agent',
   'message-agent': 'Message Agent',
-};
-
-export const INPUT_MODES = new Set<InputMode>([
-  'resume',
-  'continue',
-  'rollback',
-  'delete-confirm',
-  'spawn-agent',
-  'search',
-  'message-agent',
-  'shell-command',
-]);
-
-export const OPTIONAL_INPUT = new Set<InputMode>(['resume', 'continue', 'search']);
-
-export const PROMPTS: Partial<Record<InputMode, string>> = {
-  resume: 'resume instructions (optional)',
-  continue: 'new direction (optional)',
-  rollback: 'cycle number',
-  'delete-confirm': "type 'yes' to confirm delete:",
-  'spawn-agent': 'agent instruction:',
-  search: 'filter:',
-  'message-agent': 'message:',
-  'shell-command': '$ ',
 };
 
 // ---------------------------------------------------------------------------
@@ -185,16 +156,13 @@ export interface AppState {
   // Session
   selectedSessionId: string | null;
   searchFilter: string | null;
+  searchText: string;
   targetAgentId: string | null;
 
   // UI
   notification: string | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
   showCombinedView: boolean;
-
-  // Input bar
-  inputText: string;
-  inputCursorPos: number;
 
   // Scroll
   detailScroll: ThrottledScroll;
@@ -262,12 +230,11 @@ export function createAppState(cwd: string): AppState {
     focusPane: 'tree',
     selectedSessionId: null,
     searchFilter: null,
+    searchText: '',
     targetAgentId: null,
     notification: null,
     notificationTimer: null,
     showCombinedView: false,
-    inputText: '',
-    inputCursorPos: 0,
     detailScroll,
     logsScroll,
     sessions: [],
