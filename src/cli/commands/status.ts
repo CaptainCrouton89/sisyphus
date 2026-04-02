@@ -251,8 +251,9 @@ export function registerStatus(program: Command): void {
     .action(async (sessionIdArg?: string, opts?: { verbose?: boolean }) => {
       const sessionId = sessionIdArg ?? process.env.SISYPHUS_SESSION_ID;
       const verbose = opts?.verbose ?? false;
+      const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
-      const request: Request = { type: 'status', sessionId };
+      const request: Request = { type: 'status', sessionId, cwd };
       const response = await sendRequest(request);
       if (response.ok) {
         const session = response.data?.session as Session | undefined;
