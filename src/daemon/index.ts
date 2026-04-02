@@ -23,7 +23,7 @@ import { recomputeDots, setTrackedEntriesProvider } from './status-dots.js';
 import { writeStatusBar } from './status-bar.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
-import { listPanes, sessionExists } from './tmux.js';
+import { listPanes, sessionExistsById, sessionNameTaken, resolveSessionId } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
@@ -140,20 +140,46 @@ async function recoverSessions(): Promise<void> {
 
         // Reconnect to tmux panes if info was persisted
         if (session.tmuxSessionName && session.tmuxWindowId) {
-          if (!sessionExists(session.tmuxSessionName)) {
-            // Tmux session gone — pause so user can `sisyphus resume`
+          // Check by $N first, fall back to name
+          let sessionAlive = false;
+          let currentTmuxId = session.tmuxSessionId;
+
+          if (currentTmuxId) {
+            sessionAlive = sessionExistsById(currentTmuxId);
+            if (!sessionAlive) {
+              // $N is stale (tmux server restarted?) — try name fallback
+              currentTmuxId = undefined;
+            }
+          }
+
+          if (!sessionAlive && session.tmuxSessionName) {
+            if (sessionNameTaken(session.tmuxSessionName)) {
+              // Name exists — re-capture $N
+              currentTmuxId = resolveSessionId(session.tmuxSessionName) ?? undefined;
+              sessionAlive = !!currentTmuxId;
+              if (currentTmuxId) {
+                // Persist the refreshed $N
+                await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, session.tmuxWindowId!, currentTmuxId);
+              }
+            }
+          }
+
+          if (!sessionAlive) {
             if (session.status === 'active') {
               await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
+              // Clear stale tmux IDs
+              await stateModule.updateSession(cwd, sessionId, { tmuxSessionId: undefined });
               console.log(`[sisyphus] Session ${sessionId} paused: tmux session no longer exists`);
             }
             recovered++;
             continue;
           }
+
           const livePanes = listPanes(session.tmuxWindowId);
           if (livePanes.length > 0) {
-            registerSessionTmux(sessionId, session.tmuxSessionName, session.tmuxWindowId);
+            registerSessionTmux(sessionId, session.tmuxSessionName, session.tmuxWindowId, currentTmuxId);
             setWindowId(sessionId, session.tmuxWindowId);
-            trackSession(sessionId, cwd, session.tmuxSessionName);
+            trackSession(sessionId, cwd, currentTmuxId, session.tmuxSessionName!);
             updateTrackedWindow(sessionId, session.tmuxWindowId);
             initTimers(sessionId, session);
 

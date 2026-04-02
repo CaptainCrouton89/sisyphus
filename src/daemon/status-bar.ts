@@ -250,8 +250,9 @@ export function writeStatusBar(): void {
 
   // ─── Normal status bar ───────────────────────────────────────────────────
   const allPanes = tmux.listAllPanes();
-  const allSessions = tmux.listAllSessions();
-  if (allSessions.length === 0) return;
+  const allSessionEntries = tmux.listAllSessions();
+  if (allSessionEntries.length === 0) return;
+  const allSessions = allSessionEntries.map(e => e.name);
 
   // Per-session Claude state (highest priority wins)
   const sessionStates = new Map<string, ClaudeState>();

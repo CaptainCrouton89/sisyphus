@@ -36,9 +36,9 @@ function fireCommentary(event: CommentaryEvent, companion: CompanionState, conte
 }
 
 function switchToHomeSession(session: Session): void {
-  if (!session.tmuxSessionName) return;
+  if (!session.tmuxSessionName && !session.tmuxSessionId) return;
   const home = tmux.findHomeSession(session.cwd);
-  if (home) tmux.switchAttachedClients(session.tmuxSessionName, home);
+  if (home) tmux.switchAttachedClients(session.tmuxSessionId ?? session.tmuxSessionName!, home);
 }
 
 export async function startSession(task: string, cwd: string, context?: string, name?: string): Promise<Session> {
@@ -50,7 +50,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
 
   const tmuxName = tmuxSessionName(cwd, name ?? sessionId.slice(0, 8));
 
-  if (tmux.sessionExists(tmuxName)) {
+  if (tmux.sessionNameTaken(tmuxName)) {
     throw new Error(`Tmux session "${tmuxName}" already exists. Choose a different name.`);
   }
 
@@ -67,11 +67,11 @@ export async function startSession(task: string, cwd: string, context?: string, 
     },
   });
 
-  const { windowId, initialPaneId } = tmux.createSession(tmuxName, cwd);
-  tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
-  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
+  const { windowId, initialPaneId, sessionId: tmuxSessId } = tmux.createSession(tmuxName, cwd);
+  tmux.initSessionMeta(tmuxSessId, cwd, sessionId);
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
 
-  trackSession(sessionId, cwd, tmuxName);
+  trackSession(sessionId, cwd, tmuxSessId, tmuxName);
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId);
   updateTrackedWindow(sessionId, windowId);
 
@@ -90,21 +90,26 @@ export async function startSession(task: string, cwd: string, context?: string, 
       let finalName = generatedName;
       let candidate = tmuxSessionName(cwd, finalName);
       let attempt = 0;
-      while (tmux.sessionExists(candidate) && attempt < 5) {
+      while (tmux.sessionNameTaken(candidate) && attempt < 5) {
         attempt++;
         finalName = `${generatedName}-${attempt}`;
         candidate = tmuxSessionName(cwd, finalName);
       }
-      if (tmux.sessionExists(candidate)) return;
+      if (tmux.sessionNameTaken(candidate)) return;
+
+      const currentSession = state.getSession(cwd, sessionId);
+      const currentTmuxSessId = currentSession.tmuxSessionId;
+      const renameTarget = currentTmuxSessId ?? tmuxName;
 
       try {
-        tmux.renameSession(tmuxName, candidate);
+        tmux.renameSession(renameTarget, candidate);
       } catch { return; }
 
       await state.updateSessionName(cwd, sessionId, finalName);
-      await state.updateSessionTmux(cwd, sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
-      trackSession(sessionId, cwd, candidate);
-      registerSessionTmux(sessionId, candidate, state.getSession(cwd, sessionId).tmuxWindowId!);
+      const windowId = state.getSession(cwd, sessionId).tmuxWindowId!;
+      await state.updateSessionTmux(cwd, sessionId, candidate, windowId, currentTmuxSessId);
+      trackSession(sessionId, cwd, currentTmuxSessId, candidate);
+      registerSessionTmux(sessionId, candidate, windowId, currentTmuxSessId);
 
       // Update pane labels for all live panes in this session
       const session = state.getSession(cwd, sessionId);
@@ -194,14 +199,14 @@ export async function reopenWindow(sessionId: string, cwd: string): Promise<{ tm
   const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, session.name ?? sessionId.slice(0, 8));
 
   // If window still exists, just return the existing IDs
-  if (tmux.sessionExists(tmuxName) && session.tmuxWindowId) {
+  if (tmux.isSessionAlive(session.tmuxSessionId, tmuxName) && session.tmuxWindowId) {
     return { tmuxSessionName: tmuxName, tmuxWindowId: session.tmuxWindowId };
   }
 
   // Create fresh tmux session
   const created = tmux.createSession(tmuxName, cwd);
-  tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
-  await state.updateSessionTmux(cwd, sessionId, tmuxName, created.windowId);
+  tmux.initSessionMeta(created.sessionId, cwd, sessionId);
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, created.windowId, created.sessionId);
 
   return { tmuxSessionName: tmuxName, tmuxWindowId: created.windowId };
 }
@@ -212,18 +217,20 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
   const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, session.name ?? sessionId.slice(0, 8));
 
   let windowId: string;
-  if (tmux.sessionExists(tmuxName) && session.tmuxWindowId) {
+  let tmuxSessId: string | undefined;
+  let initialPaneId: string | undefined;
+  if (tmux.isSessionAlive(session.tmuxSessionId, tmuxName) && session.tmuxWindowId) {
     // Reuse existing tmux session
     windowId = session.tmuxWindowId;
+    tmuxSessId = session.tmuxSessionId;
   } else {
     // Create fresh tmux session with the same name
     const created = tmux.createSession(tmuxName, cwd);
-    tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
+    tmux.initSessionMeta(created.sessionId, cwd, sessionId);
     windowId = created.windowId;
-    // Kill the initial pane after orchestrator spawns (below)
-    await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
-    // We'll kill the initial pane after spawning orchestrator
-    var initialPaneId = created.initialPaneId;
+    tmuxSessId = created.sessionId;
+    initialPaneId = created.initialPaneId;
+    await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
   }
 
   if (session.status !== 'active') {
@@ -252,14 +259,14 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
   }
 
   await state.updateSessionStatus(cwd, sessionId, 'active');
-  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId);
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
 
   // Reset counters based on existing agents
   resetAgentCounterFromState(sessionId, session.agents);
   resetColors(sessionId);
   orchestratorDone.delete(sessionId);
 
-  trackSession(sessionId, cwd, tmuxName);
+  trackSession(sessionId, cwd, tmuxSessId, tmuxName);
   await orchestrator.spawnOrchestrator(sessionId, cwd, windowId, message);
   updateTrackedWindow(sessionId, windowId);
 
@@ -365,23 +372,25 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       // Killing the last pane (orchestrator yield with no agents) destroys the window/session.
       let activeWindowId = windowId;
       const tmuxName = freshSession.tmuxSessionName;
+      const existingTmuxSessId = freshSession.tmuxSessionId;
+      const sessionStillAlive = tmux.isSessionAlive(existingTmuxSessId, tmuxName ?? undefined);
       const needsRecreation = tmuxName && (
-        !tmux.sessionExists(tmuxName) ||
+        !sessionStillAlive ||
         tmux.listPanes(activeWindowId).length === 0
       );
       let initialPaneId: string | undefined;
       if (needsRecreation) {
         // Kill stale session if it exists without our window
-        if (tmux.sessionExists(tmuxName!)) {
-          tmux.killSession(tmuxName!);
+        if (sessionStillAlive) {
+          tmux.killSession(existingTmuxSessId ?? tmuxName!);
         }
         const created = tmux.createSession(tmuxName!, cwd);
-        tmux.setSessionOption(tmuxName!, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
+        tmux.initSessionMeta(created.sessionId, cwd, sessionId);
         activeWindowId = created.windowId;
         initialPaneId = created.initialPaneId;
-        await state.updateSessionTmux(cwd, sessionId, tmuxName!, activeWindowId);
-        trackSession(sessionId, cwd, tmuxName!);
-        registerSessionTmux(sessionId, tmuxName!, activeWindowId);
+        await state.updateSessionTmux(cwd, sessionId, tmuxName!, activeWindowId, created.sessionId);
+        trackSession(sessionId, cwd, created.sessionId, tmuxName!);
+        registerSessionTmux(sessionId, tmuxName!, activeWindowId, created.sessionId);
       }
       await orchestrator.spawnOrchestrator(sessionId, cwd, activeWindowId);
       updateTrackedWindow(sessionId, activeWindowId);
@@ -418,7 +427,7 @@ export async function handleSpawn(
   const session = state.getSession(cwd, sessionId);
   if (session.status === 'completed') {
     await state.updateSessionStatus(cwd, sessionId, 'active');
-    trackSession(sessionId, cwd, session.tmuxSessionName!);
+    trackSession(sessionId, cwd, session.tmuxSessionId, session.tmuxSessionName!);
   }
 
   const agent = await spawnAgent({
@@ -543,8 +552,9 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   switchToHomeSession(session);
 
   // Kill the tmux session after switching clients away
-  if (session.tmuxSessionName) {
-    tmux.killSession(session.tmuxSessionName);
+  const completeKillTarget = session.tmuxSessionId ?? session.tmuxSessionName;
+  if (completeKillTarget) {
+    tmux.killSession(completeKillTarget);
   }
 }
 
@@ -587,8 +597,9 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   switchToHomeSession(session);
 
   // Kill the entire tmux session (destroys all panes/windows atomically)
-  if (session.tmuxSessionName) {
-    tmux.killSession(session.tmuxSessionName);
+  const killTarget = session.tmuxSessionId ?? session.tmuxSessionName;
+  if (killTarget) {
+    tmux.killSession(killTarget);
   } else if (windowId) {
     tmux.killWindow(windowId);
   }

@@ -205,10 +205,11 @@ export async function updateSessionName(cwd: string, sessionId: string, name: st
   });
 }
 
-export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSessionName: string, tmuxWindowId: string): Promise<void> {
+export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSessionName: string, tmuxWindowId: string, tmuxSessionId?: string): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
     session.tmuxSessionName = tmuxSessionName;
+    session.tmuxSessionId = tmuxSessionId;
     session.tmuxWindowId = tmuxWindowId;
     saveSession(session);
   });
@@ -313,6 +314,7 @@ export async function restoreSnapshot(cwd: string, sessionId: string, toCycle: n
     session.completedAt = undefined;
     session.completionReport = undefined;
     session.tmuxSessionName = undefined;
+    session.tmuxSessionId = undefined;
     session.tmuxWindowId = undefined;
     atomicWrite(statePath(cwd, sessionId), JSON.stringify(session, null, 2));
 

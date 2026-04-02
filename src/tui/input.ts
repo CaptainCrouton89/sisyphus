@@ -801,7 +801,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
     // If window is alive, switch to it directly
     if (session.status !== 'completed' && state.paneAlive && session.tmuxWindowId) {
-      if (session.tmuxSessionName) actions.switchToSession(session.tmuxSessionName);
+      const switchTarget = session.tmuxSessionId ?? session.tmuxSessionName;
+      if (switchTarget) actions.switchToSession(switchTarget);
       actions.selectWindow(session.tmuxWindowId);
       return;
     }

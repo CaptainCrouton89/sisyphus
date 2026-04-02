@@ -113,7 +113,8 @@ export function getTotalRunningAgents(): number {
 interface TrackedEntry {
   id: string;
   cwd: string;
-  tmuxSession: string;
+  tmuxSessionId: string | undefined;
+  tmuxSessionName: string;
   windowId: string | null;
 }
 
@@ -207,10 +208,10 @@ export function recomputeDots(): void {
     }
   }
 
-  // Build a map of tmux session names for tracked entries
-  const tmuxSessionMap = new Map<string, string>(); // sessionId -> tmuxSessionName
+  // Build map of tmux info for tracked entries
+  const tmuxInfoMap = new Map<string, { name: string; id: string | undefined }>(); // sessionId -> tmux info
   for (const entry of getTrackedEntries()) {
-    tmuxSessionMap.set(entry.id, entry.tmuxSession);
+    tmuxInfoMap.set(entry.id, { name: entry.tmuxSessionName, id: entry.tmuxSessionId });
   }
 
   // For each cwd, compute dots, write to dashboard window, and set per-session phase
@@ -231,10 +232,10 @@ export function recomputeDots(): void {
         dots.push({ phase, createdAt: session.createdAt });
 
         // Write phase to tmux session option for tmux-sessions command
-        const tmuxSessionName = tmuxSessionMap.get(sessionId);
-        if (tmuxSessionName) {
-          tmux.setSessionOption(tmuxSessionName, '@sisyphus_phase', phase);
-          sisyphusPhases.set(sessionId, { phase, tmuxSession: tmuxSessionName });
+        const tmuxInfo = tmuxInfoMap.get(sessionId);
+        if (tmuxInfo) {
+          tmux.setSessionOption(tmuxInfo.id ?? tmuxInfo.name, '@sisyphus_phase', phase);
+          sisyphusPhases.set(sessionId, { phase, tmuxSession: tmuxInfo.name });
         }
       } catch {
         // Session state unreadable — skip

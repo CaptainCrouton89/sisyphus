@@ -41,6 +41,7 @@ export interface Session {
   completionReport?: string;
   parentSessionId?: string;
   tmuxSessionName?: string;
+  tmuxSessionId?: string;       // tmux $N session ID — stable across renames, exact-match targeting
   tmuxWindowId?: string;
   model?: string;
   wallClockMs?: number;

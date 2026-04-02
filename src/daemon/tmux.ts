@@ -26,52 +26,99 @@ export function killWindow(windowTarget: string): void {
   execSafe(`tmux kill-window -t "${windowTarget}"`);
 }
 
-export function createSession(sessionName: string, cwd: string): { windowId: string; initialPaneId: string } {
-  exec(`tmux new-session -d -s "${sessionName}" -n main -c ${shellQuote(cwd)}`);
-  const windowId = exec(`tmux display-message -t "${sessionName}:main" -p "#{window_id}"`);
-  const initialPaneId = exec(`tmux display-message -t "${sessionName}:main" -p "#{pane_id}"`);
-  configureSessionDefaults(sessionName, windowId);
-  return { windowId, initialPaneId };
+export function createSession(sessionName: string, cwd: string): { windowId: string; initialPaneId: string; sessionId: string } {
+  const sessionId = exec(`tmux new-session -d -s "${sessionName}" -n main -c ${shellQuote(cwd)} -P -F "#{session_id}"`);
+  const windowId = exec(`tmux display-message -t "${sessionId}:main" -p "#{window_id}"`);
+  const initialPaneId = exec(`tmux display-message -t "${sessionId}:main" -p "#{pane_id}"`);
+  configureSessionDefaults(sessionId, windowId);
+  return { windowId, initialPaneId, sessionId };
 }
 
 export function paneExists(paneTarget: string): boolean {
   return execSafe(`tmux display-message -t "${paneTarget}" -p "#{pane_id}"`) !== null;
 }
 
-export function sessionExists(sessionName: string): boolean {
-  return execSafe(`tmux has-session -t "${sessionName}"`) !== null;
+/**
+ * Check if a tmux session exists by its $N ID. Safe for all operations —
+ * $N IDs use exact integer matching (no prefix-match risk).
+ */
+export function sessionExistsById(tmuxSessionId: string): boolean {
+  return execSafe(`tmux has-session -t "${tmuxSessionId}"`) !== null;
 }
 
-export function killSession(sessionName: string): void {
-  execSafe(`tmux kill-session -t "${sessionName}"`);
+/**
+ * Check if a session name is already taken. Uses exact name matching.
+ * Only needed for collision detection at creation/rename — prefer
+ * sessionExistsById() for all other existence checks.
+ */
+export function sessionNameTaken(sessionName: string): boolean {
+  const output = execSafe('tmux list-sessions -F "#{session_name}"');
+  if (!output) return false;
+  return output.split('\n').some(line => line === sessionName);
 }
 
-export function renameSession(oldName: string, newName: string): void {
-  exec(`tmux rename-session -t "${oldName}" "${newName}"`);
+/**
+ * Re-capture a tmux $N session ID from a known session name.
+ * Used for recovery after tmux server restart when stored $N is stale.
+ */
+export function resolveSessionId(sessionName: string): string | null {
+  return execSafe(`tmux display-message -t "=${sessionName}" -p "#{session_id}"`);
 }
 
-export function setSessionOption(sessionName: string, option: string, value: string): void {
-  execSafe(`tmux set-option -t "${sessionName}" ${option} ${shellQuote(value)}`);
+/**
+ * Check if a tmux session is alive, preferring $N ID when available.
+ * Encapsulates the $N-vs-name dispatch so callers don't need to know about tmux ID formats.
+ */
+export function isSessionAlive(tmuxSessionId: string | undefined, tmuxSessionName: string | undefined): boolean {
+  if (tmuxSessionId) return sessionExistsById(tmuxSessionId);
+  if (tmuxSessionName) return sessionNameTaken(tmuxSessionName);
+  return false;
+}
+
+/**
+ * Set standard sisyphus metadata on a newly created tmux session.
+ */
+export function initSessionMeta(tmuxTarget: string, cwd: string, sisyphusSessionId: string): void {
+  setSessionOption(tmuxTarget, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
+  setSessionOption(tmuxTarget, '@sisyphus_session_id', sisyphusSessionId);
+}
+
+export function killSession(target: string): void {
+  execSafe(`tmux kill-session -t "${target}"`);
+}
+
+export function renameSession(target: string, newName: string): void {
+  exec(`tmux rename-session -t "${target}" "${newName}"`);
+}
+
+export function setSessionOption(target: string, option: string, value: string): void {
+  execSafe(`tmux set-option -t "${target}" ${option} ${shellQuote(value)}`);
+}
+
+function parseSessionLine(line: string): { sessionId: string; name: string } {
+  const spaceIdx = line.indexOf(' ');
+  return { sessionId: line.slice(0, spaceIdx), name: line.slice(spaceIdx + 1) };
 }
 
 export function findHomeSession(cwd: string): string | null {
-  const output = execSafe('tmux list-sessions -F "#{session_name}"');
+  const output = execSafe('tmux list-sessions -F "#{session_id} #{session_name}"');
   if (!output) return null;
   const normalizedCwd = cwd.replace(/\/+$/, '');
-  for (const name of output.split('\n').filter(Boolean)) {
+  for (const line of output.split('\n').filter(Boolean)) {
+    const { sessionId: sessId, name } = parseSessionLine(line);
     if (name.startsWith('ssyph_')) continue;
-    const val = execSafe(`tmux show-options -t "${name}" -v @sisyphus_cwd`);
-    if (val?.trim() === normalizedCwd) return name;
+    const val = execSafe(`tmux show-options -t "${sessId}" -v @sisyphus_cwd`);
+    if (val?.trim() === normalizedCwd) return sessId;
   }
   return null;
 }
 
-export function switchAttachedClients(sessionName: string, targetSession: string): void {
-  if (!sessionExists(targetSession)) return;
-  const output = execSafe(`tmux list-clients -t "${sessionName}" -F "#{client_tty}"`);
+export function switchAttachedClients(sourceTarget: string, destTarget: string): void {
+  if (execSafe(`tmux has-session -t "${destTarget}"`) === null) return;
+  const output = execSafe(`tmux list-clients -t "${sourceTarget}" -F "#{client_tty}"`);
   if (!output) return;
   for (const tty of output.split('\n').filter(Boolean)) {
-    execSafe(`tmux switch-client -c "${tty}" -t "${targetSession}"`);
+    execSafe(`tmux switch-client -c "${tty}" -t "${destTarget}"`);
   }
 }
 
@@ -158,8 +205,8 @@ export function setWindowOption(windowTarget: string, option: string, value: str
   execSafe(`tmux set-option -w -t "${windowTarget}" ${option} ${shellQuote(value)}`);
 }
 
-export function getSessionOption(sessionName: string, option: string): string | null {
-  return execSafe(`tmux show-options -t "${sessionName}" -v ${option}`);
+export function getSessionOption(target: string, option: string): string | null {
+  return execSafe(`tmux show-options -t "${target}" -v ${option}`);
 }
 
 export function getGlobalOption(option: string): string | null {
@@ -174,10 +221,10 @@ export function setGlobalOption(option: string, value: string): void {
   execSafe(`tmux set-option -g ${option} ${shellQuote(value)}`);
 }
 
-export function listAllSessions(): string[] {
-  const output = execSafe('tmux list-sessions -F "#{session_name}"');
+export function listAllSessions(): Array<{ name: string; sessionId: string }> {
+  const output = execSafe('tmux list-sessions -F "#{session_id} #{session_name}"');
   if (!output) return [];
-  return output.split('\n').filter(Boolean);
+  return output.split('\n').filter(Boolean).map(parseSessionLine);
 }
 
 export function listAllPanes(): Array<{ sessionName: string; paneId: string }> {

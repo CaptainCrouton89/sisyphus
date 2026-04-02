@@ -16,6 +16,7 @@ interface SessionTracking {
   cwd: string;
   tmuxSession?: string;
   windowId?: string;
+  tmuxSessionId?: string;
   messageCounter: number;
 }
 const sessionTrackingMap = new Map<string, SessionTracking>();
@@ -54,13 +55,14 @@ export function registerSessionCwd(sessionId: string, cwd: string): void {
   persistSessionRegistry();
 }
 
-export function registerSessionTmux(sessionId: string, tmuxSession: string, windowId: string): void {
+export function registerSessionTmux(sessionId: string, tmuxSession: string, windowId: string, tmuxSessionId?: string): void {
   const existing = sessionTrackingMap.get(sessionId);
   if (existing) {
     existing.tmuxSession = tmuxSession;
     existing.windowId = windowId;
+    existing.tmuxSessionId = tmuxSessionId;
   } else {
-    sessionTrackingMap.set(sessionId, { cwd: '', tmuxSession, windowId, messageCounter: 0 });
+    sessionTrackingMap.set(sessionId, { cwd: '', tmuxSession, windowId, tmuxSessionId, messageCounter: 0 });
   }
 }
 
@@ -77,6 +79,7 @@ async function handleRequest(req: Request): Promise<Response> {
           cwd: req.cwd,
           tmuxSession: session.tmuxSessionName,
           windowId: session.tmuxWindowId,
+          tmuxSessionId: session.tmuxSessionId,
           messageCounter: 0,
         });
         persistSessionRegistry();

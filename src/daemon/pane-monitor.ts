@@ -126,7 +126,7 @@ export function setDotsCallback(cb: DotsCallback): void {
   onDotsUpdate = cb;
 }
 
-export function getTrackedSessionEntries(): Iterable<{ id: string; cwd: string; tmuxSession: string; windowId: string | null }> {
+export function getTrackedSessionEntries(): Iterable<{ id: string; cwd: string; tmuxSessionId: string | undefined; tmuxSessionName: string; windowId: string | null }> {
   return trackedSessions.values();
 }
 
@@ -148,12 +148,12 @@ export function stopMonitor(): void {
   }
 }
 
-const trackedSessions = new Map<string, { id: string; cwd: string; tmuxSession: string; windowId: string | null }>();
+const trackedSessions = new Map<string, { id: string; cwd: string; tmuxSessionId: string | undefined; tmuxSessionName: string; windowId: string | null }>();
 
-export function trackSession(sessionId: string, cwd: string, tmuxSession: string): void {
+export function trackSession(sessionId: string, cwd: string, tmuxSessionId: string | undefined, tmuxSessionName: string): void {
   // windowId is registered separately via updateTrackedWindow after spawnOrchestrator sets it
   const existing = trackedSessions.get(sessionId);
-  trackedSessions.set(sessionId, { id: sessionId, cwd, tmuxSession, windowId: existing ? existing.windowId : null });
+  trackedSessions.set(sessionId, { id: sessionId, cwd, tmuxSessionId, tmuxSessionName, windowId: existing ? existing.windowId : null });
 }
 
 export function updateTrackedWindow(sessionId: string, windowId: string): void {
@@ -330,7 +330,7 @@ async function pollSession(
 
     // Check if the entire tmux session was destroyed
     const tracked = trackedSessions.get(sessionId);
-    if (tracked && !tmux.sessionExists(tracked.tmuxSession)) {
+    if (tracked && !tmux.isSessionAlive(tracked.tmuxSessionId, tracked.tmuxSessionName)) {
       await flushTimers(sessionId);
       await state.updateSessionStatus(cwd, sessionId, 'paused');
       untrackSession(sessionId);
