@@ -16,7 +16,7 @@ Raw ANSI terminal UI for real-time session monitoring and control. No frameworks
 - **`app.ts`** — Main controller: polling, render loop, input dispatch, event loop
 - **`render.ts`** — Frame-buffer primitives, ANSI parsing (optimized), panel rendering with RenderedCache
 - **`state.ts`** — AppState interface, ThrottledScroll (16ms throttle), cursor stabilization, render scheduling
-- **`input.ts`** — Keyboard/mouse handlers
+- **`input.ts`** — Keyboard/mouse handlers; compose mode (nvim-backed multi-line input) and leader-key dispatch
 - **`terminal.ts`** — Terminal I/O (stdin, stdout, resize)
 - **`lib/`** — Tree building, formatting, tmux shell access, socket client
 - **`panels/`** — Panel renderers: tree, detail, logs, overlays
@@ -33,6 +33,15 @@ Raw ANSI terminal UI for real-time session monitoring and control. No frameworks
 - **No frameworks** — raw ANSI only
 - **Synchronous rendering** — async I/O only during poll phase
 - **Terminal minimum** — 60 cols × 12 rows; graceful fallback
+
+## Input & Compose Mode
+
+- **`InputActions` dependency injection**: `input.ts` never imports `lib/tmux.js` or `lib/clipboard.js` directly — callers inject them. Avoids circular deps; add new tmux ops to the `InputActions` interface, not as direct imports.
+- **Nvim bypass** (`setRawBypass`): when nvim or compose mode is active, all raw stdin is intercepted before the normal key handler. `Tab` (0x09) is the escape key — exits nvim focus or cancels compose. If `nvimBridge.ready` is false mid-bypass, the bypass auto-deactivates and returns `false` (input re-processed normally).
+- **Compose mode** (multi-line nvim input): writes a temp file to `$TMPDIR/sisyphus-nvim/`, opens it in the detail-pane nvim via `openComposeFile(tempFile, signalFile)`, then polls for `signalFile` every 100ms. Signal content `"cancel"` = user quit; any other content = submit. Fallback: `enterComposeMode()` returns `false` if nvim is unavailable — callers must fall back to a tmux popup overlay.
+- **`prevNvimFile` must be nulled on compose cancel** — otherwise nvim won't re-open the node's real file on the next render cycle (it compares against the cached key).
+- **`continue` mode is two-step**: sends `{ type: 'continue' }` first (resets daemon state), then `{ type: 'resume' }` with the optional message. Both must succeed; the resume is skipped if `continue` returns an error.
+- **`OPTIONAL_COMPOSE` / `OPTIONAL_INPUT`** (sets in `state.ts`): controls which compose/input actions accept empty content. Actions not in these sets reject submission and re-arm the signal file for retry.
 
 ## Rendering Flow
 
