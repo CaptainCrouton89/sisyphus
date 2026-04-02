@@ -64,6 +64,10 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
   // Keybindings
   console.log(`  \u2713 Keybindings: ${keybindMsg}`);
 
+  // Session bar
+  console.log('  \u2713 Status bar: daemon-rendered via @sisyphus_status');
+  console.log('    Add to status-right: #{@sisyphus_status}');
+
   // /begin command
   if (result.command.installed) {
     console.log(`  \u2713 /begin command: ${result.command.path}${result.command.autoInstalled ? ' (just installed)' : ''}`);

@@ -905,42 +905,28 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // w: go to tmux window (or resume orchestrator Claude session if completed)
+  // w: go to tmux window (or resume orchestrator Claude session if window is dead/completed)
   if (input === 'w') {
     if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
 
-    if (session.status === 'completed') {
-      const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
-      const claudeSessionId = lastCycle?.claudeSessionId;
-      if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
-      try {
-        const label = session.name ?? state.selectedSessionId!.slice(0, 8);
-        const sessionName = actions.openClaudeResumeSession(state.cwd, claudeSessionId, label);
-        actions.switchToSession(sessionName);
-      } catch {
-        notify(state, 'Failed to open Claude session');
-      }
-      return;
-    }
-
-    if (state.paneAlive && session.tmuxWindowId) {
+    // If window is alive, switch to it directly
+    if (session.status !== 'completed' && state.paneAlive && session.tmuxWindowId) {
       if (session.tmuxSessionName) actions.switchToSession(session.tmuxSessionName);
       actions.selectWindow(session.tmuxWindowId);
       return;
     }
 
-    // Window is dead — reopen via daemon
-    void (async () => {
-      try {
-        const res = await actions.send({ type: 'reopen-window', sessionId: state.selectedSessionId!, cwd: state.cwd });
-        if (!res.ok) { notify(state, `Error: ${res.error}`); return; }
-        const data = res.data as { tmuxSessionName: string; tmuxWindowId: string };
-        actions.switchToSession(data.tmuxSessionName);
-        actions.selectWindow(data.tmuxWindowId);
-      } catch (err) {
-        notify(state, `Error: ${(err as Error).message}`);
-      }
-    })();
+    // Window is dead or session is completed — resume the last orchestrator Claude session
+    const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+    const claudeSessionId = lastCycle?.claudeSessionId;
+    if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
+    try {
+      const label = session.name ?? state.selectedSessionId!.slice(0, 8);
+      const sessionName = actions.openClaudeResumeSession(state.cwd, claudeSessionId, label);
+      actions.switchToSession(sessionName);
+    } catch {
+      notify(state, 'Failed to open Claude session');
+    }
     return;
   }
 

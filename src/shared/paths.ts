@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 export function globalDir(): string {
   return join(homedir(), '.sisyphus');
@@ -104,5 +104,19 @@ export function snapshotDir(cwd: string, sessionId: string, cycle: number): stri
 
 export function tuiScratchDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), '.tui');
+}
+
+export function tmuxSessionName(cwd: string, sessionLabel: string): string {
+  // Use underscores as separators — slashes break tmux -t target resolution,
+  // dots get silently converted to underscores by tmux (reserved for window.pane targeting)
+  return `ssyph_${basename(cwd)}_${sessionLabel}`;
+}
+
+export function isSisyphusSession(name: string): boolean {
+  return name.startsWith('ssyph_');
+}
+
+export function tmuxSessionDisplayName(name: string): string {
+  return name.replace(/^ssyph_[^_]+_/, '');
 }
 

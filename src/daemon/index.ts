@@ -20,6 +20,7 @@ import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadS
 import { startMonitor, stopMonitor, setRespawnCallback, setDotsCallback, trackSession, updateTrackedWindow, flushTimers, initTimers, getTrackedSessionIds, getTrackedSessionEntries } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 import { recomputeDots, setTrackedEntriesProvider } from './status-dots.js';
+import { writeStatusBar } from './status-bar.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
 import { listPanes, sessionExists } from './tmux.js';
@@ -223,13 +224,17 @@ async function startDaemon(): Promise<void> {
   acquirePidLock();
 
   setRespawnCallback(onAllAgentsDone);
-  setDotsCallback(recomputeDots);
+  setDotsCallback(() => {
+    recomputeDots();
+    try { writeStatusBar(); } catch { /* best-effort */ }
+  });
   setTrackedEntriesProvider(getTrackedSessionEntries);
 
   await startServer();
   startMonitor(config.pollIntervalMs);
 
   await recoverSessions();
+  try { writeStatusBar(); } catch { /* best-effort */ }
 
   if (config.autoUpdate !== false) {
     startPeriodicUpdateCheck();

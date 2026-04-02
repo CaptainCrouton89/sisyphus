@@ -60,7 +60,7 @@ cwd=$(tmux show-option -v @sisyphus_cwd 2>/dev/null)
 [ -z "$cwd" ] && exit 0
 while IFS= read -r name; do
   # Skip sisyphus agent/orchestrator sessions
-  case "$name" in sisyphus-*) continue ;; esac
+  case "$name" in ssyph_*) continue ;; esac
   scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
   if [ "$scwd" = "$cwd" ]; then
     tmux switch-client -t "$name"
@@ -83,7 +83,7 @@ if [ "$pane_count" -le 1 ]; then
   cwd=$(tmux show-option -t "$session" -v @sisyphus_cwd 2>/dev/null)
   if [ -n "$cwd" ]; then
     while IFS= read -r name; do
-      case "$name" in sisyphus-*) continue ;; esac
+      case "$name" in ssyph_*) continue ;; esac
       scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
       if [ "$scwd" = "$cwd" ]; then
         tmux switch-client -t "$name"
@@ -186,7 +186,7 @@ export function setupTmuxKeybind(key: string = DEFAULT_KEY, homeKey: string = DE
   const confPath = sisyphusTmuxConfPath();
   const cycleBinding = `bind-key -T root ${key} run-shell ${cycleScriptPath()}`;
   const homeBinding = `bind-key -T root ${homeKey} run-shell ${homeScriptPath()}`;
-  const killPaneOverride = `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^sisyphus-'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`;
+  const killPaneOverride = `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`;
   writeFileSync(confPath, `${SISYPHUS_CONF_MARKER}\n${cycleBinding}\n${homeBinding}\n${killPaneOverride}\n`, 'utf8');
 
   // Append source line to tmux.conf if not already there

@@ -26,10 +26,10 @@ export function killWindow(windowTarget: string): void {
   execSafe(`tmux kill-window -t "${windowTarget}"`);
 }
 
-export function createSession(sessionName: string, windowName: string, cwd: string): { windowId: string; initialPaneId: string } {
-  exec(`tmux new-session -d -s "${sessionName}" -n "${windowName}" -c ${shellQuote(cwd)}`);
-  const windowId = exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{window_id}"`);
-  const initialPaneId = exec(`tmux display-message -t "${sessionName}:${windowName}" -p "#{pane_id}"`);
+export function createSession(sessionName: string, cwd: string): { windowId: string; initialPaneId: string } {
+  exec(`tmux new-session -d -s "${sessionName}" -n main -c ${shellQuote(cwd)}`);
+  const windowId = exec(`tmux display-message -t "${sessionName}:main" -p "#{window_id}"`);
+  const initialPaneId = exec(`tmux display-message -t "${sessionName}:main" -p "#{pane_id}"`);
   configureSessionDefaults(sessionName, windowId);
   return { windowId, initialPaneId };
 }
@@ -59,7 +59,7 @@ export function findHomeSession(cwd: string): string | null {
   if (!output) return null;
   const normalizedCwd = cwd.replace(/\/+$/, '');
   for (const name of output.split('\n').filter(Boolean)) {
-    if (name.startsWith('sisyphus-')) continue;
+    if (name.startsWith('ssyph_')) continue;
     const val = execSafe(`tmux show-options -t "${name}" -v @sisyphus_cwd`);
     if (val?.trim() === normalizedCwd) return name;
   }
@@ -160,6 +160,25 @@ export function setWindowOption(windowTarget: string, option: string, value: str
 
 export function getSessionOption(sessionName: string, option: string): string | null {
   return execSafe(`tmux show-options -t "${sessionName}" -v ${option}`);
+}
+
+export function setGlobalOption(option: string, value: string): void {
+  execSafe(`tmux set-option -g ${option} ${shellQuote(value)}`);
+}
+
+export function listAllSessions(): string[] {
+  const output = execSafe('tmux list-sessions -F "#{session_name}"');
+  if (!output) return [];
+  return output.split('\n').filter(Boolean);
+}
+
+export function listAllPanes(): Array<{ sessionName: string; paneId: string }> {
+  const output = execSafe('tmux list-panes -a -F "#{session_name} #{pane_id}"');
+  if (!output) return [];
+  return output.split('\n').filter(Boolean).map(line => {
+    const spaceIdx = line.indexOf(' ');
+    return { sessionName: line.slice(0, spaceIdx), paneId: line.slice(spaceIdx + 1) };
+  });
 }
 
 /**

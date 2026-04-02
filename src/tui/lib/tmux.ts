@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { globalDir } from '../../shared/paths.js';
+import { globalDir, tmuxSessionName } from '../../shared/paths.js';
 import { augmentedPath } from '../../shared/env.js';
 import { shellQuote } from '../../shared/shell.js';
 import { exec, execSafe, EXEC_ENV } from '../../shared/exec.js';
@@ -135,7 +135,7 @@ export function openClaudeResumePopup(cwd: string, claudeSessionId: string): voi
 export function openClaudeResumeSession(cwd: string, claudeSessionId: string, sessionLabel: string): string {
   const pathEnv = augmentedPath();
   const cmd = `PATH=${shellQuote(pathEnv)} claude --resume ${shellQuote(claudeSessionId)}`;
-  const sessionName = `sisyphus-${sessionLabel}-resume`;
+  const sessionName = tmuxSessionName(cwd, `${sessionLabel}-resume`);
   exec(`tmux new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(cwd)} ${shellQuote(cmd)}`);
   execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
   // Match session defaults from daemon tmux.ts configureSessionDefaults

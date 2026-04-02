@@ -44,7 +44,7 @@ export function registerTmuxSessions(program: Command): void {
         if (scwd !== cwd) continue;
 
         const phase = tmuxExec(`tmux show-option -t "${name}" -v @sisyphus_phase`);
-        const displayName = name.replace(/^sisyphus-/, '');
+        const displayName = name.replace(/^ssyph_[^_]+_/, '');
         entries.push({ name, displayName, phase });
       }
 

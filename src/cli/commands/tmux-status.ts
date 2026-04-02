@@ -7,11 +7,11 @@ export function registerTmuxStatus(program: Command): void {
     .description('Output session status dots for tmux status bar')
     .action(() => {
       try {
-        const dots = execSync(
-          'tmux show-option -w -v @sisyphus_dots',
+        const status = execSync(
+          'tmux show-option -gv @sisyphus_status',
           { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
         ).trim();
-        if (dots) process.stdout.write(dots);
+        if (status) process.stdout.write(status);
       } catch {
         // Option not set or tmux error — output nothing
       }

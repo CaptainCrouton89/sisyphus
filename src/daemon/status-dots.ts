@@ -24,7 +24,7 @@ interface SessionDot {
 
 // ─── Dot rendering ───────────────────────────────────────────────────────────
 
-const DOT_MAP: Record<SessionPhase, { icon: string; color: string }> = {
+export const DOT_MAP: Record<SessionPhase, { icon: string; color: string }> = {
   'orchestrator:processing': { icon: '●', color: '#d4ad6a' },  // yellow — orchestrator thinking
   'orchestrator:idle':       { icon: '●', color: '#d47766' },  // red — needs your input
   'agents:running':          { icon: '◆', color: '#d4ad6a' },  // yellow diamond — agents working
@@ -78,14 +78,12 @@ function detectPhase(
 
   if (orchAlive) {
     // Orchestrator is running — check Claude state from hook files
-    // Hook states: idle = no prompt yet, processing = Claude working, stopped = Claude finished response
-    // Only "idle" means truly waiting for user input. "stopped" means Claude completed a turn
-    // but may still be running (tools, etc.) — treat as processing.
+    // Hook states: idle = no prompt yet, processing = Claude working, stopped = waiting for input
     const claudeState = readClaudeState(orchPaneId!);
-    if (claudeState === 'idle') {
+    if (claudeState === 'idle' || claudeState === 'stopped') {
       return 'orchestrator:idle';
     }
-    // Default: processing (covers processing, stopped, missing hook file)
+    // Default: processing (covers processing, missing hook file)
     return 'orchestrator:processing';
   }
 
@@ -93,6 +91,14 @@ function detectPhase(
 
   // No orchestrator, no running agents — between cycles or stuck
   return 'between-cycles';
+}
+
+// ─── Sisyphus phase tracking (consumed by status-bar.ts) ─────────────────────
+
+const sisyphusPhases = new Map<string, { phase: SessionPhase; tmuxSession: string }>();
+
+export function getSisyphusPhases(): ReadonlyMap<string, { phase: SessionPhase; tmuxSession: string }> {
+  return sisyphusPhases;
 }
 
 // ─── Tracked sessions interface ──────────────────────────────────────────────
@@ -172,6 +178,7 @@ export function recomputeDots(): void {
   if (!getTrackedEntries) return;
 
   pruneCompleted();
+  sisyphusPhases.clear();
 
   // Group tracked sessions by cwd
   const byCwd = new Map<string, Array<{ sessionId: string; windowId: string }>>();
@@ -218,6 +225,7 @@ export function recomputeDots(): void {
         const tmuxSessionName = tmuxSessionMap.get(sessionId);
         if (tmuxSessionName) {
           tmux.setSessionOption(tmuxSessionName, '@sisyphus_phase', phase);
+          sisyphusPhases.set(sessionId, { phase, tmuxSession: tmuxSessionName });
         }
       } catch {
         // Session state unreadable — skip
