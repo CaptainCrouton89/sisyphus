@@ -7,28 +7,42 @@ Individual panel renderers for the frame-buffer TUI. Each panel is responsible f
 - **`tree.ts`** — Session/agent tree (left sidebar): navigable hierarchy with collapsed/expanded state, cursor tracking by node ID
 - **`detail.ts`** — Agent state/output (right pane): selected pane status, latest output lines, command prompt
 - **`logs.ts`** — Cycle history (bottom left): roadmap.md and logs.md displayed side-by-side, mtime-invalidated cache
-- **`overlays.ts`** — Modals and status banners: error overlays, help, session confirmation dialogs
-- **`bottom.ts`** — Status bar (very bottom): pane counts, selected node info, mode indicator, key hints
+- **`overlays.ts`** — Modals: leader menu, copy menu, help, companion overlay, companion debug overlay
+- **`bottom.ts`** — Key-hint status bar (very bottom): context-sensitive key hints, transient notifications/errors, mode banners
 
-## Rendering Pattern
+## Two Rendering Contracts
 
-Each panel function:
-1. Takes `AppState` (full state) and region bounds (`x, y, width, height`)
-2. Returns `RenderedPanel` — array of lines as ANSI strings (cached via `RenderedCache`)
-3. Only re-renders if input fingerprint changed (dirty tracking)
+**`RenderedPanel` contract** (`detail.ts`, `logs.ts`): takes `AppState` + bounds, returns array of ANSI strings cached via `RenderedCache`, dirty-tracked by input fingerprint.
+
+**Direct FrameBuffer contract** (`tree.ts`, `overlays.ts`, `bottom.ts`): takes `FrameBuffer` + `Rect` (or `rows`/`cols`/`y`), writes via `drawBorder` + `writeClipped`, returns `void`. No caching, no dirty tracking — always re-painted every frame.
 
 Panels are called from `render.ts` → `renderFrame()`. Frame-buffer diffs output and writes only changed lines.
 
-## Key Constraints
+## Non-Obvious `tree.ts` Behaviors
 
-- **No async I/O** — panels read from cached AppState (polling happens async in poll phase)
-- **Width awareness** — lines must respect terminal width; use `displayWidthFast()` for layout
-- **ANSI-safe** — handle control chars in data (agent output, pane content) with `stripAnsi()` or escape as needed
-- **Mtime tracking** — logs.ts watches file modification times; stale entries auto-removed from cache
-- **Cursor stability** — tree.ts stabilizes cursor by node ID across renders (see `state.ts` for pattern)
+- **Companion reservation is dynamic**: `companionRows = 2 + commentaryLineCount` (blank + face row + wrapped commentary). `maxVisible = Math.max(1, innerH - companionRows)`. Fixed `innerH - 2` overflows when commentary wraps to multiple lines.
+- **Companion face row shifts up**: pinned at `y + h - 2 - commentaryCount`, not always `y + h - 2`. Commentary renders below the face row, inside the panel border.
+- **Companion render slots**: `renderCompanion(companion, ['face', 'boulder'], { maxWidth: innerW, color: true })` — `'commentary'` is NOT in the slot list; commentary is word-wrapped manually and written as separate `\x1b[2m` rows below.
+- **Scroll indicator row theft**: `availRows` is decremented for each indicator shown (top and/or bottom). Node slot count is dynamic — the bottom indicator occupies the row that would otherwise hold the last visible node.
+- **`bottomMore` uses `maxVisible`, not `availRows`**: The "↓ N more" count is `nodes.length - scrollOffset - maxVisible`, computed before indicator adjustment. When only the bottom indicator is shown it understates by 1; when both are shown it understates by 2 (both indicators steal rows from `availRows` but neither is subtracted from `maxVisible`).
+- **Selection rendering**: selected + focused = bold + inverse video (`\x1b[7m`); selected + unfocused = bold only, no inverse — `inverse` is an empty string, not omitted.
+- **`node.prefix` pre-caching**: `renderTreePrefix` is only called as fallback via `node.prefix ?? renderTreePrefix(...)`. If prefix is already set by the tree builder, the function is never called.
 
-## Common Dependencies
+## Non-Obvious `overlays.ts` Behaviors
 
-- `render.ts` — Frame-buffer helpers, `RenderedCache`, ANSI primitives, `displayWidthFast()`, `stripAnsi()`
-- `state.ts` — `AppState`, cursor stabilization helpers
-- `lib/` — Tree building, formatting utilities
+- **Anchor strategy**: leader/copy overlays are bottom-right anchored (`cols - WIDTH - 1`, `rows - HEIGHT - 2`). Help/companion/debug are screen-centered with height dynamically clamped to `rows - 2`.
+- **Height formula**: all centered overlays use `contentLines.length + 4` (2 border rows + title row + blank separator). `availableContentRows = height - 4`. Trailing blank writes only if a slot remains — it's not guaranteed.
+- **Companion overlay has two pages** (`CompanionPage = 'profile' | 'badges'`): toggled via `companionOverlayNextPage()` (Tab key). Module-level `_page`, `_gallery`, `_badgeScroll` persist across renders — reset only by `closeBadgeGallery()`. Not resetting on open means re-opening resumes the last page/scroll.
+- **`_gallery` lazy init**: created from `companion.achievements` on first badges-page render; not recreated if already set. Stale if achievements change mid-session — `closeBadgeGallery()` forces recreation.
+- **Badge list auto-scroll** (`_badgeScroll`): uses a 3-pass convergence loop (not a simple clamp) to keep `gallery.currentIndex` visible. Each pass recalculates scroll indicators; stealing a row for "↓ N more" can push `currentIndex` out of the new visible window, requiring another adjustment — 3 passes converges without needing a while loop. `maxListRows = Math.min(6, Math.max(4, rows - 2 - 4 - listStartIdx - 2))` — terminal height drives it.
+- **XP bar shows within-level progress**: `xpInLevel = companion.xp % 50` (50 xp per level), bar max is 50 — not total XP. The "xp" label implies total; it doesn't.
+- **Profile achievement slot**: shows only the single most recent achievement + `N/total` count. No scrollable list — call `companionOverlayNextPage()` (Tab) to reach the full badge gallery.
+- **Companion stats units**: `endurance` is milliseconds, displayed as hours (`/ 3_600_000`). `patience` is a plain count (cycles + lifecycle bonuses), displayed directly.
+- **`renderCompanionDebugOverlay`**: separate function (not a flag on `renderCompanionOverlay`). Shows `debugMood` signals and per-mood scores with block-character bar charts. `debug` is null until the daemon has computed at least one mood update — overlay shows two lines: "No mood signals yet" + "(mood is time-of-day only)".
+- **`ACHIEVEMENTS` imported from `shared/companion-types.js`** — no daemon dependency.
+
+## Non-Obvious `bottom.ts` Behaviors
+
+- **Silent modes**: `renderStatusLine` returns immediately (renders nothing) in `report-detail` and `compose` modes — status bar goes blank, not hidden. Debugging a missing status bar starts here.
+- **Notification vs error priority**: `notification !== null` is checked before `error !== null`. Notifications render bold yellow (`1;33`) with regex-selected icon (`✕`/`✓`/`ℹ`). Errors render red (`\x1b[31m`) with a plain `⚠` — no icon selection, only shown when notification is null.
+- **`cursorNodeType` gating**: `context-file` nodes inject `[e]dit  [⏎] open` into the tree-focused hint string; all other node types omit it. Caller must pass the correct type or hints will be wrong.

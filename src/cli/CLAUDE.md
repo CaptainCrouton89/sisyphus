@@ -2,6 +2,12 @@
 
 Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 
+## Entry Point (`index.ts`)
+
+- Node version check runs **before any `import` statements** — must stay at the top or the ESM import of Commander fails before the check runs.
+- `sortSubcommands: false` — help lists commands in **registration order**, not alphabetical; append new commands at the end of `index.ts` to preserve logical grouping.
+- First-run welcome fires when `~/.sisyphus/` doesn't exist AND immediately `mkdirSync`s it — fires exactly once on the first non-skipped command. The `skipWelcome` list exempts `doctor`, `setup`, `init`, `getting-started`, etc.; any command not on that list consumes the welcome even if it subsequently fails.
+
 ## Client Communication (`client.ts`)
 
 - `rawSend()` — Low-level socket send (10s timeout, single attempt)
@@ -44,7 +50,8 @@ Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.con
 
 **Status bar**: Daemon renders the complete status string and writes it to the global tmux option `@sisyphus_status`. To show session indicators, add `#{@sisyphus_status}` to `status-right`. No shell scripts — the daemon pre-renders tmux format strings with per-client conditionals for current-session highlighting. Updated every poll cycle (5s). `@sisyphus_phase` is still written per-session for CLI commands (`tmux-sessions`).
 
-## Conventions
+## Companion Commands (`companion.ts`, `companion-context.ts`)
 
-- Use `SISYPHUS_SESSION_ID` / `SISYPHUS_AGENT_ID` env vars when agent-spawned (set automatically by daemon)
-- Daemon binary path is resolved relative to the CLI binary (`dirname(import.meta.url)/daemon.js`) — supports any install directory
+- `sisyphus companion` — human-readable profile display (XP, level, mood, achievements, per-repo memory). `--name <name>` renames the companion via daemon request, not a local write.
+- `sisyphus companion-context` — **machine-readable only**: outputs `{"additionalContext":"<string>"}` to stdout with no trailing newline. Designed to be called as a Claude Code hook (e.g. `userPromptSubmit`), not invoked directly by users. Reads live session state via `buildCompanionContext` in `src/tui/lib/context.ts` — does **not** contact the daemon, exits synchronously.
+

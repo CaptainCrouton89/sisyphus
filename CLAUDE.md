@@ -103,9 +103,29 @@ Options: `model`, `orchestratorPrompt` (file path), `pollIntervalMs`
 - Sessions: UUIDs; Agents: `agent-001`, `agent-002` (zero-padded)
 - Orchestrator pane: yellow; agents rotate `[blue, green, magenta, cyan, red, white]`
 
+### Bug Fixes
+- When fixing a bug, write a test that reproduces the failure first, then fix the code. Keep the test — it's a regression guard.
+
 ### TypeScript
 - Strict ESM, Node 22, tsup bundles three entry points
 - Adding a command: `src/cli/commands/{cmd}.ts` → register in `src/cli/index.ts` → protocol types in `src/shared/protocol.ts` → handle in `src/daemon/server.ts`
+
+## Integration Tests
+
+Docker-based integration tests in `test/integration/`. Requires Docker running locally.
+
+```bash
+bash test/integration/run.sh          # run all tiers, print pass/fail matrix
+```
+
+Three tiers (single multi-stage Dockerfile): **base** (node-only), **tmux** (node + tmux), **full** (node + tmux + neovim). Each tier adds tests that require its capabilities. Run a single tier for faster iteration:
+
+```bash
+docker build --target tmux -t sisyphus-test:tmux test/integration/
+docker run --rm sisyphus-test:tmux bash /tests/suites/test-tmux.sh
+```
+
+GHA workflow (`.github/workflows/integration-tests.yml`) covers macOS-specific paths (launchd, Swift notifications).
 
 ## Debugging
 
