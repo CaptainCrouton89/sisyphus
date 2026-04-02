@@ -1,0 +1,56 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Linux: build Docker image and run integration test harness inside containers
+  linux-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # run.sh builds Docker image and executes integration tests inside containers
+      - run: bash test/integration/run.sh
+
+  # macOS: install globally from packed tarball, build Swift notify app, smoke test
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # Pack to tarball so we exercise the published package surface (postinstall included)
+      - run: npm pack
+
+      - name: Install globally from tarball
+        run: npm install -g sisyphi-*.tgz
+
+      # Build Swift notification helper — swiftc is available on GHA macOS runners via Xcode CLI tools
+      - name: Build Swift notification app
+        run: bash native/build-notify.sh
+
+      # Verify the .app was installed to the expected location
+      - name: Verify SisyphusNotify.app exists
+        run: test -d ~/.sisyphus/SisyphusNotify.app
+
+      # Doctor always exits 0; some checks may warn on GHA (no tmux, no launchd plist)
+      - name: Doctor smoke test
+        run: sisyphus doctor
