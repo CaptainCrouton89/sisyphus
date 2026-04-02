@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
 import type { MessageSource } from '../shared/types.js';
 import * as sessionManager from './session-manager.js';
+import { loadCompanion, saveCompanion } from './companion.js';
 import * as state from './state.js';
 import { lookupPane, unregisterPane } from './pane-registry.js';
 import { getActiveTimers } from './pane-monitor.js';
@@ -126,12 +127,21 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'status': {
-        if (req.sessionId) {
-          const cwd = sessionTrackingMap.get(req.sessionId)?.cwd ?? req.cwd;
-          if (!cwd) return unknownSessionError(req.sessionId);
-          const session = sessionManager.getSessionStatus(cwd, req.sessionId);
+        let sessionId = req.sessionId;
+
+        // If no session ID provided, find the most recent active/paused session for this cwd
+        if (!sessionId && req.cwd) {
+          const sessions = sessionManager.listSessions(req.cwd);
+          const active = sessions.find(s => s.status === 'active') ?? sessions.find(s => s.status === 'paused');
+          if (active) sessionId = active.id;
+        }
+
+        if (sessionId) {
+          const cwd = sessionTrackingMap.get(sessionId)?.cwd ?? req.cwd;
+          if (!cwd) return unknownSessionError(sessionId);
+          const session = sessionManager.getSessionStatus(cwd, sessionId);
           // Overlay live in-memory timer values for real-time accuracy
-          const timers = getActiveTimers(req.sessionId);
+          const timers = getActiveTimers(sessionId);
           if (timers) {
             session.activeMs = timers.sessionMs;
             for (const agent of session.agents) {
@@ -318,6 +328,15 @@ async function handleRequest(req: Request): Promise<Response> {
           timestamp: new Date().toISOString(),
         });
         return { ok: true };
+      }
+
+      case 'companion': {
+        const companion = loadCompanion();
+        if (req.name !== undefined) {
+          companion.name = req.name;
+          saveCompanion(companion);
+        }
+        return { ok: true, data: companion as unknown as Record<string, unknown> };
       }
 
       default:

@@ -4,8 +4,9 @@ import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
 import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
-import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer } from './pane-monitor.js';
+import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, markEventCompletion, markEventCrash, markEventLevelUp, updateCycleCount } from './pane-monitor.js';
 import { resetColors } from './colors.js';
+import { loadConfig } from '../shared/config.js';
 import { sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane, getSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
@@ -14,8 +15,25 @@ import { generateSessionName } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
+import { loadCompanion, saveCompanion, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, ACHIEVEMENTS } from './companion.js';
+import { generateCommentary, generateNickname } from './companion-commentary.js';
+import { flashCompanion } from './status-bar.js';
+import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false): void {
+  generateCommentary(event, companion, context).then(text => {
+    if (text) {
+      try {
+        const c = loadCompanion();
+        c.lastCommentary = { text, event, timestamp: new Date().toISOString() };
+        saveCompanion(c);
+        if (flash) flashCompanion(text);
+      } catch { /* non-fatal */ }
+    }
+  }).catch(() => {});
+}
 
 function switchToHomeSession(session: Session): void {
   if (!session.tmuxSessionName) return;
@@ -37,6 +55,17 @@ export async function startSession(task: string, cwd: string, context?: string, 
   }
 
   const session = state.createSession(sessionId, task, cwd, context, name);
+
+  const config = loadConfig(cwd);
+  const model = config.model;
+  await state.updateSession(cwd, sessionId, {
+    model,
+    launchConfig: {
+      model,
+      context,
+      orchestratorPrompt: config.orchestratorPrompt,
+    },
+  });
 
   const { windowId, initialPaneId } = tmux.createSession(tmuxName, cwd);
   tmux.setSessionOption(tmuxName, '@sisyphus_cwd', cwd.replace(/\/+$/, ''));
@@ -103,6 +132,15 @@ export async function startSession(task: string, cwd: string, context?: string, 
   }
 
   try { recomputeDots(); } catch { /* best-effort */ }
+
+  // Companion hook — fire-and-forget, errors must not break session flow
+  try {
+    const companion = loadCompanion();
+    onSessionStart(companion, cwd);
+    saveCompanion(companion);
+    fireCommentary('session-start', companion, task);
+  } catch { /* companion errors are non-fatal */ }
+
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
 }
 
@@ -392,6 +430,19 @@ export async function handleSpawn(
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
 
   try { recomputeDots(); } catch { /* best-effort */ }
+
+  // Companion hook — fire-and-forget, errors must not break session flow
+  try {
+    const companion = loadCompanion();
+    onAgentSpawned(companion);
+    saveCompanion(companion);
+    generateNickname(companion).then(nickname => {
+      if (nickname) {
+        state.updateAgent(cwd, sessionId, agent.id, { nickname }).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch { /* companion errors are non-fatal */ }
+
   return { agentId: agent.id };
 }
 
@@ -426,6 +477,7 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
   try { recomputeDots(); } catch { /* best-effort */ }
 
   const session = state.getSession(cwd, sessionId);
+  updateCycleCount(session.orchestratorCycles.length);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
   if (!hasRunningAgents) {
     // Fall back to state's tmuxWindowId if in-memory map is missing (e.g., after daemon restart)
@@ -443,9 +495,11 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 }
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {
-  const session = state.getSession(cwd, sessionId);
   await flushTimers(sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
+  const session = state.getSession(cwd, sessionId);
+  const wallClockMs = Date.now() - new Date(session.createdAt).getTime();
+  await state.updateSession(cwd, sessionId, { wallClockMs });
   markSessionCompleted(sessionId, session.createdAt, cwd);
 
   // Clean up tracking and tmux resources (mirrors handleKill cleanup)
@@ -455,6 +509,31 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   orchestratorDone.delete(sessionId);
 
   try { recomputeDots(); } catch { /* best-effort */ }
+
+  // Companion hook — fire-and-forget, errors must not break session flow
+  try {
+    const companion = loadCompanion();
+    const prevLevel = companion.level;
+    const newAchievementIds = onSessionComplete(companion, session);
+    saveCompanion(companion);
+    markEventCompletion();
+    const leveledUp = companion.level > prevLevel;
+
+    fireCommentary('session-complete', companion, session.task, true);
+
+    if (leveledUp) {
+      markEventLevelUp();
+      fireCommentary('level-up', companion, undefined, true);
+    }
+
+    if (newAchievementIds.length > 0) {
+      const names = newAchievementIds
+        .map(id => ACHIEVEMENTS.find(a => a.id === id)?.name ?? id)
+        .join(', ');
+      fireCommentary('achievement', companion, names, true);
+    }
+  } catch { /* companion errors are non-fatal */ }
+
   switchToHomeSession(session);
 
   // Kill the tmux session after switching clients away
@@ -618,6 +697,16 @@ export async function handlePaneExited(
     sendTerminalNotification('Sisyphus', `Agent ${label} exited without submitting a report`, session.tmuxSessionName);
 
     const allDone = await handleAgentKilled(cwd, sessionId, agentId, 'pane exited');
+
+    // Companion hook — fire-and-forget, errors must not break session flow
+    try {
+      const companion = loadCompanion();
+      onAgentCrashed(companion);
+      saveCompanion(companion);
+      markEventCrash();
+      fireCommentary('agent-crash', companion);
+    } catch { /* companion errors are non-fatal */ }
+
     if (allDone) {
       const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;
       if (windowId) {

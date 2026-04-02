@@ -4,6 +4,8 @@ import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
 import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
+import { loadCompanion, saveCompanion, computeMood } from './companion.js';
+import type { MoodSignals } from '../shared/companion-types.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
 type DotsCallback = () => void;
@@ -16,6 +18,23 @@ let onDotsUpdate: DotsCallback | null = null;
 
 let lastPollTime = 0;
 let storedPollIntervalMs = 5000;
+let idleStartTime = 0;
+let lastMoodCompute = 0;
+
+// ─── Temporal decay event tracking ────────────────────────────────────────────
+
+let lastCompletionTime = 0;  // epoch ms
+let lastCrashTime = 0;       // epoch ms
+let lastLevelUpTime = 0;     // epoch ms
+let currentMaxCycleCount = 0;
+
+export function markEventCompletion(): void { lastCompletionTime = Date.now(); }
+export function markEventCrash(): void { lastCrashTime = Date.now(); }
+export function markEventLevelUp(): void { lastLevelUpTime = Date.now(); }
+export function updateCycleCount(count: number): void {
+  if (count > currentMaxCycleCount) currentMaxCycleCount = count;
+}
+export function resetCycleCount(): void { currentMaxCycleCount = 0; }
 
 interface ActiveTimerEntry {
   sessionMs: number;
@@ -152,20 +171,98 @@ async function pollAllSessions(): Promise<void> {
   const increment = elapsed > threshold ? storedPollIntervalMs : elapsed;
   lastPollTime = now;
 
+  // Per-poll session cache: populated by pollSession, reused by mood signal loop
+  const pollSessionCache = new Map<string, Session>();
+
   for (const { id: sessionId, cwd, windowId } of trackedSessions.values()) {
     if (windowId) {
-      await pollSession(sessionId, cwd, windowId, increment);
+      await pollSession(sessionId, cwd, windowId, increment, pollSessionCache);
     }
   }
 
   // Recompute status dots after polling all sessions
   try { onDotsUpdate?.(); } catch { /* best-effort */ }
+
+  // Companion mood update — errors must never break the monitor loop
+  try {
+    const nowMs = Date.now();
+    const isIdle = trackedSessions.size === 0;
+
+    // Throttle: skip recompute when idle and computed recently (once per minute is enough)
+    if (isIdle && nowMs - lastMoodCompute < 60_000) return;
+
+    const companion = loadCompanion();
+
+    // Build MoodSignals from tracked session state (reuse sessions already read by pollSession)
+    let recentCrashes = 0;
+    let sessionLengthMs = 0;
+    let idleDurationMs = 0;
+    let activeAgentCount = 0;
+    const cutoff = nowMs - 30 * 60 * 1000;
+
+    for (const { id: sessionId, cwd } of trackedSessions.values()) {
+      try {
+        const s = pollSessionCache.get(sessionId) ?? state.getSession(cwd, sessionId);
+        if (s.status === 'active') {
+          sessionLengthMs = Math.max(sessionLengthMs, s.activeMs);
+          for (const agent of s.agents) {
+            if (agent.status === 'crashed' && agent.completedAt && new Date(agent.completedAt).getTime() > cutoff) {
+              recentCrashes++;
+            }
+            if (agent.status === 'running') {
+              activeAgentCount++;
+            }
+          }
+        }
+      } catch { /* best-effort per-session */ }
+    }
+
+    const timerKeys = [...activeTimers.keys()];
+    if (timerKeys.length === 0) {
+      if (idleStartTime === 0) idleStartTime = nowMs;
+      idleDurationMs = nowMs - idleStartTime;
+    } else {
+      idleStartTime = 0;
+    }
+
+    const DECAY_WINDOW = 120_000; // 2 minutes
+
+    const signals: MoodSignals = {
+      recentCrashes,
+      idleDurationMs,
+      sessionLengthMs,
+      cleanStreak: companion.consecutiveCleanSessions,
+      justCompleted: (nowMs - lastCompletionTime) < DECAY_WINDOW,
+      justCrashed: (nowMs - lastCrashTime) < DECAY_WINDOW,
+      justLeveledUp: (nowMs - lastLevelUpTime) < DECAY_WINDOW,
+      hourOfDay: new Date().getHours(),
+      activeAgentCount,
+      cycleCount: currentMaxCycleCount,
+      sessionsCompletedToday: companion.recentCompletions.filter(t => t.startsWith(new Date().toISOString().slice(0, 10))).length,
+    };
+
+    const newMood = computeMood(companion, undefined, signals);
+    if (newMood !== companion.mood) {
+      companion.mood = newMood;
+      companion.moodUpdatedAt = new Date().toISOString();
+      // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
+      saveCompanion(companion);
+    }
+    lastMoodCompute = nowMs;
+  } catch { /* companion poll failures are non-fatal */ }
 }
 
-async function pollSession(sessionId: string, cwd: string, windowId: string, increment: number): Promise<void> {
+async function pollSession(
+  sessionId: string,
+  cwd: string,
+  windowId: string,
+  increment: number,
+  sessionCache?: Map<string, Session>,
+): Promise<void> {
   let session;
   try {
     session = state.getSession(cwd, sessionId);
+    sessionCache?.set(sessionId, session);
   } catch (err) {
     console.error(`[sisyphus] Failed to read state for session ${sessionId}:`, err);
     return;

@@ -3,8 +3,8 @@ import { execEnv } from './env.js';
 
 export const EXEC_ENV = execEnv();
 
-export function exec(cmd: string, cwd?: string): string {
-  return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd }).trim();
+export function exec(cmd: string, cwd?: string, timeoutMs: number = 30_000): string {
+  return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd, timeout: timeoutMs }).trim();
 }
 
 export function execSafe(cmd: string, cwd?: string): string | null {

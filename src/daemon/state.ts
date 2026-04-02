@@ -52,6 +52,8 @@ export function createSession(id: string, task: string, cwd: string, context?: s
     writeFileSync(join(contextDir(cwd, id), 'initial-context.md'), context, 'utf-8');
   }
 
+  const createdAt = new Date().toISOString();
+  const created = new Date(createdAt);
   const session: Session = {
     id,
     ...(name ? { name } : {}),
@@ -59,11 +61,13 @@ export function createSession(id: string, task: string, cwd: string, context?: s
     ...(context ? { context } : {}),
     cwd,
     status: 'active',
-    createdAt: new Date().toISOString(),
+    createdAt,
     activeMs: 0,
     agents: [],
     orchestratorCycles: [],
     messages: [],
+    startHour: created.getHours(),
+    startDayOfWeek: created.getDay(),
   };
 
   atomicWrite(statePath(cwd, id), JSON.stringify(session, null, 2));
@@ -206,6 +210,14 @@ export async function updateSessionTmux(cwd: string, sessionId: string, tmuxSess
     const session = getSession(cwd, sessionId);
     session.tmuxSessionName = tmuxSessionName;
     session.tmuxWindowId = tmuxWindowId;
+    saveSession(session);
+  });
+}
+
+export async function updateSession(cwd: string, sessionId: string, updates: Partial<Session>): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    Object.assign(session, updates);
     saveSession(session);
   });
 }

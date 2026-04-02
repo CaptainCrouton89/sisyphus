@@ -162,6 +162,14 @@ export function getSessionOption(sessionName: string, option: string): string | 
   return execSafe(`tmux show-options -t "${sessionName}" -v ${option}`);
 }
 
+export function getGlobalOption(option: string): string | null {
+  try {
+    return execSafe(`tmux show-option -gv ${option}`)?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export function setGlobalOption(option: string, value: string): void {
   execSafe(`tmux set-option -g ${option} ${shellQuote(value)}`);
 }

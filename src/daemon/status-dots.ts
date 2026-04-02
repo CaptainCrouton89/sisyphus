@@ -101,6 +101,13 @@ export function getSisyphusPhases(): ReadonlyMap<string, { phase: SessionPhase; 
   return sisyphusPhases;
 }
 
+// Total running agents across all active sessions (updated each recomputeDots cycle)
+let totalRunningAgents = 0;
+
+export function getTotalRunningAgents(): number {
+  return totalRunningAgents;
+}
+
 // ─── Tracked sessions interface ──────────────────────────────────────────────
 
 interface TrackedEntry {
@@ -179,6 +186,7 @@ export function recomputeDots(): void {
 
   pruneCompleted();
   sisyphusPhases.clear();
+  totalRunningAgents = 0;
 
   // Group tracked sessions by cwd
   const byCwd = new Map<string, Array<{ sessionId: string; windowId: string }>>();
@@ -215,6 +223,7 @@ export function recomputeDots(): void {
       seenIds.add(sessionId);
       try {
         const session = state.getSession(cwd, sessionId);
+        totalRunningAgents += session.agents.filter(a => a.status === 'running').length;
         const orchPaneId = getOrchestratorPaneId(sessionId);
         const livePanes = tmux.listPanes(windowId);
         const livePaneIds = new Set(livePanes.map(p => p.paneId));
