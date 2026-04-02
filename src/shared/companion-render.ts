@@ -1,0 +1,262 @@
+import type {
+  CompanionState,
+  CompanionField,
+  CompanionRenderOpts,
+  CompanionStats,
+  Mood,
+} from './companion-types.js';
+
+// --- Base form ---
+//
+// Returns a template with two placeholders:
+//   FACE      — replaced by getMoodFace() in renderCompanion
+//   {BOULDER} — replaced by composeLine() with the agent-count-driven boulder
+//
+// No literal boulder characters are embedded here.  The previous design embedded
+// them (`.`, `o`, `O`, `OO`, `@`) which caused splitBodyAndBoulder to either
+// discard multi-char boulders (OO) or corrupt output when the dynamic boulder
+// didn't match the embedded one.
+
+export function getBaseForm(level: number): string {
+  if (level <= 2) return '(FACE) {BOULDER}';
+  if (level <= 4) return '(FACE)/ {BOULDER}';
+  if (level <= 7) return '/(FACE)/ {BOULDER}';
+  if (level <= 11) return '\\(FACE)/ {BOULDER}';
+  if (level <= 19) return 'ᕦ(FACE)ᕤ {BOULDER}';
+  return '♛ᕦ(FACE)ᕤ {BOULDER}';
+}
+
+// --- Mood face ---
+
+export function getMoodFace(mood: Mood): string {
+  switch (mood) {
+    case 'happy':       return '^.^';
+    case 'grinding':    return '>.<';
+    case 'frustrated':  return '>.<#';
+    case 'zen':         return '‾.‾';
+    case 'sleepy':      return '-.-)zzZ';
+    case 'excited':     return '*o*';
+    case 'existential': return '◉_◉';
+    default: throw new Error(`Unknown mood: ${mood as string}`);
+  }
+}
+
+// --- Stat cosmetics ---
+
+export function getStatCosmetics(stats: CompanionStats): string[] {
+  const cosmetics: string[] = [];
+  if (stats.wisdom > 5) cosmetics.push('wisps');
+  if (stats.endurance > 36_000_000) cosmetics.push('trail');
+  if (stats.patience > 50) cosmetics.push('zen-prefix');
+  return cosmetics;
+}
+
+// --- Boulder form ---
+
+export function getBoulderForm(agentCount?: number, repoNickname?: string): string {
+  let boulder: string;
+  if (agentCount === undefined || agentCount <= 0) {
+    boulder = '.';
+  } else if (agentCount <= 1) {
+    boulder = 'o';
+  } else if (agentCount <= 4) {
+    boulder = 'O';
+  } else if (agentCount <= 9) {
+    boulder = '◉';
+  } else if (agentCount <= 20) {
+    boulder = '@';
+  } else {
+    boulder = '@@';
+  }
+  if (repoNickname !== undefined) {
+    boulder = `${boulder} "${repoNickname}"`;
+  }
+  return boulder;
+}
+
+// --- composeLine ---
+//
+// body has already had FACE replaced with the mood face, and still contains
+// the {BOULDER} placeholder from getBaseForm.
+// composeLine applies cosmetics to `boulder`, then substitutes {BOULDER}.
+
+export function composeLine(
+  body: string,
+  cosmetics: string[],
+  boulder: string,
+): string {
+  let b = boulder;
+
+  let hasSparkle = false;
+  let hasZenPrefix = false;
+
+  for (const c of cosmetics) {
+    switch (c) {
+      case 'wisps':
+        b = `~${b}~`;
+        break;
+      case 'trail':
+        b = `${b} ...`;
+        break;
+      case 'sparkle':
+        hasSparkle = true;
+        break;
+      case 'zen-prefix':
+        hasZenPrefix = true;
+        break;
+    }
+  }
+
+  let line = body.replace('{BOULDER}', b);
+
+  if (hasZenPrefix) line = `o ${line}`;
+  if (hasSparkle) line = `* ${line} *`;
+
+  return line;
+}
+
+// --- Color helpers ---
+
+type AnsiCode = number;
+type TmuxColor = string;
+
+interface MoodColor {
+  ansi: AnsiCode;
+  tmux: TmuxColor;
+}
+
+const MOOD_COLORS: Record<Mood, MoodColor> = {
+  happy:       { ansi: 32,  tmux: 'green' },
+  grinding:    { ansi: 33,  tmux: 'yellow' },
+  frustrated:  { ansi: 31,  tmux: 'red' },
+  zen:         { ansi: 36,  tmux: 'cyan' },
+  sleepy:      { ansi: 90,  tmux: 'colour245' },
+  excited:     { ansi: 97,  tmux: 'white' },
+  existential: { ansi: 35,  tmux: 'magenta' },
+};
+
+function colorize(text: string, mood: Mood, tmux: boolean): string {
+  const { ansi, tmux: tmuxColor } = MOOD_COLORS[mood];
+  if (tmux) {
+    return `#[fg=${tmuxColor}]${text}#[fg=default]`;
+  }
+  return `\x1b[${ansi}m${text}\x1b[0m`;
+}
+
+// --- Stat summary string ---
+
+function statSummary(stats: CompanionStats): string {
+  const endH = Math.floor(stats.endurance / 3_600_000);
+  return `STR:${stats.strength} END:${endH}h WIS:${stats.wisdom} PAT:${stats.patience}`;
+}
+
+// --- Main renderer ---
+
+export function renderCompanion(
+  companion: CompanionState,
+  fields: CompanionField[],
+  opts?: CompanionRenderOpts,
+): string {
+  const hasFace = fields.includes('face');
+  const hasBoulder = fields.includes('boulder');
+
+  const repoNickname = opts?.repoPath !== undefined
+    ? companion.repos[opts.repoPath]?.nickname ?? undefined
+    : undefined;
+
+  const boulder = getBoulderForm(opts?.agentCount, repoNickname);
+  const cosmetics = getStatCosmetics(companion.stats);
+
+  let facePart: string | null = null;
+  let boulderOnlyPart: string | null = null;
+
+  if (hasFace) {
+    const baseForm = getBaseForm(companion.level);
+    const face = getMoodFace(companion.mood);
+    const bodyWithFace = baseForm.replace('FACE', face);
+    facePart = composeLine(bodyWithFace, cosmetics, boulder);
+  } else if (hasBoulder) {
+    // Boulder standalone (unusual)
+    boulderOnlyPart = boulder;
+  }
+
+  let commentary = fields.includes('commentary')
+    ? (companion.lastCommentary?.text ?? '')
+    : null;
+
+  const parts: string[] = [];
+
+  for (const field of fields) {
+    switch (field) {
+      case 'face':
+        if (facePart !== null) parts.push(facePart);
+        break;
+      case 'boulder':
+        if (!hasFace && boulderOnlyPart !== null) parts.push(boulderOnlyPart);
+        // If face included, boulder is already embedded — skip
+        break;
+      case 'title':
+        parts.push(companion.title);
+        break;
+      case 'commentary':
+        if (commentary !== null) parts.push(commentary);
+        break;
+      case 'mood':
+        parts.push(`[${companion.mood}]`);
+        break;
+      case 'level':
+        parts.push(`Lv ${companion.level}`);
+        break;
+      case 'stats':
+        parts.push(statSummary(companion.stats));
+        break;
+      case 'achievements':
+        parts.push(`${companion.achievements.length} achievements`);
+        break;
+    }
+  }
+
+  // Apply maxWidth: truncate commentary first, then right-truncate
+  if (opts?.maxWidth !== undefined) {
+    const maxWidth = opts.maxWidth;
+    const joined = parts.join('  ');
+    if (joined.length > maxWidth && commentary !== null && commentary.length > 0) {
+      // Shorten commentary progressively
+      const commentaryIdx = parts.indexOf(commentary);
+      if (commentaryIdx !== -1) {
+        const overhead = joined.length - commentary.length;
+        const available = maxWidth - overhead - 2; // account for double-space
+        if (available < 0) {
+          parts[commentaryIdx] = '';
+        } else {
+          parts[commentaryIdx] = commentary.slice(0, available);
+        }
+        commentary = parts[commentaryIdx];
+      }
+    }
+    const result = parts.filter(p => p.length > 0).join('  ');
+    const final = result.length > maxWidth
+      ? result.slice(0, maxWidth - 1) + '…'
+      : result;
+
+    return applyColor(final, fields, facePart, companion.mood, opts);
+  }
+
+  const result = parts.filter(p => p.length > 0).join('  ');
+  return applyColor(result, fields, facePart, companion.mood, opts);
+}
+
+function applyColor(
+  result: string,
+  fields: CompanionField[],
+  facePart: string | null,
+  mood: Mood,
+  opts?: CompanionRenderOpts,
+): string {
+  const useColor = opts?.color === true || opts?.tmuxFormat === true;
+  if (!useColor || facePart === null || !fields.includes('face')) return result;
+
+  const tmux = opts?.tmuxFormat === true;
+  const coloredFace = colorize(facePart, mood, tmux);
+  return result.replace(facePart, coloredFace);
+}

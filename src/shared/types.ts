@@ -42,11 +42,17 @@ export interface Session {
   parentSessionId?: string;
   tmuxSessionName?: string;
   tmuxWindowId?: string;
+  model?: string;
+  wallClockMs?: number;
+  startHour?: number;
+  startDayOfWeek?: number;
+  launchConfig?: { model?: string; context?: string; orchestratorPrompt?: string; };
 }
 
 export interface Agent {
   id: string;
   name: string;
+  nickname?: string;
   agentType: string;
   provider?: Provider;
   claudeSessionId?: string;

@@ -112,6 +112,10 @@ export function tmuxSessionName(cwd: string, sessionLabel: string): string {
   return `ssyph_${basename(cwd)}_${sessionLabel}`;
 }
 
+export function companionPath(): string {
+  return join(globalDir(), 'companion.json');
+}
+
 export function isSisyphusSession(name: string): boolean {
   return name.startsWith('ssyph_');
 }

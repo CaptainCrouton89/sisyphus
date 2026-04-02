@@ -19,7 +19,8 @@ export type Request =
   | { type: 'update-task'; sessionId: string; task: string }
   | { type: 'rollback'; sessionId: string; cwd: string; toCycle: number }
   | { type: 'delete'; sessionId: string; cwd: string }
-  | { type: 'reopen-window'; sessionId: string; cwd: string };
+  | { type: 'reopen-window'; sessionId: string; cwd: string }
+  | { type: 'companion'; name?: string };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }
