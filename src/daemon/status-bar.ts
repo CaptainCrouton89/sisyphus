@@ -102,10 +102,9 @@ const STATUS_LEFT_BG = '#1d1e21';
 
 function windowTabFormat(bg: string, text: string, active = false): string {
   const nextWindowIsActive = '#{e|==:#{active_window_index},#{e|+|:#{window_index},1}}';
-  const rightArrowBg = active
-    ? `#{?window_end_flag,${STATUS_LEFT_BG},${WINDOW_TAB_BG}}`
-    : `#{?${nextWindowIsActive},${WINDOW_TAB_ACTIVE_BG},${STATUS_LEFT_BG}}`;
-  const rightArrow = `#[fg=${bg}]#[bg=${rightArrowBg}]\uE0B0`;
+  const rightArrow = active
+    ? `#[fg=${bg}]#[bg=#{?window_end_flag,${STATUS_LEFT_BG},${WINDOW_TAB_BG}}]\uE0B0`
+    : `#{?window_end_flag,#[fg=${bg}]#[bg=${STATUS_LEFT_BG}]\uE0B0,#{?${nextWindowIsActive},#[fg=${bg}]#[bg=${WINDOW_TAB_ACTIVE_BG}]\uE0B0,#[fg=${bg}]#[bg=${bg}]\uE0B0}}`;
   const name = active
     ? `#[fg=${text}]#[bg=${bg}]#[bold] #W#(~/.tmux/claude-status.sh '#{window_id}')#{@sisyphus_dots} #[nobold]`
     : `#[fg=${text}]#[bg=${bg}] #W#(~/.tmux/claude-status.sh '#{window_id}')#{@sisyphus_dots} `;
