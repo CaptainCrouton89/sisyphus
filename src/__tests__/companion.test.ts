@@ -1,0 +1,948 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  createDefaultCompanion,
+  computeXP,
+  computeLevel,
+  getTitle,
+  computeMood,
+  checkAchievements,
+  onSessionStart,
+  onSessionComplete,
+  onAgentSpawned,
+  onAgentCrashed,
+  updateRepoMemory,
+  ACHIEVEMENTS,
+  hasAchievement,
+} from '../daemon/companion.js';
+import type { Session, Agent, OrchestratorCycle, Message } from '../shared/types.js';
+import type { CompanionState, MoodSignals, RepoMemory } from '../shared/companion-types.js';
+
+// ---------------------------------------------------------------------------
+// Fixtures / helpers
+// ---------------------------------------------------------------------------
+
+function makeCompanion(overrides: Partial<CompanionState> = {}): CompanionState {
+  return { ...createDefaultCompanion(), ...overrides };
+}
+
+const BASE_REPO: RepoMemory = {
+  visits: 1,
+  completions: 0,
+  crashes: 0,
+  totalActiveMs: 0,
+  moodAvg: 0,
+  nickname: null,
+  firstSeen: '2024-01-01T00:00:00.000Z',
+  lastSeen: '2024-01-01T00:00:00.000Z',
+};
+
+function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'agent-001',
+    name: 'test-agent',
+    agentType: 'default',
+    color: 'blue',
+    instruction: 'do stuff',
+    status: 'completed',
+    spawnedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    activeMs: 10_000,
+    reports: [],
+    paneId: 'pane-001',
+    repo: '/test/repo',
+    ...overrides,
+  };
+}
+
+function makeSession(overrides: Partial<Session> = {}): Session {
+  return {
+    id: 'session-001',
+    task: 'test task',
+    cwd: '/test/repo',
+    status: 'completed',
+    createdAt: new Date().toISOString(),
+    activeMs: 60_000,
+    agents: [],
+    orchestratorCycles: [],
+    messages: [],
+    ...overrides,
+  };
+}
+
+function makeSignals(overrides: Partial<MoodSignals> = {}): MoodSignals {
+  return {
+    recentCrashes: 0,
+    idleDurationMs: 0,
+    sessionLengthMs: 0,
+    cleanStreak: 0,
+    justCompleted: false,
+    justCrashed: false,
+    justLeveledUp: false,
+    hourOfDay: 12,
+    ...overrides,
+  };
+}
+
+/** Returns ISO timestamp at a specific local hour today. */
+function localDateAtHour(h: number): string {
+  const d = new Date();
+  d.setHours(h, 0, 0, 0);
+  return d.toISOString();
+}
+
+/** Returns ISO timestamp at noon of a known Saturday (2023-01-07). */
+function saturdayNoon(): string {
+  return '2023-01-07T12:00:00.000Z';
+}
+
+// ---------------------------------------------------------------------------
+// createDefaultCompanion
+// ---------------------------------------------------------------------------
+
+describe('createDefaultCompanion', () => {
+  it('returns level 1', () => {
+    assert.equal(createDefaultCompanion().level, 1);
+  });
+
+  it('returns title "Boulder Intern"', () => {
+    assert.equal(createDefaultCompanion().title, 'Boulder Intern');
+  });
+
+  it('returns mood "sleepy"', () => {
+    assert.equal(createDefaultCompanion().mood, 'sleepy');
+  });
+
+  it('returns all-zero stats', () => {
+    assert.deepEqual(createDefaultCompanion().stats, {
+      strength: 0, endurance: 0, wisdom: 0, patience: 0,
+    });
+  });
+
+  it('returns empty achievements array', () => {
+    assert.deepEqual(createDefaultCompanion().achievements, []);
+  });
+
+  it('returns empty repos object', () => {
+    assert.deepEqual(createDefaultCompanion().repos, {});
+  });
+
+  it('returns 0 sessionsCompleted', () => {
+    assert.equal(createDefaultCompanion().sessionsCompleted, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeXP
+// ---------------------------------------------------------------------------
+
+describe('computeXP', () => {
+  it('returns 0 for zero stats', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 0, patience: 0 }), 0);
+  });
+
+  it('strength * 80', () => {
+    assert.equal(computeXP({ strength: 5, endurance: 0, wisdom: 0, patience: 0 }), 400);
+  });
+
+  it('endurance: (ms / 3_600_000) * 15', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 7_200_000, wisdom: 0, patience: 0 }), 30);
+  });
+
+  it('wisdom * 40', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 4, patience: 0 }), 160);
+  });
+
+  it('patience: count * 5', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 0, patience: 10 }), 50);
+  });
+
+  it('combined formula: strength=1, endurance=3.6M ms, wisdom=1, patience=1 → 136', () => {
+    // 80 + 15 + 40 + 5 = 140
+    assert.equal(computeXP({ strength: 1, endurance: 3_600_000, wisdom: 1, patience: 1 }), 140);
+  });
+
+  it('floors fractional XP (1ms endurance → 0)', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 1, wisdom: 0, patience: 0 }), 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeLevel
+// ---------------------------------------------------------------------------
+
+// Cumulative XP thresholds for each level (computed from the 1.35× formula, base 150):
+// L1:0  L2:150  L3:352  L4:624  L5:991  L6:1486  L7:2154  L8:3055  L9:4271  L10:5912
+
+describe('computeLevel', () => {
+  it('level 1 at xp=0', () => assert.equal(computeLevel(0), 1));
+  it('level 1 at xp=149 (just below threshold)', () => assert.equal(computeLevel(149), 1));
+  it('level 2 at xp=150', () => assert.equal(computeLevel(150), 2));
+  it('level 2 at xp=351', () => assert.equal(computeLevel(351), 2));
+  it('level 3 at xp=352', () => assert.equal(computeLevel(352), 3));
+  it('level 4 at xp=624', () => assert.equal(computeLevel(624), 4));
+  it('level 5 at xp=991', () => assert.equal(computeLevel(991), 5));
+  it('level 9 just below level 10 threshold', () => assert.equal(computeLevel(5911), 9));
+  it('level 10 at xp=5912', () => assert.equal(computeLevel(5912), 10));
+});
+
+// ---------------------------------------------------------------------------
+// getTitle
+// ---------------------------------------------------------------------------
+
+describe('getTitle', () => {
+  it('level 1 → "Boulder Intern"',  () => assert.equal(getTitle(1), 'Boulder Intern'));
+  it('level 5 → "Slope Familiar"',  () => assert.equal(getTitle(5), 'Slope Familiar'));
+  it('level 10 → "Boulder Brother"', () => assert.equal(getTitle(10), 'Boulder Brother'));
+  it('level 20 → "The Absurd Hero"', () => assert.equal(getTitle(20), 'The Absurd Hero'));
+  it('level 21 falls back to level 20 title', () => assert.equal(getTitle(21), 'The Absurd Hero'));
+  it('level 24 falls back to level 20 title', () => assert.equal(getTitle(24), 'The Absurd Hero'));
+  it('level 25 → "One Must Imagine Him Happy"', () => assert.equal(getTitle(25), 'One Must Imagine Him Happy'));
+  it('level 26 falls back to level 25 title', () => assert.equal(getTitle(26), 'One Must Imagine Him Happy'));
+  it('level 30 → "He Has Always Been Here"', () => assert.equal(getTitle(30), 'He Has Always Been Here'));
+  it('level 31 falls back to level 30 title', () => assert.equal(getTitle(31), 'He Has Always Been Here'));
+});
+
+// ---------------------------------------------------------------------------
+// computeMood
+// ---------------------------------------------------------------------------
+
+describe('computeMood', () => {
+  const VALID_MOODS = ['happy', 'grinding', 'frustrated', 'zen', 'sleepy', 'excited', 'existential'];
+
+  it('no signals: returns a valid time-based mood', () => {
+    const mood = computeMood(makeCompanion());
+    assert.ok(VALID_MOODS.includes(mood), `Unexpected mood: ${mood}`);
+  });
+
+  it('justCompleted → happy', () => {
+    const mood = computeMood(makeCompanion(), undefined, makeSignals({ justCompleted: true, hourOfDay: 12 }));
+    assert.equal(mood, 'happy');
+  });
+
+  it('justLeveledUp → excited', () => {
+    const mood = computeMood(makeCompanion(), undefined, makeSignals({ justLeveledUp: true, hourOfDay: 12 }));
+    assert.equal(mood, 'excited');
+  });
+
+  it('recentCrashes + justCrashed → frustrated', () => {
+    const mood = computeMood(
+      makeCompanion(),
+      undefined,
+      makeSignals({ recentCrashes: 3, justCrashed: true, hourOfDay: 12 }),
+    );
+    assert.equal(mood, 'frustrated');
+  });
+
+  it('high idleDurationMs → sleepy', () => {
+    const mood = computeMood(
+      makeCompanion(),
+      undefined,
+      makeSignals({ idleDurationMs: 7_200_001, hourOfDay: 14 }),
+    );
+    assert.equal(mood, 'sleepy');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onSessionComplete — stat accumulation
+// ---------------------------------------------------------------------------
+
+describe('onSessionComplete', () => {
+  it('increments strength by 1', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ activeMs: 0, agents: [] }));
+    assert.equal(c.stats.strength, 1);
+  });
+
+  it('adds session.activeMs to endurance', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ activeMs: 60_000, agents: [] }));
+    assert.equal(c.stats.endurance, 60_000);
+  });
+
+  it('increments sessionsCompleted', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ agents: [] }));
+    assert.equal(c.sessionsCompleted, 1);
+  });
+
+  it('resets consecutiveCleanSessions when session has a crashed agent', () => {
+    const c = makeCompanion({ consecutiveCleanSessions: 5 });
+    onSessionComplete(c, makeSession({ agents: [makeAgent({ status: 'crashed' })] }));
+    assert.equal(c.consecutiveCleanSessions, 0);
+  });
+
+  it('increments consecutiveCleanSessions when no crashes', () => {
+    const c = makeCompanion({ consecutiveCleanSessions: 2 });
+    onSessionComplete(c, makeSession({ agents: [makeAgent({ status: 'completed' })] }));
+    assert.equal(c.consecutiveCleanSessions, 3);
+  });
+
+  it('increments consecutiveEfficientSessions when session has <= 3 cycles', () => {
+    const c = makeCompanion({ consecutiveEfficientSessions: 2 });
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 3 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    onSessionComplete(c, makeSession({ orchestratorCycles }));
+    assert.equal(c.consecutiveEfficientSessions, 3);
+  });
+
+  it('resets consecutiveEfficientSessions when session has > 3 cycles', () => {
+    const c = makeCompanion({ consecutiveEfficientSessions: 5 });
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 4 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    onSessionComplete(c, makeSession({ orchestratorCycles }));
+    assert.equal(c.consecutiveEfficientSessions, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onAgentSpawned
+// ---------------------------------------------------------------------------
+
+describe('onAgentSpawned', () => {
+  it('increments lifetimeAgentsSpawned', () => {
+    const c = makeCompanion();
+    onAgentSpawned(c);
+    assert.equal(c.lifetimeAgentsSpawned, 1);
+  });
+
+  it('increments on multiple calls', () => {
+    const c = makeCompanion();
+    onAgentSpawned(c);
+    onAgentSpawned(c);
+    onAgentSpawned(c);
+    assert.equal(c.lifetimeAgentsSpawned, 3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onAgentCrashed
+// ---------------------------------------------------------------------------
+
+describe('onAgentCrashed', () => {
+  it('resets consecutiveCleanSessions to 0', () => {
+    const c = makeCompanion({ consecutiveCleanSessions: 7 });
+    onAgentCrashed(c);
+    assert.equal(c.consecutiveCleanSessions, 0);
+  });
+
+  it('does NOT increment sessionsCrashed (counted per-session in onSessionComplete)', () => {
+    const c = makeCompanion();
+    onAgentCrashed(c);
+    // Multiple agent crashes in the same session must not inflate sessionsCrashed
+    onAgentCrashed(c);
+    onAgentCrashed(c);
+    assert.equal(c.sessionsCrashed, 0);
+  });
+});
+
+describe('onSessionComplete — sessionsCrashed', () => {
+  it('increments sessionsCrashed when session has a crashed agent', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ agents: [makeAgent({ status: 'crashed' })] }));
+    assert.equal(c.sessionsCrashed, 1);
+  });
+
+  it('increments sessionsCrashed only once regardless of agent crash count', () => {
+    const c = makeCompanion();
+    const agents = [
+      makeAgent({ id: 'agent-001', status: 'crashed' }),
+      makeAgent({ id: 'agent-002', status: 'crashed' }),
+      makeAgent({ id: 'agent-003', status: 'crashed' }),
+    ];
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.sessionsCrashed, 1);
+  });
+
+  it('does NOT increment sessionsCrashed when no agents crashed', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ agents: [makeAgent({ status: 'completed' })] }));
+    assert.equal(c.sessionsCrashed, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ACHIEVEMENTS list
+// ---------------------------------------------------------------------------
+
+describe('ACHIEVEMENTS', () => {
+  it('contains exactly 66 entries', () => {
+    assert.equal(ACHIEVEMENTS.length, 66);
+  });
+
+  it('all entries have id, name, category, and description', () => {
+    for (const a of ACHIEVEMENTS) {
+      assert.ok(typeof a.id === 'string' && a.id.length > 0, `${a.id}: missing id`);
+      assert.ok(typeof a.name === 'string' && a.name.length > 0, `${a.id}: missing name`);
+      assert.ok(typeof a.category === 'string', `${a.id}: missing category`);
+      assert.ok(typeof a.description === 'string', `${a.id}: missing description`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hasAchievement
+// ---------------------------------------------------------------------------
+
+describe('hasAchievement', () => {
+  it('returns false when achievement not present', () => {
+    assert.equal(hasAchievement(makeCompanion(), 'first-blood'), false);
+  });
+
+  it('returns true when achievement is present', () => {
+    const c = makeCompanion({ achievements: [{ id: 'first-blood', unlockedAt: new Date().toISOString() }] });
+    assert.equal(hasAchievement(c, 'first-blood'), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAchievements — general
+// ---------------------------------------------------------------------------
+
+describe('checkAchievements general', () => {
+  it('returns empty array for a fresh companion', () => {
+    assert.deepEqual(checkAchievements(makeCompanion()), []);
+  });
+
+  it('does not re-return already-unlocked achievements', () => {
+    const c = makeCompanion({
+      sessionsCompleted: 1,
+      achievements: [{ id: 'first-blood', unlockedAt: new Date().toISOString() }],
+    });
+    assert.ok(!checkAchievements(c).includes('first-blood'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAchievements — milestone
+// ---------------------------------------------------------------------------
+
+describe('checkAchievements milestone', () => {
+  it('first-blood: sessionsCompleted >= 1', () => {
+    assert.ok(checkAchievements(makeCompanion({ sessionsCompleted: 1 })).includes('first-blood'));
+  });
+
+  it('centurion: sessionsCompleted >= 100', () => {
+    assert.ok(checkAchievements(makeCompanion({ sessionsCompleted: 100 })).includes('centurion'));
+  });
+
+  it('thousand-boulder: sessionsCompleted >= 1000', () => {
+    assert.ok(checkAchievements(makeCompanion({ sessionsCompleted: 1000 })).includes('thousand-boulder'));
+  });
+
+  it('cartographer: 5 different repos', () => {
+    const repos = Object.fromEntries(
+      Array.from({ length: 5 }, (_, i) => [`/repo${i}`, { ...BASE_REPO }]),
+    );
+    assert.ok(checkAchievements(makeCompanion({ repos })).includes('cartographer'));
+  });
+
+  it('cartographer: does NOT fire with 4 repos', () => {
+    const repos = Object.fromEntries(
+      Array.from({ length: 4 }, (_, i) => [`/repo${i}`, { ...BASE_REPO }]),
+    );
+    assert.ok(!checkAchievements(makeCompanion({ repos })).includes('cartographer'));
+  });
+
+  it('world-traveler: 15 different repos', () => {
+    const repos = Object.fromEntries(
+      Array.from({ length: 15 }, (_, i) => [`/repo${i}`, { ...BASE_REPO }]),
+    );
+    assert.ok(checkAchievements(makeCompanion({ repos })).includes('world-traveler'));
+  });
+
+  it('world-traveler: does NOT fire with 14 repos', () => {
+    const repos = Object.fromEntries(
+      Array.from({ length: 14 }, (_, i) => [`/repo${i}`, { ...BASE_REPO }]),
+    );
+    assert.ok(!checkAchievements(makeCompanion({ repos })).includes('world-traveler'));
+  });
+
+  it('hive-mind: lifetimeAgentsSpawned >= 500', () => {
+    assert.ok(checkAchievements(makeCompanion({ lifetimeAgentsSpawned: 500 })).includes('hive-mind'));
+  });
+
+  it('old-growth: companion >= 14 days old', () => {
+    const createdAt = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+    assert.ok(checkAchievements(makeCompanion({ createdAt })).includes('old-growth'));
+  });
+
+  it('ancient: companion >= 365 days old', () => {
+    const createdAt = new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString();
+    assert.ok(checkAchievements(makeCompanion({ createdAt })).includes('ancient'));
+  });
+
+  it('regular: sessionsCompleted >= 10', () => {
+    assert.ok(checkAchievements(makeCompanion({ sessionsCompleted: 10 })).includes('regular'));
+  });
+
+  it('swarm-starter: lifetimeAgentsSpawned >= 50', () => {
+    assert.ok(checkAchievements(makeCompanion({ lifetimeAgentsSpawned: 50 })).includes('swarm-starter'));
+  });
+
+  it('first-shift: totalActiveMs >= 36_000_000', () => {
+    assert.ok(checkAchievements(makeCompanion({ totalActiveMs: 36_000_000 })).includes('first-shift'));
+  });
+
+  it('apprentice: level >= 5', () => {
+    assert.ok(checkAchievements(makeCompanion({ level: 5 })).includes('apprentice'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAchievements — session
+// ---------------------------------------------------------------------------
+
+describe('checkAchievements session', () => {
+  it('marathon: session with 15+ agents', () => {
+    const agents = Array.from({ length: 15 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }),
+    );
+    assert.ok(checkAchievements(makeCompanion(), makeSession({ agents })).includes('marathon'));
+  });
+
+  it('blitz: session activeMs < 300000 and completed', () => {
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ activeMs: 60_000, status: 'completed' }))
+        .includes('blitz'),
+    );
+  });
+
+  it('speed-run: session activeMs < 900000 and completed', () => {
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ activeMs: 800_000, status: 'completed' }))
+        .includes('speed-run'),
+    );
+  });
+
+  it('speed-run: does NOT fire at activeMs >= 900001', () => {
+    assert.ok(
+      !checkAchievements(makeCompanion(), makeSession({ activeMs: 900_001, status: 'completed' }))
+        .includes('speed-run'),
+    );
+  });
+
+  it('flawless: 10+ agents all completed', () => {
+    const agents = Array.from({ length: 10 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}`, status: 'completed' }),
+    );
+    const session = makeSession({ agents, status: 'completed' });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('flawless'));
+  });
+
+  it('flawless: does NOT fire with only 9 agents', () => {
+    const agents = Array.from({ length: 9 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}`, status: 'completed' }),
+    );
+    const session = makeSession({ agents, status: 'completed' });
+    assert.ok(!checkAchievements(makeCompanion(), session).includes('flawless'));
+  });
+
+  it('flawless: does NOT fire when any agent crashed', () => {
+    const session = makeSession({
+      agents: [makeAgent({ status: 'completed' }), makeAgent({ id: 'agent-002', status: 'crashed' })],
+      status: 'completed',
+    });
+    assert.ok(!checkAchievements(makeCompanion(), session).includes('flawless'));
+  });
+
+  it('iron-will: consecutiveEfficientSessions >= 10', () => {
+    assert.ok(checkAchievements(makeCompanion({ consecutiveEfficientSessions: 10 })).includes('iron-will'));
+  });
+
+  it('glass-cannon: 5+ agents all crashed, session completed', () => {
+    const agents = Array.from({ length: 5 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}`, status: 'crashed' }),
+    );
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ agents, status: 'completed' }))
+        .includes('glass-cannon'),
+    );
+  });
+
+  it('glass-cannon: does NOT fire with fewer than 5 agents', () => {
+    const agents = Array.from({ length: 4 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}`, status: 'crashed' }),
+    );
+    assert.ok(
+      !checkAchievements(makeCompanion(), makeSession({ agents, status: 'completed' }))
+        .includes('glass-cannon'),
+    );
+  });
+
+  it('solo: session with exactly 1 completed agent', () => {
+    const session = makeSession({ agents: [makeAgent({ status: 'completed' })], status: 'completed' });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('solo'));
+  });
+
+  it('one-more-cycle: 10+ orchestrator cycles', () => {
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 10 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ orchestratorCycles }))
+        .includes('one-more-cycle'),
+    );
+  });
+
+  it('quick-draw: first agent spawned within 30s of session start', () => {
+    const createdAt = new Date().toISOString();
+    const spawnedAt = new Date(new Date(createdAt).getTime() + 15_000).toISOString();
+    const session = makeSession({ createdAt, agents: [makeAgent({ spawnedAt })] });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('quick-draw'));
+  });
+
+  it('quick-draw: does NOT fire if first agent spawned > 30s after start', () => {
+    const createdAt = new Date().toISOString();
+    const spawnedAt = new Date(new Date(createdAt).getTime() + 60_000).toISOString();
+    const session = makeSession({ createdAt, agents: [makeAgent({ spawnedAt })] });
+    assert.ok(!checkAchievements(makeCompanion(), session).includes('quick-draw'));
+  });
+
+  it('squad: session with 10+ agents', () => {
+    const agents = Array.from({ length: 10 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }),
+    );
+    assert.ok(checkAchievements(makeCompanion(), makeSession({ agents })).includes('squad'));
+  });
+
+  it('deep-dive: session with 15+ orchestrator cycles', () => {
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 15 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ orchestratorCycles }))
+        .includes('deep-dive'),
+    );
+  });
+
+  it('one-shot: 5+ agents, 1 cycle, completed', () => {
+    const agents = Array.from({ length: 5 }, (_, i) =>
+      makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }),
+    );
+    const orchestratorCycles: OrchestratorCycle[] = [
+      { cycle: 1, timestamp: new Date().toISOString(), activeMs: 1000, agentsSpawned: [] },
+    ];
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ agents, orchestratorCycles, status: 'completed' }))
+        .includes('one-shot'),
+    );
+  });
+
+  it('flash: activeMs < 120_000 and completed', () => {
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ activeMs: 90_000, status: 'completed' }))
+        .includes('flash'),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAchievements — time
+// ---------------------------------------------------------------------------
+
+describe('checkAchievements time', () => {
+  it('night-owl: session started at 2am (< 6am), completed', () => {
+    const session = makeSession({ createdAt: localDateAtHour(2), status: 'completed' });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('night-owl'));
+  });
+
+  it('night-owl: does NOT fire if started at midnight (hour 0)', () => {
+    const session = makeSession({ createdAt: localDateAtHour(0), status: 'completed' });
+    assert.ok(!checkAchievements(makeCompanion(), session).includes('night-owl'));
+  });
+
+  it('night-owl: does NOT fire if started at 10am', () => {
+    const session = makeSession({ createdAt: localDateAtHour(10), status: 'completed' });
+    assert.ok(!checkAchievements(makeCompanion(), session).includes('night-owl'));
+  });
+
+  it('early-bird: session started at 4am (< 6am)', () => {
+    const session = makeSession({ createdAt: localDateAtHour(4) });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('early-bird'));
+  });
+
+  it('dawn-patrol: started at 2am, completed at 5:30am (3.5h in midnight-6am window)', () => {
+    const start = new Date();
+    start.setHours(2, 0, 0, 0);
+    const end = new Date(start.getTime() + 3.5 * 60 * 60 * 1000); // 3.5 hours later = 5:30am
+    const session = makeSession({ createdAt: start.toISOString(), completedAt: end.toISOString(), activeMs: 12_600_000 });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('dawn-patrol'));
+  });
+
+  it('dawn-patrol: started at 11pm, completed at 2:30am (spans midnight, 3.5h)', () => {
+    const start = new Date();
+    start.setHours(23, 0, 0, 0);
+    const end = new Date(start.getTime() + 3.5 * 60 * 60 * 1000); // 3.5 hours later = 2:30am next day
+    const session = makeSession({ createdAt: start.toISOString(), completedAt: end.toISOString(), activeMs: 12_600_000 });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('dawn-patrol'));
+  });
+
+  it('weekend-warrior: completed on a Saturday', () => {
+    // 2023-01-07 was a Saturday. In UTC noon it's Sat across virtually all timezones.
+    const session = makeSession({ completedAt: saturdayNoon(), status: 'completed' });
+    const day = new Date(saturdayNoon()).getDay();
+    // Only run this assertion if the date resolves to Sat/Sun in local timezone
+    if (day === 0 || day === 6) {
+      assert.ok(checkAchievements(makeCompanion(), session).includes('weekend-warrior'));
+    }
+  });
+
+  it('all-nighter: session activeMs >= 18_000_000 (5h)', () => {
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ activeMs: 18_000_000 }))
+        .includes('all-nighter'),
+    );
+  });
+
+  it('witching-hour: session started at 3am exactly', () => {
+    const session = makeSession({ createdAt: localDateAtHour(3) });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('witching-hour'));
+  });
+
+  it('witching-hour: does NOT fire at 4am', () => {
+    const session = makeSession({ createdAt: localDateAtHour(4) });
+    assert.ok(!checkAchievements(makeCompanion(), session).includes('witching-hour'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkAchievements — behavioral
+// ---------------------------------------------------------------------------
+
+describe('checkAchievements behavioral', () => {
+  it('sisyphean: taskHistory has entry >= 3', () => {
+    const c = makeCompanion({ taskHistory: { 'repo:some-task': 3 } });
+    assert.ok(checkAchievements(c).includes('sisyphean'));
+  });
+
+  it('stubborn: taskHistory has entry >= 5 and sessionsCompleted > 0', () => {
+    const c = makeCompanion({ taskHistory: { 'repo:task': 5 }, sessionsCompleted: 1 });
+    assert.ok(checkAchievements(c).includes('stubborn'));
+  });
+
+  it('creature-of-habit: same repo visited 20+ times', () => {
+    const c = makeCompanion({ repos: { '/repo': { ...BASE_REPO, visits: 20 } } });
+    assert.ok(checkAchievements(c).includes('creature-of-habit'));
+  });
+
+  it('loyal: same repo visited 50+ times', () => {
+    const c = makeCompanion({ repos: { '/repo': { ...BASE_REPO, visits: 50 } } });
+    assert.ok(checkAchievements(c).includes('loyal'));
+  });
+
+  it('wanderer: 3 different repos on the same calendar day', () => {
+    const c = makeCompanion({ dailyRepos: { '2024-01-15': ['/a', '/b', '/c'] } });
+    assert.ok(checkAchievements(c).includes('wanderer'));
+  });
+
+  it('wanderer: does NOT fire with only 2 repos on same day', () => {
+    const c = makeCompanion({ dailyRepos: { '2024-01-15': ['/a', '/b'] } });
+    assert.ok(!checkAchievements(c).includes('wanderer'));
+  });
+
+  it('streak: consecutiveDaysActive >= 7', () => {
+    assert.ok(checkAchievements(makeCompanion({ consecutiveDaysActive: 7 })).includes('streak'));
+  });
+
+  it('hot-streak: consecutiveCleanSessions >= 15', () => {
+    assert.ok(checkAchievements(makeCompanion({ consecutiveCleanSessions: 15 })).includes('hot-streak'));
+  });
+
+  it('momentum: 5 completions within 4 hours', () => {
+    const now = Date.now();
+    const c = makeCompanion({
+      recentCompletions: [
+        new Date(now - 3 * 60 * 60 * 1000).toISOString(),
+        new Date(now - 2.5 * 60 * 60 * 1000).toISOString(),
+        new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        new Date(now - 60 * 60 * 1000).toISOString(),
+        new Date(now).toISOString(),
+      ],
+    });
+    assert.ok(checkAchievements(c).includes('momentum'));
+  });
+
+  it('momentum: does NOT fire if span > 4 hours', () => {
+    const now = Date.now();
+    const c = makeCompanion({
+      recentCompletions: [
+        new Date(now - 5 * 60 * 60 * 1000).toISOString(),
+        new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        new Date(now).toISOString(),
+      ],
+    });
+    assert.ok(!checkAchievements(c).includes('momentum'));
+  });
+
+  it('patient-one: 30+ min gap between orchestrator cycles', () => {
+    const now = Date.now();
+    const orchestratorCycles: OrchestratorCycle[] = [
+      {
+        cycle: 1,
+        timestamp: new Date(now - 60 * 60 * 1000).toISOString(),
+        completedAt: new Date(now - 45 * 60 * 1000).toISOString(),
+        activeMs: 1000,
+        agentsSpawned: [],
+      },
+      {
+        cycle: 2,
+        timestamp: new Date(now - 10 * 60 * 1000).toISOString(),
+        activeMs: 1000,
+        agentsSpawned: [],
+      },
+    ];
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ orchestratorCycles }))
+        .includes('patient-one'),
+    );
+  });
+
+  it('message-in-a-bottle: 10+ user messages in session', () => {
+    const messages: Message[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `msg-${i}`,
+      source: { type: 'user' as const },
+      content: 'hello',
+      summary: 'hello',
+      timestamp: new Date().toISOString(),
+    }));
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ messages }))
+        .includes('message-in-a-bottle'),
+    );
+  });
+
+  it('message-in-a-bottle: does NOT fire with 9 user messages', () => {
+    const messages: Message[] = Array.from({ length: 9 }, (_, i) => ({
+      id: `msg-${i}`,
+      source: { type: 'user' as const },
+      content: 'hello',
+      summary: 'hello',
+      timestamp: new Date().toISOString(),
+    }));
+    assert.ok(
+      !checkAchievements(makeCompanion(), makeSession({ messages }))
+        .includes('message-in-a-bottle'),
+    );
+  });
+
+  it('comeback-kid: completed session with parentSessionId', () => {
+    const orchestratorCycles: OrchestratorCycle[] = [
+      { cycle: 1, timestamp: new Date().toISOString(), activeMs: 1000, agentsSpawned: [] },
+    ];
+    const session = makeSession({
+      status: 'completed',
+      parentSessionId: 'prev-session-id',
+      orchestratorCycles,
+    });
+    assert.ok(checkAchievements(makeCompanion(), session).includes('comeback-kid'));
+  });
+
+  it('pair-programming: 8+ user messages in session', () => {
+    const messages: Message[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `msg-${i}`,
+      source: { type: 'user' as const },
+      content: 'hello',
+      summary: 'hello',
+      timestamp: new Date().toISOString(),
+    }));
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ messages }))
+        .includes('pair-programming'),
+    );
+  });
+
+  it('overdrive: 6+ completions on same calendar day', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const c = makeCompanion({
+      recentCompletions: Array.from({ length: 6 }, () => `${today}T10:00:00.000Z`),
+    });
+    assert.ok(checkAchievements(c).includes('overdrive'));
+  });
+
+  it('iron-streak: consecutiveDaysActive >= 14', () => {
+    assert.ok(checkAchievements(makeCompanion({ consecutiveDaysActive: 14 })).includes('iron-streak'));
+  });
+
+  it('deep-conversation: 20+ user messages in session', () => {
+    const messages: Message[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `msg-${i}`,
+      source: { type: 'user' as const },
+      content: 'hello',
+      summary: 'hello',
+      timestamp: new Date().toISOString(),
+    }));
+    assert.ok(
+      checkAchievements(makeCompanion(), makeSession({ messages }))
+        .includes('deep-conversation'),
+    );
+  });
+
+  it('one-must-imagine: taskHistory entry >= 10', () => {
+    const c = makeCompanion({ taskHistory: { 'repo:same-task': 10 } });
+    assert.ok(checkAchievements(c).includes('one-must-imagine'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateRepoMemory
+// ---------------------------------------------------------------------------
+
+describe('updateRepoMemory', () => {
+  it('creates new entry on first visit', () => {
+    const c = makeCompanion();
+    updateRepoMemory(c, '/test/repo', 'visit');
+    assert.ok(c.repos['/test/repo'] !== undefined);
+    assert.equal(c.repos['/test/repo']!.visits, 1);
+  });
+
+  it('increments visits on subsequent visit calls', () => {
+    const c = makeCompanion();
+    updateRepoMemory(c, '/test/repo', 'visit');
+    updateRepoMemory(c, '/test/repo', 'visit');
+    assert.equal(c.repos['/test/repo']!.visits, 2);
+  });
+
+  it('tracks completions separately from visits', () => {
+    const c = makeCompanion();
+    updateRepoMemory(c, '/test/repo', 'completion');
+    assert.equal(c.repos['/test/repo']!.completions, 1);
+    assert.equal(c.repos['/test/repo']!.visits, 0);
+  });
+
+  it('tracks crashes separately', () => {
+    const c = makeCompanion();
+    updateRepoMemory(c, '/test/repo', 'crash');
+    assert.equal(c.repos['/test/repo']!.crashes, 1);
+    assert.equal(c.repos['/test/repo']!.visits, 0);
+    assert.equal(c.repos['/test/repo']!.completions, 0);
+  });
+
+  it('increments existing completion count', () => {
+    const c = makeCompanion();
+    updateRepoMemory(c, '/test/repo', 'completion');
+    updateRepoMemory(c, '/test/repo', 'completion');
+    assert.equal(c.repos['/test/repo']!.completions, 2);
+  });
+
+  it('returns the mutated companion state', () => {
+    const c = makeCompanion();
+    const result = updateRepoMemory(c, '/test/repo', 'visit');
+    assert.equal(result, c);
+  });
+});
