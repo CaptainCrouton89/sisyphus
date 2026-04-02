@@ -342,6 +342,12 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     state.createSnapshot(cwd, sessionId, cycleNumber);
   }
 
+  // Fire companion commentary at cycle boundary (50% chance)
+  try {
+    const companion = loadCompanion();
+    fireCommentary('cycle-boundary', companion, `Cycle ${cycleNumber} complete, respawning orchestrator`);
+  } catch { /* non-fatal */ }
+
   // Respawn on next tick — agents already finished, no delay needed
   setImmediate(async () => {
     pendingRespawns.delete(sessionId);

@@ -5,6 +5,8 @@ import { handleAgentKilled } from './agent.js';
 import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
 import { loadCompanion, saveCompanion, computeMood } from './companion.js';
+import { generateCommentary } from './companion-commentary.js';
+import { flashCompanion } from './status-bar.js';
 import type { MoodSignals } from '../shared/companion-types.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
@@ -27,6 +29,7 @@ let lastCompletionTime = 0;  // epoch ms
 let lastCrashTime = 0;       // epoch ms
 let lastLevelUpTime = 0;     // epoch ms
 let currentMaxCycleCount = 0;
+let lastLateNightCommentary = 0;  // epoch ms — throttle late-night commentary to once per 30min
 
 export function markEventCompletion(): void { lastCompletionTime = Date.now(); }
 export function markEventCrash(): void { lastCrashTime = Date.now(); }
@@ -222,6 +225,21 @@ async function pollAllSessions(): Promise<void> {
       if (idleStartTime === 0) idleStartTime = nowMs;
       idleDurationMs = nowMs - idleStartTime;
     } else {
+      // Transitioning from idle to active — fire idle-wake commentary
+      if (idleStartTime > 0) {
+        const idledMs = nowMs - idleStartTime;
+        if (idledMs > 60_000) { // Only if idle for >1min (avoid spurious wakes)
+          generateCommentary('idle-wake', companion, `Idle for ${Math.round(idledMs / 60_000)} minutes`).then(text => {
+            if (text) {
+              try {
+                const c = loadCompanion();
+                c.lastCommentary = { text, event: 'idle-wake', timestamp: new Date().toISOString() };
+                saveCompanion(c);
+              } catch { /* non-fatal */ }
+            }
+          }).catch(() => {});
+        }
+      }
       idleStartTime = 0;
     }
 
@@ -248,6 +266,22 @@ async function pollAllSessions(): Promise<void> {
       // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
       saveCompanion(companion);
     }
+    // Late-night commentary (2-6am, throttled to once per 30min)
+    const hour = new Date().getHours();
+    if (hour >= 2 && hour < 6 && !isIdle && (nowMs - lastLateNightCommentary) > 30 * 60 * 1000) {
+      lastLateNightCommentary = nowMs;
+      generateCommentary('late-night', companion).then(text => {
+        if (text) {
+          try {
+            const c = loadCompanion();
+            c.lastCommentary = { text, event: 'late-night', timestamp: new Date().toISOString() };
+            saveCompanion(c);
+            flashCompanion(text);
+          } catch { /* non-fatal */ }
+        }
+      }).catch(() => {});
+    }
+
     lastMoodCompute = nowMs;
   } catch { /* companion poll failures are non-fatal */ }
 }
