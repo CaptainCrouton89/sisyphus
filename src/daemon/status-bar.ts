@@ -100,13 +100,16 @@ const WINDOW_TAB_BG = '#2d2f33';
 const WINDOW_TAB_ACTIVE_BG = '#4a4d55';
 const STATUS_LEFT_BG = '#1d1e21';
 
-function windowTabFormat(bg: string, text: string, bold = false): string {
-  const leftArrow = `#[fg=${bg}]#[bg=${STATUS_LEFT_BG}]\uE0B0`;
-  const rightArrow = `#[fg=${STATUS_LEFT_BG}]#[bg=${bg}]\uE0B0`;
-  const name = bold
+function windowTabFormat(bg: string, text: string, active = false): string {
+  const nextWindowIsActive = '#{e|==:#{active_window_index},#{e|+|:#{window_index},1}}';
+  const rightArrowBg = active
+    ? `#{?window_end_flag,${STATUS_LEFT_BG},${WINDOW_TAB_BG}}`
+    : `#{?${nextWindowIsActive},${WINDOW_TAB_ACTIVE_BG},${STATUS_LEFT_BG}}`;
+  const rightArrow = `#[fg=${bg}]#[bg=${rightArrowBg}]\uE0B0`;
+  const name = active
     ? `#[fg=${text}]#[bg=${bg}]#[bold] #W#(~/.tmux/claude-status.sh '#{window_id}')#{@sisyphus_dots} #[nobold]`
     : `#[fg=${text}]#[bg=${bg}] #W#(~/.tmux/claude-status.sh '#{window_id}')#{@sisyphus_dots} `;
-  return `${leftArrow}${name}${rightArrow}`;
+  return `${name}${rightArrow}`;
 }
 
 function renderNormalSession(name: string, state: ClaudeState | 'none', sectionBg: string): string {
@@ -176,6 +179,12 @@ let statusIntegrated = false;
 export function ensureStatusRightIntegration(): void {
   if (statusIntegrated) return;
   statusIntegrated = true;
+
+  try {
+    tmux.setGlobalOption('window-status-separator', '');
+    tmux.setGlobalOption('window-status-format', windowTabFormat(WINDOW_TAB_BG, INACTIVE_TEXT));
+    tmux.setGlobalOption('window-status-current-format', windowTabFormat(WINDOW_TAB_ACTIVE_BG, ACTIVE_TEXT, true));
+  } catch { /* non-fatal */ }
 
   // Remove from status-left if present (prior injection location)
   try {
