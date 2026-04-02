@@ -46,7 +46,7 @@ function renderDots(dots: SessionDot[]): string {
 
 // ─── Claude hook file reading ────────────────────────────────────────────────
 
-function readClaudeState(paneId: string): 'idle' | 'processing' | 'stopped' | null {
+export function readClaudeState(paneId: string): 'idle' | 'processing' | 'stopped' | null {
   // paneId is like "%42" — strip the %
   const numericId = paneId.replace('%', '');
   try {

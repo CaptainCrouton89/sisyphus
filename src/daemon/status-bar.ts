@@ -2,10 +2,10 @@ import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as tmux from './tmux.js';
-import { DOT_MAP, getSisyphusPhases, getTotalRunningAgents, type SessionPhase } from './status-dots.js';
+import { DOT_MAP, getSisyphusPhases, getTotalRunningAgents, readClaudeState, type SessionPhase } from './status-dots.js';
 import { loadCompanion } from './companion.js';
-import { renderCompanion, getBaseForm, getMoodFace, getStatCosmetics, composeLine, getBoulderForm } from '../shared/companion-render.js';
-import type { CompanionField, CompanionState, Mood } from '../shared/companion-types.js';
+import { renderCompanion } from '../shared/companion-render.js';
+import type { CompanionState } from '../shared/companion-types.js';
 
 // ─── Companion flash state ──────────────────────────────────────────────────
 
@@ -32,10 +32,9 @@ export function flashCompanion(text: string, durationMs = 10_000): void {
   flashUntil = Date.now() + durationMs;
 }
 
-const CLAUDE_STATE_DIR = '/tmp/claude-tmux-state';
 const SESSION_ORDER_PATH = join(homedir(), '.config', 'tmux', 'session-order');
 
-// ─── Claude state reading ───────────────────────────────────────────────────
+// ─── Claude state types ─────────────────────────────────────────────────────
 
 type ClaudeState = 'processing' | 'stopped' | 'idle';
 
@@ -51,19 +50,6 @@ const STATE_COLORS: Record<ClaudeState | 'none', string> = {
   idle: '#5e584e',
   none: '#5e584e',
 };
-
-function readClaudeState(paneId: string): ClaudeState | null {
-  const numericId = paneId.replace('%', '');
-  try {
-    const content = readFileSync(`${CLAUDE_STATE_DIR}/${numericId}`, 'utf-8').trim();
-    if (content === 'idle' || content === 'processing' || content === 'stopped') {
-      return content;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 // ─── Session ordering ───────────────────────────────────────────────────────
 
@@ -104,27 +90,27 @@ function orderSessions(sessions: string[], order: string[]): string[] {
 
 // ─── Per-session rendering ──────────────────────────────────────────────────
 
-// Powerline section bg colors (gradient across sections)
-const SESSIONS_BG = '#252629';       // gloam bg1
-const SISYPHUS_BG = '#36383e';       // gloam bg3
-const COMPANION_BG = '#4a4d55';      // gloam bg5
-const ACTIVE_SESSION_BG = '#3d3225'; // warm bg3-level
+const SESSIONS_BG = '#252629';
+const SISYPHUS_BG = '#36383e';
+const COMPANION_BG = '#4a4d55';
+const ACTIVE_SESSION_BG = '#3d3225';
 const ACTIVE_TEXT = '#e2d9c6';
 const INACTIVE_TEXT = '#b0a898';
+const WINDOW_TAB_BG = '#2d2f33';
+const WINDOW_TAB_ACTIVE_BG = '#4a4d55';
+const STATUS_LEFT_BG = '#1d1e21';
 
-const MOOD_TMUX_COLORS: Record<Mood, string> = {
-  happy: 'green',
-  grinding: 'yellow',
-  frustrated: 'red',
-  zen: 'cyan',
-  sleepy: 'colour245',
-  excited: 'white',
-  existential: 'magenta',
-};
+function windowTabFormat(bg: string, text: string, bold = false): string {
+  const leftArrow = `#[fg=${bg}]#[bg=${STATUS_LEFT_BG}]\uE0B0`;
+  const rightArrow = `#[fg=${STATUS_LEFT_BG}]#[bg=${bg}]\uE0B0`;
+  const name = bold
+    ? `#[fg=${text}]#[bg=${bg}]#[bold] #W#(~/.tmux/claude-status.sh '#{window_id}')#{@sisyphus_dots} #[nobold]`
+    : `#[fg=${text}]#[bg=${bg}] #W#(~/.tmux/claude-status.sh '#{window_id}')#{@sisyphus_dots} `;
+  return `${leftArrow}${name}${rightArrow}`;
+}
 
 function renderNormalSession(name: string, state: ClaudeState | 'none', sectionBg: string): string {
   const color = STATE_COLORS[state];
-  // Split attrs — commas inside #[] break tmux #{?} conditionals.
   const active = `#[bg=${ACTIVE_SESSION_BG}]#[fg=${color}] ● #[fg=${ACTIVE_TEXT}]#[bold]${name}#[nobold] #[bg=${sectionBg}]`;
   const inactive = `#[fg=${color}] ● #[fg=${INACTIVE_TEXT}]${name} `;
   return `#{?#{==:#{session_name},${name}},${active},${inactive}}`;
@@ -135,6 +121,51 @@ function renderSisyphusSession(tmuxName: string, phase: SessionPhase, sectionBg:
   const active = `#[bg=${ACTIVE_SESSION_BG}]#[fg=${color}] ${icon} #[fg=${ACTIVE_TEXT}]#[bold]S#[nobold] #[bg=${sectionBg}]`;
   const inactive = `#[fg=${color}] ${icon} #[fg=${INACTIVE_TEXT}]S `;
   return `#{?#{==:#{session_name},${tmuxName}},${active},${inactive}}`;
+}
+
+function renderSessionArrow(
+  name: string,
+  leftNeighborName: string | null,
+  leftBg: string,
+  sectionBg: string,
+): string {
+  const active = `#[fg=${ACTIVE_SESSION_BG}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]`;
+  const afterActive = leftNeighborName
+    ? `#[fg=${sectionBg}]#[bg=${ACTIVE_SESSION_BG}]\uE0B2#[bg=${sectionBg}]`
+    : `#[fg=${sectionBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]`;
+
+  if (!leftNeighborName) {
+    return `#{?#{==:#{session_name},${name}},${active},${afterActive}}`;
+  }
+
+  return `#{?#{==:#{session_name},${name}},${active},#{?#{==:#{session_name},${leftNeighborName}},${afterActive},#[fg=${sectionBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]}}`;
+}
+
+function renderSessionBand(
+  parts: Array<{ name: string; rendered: string }>,
+  sectionBg: string,
+  prevBg: string,
+): { content: string; trailingName: string | null } {
+  if (parts.length === 0) return { content: '', trailingName: null };
+
+  let band = '';
+
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i]!;
+    const leftNeighbor = i > 0 ? parts[i - 1]!.name : null;
+    const leftBg = i > 0 ? sectionBg : prevBg;
+    band += renderSessionArrow(part.name, leftNeighbor, leftBg, sectionBg);
+    band += part.rendered;
+  }
+
+  return { content: band, trailingName: parts[parts.length - 1]!.name };
+}
+
+function renderSectionBoundary(targetBg: string, prevBg: string, trailingName: string | null): string {
+  const inactive = `#[fg=${targetBg}]#[bg=${prevBg}]\uE0B2#[bg=${targetBg}]`;
+  if (!trailingName) return inactive;
+  const active = `#[fg=${targetBg}]#[bg=${ACTIVE_SESSION_BG}]\uE0B2#[bg=${targetBg}]`;
+  return `#{?#{==:#{session_name},${trailingName}},${active},${inactive}}`;
 }
 
 // ─── Status-right integration ──────────────────────────────────────────────
@@ -158,7 +189,6 @@ export function ensureStatusRightIntegration(): void {
     const current = tmux.getGlobalOption('status-right');
     if (!current || current.includes('@sisyphus_status')) return;
 
-    // Insert before the time section (the first #[fg= block)
     let updated = current.replace(/#\[fg=/, `${SISYPHUS_STATUS_REF} #[fg=`);
     if (updated === current) updated = SISYPHUS_STATUS_REF + current;
     tmux.setGlobalOption('status-right', updated);
@@ -178,37 +208,25 @@ export function ensureStatusRightIntegration(): void {
 export function writeStatusBar(): void {
   ensureStatusRightIntegration();
 
-  // ─── Flash takeover: replace entire bar with face + commentary ───────────
   const now = Date.now();
-  const isFlashing = now < flashUntil;
 
-  if (isFlashing) {
+  // ─── Flash takeover: replace entire bar with face + commentary ───────────
+  if (now < flashUntil) {
     let rendered = '';
     try {
       const companion = getCachedCompanion();
-      const agentCount = getTotalRunningAgents();
-
-      const baseForm = getBaseForm(companion.level);
-      const face = getMoodFace(companion.mood);
-      const bodyWithFace = baseForm.replace('FACE', face);
-      const cosmetics = getStatCosmetics(companion.stats);
-      const boulder = getBoulderForm(agentCount);
-      const facePart = composeLine(bodyWithFace, cosmetics, boulder);
-
-      const moodColor = MOOD_TMUX_COLORS[companion.mood];
+      const facePart = renderCompanion(companion, ['face', 'boulder'], {
+        tmuxFormat: true,
+        agentCount: getTotalRunningAgents(),
+      });
       const commentary = flashText || companion.lastCommentary?.text || '';
-
-      rendered = `#[fg=${COMPANION_BG}]#[bg=default]\uE0B2`
-        + `#[bg=${COMPANION_BG}]`
-        + `#[fg=${moodColor}] ${facePart} `
-        + `#[fg=${INACTIVE_TEXT}] ${commentary}`
-        + `#[default]`;
+      rendered = `#[fg=${COMPANION_BG}]#[bg=default]\uE0B2#[bg=${COMPANION_BG}] ${facePart} #[fg=${INACTIVE_TEXT}] ${commentary}#[default]`;
     } catch { /* non-fatal */ }
     tmux.setGlobalOption('@sisyphus_status', rendered);
     return;
   }
 
-  // ─── Clear expired flash state ───────────────────────────────────────────
+  // Clear expired flash
   if (flashUntil !== 0) {
     flashText = '';
     flashUntil = 0;
@@ -217,84 +235,81 @@ export function writeStatusBar(): void {
   // ─── Normal status bar ───────────────────────────────────────────────────
   const allPanes = tmux.listAllPanes();
   const allSessions = tmux.listAllSessions();
-
   if (allSessions.length === 0) return;
 
-  // Compute per-session Claude state from pane data
-  const sessionStates = new Map<string, ClaudeState | 'none'>();
-  for (const session of allSessions) {
-    sessionStates.set(session, 'none');
-  }
+  // Per-session Claude state (highest priority wins)
+  const sessionStates = new Map<string, ClaudeState>();
   for (const { sessionName, paneId } of allPanes) {
     const state = readClaudeState(paneId);
     if (!state) continue;
     const current = sessionStates.get(sessionName);
-    if (!current || current === 'none' || STATE_PRIORITY[state] > STATE_PRIORITY[current as ClaudeState]) {
+    if (!current || STATE_PRIORITY[state] > STATE_PRIORITY[current]) {
       sessionStates.set(sessionName, state);
     }
   }
 
-  // Separate normal vs sisyphus sessions
+  // Classify sessions into normal vs sisyphus
   const phases = getSisyphusPhases();
-  const sisyphusTmuxNames = new Set<string>();
-  for (const { tmuxSession } of phases.values()) {
-    sisyphusTmuxNames.add(tmuxSession);
+  const tmuxToPhase = new Map<string, SessionPhase>();
+  for (const { tmuxSession, phase } of phases.values()) {
+    tmuxToPhase.set(tmuxSession, phase);
   }
 
   const normalSessions: string[] = [];
   const sisyphusSessions: Array<{ tmuxName: string; phase: SessionPhase }> = [];
-
   for (const session of allSessions) {
-    if (sisyphusTmuxNames.has(session)) {
-      for (const entry of phases.values()) {
-        if (entry.tmuxSession === session) {
-          sisyphusSessions.push({ tmuxName: session, phase: entry.phase });
-          break;
-        }
-      }
+    const phase = tmuxToPhase.get(session);
+    if (phase) {
+      sisyphusSessions.push({ tmuxName: session, phase });
     } else if (!session.startsWith('ssyph_')) {
       normalSessions.push(session);
     }
   }
 
-  // Order sessions
-  const sessionOrder = getSessionOrder();
-  const orderedNormal = orderSessions(normalSessions, sessionOrder);
+  // Render per-session items
+  const orderedNormal = orderSessions(normalSessions, getSessionOrder());
+  const normalParts = orderedNormal.map(name => ({
+    name,
+    rendered: renderNormalSession(name, sessionStates.get(name) ?? 'none', SESSIONS_BG),
+  }));
+  const sisyphusParts = sisyphusSessions.map(({ tmuxName, phase }) => ({
+    name: tmuxName,
+    rendered: renderSisyphusSession(tmuxName, phase, SISYPHUS_BG),
+  }));
 
-  // Render per-session items (fg only — bg set by section bands)
-  const normalParts = orderedNormal.map(name => {
-    const state = sessionStates.get(name) ?? 'none';
-    return renderNormalSession(name, state, SESSIONS_BG);
-  });
-
-  const sisyphusParts = sisyphusSessions.map(({ tmuxName, phase }) =>
-    renderSisyphusSession(tmuxName, phase, SISYPHUS_BG),
-  );
-
-  // Companion (normal mode — face + boulder, 20 char max)
+  // Companion face + boulder
   let companionStr = '';
   try {
-    const companion = getCachedCompanion();
-    const fields: CompanionField[] = ['face', 'boulder'];
-    companionStr = renderCompanion(companion, fields, { maxWidth: 20, tmuxFormat: true, agentCount: getTotalRunningAgents() });
-  } catch { /* companion render failures are non-fatal */ }
+    companionStr = renderCompanion(getCachedCompanion(), ['face', 'boulder'], {
+      maxWidth: 20,
+      tmuxFormat: true,
+      agentCount: getTotalRunningAgents(),
+    });
+  } catch { /* non-fatal */ }
 
-  // Build powerline with inward-pointing arrows (left-pointing \uE0B2 at section start)
+  // Build powerline with inward-pointing arrows
   let rendered = '';
   let prevBg = 'default';
+  let trailingSessionName: string | null = null;
 
   if (normalParts.length > 0) {
-    rendered += `#[fg=${SESSIONS_BG}]#[bg=${prevBg}]\uE0B2#[bg=${SESSIONS_BG}]${normalParts.join('')} `;
+    const band = renderSessionBand(normalParts, SESSIONS_BG, prevBg);
+    rendered += band.content;
     prevBg = SESSIONS_BG;
+    trailingSessionName = band.trailingName;
   }
 
   if (sisyphusParts.length > 0) {
-    rendered += `#[fg=${SISYPHUS_BG}]#[bg=${prevBg}]\uE0B2#[bg=${SISYPHUS_BG}]${sisyphusParts.join('')} `;
+    rendered += renderSectionBoundary(SISYPHUS_BG, prevBg, trailingSessionName);
+    const band = renderSessionBand(sisyphusParts, SISYPHUS_BG, SISYPHUS_BG);
+    rendered += band.content;
     prevBg = SISYPHUS_BG;
+    trailingSessionName = band.trailingName;
   }
 
   if (companionStr) {
-    rendered += `#[fg=${COMPANION_BG}]#[bg=${prevBg}]\uE0B2#[bg=${COMPANION_BG}] ${companionStr} `;
+    rendered += renderSectionBoundary(COMPANION_BG, prevBg, trailingSessionName);
+    rendered += ` ${companionStr} `;
     prevBg = COMPANION_BG;
   }
 
