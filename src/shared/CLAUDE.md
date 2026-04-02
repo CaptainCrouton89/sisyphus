@@ -55,6 +55,16 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
 - **`Session.parentSessionId`** — set when created via `sisyphus resume`; only used by companion achievement checker (`comeback-kid`). No effect on orchestrator or agent behavior.
 
+## companion-badges.ts Patterns
+
+- **Dual registration required**: adding an achievement to `ACHIEVEMENTS` in `companion-types.ts` also requires an entry in `BADGE_ART` in `companion-badges.ts`. Missing entries silently render blank art — no error thrown, `BADGE_ART[def.id] ?? []` falls back to empty.
+
+- **Fixed card geometry**: `CARD_WIDTH=34`, `CARD_HEIGHT=18` are exported constants used by TUI for layout. Art is hard-capped at 9 lines (extras silently dropped); description wraps at 28 chars, max 2 lines rendered. Changing any of these requires matching TUI updates.
+
+- **Art line centering uses raw visible width**: `centerLine` strips ANSI codes before computing padding. Don't embed ANSI codes in `BADGE_ART` strings — centering will be miscalculated.
+
+- **`createBadgeGallery` sort order**: unlocked achievements first (sorted ascending by `unlockedAt` ISO string), then locked achievements in their original `ACHIEVEMENTS` array order (category grouping). The `startIndex` param is a position in this sorted list, not an achievement index.
+
 ## exec.ts Patterns
 
 - **`EXEC_ENV`** is a module-level singleton (sourced from `env.ts`) that augments `PATH` with Homebrew, nix, and user-local bin dirs at daemon startup. Any `execSync`/`spawn` call that skips `EXEC_ENV` may fail to find `tmux`, `git`, or `claude` in stripped environments (launchd, CI).
