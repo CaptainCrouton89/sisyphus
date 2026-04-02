@@ -123,18 +123,26 @@ export function openInFileManager(path: string): void {
   execSync(`open ${shellQuote(path)}`, { stdio: 'inherit', env: EXEC_ENV });
 }
 
-export function openClaudeResumePopup(cwd: string, claudeSessionId: string): void {
+export function openClaudeResumePopup(cwd: string, claudeSessionId: string, resumeEnv?: string, resumeArgs?: string): void {
   const pathEnv = augmentedPath();
-  const cmd = `PATH=${shellQuote(pathEnv)} claude --resume ${shellQuote(claudeSessionId)}`;
+  const envPrefix = resumeEnv ? `${resumeEnv} && ` : '';
+  const args = resumeArgs
+    ? `${resumeArgs} --resume ${shellQuote(claudeSessionId)}`
+    : `--resume ${shellQuote(claudeSessionId)}`;
+  const cmd = `${envPrefix}PATH=${shellQuote(pathEnv)} claude ${args}`;
   execSync(
     `tmux display-popup -E -w 90% -h 80% -d ${shellQuote(cwd)} ${shellQuote(cmd)}`,
     { stdio: 'inherit', env: EXEC_ENV },
   );
 }
 
-export function openClaudeResumeSession(cwd: string, claudeSessionId: string, sessionLabel: string): string {
+export function openClaudeResumeSession(cwd: string, claudeSessionId: string, sessionLabel: string, resumeEnv?: string, resumeArgs?: string): string {
   const pathEnv = augmentedPath();
-  const cmd = `PATH=${shellQuote(pathEnv)} claude --resume ${shellQuote(claudeSessionId)}`;
+  const envPrefix = resumeEnv ? `${resumeEnv} && ` : '';
+  const args = resumeArgs
+    ? `${resumeArgs} --resume ${shellQuote(claudeSessionId)}`
+    : `--resume ${shellQuote(claudeSessionId)}`;
+  const cmd = `${envPrefix}PATH=${shellQuote(pathEnv)} claude ${args}`;
   const sessionName = tmuxSessionName(cwd, `${sessionLabel}-resume`);
   exec(`tmux new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(cwd)} ${shellQuote(cmd)}`);
   execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);

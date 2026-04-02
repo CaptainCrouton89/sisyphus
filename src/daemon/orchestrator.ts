@@ -360,6 +360,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   ]);
   tmux.sendKeys(paneId, `bash '${scriptPath}'`);
 
+  const resumeArgs = `--dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
+  const resumeEnv = `${envExports} && ${notifyEnvExports}`;
+
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,
     timestamp: new Date().toISOString(),
@@ -368,6 +371,8 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     paneId,
     claudeSessionId,
     mode,
+    resumeEnv,
+    resumeArgs,
   });
 }
 

@@ -60,6 +60,8 @@ export interface Agent {
   paneId: string;
   repo: string;
   killedReason?: string;
+  resumeEnv?: string;
+  resumeArgs?: string;
 }
 
 export interface OrchestratorCycle {
@@ -72,4 +74,6 @@ export interface OrchestratorCycle {
   claudeSessionId?: string;
   nextPrompt?: string;
   mode?: string;
+  resumeEnv?: string;
+  resumeArgs?: string;
 }

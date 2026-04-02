@@ -922,7 +922,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
     try {
       const label = session.name ?? state.selectedSessionId!.slice(0, 8);
-      const sessionName = actions.openClaudeResumeSession(state.cwd, claudeSessionId, label);
+      const sessionName = actions.openClaudeResumeSession(state.cwd, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs);
       actions.switchToSession(sessionName);
     } catch {
       notify(state, 'Failed to open Claude session');
@@ -934,16 +934,22 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'o') {
     if (!cursorNode) { notify(state, 'No node selected'); return; }
     let claudeSessionId: string | undefined;
+    let resumeEnv: string | undefined;
+    let resumeArgs: string | undefined;
     if (cursorNode.type === 'agent' || cursorNode.type === 'report') {
       const agent = actions.getAgentForNode(cursorNode);
       claudeSessionId = agent?.claudeSessionId ?? undefined;
+      resumeEnv = agent?.resumeEnv;
+      resumeArgs = agent?.resumeArgs;
     } else if (cursorNode.type === 'cycle' && session) {
       const cycle = session.orchestratorCycles.find(c => c.cycle === cursorNode.cycleNumber);
       claudeSessionId = cycle?.claudeSessionId;
+      resumeEnv = cycle?.resumeEnv;
+      resumeArgs = cycle?.resumeArgs;
     }
     if (!claudeSessionId) { notify(state, 'No Claude session ID available'); return; }
     try {
-      actions.openClaudeResumePopup(state.cwd, claudeSessionId);
+      actions.openClaudeResumePopup(state.cwd, claudeSessionId, resumeEnv, resumeArgs);
     } catch {
       notify(state, 'Failed to open Claude session');
     }

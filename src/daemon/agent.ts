@@ -153,7 +153,7 @@ interface SetupAgentPaneOpts {
   claudeSessionId?: string;
 }
 
-function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: string } {
+function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: string; resumeEnv: string; resumeArgs?: string } {
   const { sessionId, cycleNum, cwd, agentId, agentType, name, instruction, windowId, color, provider, agentConfig, paneCwd, claudeSessionId } = opts;
 
   const paneId = tmux.createPane(windowId, paneCwd);
@@ -186,6 +186,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   const notifyCmd = buildNotifyCmd(paneId);
 
   let mainCmd: string;
+  let resumeArgs: string | undefined;
 
   if (provider === 'openai') {
     const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
@@ -205,6 +206,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const extraPluginFlags = requiredPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
     mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name ${shellQuote(agentTitle)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    resumeArgs = `--dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
   }
 
   const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [
@@ -216,7 +218,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   ]);
   const fullCmd = `bash '${scriptPath}'`;
 
-  return { paneId, fullCmd };
+  return { paneId, fullCmd, resumeEnv: envExports, resumeArgs };
 }
 
 export interface SpawnAgentOpts {
@@ -257,7 +259,7 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
-  const { paneId, fullCmd } = setupAgentPane({
+  const { paneId, fullCmd, resumeEnv, resumeArgs } = setupAgentPane({
     sessionId, sessionName: opts.sessionName, cycleNum: opts.cycleNum, cwd, agentId, agentType, name, instruction,
     windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
@@ -277,6 +279,8 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
     reports: [],
     paneId,
     repo,
+    resumeEnv,
+    resumeArgs,
   };
 
   await state.addAgent(cwd, sessionId, agent);
