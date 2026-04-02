@@ -196,10 +196,18 @@ export function ensureStatusRightIntegration(): void {
 
   try {
     const current = tmux.getGlobalOption('status-right');
-    if (!current || current.includes('@sisyphus_status')) return;
+    if (!current) return;
 
-    let updated = current.replace(/#\[fg=/, `${SISYPHUS_STATUS_REF} #[fg=`);
-    if (updated === current) updated = SISYPHUS_STATUS_REF + current;
+    let updated = current
+      .replace(/#\{E:@sisyphus_status\}\s+#\[fg=/, `${SISYPHUS_STATUS_REF}#[fg=`)
+      .replace(/#\{E:@sisyphus_status\}\s+$/, SISYPHUS_STATUS_REF);
+
+    if (!updated.includes('@sisyphus_status')) {
+      updated = updated.replace(/#\[fg=/, `${SISYPHUS_STATUS_REF}#[fg=`);
+      if (updated === current) updated = SISYPHUS_STATUS_REF + current;
+    }
+
+    if (updated === current) return;
     tmux.setGlobalOption('status-right', updated);
 
     try {
