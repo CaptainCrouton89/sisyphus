@@ -22,6 +22,7 @@
   "files": [
     "dist",
     "templates",
+    "native",
     "README.md"
   ],
   "bin": {
@@ -33,7 +34,7 @@
     "dev": "tsup --watch",
     "dev:daemon": "tsup --watch --onSuccess 'node dist/daemon.js restart'",
     "test": "node --import tsx --test src/__tests__/*.test.ts",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true; bash native/build-notify.sh 2>/dev/null || true",
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
