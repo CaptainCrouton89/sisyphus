@@ -2,11 +2,6 @@
 
 Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
-## Config & Effort Levels
-
-- **EffortLevel** type: `'low' | 'medium' | 'high' | 'max'` — case-sensitive, must be exact match
-- **Immutable at runtime** — Load once via `loadConfig(cwd)`, don't re-read files
-
 ## paths.ts Patterns
 
 - **`daemonUpdatingPath()`** returns `~/.sisyphus/updating` — sentinel file written by `updater.ts` containing the version being installed. CLI's `waitForDaemon` extends its socket-ready timeout while this file exists; without it the CLI times out during self-updates.
@@ -19,9 +14,7 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
 - **`contextDir`** — Files here (excluding `CLAUDE.md`) are injected into the orchestrator prompt on cycle 1+. On cycle 0, only `session.context` string is used — files added before the first yield won't be seen until cycle 1. `state.ts` seeds this dir with `CLAUDE.md` always, and `initial-context.md` if context was provided.
 
-- **`goalPath`** — Written at session creation. Overwritten by the `update-task` protocol request; TUI and context summary always read the file directly.
-
-- **`strategyPath`** — Written by the orchestrator (not at session creation); shows as `(empty)` until first written. Persists across cycles — orchestrator updates it in place.
+- **`strategyPath`** — Written by the orchestrator (not at session creation); shows as `(empty)` until first written. Persists across cycles.
 
 - **`messagesDir`** — Only messages longer than 200 chars get a file here (`{messageId}.md`); shorter messages stored inline in state.json. Don't assume `message.content` is full text when `filePath` is set.
 
@@ -31,13 +24,11 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
 ## Protocol Patterns
 
-- **`report` vs `submit`**: `report` → `AgentReport.type: 'update'` (intermediate snapshot); `submit` → `AgentReport.type: 'final'` (completion signal, marks agent done). Orchestrator state summary uses `final` if present, else falls back to last `update`. An agent that only ever calls `report` never completes.
+- **`report` vs `submit`**: `report` → `AgentReport.type: 'update'`; `submit` → `AgentReport.type: 'final'` (marks agent done). Orchestrator state summary uses `final` if present, else falls back to last `update`. An agent that only calls `report` never completes.
 
 - **`continue` vs `resume` vs `reopen-window`**: `continue` reactivates a `completed` session in-place — clears `completedAt`/`completionReport`, no cycle increment, no message injection. `resume` increments the cycle and optionally injects a message. `reopen-window` recreates the tmux window without touching state or cycle count.
 
-- **`update-task`** — amends the task description; overwrites `goalPath`. Orchestrator sees the new task on its next cycle's context summary.
-
-- **`yield.nextPrompt`** — replaces the default "Review the current session…" continuation instruction for the next cycle's user prompt. Overridden by `sisyphus resume --message` if both are present — the stateless orchestrator's only way to carry explicit intent across a cycle boundary.
+- **`yield.nextPrompt`** — replaces the default continuation instruction for the next cycle's user prompt; overridden by `sisyphus resume --message` if both are present.
 
 - **`yield.mode`** — stored on the completed `OrchestratorCycle`; read on next orchestrator spawn to select which template file to load (falls back to `'strategy'`). Available mode names are injected into the system prompt each cycle.
 
@@ -49,11 +40,15 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
 - **`resumeEnv` / `resumeArgs`** — exact env-export string and CLI flags captured at spawn time. If absent (OpenAI agents), TUI still attempts resume without flags.
 
+- **`Session.tmuxSessionId`** — tmux `$N` numeric ID (e.g. `$3`), stable across session renames. `tmuxSessionName` can change; `isSessionAlive` prefers `tmuxSessionId` for liveness checks. Both fields optional — absent on sessions created before this field was added.
+
+- **`Agent.repo`** — relative subdir path from session `cwd`; pane CWD is set to `join(cwd, repo)` at spawn. Default `'.'` (same as session cwd). `state.ts` backfills missing `repo` to `'.'` on load. Orchestrator can filter `session.agents` by `a.repo` to group work by subdirectory.
+
+- **`Agent.nickname`** — AI-generated display name set asynchronously post-spawn via `companion-commentary.ts`. Companion gamification only; never used in protocol or scheduling logic.
+
 - **`Session.launchConfig`** — snapshot of `{ model, context, orchestratorPrompt }` at session creation. Never read by daemon after creation — audit trail only.
 
 - **`Session.wallClockMs` / `startHour` / `startDayOfWeek`** — companion analytics fields. `wallClockMs` written at session completion; `startHour`/`startDayOfWeek` at creation. Not used by daemon scheduling or orchestrator logic.
-
-- **`Session.parentSessionId`** — set when created via `sisyphus resume`; only used by companion achievement checker (`comeback-kid`). No effect on orchestrator or agent behavior.
 
 ## companion-badges.ts Patterns
 
@@ -63,7 +58,7 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 
 - **Art line centering uses raw visible width**: `centerLine` strips ANSI codes before computing padding. Don't embed ANSI codes in `BADGE_ART` strings — centering will be miscalculated.
 
-- **`createBadgeGallery` sort order**: unlocked achievements first (sorted ascending by `unlockedAt` ISO string), then locked achievements in their original `ACHIEVEMENTS` array order (category grouping). The `startIndex` param is a position in this sorted list, not an achievement index.
+- **`createBadgeGallery` sort order**: unlocked achievements first (sorted ascending by `unlockedAt` ISO string), then locked in original `ACHIEVEMENTS` array order. The `startIndex` param is a position in this sorted list, not an achievement index.
 
 ## exec.ts Patterns
 
