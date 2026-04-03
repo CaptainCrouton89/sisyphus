@@ -36,6 +36,7 @@ import { registerInit } from './commands/init.js';
 import { registerSetup } from './commands/setup.js';
 import { registerTmuxStatus } from './commands/tmux-status.js';
 import { registerTmuxSessions } from './commands/tmux-sessions.js';
+import { registerHistory } from './commands/history.js';
 import { globalDir } from '../shared/paths.js';
 
 const program = new Command();
@@ -81,6 +82,7 @@ registerInit(program);
 registerSetup(program);
 registerTmuxStatus(program);
 registerTmuxSessions(program);
+registerHistory(program);
 
 program.addHelpText('after', `
 Examples:
