@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import type { Command } from 'commander';
 import { runOnboarding, type OnboardResult } from '../onboard.js';
 import { ensureDaemonInstalled, isInstalled } from '../install.js';
-import { setupTmuxKeybind, DEFAULT_KEY, DEFAULT_HOME_KEY } from '../tmux-setup.js';
+import { setupTmuxKeybind, DEFAULT_CYCLE_KEY, DEFAULT_PREFIX_KEY } from '../tmux-setup.js';
 
 function getTmuxVersion(): string {
   try {
@@ -115,7 +115,7 @@ export function registerSetup(program: Command): void {
       const keybindResult = setupTmuxKeybind();
       let keybindMsg: string;
       if (keybindResult.status === 'installed' || keybindResult.status === 'already-installed') {
-        keybindMsg = `${DEFAULT_KEY} (cycle), ${DEFAULT_HOME_KEY} (dashboard)`;
+        keybindMsg = `${DEFAULT_CYCLE_KEY} cycle, ${DEFAULT_PREFIX_KEY} prefix (h=dashboard, x=kill)`;
       } else {
         keybindMsg = keybindResult.message;
       }

@@ -1,12 +1,12 @@
 import type { Command } from 'commander';
-import { DEFAULT_KEY, setupTmuxKeybind } from '../tmux-setup.js';
+import { DEFAULT_CYCLE_KEY, setupTmuxKeybind } from '../tmux-setup.js';
 
 export function registerSetupKeybind(program: Command): void {
   program
-    .command('setup-keybind [key]')
-    .description('Install the sisyphus-cycle tmux keybinding (default: M-s)')
+    .command('setup-keybind [cycle-key]')
+    .description('Install sisyphus tmux keybindings (default: M-s cycle, C-s prefix)')
     .action(async (key: string | undefined) => {
-      const resolvedKey = key ?? DEFAULT_KEY;
+      const resolvedKey = key ?? DEFAULT_CYCLE_KEY;
       const result = setupTmuxKeybind(resolvedKey);
 
       switch (result.status) {

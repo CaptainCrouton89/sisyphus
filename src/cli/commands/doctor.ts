@@ -4,7 +4,7 @@ import type { Command } from 'commander';
 import { daemonLogPath, daemonPidPath, globalDir, socketPath } from '../../shared/paths.js';
 import { isInstalled } from '../install.js';
 import { detectTerminal, checkItermOptionKey, isNvimAvailable, isBeginCommandInstalled } from '../onboard.js';
-import { cycleScriptPath, DEFAULT_KEY, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath } from '../tmux-setup.js';
+import { cycleScriptPath, DEFAULT_CYCLE_KEY, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath } from '../tmux-setup.js';
 
 interface Check {
   name: string;
@@ -153,28 +153,28 @@ function checkCycleScript(): Check {
 }
 
 function checkTmuxKeybind(): Check {
-  const existing = getExistingBinding(DEFAULT_KEY);
+  const existing = getExistingBinding(DEFAULT_CYCLE_KEY);
   if (existing === null) {
     // Also check if the sisyphus tmux.conf exists (binding might be configured but tmux not running)
     if (existsSync(sisyphusTmuxConfPath())) {
       return {
-        name: `Tmux keybind (${DEFAULT_KEY})`,
+        name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
         status: 'warn',
         detail: 'Configured in sisyphus tmux.conf but not active (tmux may not be running)',
       };
     }
     return {
-      name: `Tmux keybind (${DEFAULT_KEY})`,
+      name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
       status: 'fail',
       detail: 'Not bound',
       fix: 'sisyphus setup-keybind',
     };
   }
   if (isSisyphusBinding(existing)) {
-    return { name: `Tmux keybind (${DEFAULT_KEY})`, status: 'ok', detail: 'Bound to sisyphus-cycle' };
+    return { name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`, status: 'ok', detail: 'Bound to sisyphus-cycle' };
   }
   return {
-    name: `Tmux keybind (${DEFAULT_KEY})`,
+    name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
     status: 'warn',
     detail: `Bound to something else: ${existing}`,
     fix: 'sisyphus setup-keybind M-S  (or another free key)',

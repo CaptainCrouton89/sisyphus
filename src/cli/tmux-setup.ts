@@ -4,21 +4,34 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { globalDir } from '../shared/paths.js';
 
-export const DEFAULT_KEY = 'M-s';
-export const DEFAULT_HOME_KEY = 'M-S';
+export const DEFAULT_CYCLE_KEY = 'M-s';
+export const DEFAULT_PREFIX_KEY = 'C-s';
+export const KEY_TABLE = 'sisyphus';
 
 const SISYPHUS_CONF_MARKER = '# sisyphus-managed — do not edit';
 
+function scriptPath(name: string): string {
+  return join(globalDir(), 'bin', name);
+}
+
 export function cycleScriptPath(): string {
-  return join(globalDir(), 'bin', 'sisyphus-cycle');
+  return scriptPath('sisyphus-cycle');
 }
 
 export function homeScriptPath(): string {
-  return join(globalDir(), 'bin', 'sisyphus-home');
+  return scriptPath('sisyphus-home');
 }
 
 export function killPaneScriptPath(): string {
-  return join(globalDir(), 'bin', 'sisyphus-kill-pane');
+  return scriptPath('sisyphus-kill-pane');
+}
+
+export function newPromptScriptPath(): string {
+  return scriptPath('sisyphus-new');
+}
+
+export function messageScriptPath(): string {
+  return scriptPath('sisyphus-msg');
 }
 
 export function sisyphusTmuxConfPath(): string {
@@ -26,7 +39,6 @@ export function sisyphusTmuxConfPath(): string {
 }
 
 function userTmuxConfPath(): string | null {
-  // Check both standard locations, preferring whichever exists
   const dotfile = join(homedir(), '.tmux.conf');
   const xdg = join(homedir(), '.config', 'tmux', 'tmux.conf');
   if (existsSync(xdg)) return xdg;
@@ -34,7 +46,8 @@ function userTmuxConfPath(): string | null {
   return null;
 }
 
-const CYCLE_SCRIPT = `#!/bin/bash
+// --- Manifest helper used by multiple scripts ---
+const MANIFEST_LOOKUP = `
 MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
 [ ! -f "$MANIFEST" ] && exit 0
 current=$(tmux display-message -p '#{session_name}')
@@ -43,7 +56,10 @@ cwd=""
 while IFS=$'\\t' read -r type name scwd phase dwid; do
   [ "$name" = "$current" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
-[ -z "$cwd" ] && exit 0
+[ -z "$cwd" ] && exit 0`.trim();
+
+const CYCLE_SCRIPT = `#!/bin/bash
+${MANIFEST_LOOKUP}
 # Collect all sessions (S and H) matching this cwd
 sessions=()
 while IFS=$'\\t' read -r type name scwd phase dwid; do
@@ -62,21 +78,17 @@ tmux switch-client -t "\${sessions[0]}"
 `;
 
 const HOME_SCRIPT = `#!/bin/bash
-# Jump to the home (non-sisyphus) session that has the dashboard window
-MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
-[ ! -f "$MANIFEST" ] && exit 0
-current=$(tmux display-message -p '#{session_name}')
-# Find cwd for current session
-cwd=""
-while IFS=$'\\t' read -r type name scwd phase dwid; do
-  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
-done < "$MANIFEST"
-[ -z "$cwd" ] && exit 0
-# Find home session for this cwd
+# Jump to the home session's dashboard window
+${MANIFEST_LOOKUP}
+# Find home session for this cwd and select dashboard window
 while IFS=$'\\t' read -r type name scwd phase dwid; do
   if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
     tmux switch-client -t "$name"
-    [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
+    # Try window ID first, fall back to window name
+    if [ -n "$dwid" ]; then
+      tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
+        tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
+    fi
     exit 0
   fi
 done < "$MANIFEST"
@@ -89,7 +101,6 @@ session=$(tmux display-message -p '#{session_name}')
 pane_count=$(tmux list-panes -t "$session" -F '#{pane_id}' | wc -l | tr -d ' ')
 
 if [ "$pane_count" -le 1 ]; then
-  # Last pane — find home session from manifest, switch there, then kill
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   if [ -f "$MANIFEST" ]; then
     cwd=""
@@ -100,52 +111,84 @@ if [ "$pane_count" -le 1 ]; then
       while IFS=$'\\t' read -r type name scwd phase dwid; do
         if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
           tmux switch-client -t "$name"
-          [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
+          if [ -n "$dwid" ]; then
+            tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
+              tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
+          fi
           tmux kill-session -t "$session"
           exit 0
         fi
       done < "$MANIFEST"
     fi
   fi
-  # No home session found — just kill the pane
   tmux kill-pane
 else
-  # Multiple panes — kill this one and rebalance
   tmux kill-pane
   tmux select-layout even-horizontal
 fi
 `;
 
-export function installCycleScript(): void {
+const NEW_PROMPT_SCRIPT = `#!/bin/bash
+# Open nvim to compose a new sisyphus task, then start a session
+tmpfile=$(mktemp /tmp/sisyphus-new-XXXXXX.md)
+trap 'rm -f "$tmpfile"' EXIT
+nvim "$tmpfile"
+grep -q '[^[:space:]]' "$tmpfile" || exit 0
+exec sisyphus start "$(cat "$tmpfile")"
+`;
+
+const MESSAGE_SCRIPT = `#!/bin/bash
+# Open nvim to compose a message for the current session's orchestrator
+# Resolve session ID: direct tmux option → manifest lookup
+session_name=$(tmux display-message -p '#{session_name}')
+session_id=$(tmux show-options -t "$session_name" -v @sisyphus_session_id 2>/dev/null)
+
+if [ -z "$session_id" ]; then
+  MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+  [ ! -f "$MANIFEST" ] && { echo "No active sessions found"; sleep 1; exit 1; }
+  cwd=""
+  while IFS=$'\\t' read -r type name scwd phase dwid; do
+    [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
+  done < "$MANIFEST"
+  [ -z "$cwd" ] && { echo "Session not in manifest"; sleep 1; exit 1; }
+  while IFS=$'\\t' read -r type name scwd phase dwid; do
+    if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
+      session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
+      [ -n "$session_id" ] && break
+    fi
+  done < "$MANIFEST"
+fi
+
+[ -z "$session_id" ] && { echo "No active sisyphus session found"; sleep 1; exit 1; }
+
+tmpfile=$(mktemp /tmp/sisyphus-msg-XXXXXX.md)
+trap 'rm -f "$tmpfile"' EXIT
+nvim "$tmpfile"
+grep -q '[^[:space:]]' "$tmpfile" || exit 0
+exec sisyphus message --session "$session_id" "$(cat "$tmpfile")"
+`;
+
+function installScript(name: string, content: string): void {
   mkdirSync(join(globalDir(), 'bin'), { recursive: true });
-  const scriptPath = cycleScriptPath();
-  writeFileSync(scriptPath, CYCLE_SCRIPT, 'utf8');
-  chmodSync(scriptPath, 0o755);
+  const path = scriptPath(name);
+  writeFileSync(path, content, 'utf8');
+  chmodSync(path, 0o755);
 }
 
-export function installHomeScript(): void {
-  mkdirSync(join(globalDir(), 'bin'), { recursive: true });
-  const scriptPath = homeScriptPath();
-  writeFileSync(scriptPath, HOME_SCRIPT, 'utf8');
-  chmodSync(scriptPath, 0o755);
+function installAllScripts(): void {
+  installScript('sisyphus-cycle', CYCLE_SCRIPT);
+  installScript('sisyphus-home', HOME_SCRIPT);
+  installScript('sisyphus-kill-pane', KILL_PANE_SCRIPT);
+  installScript('sisyphus-new', NEW_PROMPT_SCRIPT);
+  installScript('sisyphus-msg', MESSAGE_SCRIPT);
 }
 
-export function installKillPaneScript(): void {
-  mkdirSync(join(globalDir(), 'bin'), { recursive: true });
-  const scriptPath = killPaneScriptPath();
-  writeFileSync(scriptPath, KILL_PANE_SCRIPT, 'utf8');
-  chmodSync(scriptPath, 0o755);
-}
-
-export function getExistingBinding(key: string): string | null {
+export function getExistingBinding(key: string, table: string = 'root'): string | null {
   try {
-    const output = execSync('tmux list-keys', { stdio: ['pipe', 'pipe', 'pipe'] }).toString();
+    const output = execSync(`tmux list-keys -T ${table}`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString();
     for (const line of output.split('\n')) {
-      // lines look like: bind-key -T root M-s run-shell ...
-      // or:              bind-key    -T root M-s run-shell ...
       if (line.includes(key)) {
         const parts = line.trim().split(/\s+/);
-        // Find the key in parts and check it matches exactly (not as substring of another key)
         const keyIdx = parts.indexOf(key);
         if (keyIdx !== -1) {
           return line.trim();
@@ -154,7 +197,6 @@ export function getExistingBinding(key: string): string | null {
     }
     return null;
   } catch {
-    // tmux not running or not available
     return null;
   }
 }
@@ -168,44 +210,43 @@ export type SetupResult =
   | { status: 'already-installed'; message: string }
   | { status: 'conflict'; message: string; existingBinding: string };
 
-export function setupTmuxKeybind(key: string = DEFAULT_KEY, homeKey: string = DEFAULT_HOME_KEY): SetupResult {
-  installCycleScript();
-  installHomeScript();
-  installKillPaneScript();
+export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey: string = DEFAULT_PREFIX_KEY): SetupResult {
+  installAllScripts();
 
-  // Check for existing binding before writing anything
-  const existing = getExistingBinding(key);
-  if (existing !== null && !isSisyphusBinding(existing)) {
-    return {
-      status: 'conflict',
-      message: `Tmux key ${key} is already bound to something else. Run "sisyphus setup-keybind <key>" to use a different key.`,
-      existingBinding: existing,
-    };
-  }
-
-  // Check home key for conflicts too (only if different from cycle key)
-  if (homeKey !== key) {
-    const existingHome = getExistingBinding(homeKey);
-    if (existingHome !== null && !isSisyphusBinding(existingHome)) {
+  // Check for existing bindings before writing anything
+  for (const [label, key] of [['cycle', cycleKey], ['prefix', prefixKey]] as const) {
+    const existing = getExistingBinding(key);
+    if (existing !== null && !isSisyphusBinding(existing)) {
       return {
         status: 'conflict',
-        message: `Tmux key ${homeKey} is already bound to something else.`,
-        existingBinding: existingHome,
+        message: `Tmux key ${key} (${label}) is already bound to something else. Run "sisyphus setup-keybind <key>" to use a different key.`,
+        existingBinding: existing,
       };
     }
   }
 
-  // Write ~/.sisyphus/tmux.conf with keybindings + prefix-x override
+  // Build binding lines
+  const popupOpts = `-E -w 80% -h 60%`;
+  const bindings = [
+    // Root-table: direct cycle + prefix entry
+    `bind-key -T root ${cycleKey} run-shell ${cycleScriptPath()}`,
+    `bind-key -T root ${prefixKey} switch-client -T ${KEY_TABLE}`,
+    // Sisyphus key table
+    `bind-key -T ${KEY_TABLE} s run-shell ${cycleScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} h run-shell ${homeScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} x run-shell ${killPaneScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} n display-popup ${popupOpts} -d "#{pane_current_path}" ${newPromptScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} m display-popup ${popupOpts} -d "#{pane_current_path}" ${messageScriptPath()}`,
+    // prefix-x smart kill
+    `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`,
+  ];
+
   const confPath = sisyphusTmuxConfPath();
-  const cycleBinding = `bind-key -T root ${key} run-shell ${cycleScriptPath()}`;
-  const homeBinding = `bind-key -T root ${homeKey} run-shell ${homeScriptPath()}`;
-  const killPaneOverride = `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`;
-  writeFileSync(confPath, `${SISYPHUS_CONF_MARKER}\n${cycleBinding}\n${homeBinding}\n${killPaneOverride}\n`, 'utf8');
+  writeFileSync(confPath, `${SISYPHUS_CONF_MARKER}\n${bindings.join('\n')}\n`, 'utf8');
 
   // Append source line to tmux.conf if not already there
   const userConf = userTmuxConfPath();
-  const sourceLine = `source-file ${confPath}`;
-  const markedSourceLine = `${sourceLine} ${SISYPHUS_CONF_MARKER}`;
+  const markedSourceLine = `source-file ${confPath} ${SISYPHUS_CONF_MARKER}`;
   let persistedToConf = false;
 
   if (userConf !== null) {
@@ -217,19 +258,19 @@ export function setupTmuxKeybind(key: string = DEFAULT_KEY, homeKey: string = DE
     persistedToConf = true;
   }
 
-  // Apply bindings live if tmux is running
+  // Apply bindings live
   try {
-    execSync(`tmux bind-key -T root ${key} run-shell ${cycleScriptPath()}`, { stdio: 'pipe' });
-    execSync(`tmux bind-key -T root ${homeKey} run-shell ${homeScriptPath()}`, { stdio: 'pipe' });
-    execSync(`tmux ${killPaneOverride}`, { stdio: 'pipe' });
+    for (const b of bindings) {
+      execSync(`tmux ${b}`, { stdio: 'pipe' });
+    }
   } catch {
-    // tmux not running — bindings will take effect on next session start
+    // tmux not running
   }
 
-  if (existing !== null && isSisyphusBinding(existing)) {
+  if (getExistingBinding(cycleKey) !== null && isSisyphusBinding(getExistingBinding(cycleKey)!)) {
     return {
       status: 'already-installed',
-      message: `Tmux keybindings ${key} (cycle) and ${homeKey} (dashboard) already configured for sisyphus.`,
+      message: `Tmux keybindings already configured: ${cycleKey} (cycle), ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill).`,
     };
   }
 
@@ -238,14 +279,12 @@ export function setupTmuxKeybind(key: string = DEFAULT_KEY, homeKey: string = DE
     : `\nNote: No tmux.conf found. Add this to your tmux config for persistence:\n  source-file ${confPath}`;
   return {
     status: 'installed',
-    message: `Tmux keybindings set: ${key} cycles sessions, ${homeKey} jumps to dashboard${persistNote}`,
+    message: `Tmux keybindings set: ${cycleKey} cycles, ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill)${persistNote}`,
   };
 }
 
 export function removeTmuxKeybind(): void {
-  // Remove source line from user's tmux.conf
   const confPath = sisyphusTmuxConfPath();
-  // Check both possible tmux.conf locations
   for (const candidate of [join(homedir(), '.tmux.conf'), join(homedir(), '.config', 'tmux', 'tmux.conf')]) {
     if (existsSync(candidate)) {
       const contents = readFileSync(candidate, 'utf8');
@@ -259,22 +298,30 @@ export function removeTmuxKeybind(): void {
     }
   }
 
-  // Remove ~/.sisyphus/tmux.conf
   if (existsSync(confPath)) {
     unlinkSync(confPath);
   }
 
-  // Restore default prefix-x binding if tmux is running
+  // Unbind live
   try {
+    execSync(`tmux unbind-key -T root ${DEFAULT_CYCLE_KEY}`, { stdio: 'pipe' });
+    execSync(`tmux unbind-key -T root ${DEFAULT_PREFIX_KEY}`, { stdio: 'pipe' });
+    const output = execSync(`tmux list-keys -T ${KEY_TABLE}`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString();
+    for (const line of output.split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 4 && parts[2] === KEY_TABLE) {
+        execSync(`tmux unbind-key -T ${KEY_TABLE} ${parts[3]}`, { stdio: 'pipe' });
+      }
+    }
     execSync('tmux bind-key -T prefix x kill-pane \\; select-layout even-horizontal', { stdio: 'pipe' });
   } catch {
     // tmux not running
   }
 
   // Remove scripts
-  for (const scriptPath of [cycleScriptPath(), homeScriptPath(), killPaneScriptPath()]) {
-    if (existsSync(scriptPath)) {
-      unlinkSync(scriptPath);
-    }
+  const scripts = ['sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg'];
+  for (const name of scripts) {
+    const path = scriptPath(name);
+    if (existsSync(path)) unlinkSync(path);
   }
 }
