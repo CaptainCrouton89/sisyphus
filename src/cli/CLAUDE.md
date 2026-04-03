@@ -34,19 +34,19 @@ Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 
 Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.conf` then sourced into user's tmux config (prefers XDG `~/.config/tmux/tmux.conf` over `~/.tmux.conf`). If no user config exists, the source line is omitted and a manual instruction is printed.
 
-**Session grouping**: cycle/home/kill scripts match sessions by `@sisyphus_cwd` tmux option — only sessions sharing the same cwd are cycled together. This option must be set on each sisyphus tmux session by the daemon at spawn time.
+**Session grouping**: cycle/home/kill scripts read `~/.sisyphus/sessions-manifest.tsv` (written by the daemon) to find related sessions. TSV columns: `type\tname\tcwd\tphase\tdwid`. `type=H` is the home session; other types are sisyphus sessions. Lines starting with `#` are skipped. Scripts group by matching `cwd` — only same-cwd sessions cycle together. The daemon is solely responsible for keeping this file current.
 
-**Session identity**: `ssyph_` prefix marks agent/orchestrator sessions (bash pattern `ssyph_*`). Home/kill scripts skip these when searching for the home session.
+**Session identity**: `ssyph_` prefix marks agent/orchestrator sessions. The `prefix-x` override uses `grep -q '^ssyph_'` on the session name — home/non-sisyphus sessions get default `kill-pane ; select-layout even-horizontal` directly.
 
-**`@sisyphus_dashboard`** stores a window *ID* (e.g. `@3`), not a name — so jumping to the dashboard survives window renames.
+**Dashboard window**: `dwid` column in the manifest stores a window *ID* (e.g. `@3`), not a name — so jumping to the dashboard survives window renames.
 
-**`prefix-x` override**: the tmux.conf bind-key uses `if-shell` to only invoke the kill-pane script for `ssyph_*` sessions; non-sisyphus sessions get `kill-pane ; select-layout even-horizontal` directly. Within the script:
-- **Multiple panes**: kills current pane + runs `select-layout even-horizontal`
-- **Last pane**: switches to home session dashboard, then calls `kill-session` (the whole session is destroyed, not just the pane); falls through to plain `kill-pane` if no home session found
+**`prefix-x` override** (within kill-pane script):
+- **Multiple panes**: kills current pane + `select-layout even-horizontal`
+- **Last pane**: looks up home session via manifest, switches there + selects dashboard window, then `kill-session`; falls through to plain `kill-pane` if no home session found
 
-**`setupTmuxKeybind`** always reinstalls all three scripts (`cycle`, `home`, `kill-pane`) and rewrites `~/.sisyphus/tmux.conf` (idempotent), then checks `tmux list-keys` for conflicts on both the cycle key and home key before touching the user's tmux config. On conflict, scripts exist in `~/.sisyphus/bin/` but no bindings are configured. `already-installed` status is cosmetic only — writes still happen. Also applies bindings live via `tmux bind-key` if a server is running — no reload needed. **Conflict detection requires a running tmux server** — if tmux is down at setup time, `getExistingBinding` returns null and all bindings are written without conflict checking.
+**`setupTmuxKeybind`** always reinstalls all three scripts and rewrites `~/.sisyphus/tmux.conf` (idempotent), then checks `tmux list-keys` for conflicts on both keys before touching user config. On conflict with a non-sisyphus binding: scripts are written but conf and source line are not. `already-installed` status is cosmetic only — script and conf writes still happen. Applies bindings live via `tmux bind-key` if a server is running. **Conflict detection requires a running tmux server** — if tmux is down, `getExistingBinding` returns null and all bindings are written without conflict checking.
 
-**`removeTmuxKeybind`** scans both `~/.tmux.conf` and `~/.config/tmux/tmux.conf` for the source line regardless of which one setup wrote to — handles cases where the user has moved their config since install. Also restores the default `prefix-x` binding (`kill-pane ; select-layout even-horizontal`) live if tmux is running.
+**`removeTmuxKeybind`** scans both `~/.tmux.conf` and `~/.config/tmux/tmux.conf` for the source line regardless of which was written — handles config moves since install. Also deletes the three scripts from `~/.sisyphus/bin/` and restores default `prefix-x` live if tmux is running.
 
 **Status bar**: Daemon renders the complete status string and writes it to the global tmux option `@sisyphus_status`. To show session indicators, add `#{@sisyphus_status}` to `status-right`. No shell scripts — the daemon pre-renders tmux format strings with per-client conditionals for current-session highlighting. Updated every poll cycle (5s). `@sisyphus_phase` is still written per-session for CLI commands (`tmux-sessions`).
 
