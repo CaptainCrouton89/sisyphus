@@ -86,6 +86,51 @@ export function writeSessionSummary(
   }
 }
 
+/**
+ * Load the most recent non-null sentiments from session history.
+ * Scans at most `scanLimit` dirs (by mtime, newest first) to avoid reading everything.
+ */
+export function getRecentSentiments(count = 5, scanLimit = 30, overrideBaseDir?: string): Array<{ sentiment: string; task: string; completedAt: string }> {
+  try {
+    const base = overrideBaseDir ?? historyBaseDir();
+    let entries: string[];
+    try {
+      entries = readdirSync(base);
+    } catch {
+      return [];
+    }
+
+    // Sort dirs by mtime descending (newest first)
+    const withMtime: Array<{ name: string; mtime: number }> = [];
+    for (const name of entries) {
+      try {
+        const st = statSync(join(base, name));
+        if (st.isDirectory()) withMtime.push({ name, mtime: st.mtimeMs });
+      } catch { continue; }
+    }
+    withMtime.sort((a, b) => b.mtime - a.mtime);
+
+    const results: Array<{ sentiment: string; task: string; completedAt: string }> = [];
+    const limit = Math.min(withMtime.length, scanLimit);
+    for (let i = 0; i < limit && results.length < count; i++) {
+      try {
+        const raw = readFileSync(join(base, withMtime[i].name, 'session.json'), 'utf-8');
+        const summary = JSON.parse(raw) as SessionSummary;
+        if (summary.sentiment) {
+          results.push({
+            sentiment: summary.sentiment,
+            task: summary.task.slice(0, 100),
+            completedAt: summary.completedAt,
+          });
+        }
+      } catch { continue; }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 const PRUNE_KEEP_COUNT = 200;
 const PRUNE_KEEP_DAYS = 90;
 

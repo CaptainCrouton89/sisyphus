@@ -7,11 +7,6 @@ import { loadCompanion } from './companion.js';
 import { renderCompanion } from '../shared/companion-render.js';
 import type { CompanionState } from '../shared/companion-types.js';
 
-// ─── Companion flash state ──────────────────────────────────────────────────
-
-let flashUntil = 0;
-let flashText = '';
-
 // ─── Companion cache (10s TTL) ──────────────────────────────────────────────
 
 let cachedCompanion: CompanionState | null = null;
@@ -25,11 +20,6 @@ function getCachedCompanion(): CompanionState {
     companionCacheTime = now;
   }
   return cachedCompanion;
-}
-
-export function flashCompanion(text: string, durationMs = 10_000): void {
-  flashText = text;
-  flashUntil = Date.now() + durationMs;
 }
 
 const SESSION_ORDER_PATH = join(homedir(), '.config', 'tmux', 'session-order');
@@ -224,31 +214,6 @@ export function ensureStatusRightIntegration(): void {
 export function writeStatusBar(): void {
   ensureStatusRightIntegration();
 
-  const now = Date.now();
-
-  // ─── Flash takeover: replace entire bar with face + commentary ───────────
-  if (now < flashUntil) {
-    let rendered = '';
-    try {
-      const companion = getCachedCompanion();
-      const facePart = renderCompanion(companion, ['face', 'boulder'], {
-        tmuxFormat: true,
-        agentCount: getTotalRunningAgents(),
-      });
-      const commentary = flashText || companion.lastCommentary?.text || '';
-      rendered = `#[fg=${COMPANION_BG}]#[bg=default]\uE0B2#[bg=${COMPANION_BG}] ${facePart} #[fg=${INACTIVE_TEXT}] ${commentary}#[default]`;
-    } catch { /* non-fatal */ }
-    tmux.setGlobalOption('@sisyphus_status', rendered);
-    return;
-  }
-
-  // Clear expired flash
-  if (flashUntil !== 0) {
-    flashText = '';
-    flashUntil = 0;
-  }
-
-  // ─── Normal status bar ───────────────────────────────────────────────────
   const allPanes = tmux.listAllPanes();
   const allSessionEntries = tmux.listAllSessions();
   if (allSessionEntries.length === 0) return;
