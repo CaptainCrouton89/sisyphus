@@ -19,6 +19,9 @@ Raw ANSI terminal UI for real-time session monitoring and control. No frameworks
 - **`windowAlive` batch check**: Single `listAllWindowIds()` tmux call per poll; cached in `SessionSummary.windowAlive`. Render reads the cache — never spawns a subprocess during rendering.
 - **`cachedReportBlocks` resolved in poll, not render**: `resolveReports()` is synchronous disk I/O; running it in `render()` blocks keypress processing. Keyed by `agent.id`.
 - **`list` + `status` concurrent**: Both fire in `Promise.all`; `status` only when `selectedSessionId` is set; `paneAlive` sourced from `list` response's `windowAlive`, not a separate check.
+- **`ThrottledScroll` `.offset` vs `.target`**: `.target` is updated immediately on `scrollBy`/`scrollTo`; `.offset` (what render reads) is only updated after the 16ms flush timer fires. Reading `.offset` inside a keypress handler during a pending scroll gives the pre-scroll position. `reset()` cancels the timer and zeroes both fields — use it when changing selected session. `destroy()` only cancels the timer without zeroing (call on app exit only).
+- **`rightPanelMode: 'digest' | 'logs'`**: Orthogonal to `showCombinedView`. Controls whether the right panel renders `digestData` (via `digestScroll`/`cachedDigestLines`/`digestRenderedCache`) or log content. `showCombinedView` controls whether detail+right panels are shown at all; `rightPanelMode` controls what's in the right panel when they are.
+- **`notify` 30s timer replacement**: Each `notify()` call cancels the previous auto-clear timer and starts a fresh 30s one — only the most recent notification persists. Notifications do not stack.
 
 ## Input & Compose Mode
 
@@ -63,6 +66,8 @@ Raw ANSI terminal UI for real-time session monitoring and control. No frameworks
 ## State Derived in Render
 
 - **`selectedSessionId` set from cursor**: Derived as `cursorNode.sessionId` inside `render()`, not by input handlers. On change: resets `detailScroll`, `logsScroll`, `cachedDetailLines`, `cachedLogsLines`, `prevNvimFile`, and fires the 80ms debounced poll. Debugging "wrong session shown" issues starts here, not in input handling.
+- **`stabilizeCursor` identity tracking**: `cursorNodeId` is the stable identity; `cursorIndex` is recomputed to match it on every render. When the tracked node disappears (parent collapsed, session removed): clamps `cursorIndex` to `nodes.length - 1` AND updates `cursorNodeId` to the clamped node. When `cursorNodeId` is null (first call): sets it to `nodes[0].id` but does not adjust `cursorIndex` (stays 0). Always update `cursorNodeId` when setting `cursorIndex` via input or it will be overwritten on next render.
+- **`autoExpandCycle` first-cycle path**: The "collapse previous, expand latest" branch requires `prevCycleCount > 0` — so when the very first cycle appears, it always goes through the "ensure latest is expanded" branch without collapsing anything. Only subsequent cycle arrivals trigger the collapse-previous behavior.
 - **`resolveNvimFile` → `openTabFiles` (multi-file tabs)**: Returns `{ files: NvimFile[] }`; `prevNvimFile` key is `files.map(f => f.path).join('|')`. `nvimEditable` = `files.some(f => !f.readonly)`. Not called during compose — nvim holds the temp file; calling it would override the buffer mid-session.
 - **`showCombinedView` layout**: Detail = `floor(remaining * 0.6)`, logs = remainder of panel width. When disabled, `logsRect`/`logsRows` are `null` and skipped in row concatenation — panel row count must still equal `contentHeight`.
 - **`resolveEditor()` priority**: `config.editor` (`.sisyphus/config.json`) → `$EDITOR` env → `'nvim'`.
