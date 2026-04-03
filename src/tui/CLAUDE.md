@@ -54,6 +54,11 @@ Raw ANSI terminal UI for real-time session monitoring and control. No frameworks
 - **`expandSessionLatestCycle` side effect**: Pressing `→` or Enter to expand a collapsed session node also auto-expands the latest cycle inside it — one keypress expands two tree levels. Auto-expand is skipped if there are no cycles yet.
 - **`<leader>1-9` counts session nodes only**: Iterates the flat node list and counts only `type === 'session'` nodes; cycles, agents, and reports don't increment the counter. `<leader>3` jumps to the third session regardless of how many child nodes are visible between them.
 - **`t` key focus side effect**: Hiding the logs panel while `focusPane === 'logs'` moves focus to `'detail'` before toggling. If debugging "focus jumped to detail on `t`" — this is intentional; logs pane no longer exists to hold focus.
+- **`n` key (navigate)**: new session — compose first, `editInPopup` fallback. Identical fallback pattern to `m`/`R`/`C`. Not guarded by session selection.
+- **`g` key (goal) popup size**: calls `openEditorPopup(cwd, editor, goalPath, { w: '80', h: '50%' })` — the only popup call with an explicit size hint. All other `openEditorPopup` calls omit size (terminal default). Removing the size arg from `g` silently regresses popup dimensions.
+- **`p` key (plan/roadmap)**: opens `roadmapPath(cwd, sessionId)` in popup via `openEditorPopup`, no size hint. Requires session selected; silently notifies if not.
+- **`<leader>a` (spawn-agent)**: compose-first, popup fallback; dispatches `{ type: 'spawn', agentType: 'default', name: 'agent', instruction: content }`. `<leader>m` messages a specific agent; `<leader>a` spawns a new one — they're symmetric leader actions sharing the compose/popup fallback pattern.
+- **`<leader>l` vs copy-menu `l`**: `<leader>l` in leader mode calls `actions.openLogPopup()` (opens the live daemon log in a tmux popup). Copy-menu's `l` (entered via `<leader>y l`) copies the *current session's logs content* to clipboard. Same key letter, completely different targets — confusing when both are broken.
 
 ## State Derived in Render
 

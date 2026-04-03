@@ -38,12 +38,14 @@ Panels are called from `render.ts` → `renderFrame()`. Frame-buffer diffs outpu
 - **`_gallery` lazy init**: created from `companion.achievements` on first badges-page render; not recreated if already set. Stale if achievements change mid-session — `closeBadgeGallery()` forces recreation.
 - **Badge list auto-scroll** (`_badgeScroll`): uses a 3-pass convergence loop (not a simple clamp) to keep `gallery.currentIndex` visible. Each pass recalculates scroll indicators; stealing a row for "↓ N more" can push `currentIndex` out of the new visible window, requiring another adjustment — 3 passes converges without needing a while loop. `maxListRows = Math.min(6, Math.max(4, rows - 2 - 4 - listStartIdx - 2))` — terminal height drives it.
 - **Badge card centering**: ANSI sequences are stripped before measuring visual width; padding is computed from stripped length, then applied around the original colored string.
-- **XP bar shows within-level progress**: `xpInLevel = companion.xp % 50` (50 xp per level), bar max is 50 — not total XP. The "xp" label implies total; it doesn't.
+- **XP bar shows within-level progress**: `computeLevelProgress(companion.xp)` returns `{ xpIntoLevel, xpForNextLevel }` — non-linear scaling (150 base XP, ×1.35/level). Bar max is `xpForNextLevel`, not a fixed constant. `computeLevelProgress` is imported from `daemon/companion.js` — the only panel with a direct daemon-layer import; changes to level scaling require updating that file.
 - **Stat bar maxes are fixed**: `strength` 100, `endurance` 500h, `wisdom` 50, `patience` 200. Bars saturate silently beyond these.
+- **`GALLERY_WIDTH = 50`** vs `COMPANION_WIDTH = 52`: badges page uses its own narrower constant — profile/help pages are 2 cols wider. Changing badge card layout must account for this difference.
 - **Profile achievement slot**: shows only the single most recent achievement + `N/total` count. No scrollable list — Tab → badges for the full gallery.
 - **Companion stats units**: `endurance` is milliseconds, displayed as hours (`/ 3_600_000`). `patience` is a plain count (cycles + lifecycle bonuses), displayed directly.
+- **`wrapText` assumes plain text**: no ANSI stripping before measuring word lengths. `lastCommentary.text` must be plain — ANSI sequences in commentary break word-wrap calculations.
 - **`renderCompanionDebugOverlay`**: separate function (not a flag on `renderCompanionOverlay`). Shows `debugMood` signals and per-mood scores with block-character bar charts. `debug` is null until the daemon has computed at least one mood update — overlay shows two lines: "No mood signals yet" + "(mood is time-of-day only)".
-- **`ACHIEVEMENTS` imported from `shared/companion-types.js`** — no daemon dependency.
+- **`ACHIEVEMENTS` imported from `shared/companion-types.js`** — no daemon dependency (contrast with `computeLevelProgress`).
 
 ## Non-Obvious `bottom.ts` Behaviors
 

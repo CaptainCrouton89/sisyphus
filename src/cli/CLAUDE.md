@@ -46,6 +46,8 @@ Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.con
 
 **`setupTmuxKeybind`** always reinstalls all three scripts and rewrites `~/.sisyphus/tmux.conf` (idempotent), then checks `tmux list-keys` for conflicts on both keys before touching user config. On conflict with a non-sisyphus binding: scripts are written but conf and source line are not. `already-installed` status is cosmetic only — script and conf writes still happen. Applies bindings live via `tmux bind-key` if a server is running. **Conflict detection requires a running tmux server** — if tmux is down, `getExistingBinding` returns null and all bindings are written without conflict checking.
 
+**Extended keys alias**: Any key matching `M-[A-Z]` (e.g. `DEFAULT_HOME_KEY = 'M-S'`) gets a second binding `M-S-{lower}` (e.g. `M-S-s`) to the same script — required because terminals with `extended-keys on` send the modifier form instead. `DEFAULT_KEY = 'M-s'` (lowercase) doesn't match and gets no alias. Conflict checking covers the primary key only, not the alias.
+
 **`removeTmuxKeybind`** scans both `~/.tmux.conf` and `~/.config/tmux/tmux.conf` for the source line regardless of which was written — handles config moves since install. Also deletes the three scripts from `~/.sisyphus/bin/` and restores default `prefix-x` live if tmux is running.
 
 **Status bar**: Daemon renders the complete status string and writes it to the global tmux option `@sisyphus_status`. To show session indicators, add `#{@sisyphus_status}` to `status-right`. No shell scripts — the daemon pre-renders tmux format strings with per-client conditionals for current-session highlighting. Updated every poll cycle (5s). `@sisyphus_phase` is still written per-session for CLI commands (`tmux-sessions`).
