@@ -77,18 +77,40 @@ done
 tmux switch-client -t "\${sessions[0]}"
 `;
 
+const HOME_SCRIPT_JUMP = `
+go_home() {
+  local name="$1" dwid="$2"
+  tmux switch-client -t "$name"
+  if [ -n "$dwid" ] && [ "$dwid" != "-" ]; then
+    tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
+      tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
+  fi
+}`.trim();
+
 const HOME_SCRIPT = `#!/bin/bash
 # Jump to the home session's dashboard window
-${MANIFEST_LOOKUP}
-# Find home session for this cwd and select dashboard window
+${HOME_SCRIPT_JUMP}
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+[ ! -f "$MANIFEST" ] && exit 0
+current=$(tmux display-message -p '#{session_name}')
+# Find cwd for current session from manifest
+cwd=""
 while IFS=$'\\t' read -r type name scwd phase dwid; do
-  if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
-    tmux switch-client -t "$name"
-    # Try window ID first, fall back to window name
-    if [ -n "$dwid" ]; then
-      tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
-        tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
+  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
+done < "$MANIFEST"
+# If cwd found, go to matching home session
+if [ -n "$cwd" ]; then
+  while IFS=$'\\t' read -r type name scwd phase dwid; do
+    if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
+      go_home "$name" "$dwid"
+      exit 0
     fi
+  done < "$MANIFEST"
+fi
+# Fallback: current session not in manifest — go to first home session with a dashboard
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  if [ "$type" = "H" ] && [ "$dwid" != "-" ]; then
+    go_home "$name" "$dwid"
     exit 0
   fi
 done < "$MANIFEST"
@@ -111,7 +133,7 @@ if [ "$pane_count" -le 1 ]; then
       while IFS=$'\\t' read -r type name scwd phase dwid; do
         if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
           tmux switch-client -t "$name"
-          if [ -n "$dwid" ]; then
+          if [ -n "$dwid" ] && [ "$dwid" != "-" ]; then
             tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
               tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
           fi

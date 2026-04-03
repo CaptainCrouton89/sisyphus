@@ -62,7 +62,7 @@ function toTsv(entries: ManifestEntry[]): string {
   const ts = Math.floor(Date.now() / 1000);
   const lines = [`#ts:${ts}`];
   for (const e of entries) {
-    lines.push(`${e.type}\t${e.tmuxName}\t${e.cwd}\t${e.phase ?? ''}\t${e.dashboardWindowId ?? ''}`);
+    lines.push(`${e.type}\t${e.tmuxName}\t${e.cwd}\t${e.phase ?? '-'}\t${e.dashboardWindowId ?? '-'}`);
   }
   return lines.join('\n') + '\n';
 }
