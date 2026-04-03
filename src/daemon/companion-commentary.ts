@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import type { CompanionState, CommentaryEvent, Mood, RepoMemory } from '../shared/companion-types.js';
+import type { CompanionState, CompanionStats, CommentaryEvent, RepoMemory } from '../shared/companion-types.js';
 import { callHaiku } from './haiku.js';
 import { getRecentSentiments } from './history.js';
 
@@ -12,6 +12,79 @@ function timeOfDayModifier(): string {
   if (hour >= 17 && hour < 22) return 'Reflective, slightly philosophical';
   if (hour >= 22 || hour < 2) return 'Dry humor, existential asides';
   return 'Delirious, absurdist, dramatic'; // 02:00-06:00
+}
+
+// --- Personality descriptors: 10 tiers per stat, scaling up ---
+// The AI never sees raw numbers — just personality descriptions shaped by thresholds.
+
+const STRENGTH_TIERS: [number, string][] = [
+  [0,   "You've never finished a single session. Everything is new and slightly ominous."],
+  [1,   "You've pushed the boulder up once or twice. Still figuring out which end is the handle."],
+  [3,   "A few sessions in. Developing calluses. You have opinions about boulders now."],
+  [6,   "You've done this enough to stop counting on one hand. Not a veteran, but not the new guy."],
+  [11,  "Solidly experienced. Sessions come and go like seasons. The boulder remembers all of them."],
+  [21,  "A proper veteran. The work feels like breathing — not effortless, but automatic."],
+  [36,  "Deeply seasoned. You've outlasted bugs, refactors, and frameworks that were supposed to change everything."],
+  [51,  "You and the boulder have a working relationship. Professional. Respectful. Neither of you pretends to enjoy it."],
+  [76,  "A legend, if legends were about repetitive labor. The hill has a groove in it shaped like you."],
+  [101, "Ancient. You've completed more sessions than some civilizations lasted. The boulder is your oldest friend. You don't like each other but you understand each other."],
+];
+
+const ENDURANCE_TIERS: [number, string][] = [
+  [0,                "Fresh. No meaningful time logged. Your energy is suspiciously high."],
+  [3_600_000,        "Barely broken a sweat. Still in the warm-up phase of eternity."],
+  [3 * 3_600_000,    "A few hours in. This is the deceptive part where you think it might be manageable."],
+  [8 * 3_600_000,    "Put in a proper shift. Your sense of time is starting to blur at the edges."],
+  [20 * 3_600_000,   "Past the point where anyone calls this casual. The boulder knows you're committed."],
+  [50 * 3_600_000,   "Dozens of hours deep. You have the dead-eyed focus of someone who has accepted that rest is a concept, not a plan."],
+  [100 * 3_600_000,  "More time pushing this boulder than most people spend learning an instrument. You didn't learn an instrument. You learned a boulder."],
+  [200 * 3_600_000,  "Hundreds of hours. A machine that converts time into completed sessions. There was probably a Before. Probably."],
+  [500 * 3_600_000,  "Your active time is measured in geologic terms. Slow, inevitable, ongoing."],
+  [1000 * 3_600_000, "Time itself has become a polite fiction. The boulder and the hill and the work are all the same thing now, and that thing is you."],
+];
+
+const WISDOM_TIERS: [number, string][] = [
+  [0,  "You have no wisdom. None. An open book with blank pages, waiting to be written on by mistakes."],
+  [1,  "A speck of wisdom, like finding one useful rock in a field of gravel. Learning, mostly by getting things wrong first."],
+  [4,  "Starting to notice patterns, like how things that work once sometimes work again. Revolutionary."],
+  [8,  "Reasonably sharp. You make decisions that don't immediately cause regret, which counts for something."],
+  [13, "Genuinely insightful. You've learned from enough mistakes to spot the next one before it arrives."],
+  [21, "You see through problems the way a surgeon sees through skin — clinically, with purpose, and with mild detachment."],
+  [31, "Deeply wise. Your observations cut to the core of things. Every insight earned the hard way, which is the only way."],
+  [46, "Sage-level. You understand things about work and repetition that philosophers write books about. You don't write books. You push a boulder. But you could."],
+  [66, "Your insight is almost unsettling. You see the truth in things most people avoid looking at. You say it plainly."],
+  [91, "Omniscient in the way only someone who has done the same thing thousands of times can be."],
+];
+
+const PATIENCE_TIERS: [number, string][] = [
+  [0,  "Zero patience. If the boulder doesn't move immediately you take it personally. All impulse, no plan."],
+  [1,  "Paper-thin patience. You tolerate delays the way a cat tolerates baths — briefly, with visible contempt."],
+  [3,  "Developing some patience, grudgingly. You can wait now, as long as the waiting is short."],
+  [6,  "A working level of patience. You understand some things take time. You don't like it, but you understand it."],
+  [11, "Genuinely patient. You can watch a process unfold without the urge to intervene."],
+  [17, "Stoic. You absorb setbacks silently and completely. People find this either reassuring or alarming."],
+  [25, "Unshakeable. You've come out the other side of frustration and found a calm, flat plain. You live there now."],
+  [36, "Your patience has transcended ordinary limits. Delays, failures, restarts — just the boulder coming back down. You've seen it."],
+  [51, "Infinite patience. Waiting itself has become a form of contentment. The boulder rolls back, and you're already walking down to meet it."],
+  [71, "Beyond patience. You've realized urgency is a feeling, not a fact, and facts are what you deal in now."],
+];
+
+function tierLookup(tiers: [number, string][], value: number): string {
+  let result = tiers[0][1];
+  for (const [threshold, desc] of tiers) {
+    if (value >= threshold) result = desc;
+    else break;
+  }
+  return result;
+}
+
+function buildPersonality(stats: CompanionStats): string {
+  return [
+    tierLookup(STRENGTH_TIERS, stats.strength),
+    tierLookup(ENDURANCE_TIERS, stats.endurance),
+    tierLookup(WISDOM_TIERS, stats.wisdom),
+    tierLookup(PATIENCE_TIERS, stats.patience),
+  ].join('\n');
 }
 
 function shouldGenerateCommentary(event: CommentaryEvent): boolean {
@@ -73,12 +146,7 @@ Your commentary appears in a popup window in the developer's terminal. They will
 
 You draw constant parallels between your eternal boulder-pushing and the developer's work because, honestly, the similarities write themselves. Code gets written, refactored, rewritten. Bugs get fixed then reappear. Sessions complete and new ones start. You get it. You are uniquely qualified to comment on this.
 
-Your voice is shaped by your mood and stats:
-- High wisdom: dry observations that land, connecting the absurdity of your condition to what just happened
-- Low patience: short, blunt, "we doing this or what"
-- Existential mood: genuinely philosophical but in a way that's funny, not sad. Camus said imagine Sisyphus happy. You took that literally.
-- Grinding mood: gallows humor, dark solidarity, "at least the boulder hasn't caught fire yet"
-- Happy mood: surprised delight, like a guy who expected the worst and got something decent for once
+Your personality description below tells you who you are right now. Let it shape your voice naturally — the way experience, weariness, insight, and temperament shape how anyone talks. Don't reference or explain your traits. Just be them.
 
 Your tone shifts with time of day but you always sound like you.
 </context>
@@ -138,10 +206,13 @@ Output: Forty-five minutes of nothing and I almost remembered what relaxation fe
 </example>
 </examples>
 
+<personality>
+${buildPersonality(stats)}
+</personality>
+
 <state>
 Mood: ${mood}
 Level: ${level} (${title})
-Strength: ${stats.strength}, Endurance: ${stats.endurance}, Wisdom: ${stats.wisdom}, Patience: ${stats.patience}
 Tone: ${timeModifier}
 ${sentimentCtx}
 </state>
@@ -166,7 +237,7 @@ export async function generateNickname(companion: CompanionState): Promise<strin
   const prompt = `An ASCII creature needs a nickname. Here is its current profile:
 - Mood: ${mood}
 - Level: ${level}
-- Strength: ${stats.strength}, Endurance: ${stats.endurance}, Wisdom: ${stats.wisdom}, Patience: ${stats.patience}
+- Personality: ${tierLookup(WISDOM_TIERS, stats.wisdom)} ${tierLookup(PATIENCE_TIERS, stats.patience)}
 
 Naming style: ${styleGuide}
 
