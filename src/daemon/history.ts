@@ -27,7 +27,7 @@ export function emitHistoryEvent(sessionId: string, event: HistoryEventType, dat
 
 export function writeSessionSummary(
   session: Session,
-  extra?: { achievements?: string[]; xpGained?: number; finalSignals?: MoodSignals },
+  extra?: { achievements?: string[]; xpGained?: number; finalSignals?: MoodSignals; sentiment?: string },
 ): void {
   try {
     ensureDir(session.id);
@@ -74,6 +74,7 @@ export function writeSessionSummary(
       finalMoodSignals: extra?.finalSignals ?? null,
       achievements: extra?.achievements ?? [],
       xpGained: extra?.xpGained ?? 0,
+      sentiment: extra?.sentiment ?? null,
     };
 
     const filePath = historySessionSummaryPath(session.id);

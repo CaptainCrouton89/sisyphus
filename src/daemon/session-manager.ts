@@ -11,13 +11,14 @@ import { sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane, getSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { sendTerminalNotification } from './notify.js';
-import { generateSessionName } from './summarize.js';
+import { generateSessionName, generateSentiment } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
 import { loadCompanion, saveCompanion, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, ACHIEVEMENTS } from './companion.js';
+import { SPINNER_VERBS } from '../shared/companion-render.js';
 import { generateCommentary, generateNickname } from './companion-commentary.js';
-import { flashCompanion } from './status-bar.js';
+import { showCommentaryPopup } from './companion-popup.js';
 import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
 import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.js';
 
@@ -30,7 +31,7 @@ function fireCommentary(event: CommentaryEvent, companion: CompanionState, conte
         const c = loadCompanion();
         c.lastCommentary = { text, event, timestamp: new Date().toISOString() };
         saveCompanion(c);
-        if (flash) flashCompanion(text);
+        if (flash) showCommentaryPopup(text);
       } catch { /* non-fatal */ }
     }
   }).catch(() => {});
@@ -392,9 +393,11 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     emitHistoryEvent(sessionId, 'cycle-boundary', { cycle: lastCycle.cycle, mode: lastCycle.mode ?? null, agentsSpawned: lastCycle.agentsSpawned.length, activeMs: session.activeMs });
   }
 
-  // Fire companion commentary at cycle boundary (50% chance)
+  // Fire companion commentary at cycle boundary (50% chance) and advance spinner verb
   try {
     const companion = loadCompanion();
+    companion.spinnerVerbIndex = (companion.spinnerVerbIndex + 1) % SPINNER_VERBS.length;
+    saveCompanion(companion);
     fireCommentary('cycle-boundary', companion, `Cycle ${cycleNumber} complete, respawning orchestrator`);
   } catch { /* non-fatal */ }
 
@@ -574,6 +577,16 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   const completedSession = state.getSession(cwd, sessionId);
   emitHistoryEvent(sessionId, 'session-end', { status: 'completed', activeMs: completedSession.activeMs, wallClockMs: completedSession.wallClockMs ?? null, agentCount: completedSession.agents.length, cycleCount: completedSession.orchestratorCycles.length, completionReport: completedSession.completionReport ?? null });
   writeSessionSummary(completedSession);
+
+  // Fire-and-forget: enrich summary with sentiment once Haiku responds
+  const userMessages = completedSession.messages
+    .filter(m => typeof m.source === 'object' && m.source.type === 'user')
+    .map(m => m.content);
+  generateSentiment(completedSession.task, userMessages).then(sentiment => {
+    if (sentiment) {
+      writeSessionSummary(completedSession, { sentiment });
+    }
+  }).catch(() => {});
 
   // Companion hook — fire-and-forget, errors must not break session flow
   try {

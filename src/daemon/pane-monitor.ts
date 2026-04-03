@@ -6,7 +6,7 @@ import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
 import { loadCompanion, saveCompanion, computeMood } from './companion.js';
 import { generateCommentary } from './companion-commentary.js';
-import { flashCompanion } from './status-bar.js';
+import { showCommentaryPopup } from './companion-popup.js';
 import type { MoodSignals } from '../shared/companion-types.js';
 import { emitHistoryEvent } from './history.js';
 
@@ -281,7 +281,7 @@ async function pollAllSessions(): Promise<void> {
             const c = loadCompanion();
             c.lastCommentary = { text, event: 'late-night', timestamp: new Date().toISOString() };
             saveCompanion(c);
-            flashCompanion(text);
+            showCommentaryPopup(text);
           } catch { /* non-fatal */ }
         }
       }).catch(() => {});

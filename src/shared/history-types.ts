@@ -67,4 +67,5 @@ export interface SessionSummary {
   finalMoodSignals: MoodSignals | null;
   achievements: string[];
   xpGained: number;
+  sentiment: string | null;
 }

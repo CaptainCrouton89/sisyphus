@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, join, relative } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, strategyPath, cycleLogPath, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir } from '../shared/paths.js';
+import { contextDir, goalPath, strategyPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -124,7 +124,64 @@ function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): s
   return base + '\n\n' + modeBody;
 }
 
-function formatStateForOrchestrator(session: Session): string {
+// --- Mode-specific user prompt content ---
+// Each function receives the session and returns extra markdown to append.
+// Add new modes here as the orchestrator grows.
+
+type ModeContentBuilder = (session: Session) => string;
+
+const modeContentBuilders: Record<string, ModeContentBuilder> = {
+  completion: buildCompletionContent,
+};
+
+export function buildCompletionContent(session: Session): string {
+  const lines: string[] = ['\n## Session History\n'];
+
+  // Agent summary table
+  if (session.agents.length > 0) {
+    lines.push('### Agents\n');
+    lines.push('| Agent | Name | Type | Status | Summary |');
+    lines.push('|-------|------|------|--------|---------|');
+    for (const agent of session.agents) {
+      const finalReport = agent.reports.find(r => r.type === 'final');
+      const summary = finalReport?.summary ?? agent.reports[agent.reports.length - 1]?.summary ?? '(no report)';
+      lines.push(`| ${agent.id} | ${agent.name} | ${agent.agentType} | ${agent.status} | ${summary} |`);
+    }
+    lines.push('');
+  }
+
+  // Inline cycle logs
+  const logsDirPath = logsDir(session.cwd, session.id);
+  if (existsSync(logsDirPath)) {
+    const logFiles = readdirSync(logsDirPath)
+      .filter(f => f.startsWith('cycle-') && f.endsWith('.md'))
+      .sort();
+    if (logFiles.length > 0) {
+      lines.push('### Cycle Logs\n');
+      for (const file of logFiles) {
+        const content = readFileSync(join(logsDirPath, file), 'utf-8').trim();
+        if (content) {
+          lines.push(content);
+          lines.push('');
+        }
+      }
+    }
+  }
+
+  // Reference to full reports for deeper digging
+  const reportsDirPath = reportsDir(session.cwd, session.id);
+  if (existsSync(reportsDirPath)) {
+    const reportFiles = readdirSync(reportsDirPath).filter(f => f.endsWith('.md'));
+    if (reportFiles.length > 0) {
+      lines.push('### Detailed Reports\n');
+      lines.push(`Full agent reports: @${relative(session.cwd, reportsDirPath)}\n`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function formatStateForOrchestrator(session: Session, mode: string): string {
   const cycleNum = session.orchestratorCycles.length;
 
   const ctxDir = contextDir(session.cwd, session.id);
@@ -220,6 +277,8 @@ function formatStateForOrchestrator(session: Session): string {
   const goalFile = goalPath(session.cwd, session.id);
   const goalContent = existsSync(goalFile) ? readFileSync(goalFile, 'utf-8').trim() : session.task;
 
+  // Mode-specific content
+  const modeContent = modeContentBuilders[mode]?.(session) ?? '';
 
   return `## Goal
 
@@ -228,7 +287,7 @@ ${contextSection}${messagesSection}
 ### Cycle Log
 
 Write your cycle summary to: ${relative(session.cwd, logFile)}
-${mostRecentCycleSection}
+${mostRecentCycleSection}${modeContent}
 ## Strategy
 
 ${strategyRef}
@@ -254,7 +313,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const mode = lastCycle?.mode ?? 'strategy';
 
   const basePrompt = loadOrchestratorPrompt(cwd, sessionId, mode);
-  const formattedState = formatStateForOrchestrator(session);
+  const formattedState = formatStateForOrchestrator(session, mode);
 
   // Inject available agent types into system prompt
   const agentPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
