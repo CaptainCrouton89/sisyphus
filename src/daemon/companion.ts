@@ -36,6 +36,7 @@ export function loadCompanion(): CompanionState {
   if (state.recentCompletions == null) state.recentCompletions = [];
   if (state.lifetimeAgentsSpawned == null) state.lifetimeAgentsSpawned = 0;
   if (state.consecutiveEfficientSessions == null) state.consecutiveEfficientSessions = 0;
+  if (state.spinnerVerbIndex == null) state.spinnerVerbIndex = 0;
   return state;
 }
 
@@ -79,6 +80,7 @@ export function createDefaultCompanion(): CompanionState {
     taskHistory: {},
     dailyRepos: {},
     recentCompletions: [],
+    spinnerVerbIndex: 0,
   };
 }
 
@@ -174,12 +176,19 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   const cycleCount = signals.cycleCount ?? 0;
   const sessionsCompletedToday = signals.sessionsCompletedToday ?? 0;
 
-  // Happy
+  // Happy — "things are going well right now"
   if (signals.justCompleted) scores.happy += 50;
-  scores.happy += signals.cleanStreak * 10;
+  if (signals.justCompleted && signals.sessionLengthMs < 1_200_000) scores.happy += 15; // quick win (<20min)
+  if (sessionsCompletedToday >= 3) scores.happy += 20; // productive day
+  if (sessionsCompletedToday >= 5) scores.happy += 10; // really productive day
   if (signals.hourOfDay >= 6 && signals.hourOfDay < 12) scores.happy += 15;
   if (signals.hourOfDay >= 12 && signals.hourOfDay < 17) scores.happy += 8;
   if ((signals.activeAgentCount ?? 0) >= 1 && signals.sessionLengthMs < 900_000) scores.happy += 12; // early session optimism
+  // Flow state: last completion was recent (within 30min) and we're in a new session
+  const lastCompletion = companion.recentCompletions.length > 0
+    ? Date.now() - new Date(companion.recentCompletions[companion.recentCompletions.length - 1]!).getTime()
+    : Infinity;
+  if (lastCompletion < 1_800_000 && signals.sessionLengthMs > 0) scores.happy += 20; // flow
 
   // Grinding — 20min/60min/120min tiers
   if (signals.sessionLengthMs > 1_200_000) scores.grinding += 12;
@@ -188,19 +197,22 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   if ((signals.activeAgentCount ?? 0) >= 3) scores.grinding += 10;
   if (cycleCount >= 3) scores.grinding += 8;
 
-  // Frustrated
-  scores.frustrated += signals.recentCrashes * 30;
-  if (signals.justCrashed) scores.frustrated += 45;
-  if (signals.sessionLengthMs > 10_800_000) scores.frustrated += 15; // >180min
-  if (cycleCount >= 8) scores.frustrated += 10;
-  if (signals.idleDurationMs >= 180_000 && signals.idleDurationMs < 600_000) scores.frustrated += 8; // 3-10min idle
+  // Frustrated — churning, stuck, long sessions with many cycles
+  if (cycleCount >= 5) scores.frustrated += 15;
+  if (cycleCount >= 8) scores.frustrated += 15;
+  if (cycleCount >= 12) scores.frustrated += 10;
+  if (signals.sessionLengthMs > 3_600_000) scores.frustrated += 12; // >60min
+  if (signals.sessionLengthMs > 7_200_000) scores.frustrated += 15; // >120min
+  if (signals.sessionLengthMs > 10_800_000) scores.frustrated += 10; // >180min
+  if (signals.justCrashed) scores.frustrated += 30; // crashes still matter when they do happen
+  if (signals.recentCrashes >= 2) scores.frustrated += 20; // multiple crashes is genuinely bad
 
-  // Zen
+  // Zen — calm, unhurried, things are fine
   if (companion.stats.patience > 30) scores.zen += 15;
-  if (signals.idleDurationMs > 120_000 && signals.idleDurationMs <= 900_000) scores.zen += 25; // 2-15min
-  if (signals.cleanStreak > 1) scores.zen += 12;
-  if (signals.sessionLengthMs > 0 && signals.sessionLengthMs < 1_200_000 && signals.recentCrashes === 0) scores.zen += 15; // <20min
+  if (signals.idleDurationMs > 120_000 && signals.idleDurationMs <= 900_000) scores.zen += 25; // 2-15min idle
+  if (signals.sessionLengthMs > 0 && signals.sessionLengthMs < 1_200_000) scores.zen += 15; // short session, no stress
   if (signals.hourOfDay >= 6 && signals.hourOfDay < 10 && (signals.activeAgentCount ?? 0) === 0) scores.zen += 10; // calm morning
+  if (sessionsCompletedToday >= 1 && sessionsCompletedToday <= 2) scores.zen += 10; // easy day
 
   // Sleepy
   if (signals.idleDurationMs > 900_000) scores.sleepy += 30;   // >15min
