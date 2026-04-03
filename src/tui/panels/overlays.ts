@@ -438,9 +438,9 @@ function renderHelpPage(buf: FrameBuffer, rows: number, cols: number): void {
   contentLines.push(' '.padEnd(innerWidth));
 
   contentLines.push(divider('PAT (Patience)', 'magenta'));
-  contentLines.push('  +cycles per completed session'.padEnd(innerWidth));
-  contentLines.push(ansiDim('  +3 if validation mode').padEnd(innerWidth));
-  contentLines.push(ansiDim('  +2 if completion mode').padEnd(innerWidth));
+  contentLines.push('  +√cycles per completed session'.padEnd(innerWidth));
+  contentLines.push(ansiDim('  +1 if validation mode').padEnd(innerWidth));
+  contentLines.push(ansiDim('  +1 if completion mode').padEnd(innerWidth));
   contentLines.push(' '.padEnd(innerWidth));
 
   contentLines.push(divider('XP & Level', 'cyan'));
