@@ -202,6 +202,7 @@ async function pollAllSessions(): Promise<void> {
     let sessionLengthMs = 0;
     let idleDurationMs = 0;
     let activeAgentCount = 0;
+    let totalAgentCount = 0;
     const cutoff = nowMs - 30 * 60 * 1000;
 
     for (const { id: sessionId, cwd } of trackedSessions.values()) {
@@ -209,6 +210,7 @@ async function pollAllSessions(): Promise<void> {
         const s = pollSessionCache.get(sessionId) ?? state.getSession(cwd, sessionId);
         if (s.status === 'active') {
           sessionLengthMs = Math.max(sessionLengthMs, s.activeMs);
+          totalAgentCount = Math.max(totalAgentCount, s.agents.length);
           for (const agent of s.agents) {
             if (agent.status === 'crashed' && agent.completedAt && new Date(agent.completedAt).getTime() > cutoff) {
               recentCrashes++;
@@ -256,6 +258,7 @@ async function pollAllSessions(): Promise<void> {
       justLeveledUp: (nowMs - lastLevelUpTime) < DECAY_WINDOW,
       hourOfDay: new Date().getHours(),
       activeAgentCount,
+      totalAgentCount,
       cycleCount: currentMaxCycleCount,
       sessionsCompletedToday: companion.recentCompletions.filter(t => t.startsWith(new Date().toISOString().slice(0, 10))).length,
     };
@@ -275,7 +278,17 @@ async function pollAllSessions(): Promise<void> {
     const hour = new Date().getHours();
     if (hour >= 2 && hour < 6 && !isIdle && (nowMs - lastLateNightCommentary) > 30 * 60 * 1000) {
       lastLateNightCommentary = nowMs;
-      generateCommentary('late-night', companion).then(text => {
+      const mins = String(new Date().getMinutes()).padStart(2, '0');
+      let lateCtx = `${trackedSessions.size} session(s) at ${hour}:${mins}am`;
+      for (const { id: sid, cwd: sCwd } of trackedSessions.values()) {
+        try {
+          const s = pollSessionCache.get(sid) ?? state.getSession(sCwd, sid);
+          const taskSnip = s.task.length > 80 ? s.task.slice(0, 80) + '...' : s.task;
+          lateCtx += `\n- ${taskSnip}`;
+          if (lateCtx.length > 300) break;
+        } catch { /* skip */ }
+      }
+      generateCommentary('late-night', companion, lateCtx).then(text => {
         if (text) {
           try {
             const c = loadCompanion();

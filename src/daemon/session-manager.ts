@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
@@ -7,7 +7,7 @@ import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter
 import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, markEventCompletion, markEventCrash, markEventLevelUp, updateCycleCount } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { loadConfig } from '../shared/config.js';
-import { sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
+import { goalPath, cycleLogPath, sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane, getSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { sendTerminalNotification } from './notify.js';
@@ -15,14 +15,27 @@ import { generateSessionName, generateSentiment } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
-import { loadCompanion, saveCompanion, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, ACHIEVEMENTS } from './companion.js';
+import { loadCompanion, saveCompanion, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS } from './companion.js';
 import { SPINNER_VERBS } from '../shared/companion-render.js';
 import { generateCommentary, generateNickname } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
 import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
 import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.js';
+import { formatDuration } from '../shared/format.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max) + '...';
+}
+
+function readGoal(cwd: string, sessionId: string, fallback: string): string {
+  try {
+    const p = goalPath(cwd, sessionId);
+    if (existsSync(p)) return readFileSync(p, 'utf-8').trim();
+  } catch { /* fall through */ }
+  return fallback;
+}
 
 function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false): void {
   generateCommentary(event, companion, context).then(text => {
@@ -398,7 +411,26 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     const companion = loadCompanion();
     companion.spinnerVerbIndex = (companion.spinnerVerbIndex + 1) % SPINNER_VERBS.length;
     saveCompanion(companion);
-    fireCommentary('cycle-boundary', companion, `Cycle ${cycleNumber} complete, respawning orchestrator`);
+
+    const goal = readGoal(cwd, sessionId, session.task);
+    const modeLabel = lastCycle?.mode ? ` (${lastCycle.mode})` : '';
+    const agentMap = new Map(session.agents.map(a => [a.id, a]));
+    const spawnedThisCycle = (lastCycle?.agentsSpawned ?? [])
+      .map(id => agentMap.get(id))
+      .filter(Boolean)
+      .map(a => `${a!.name} (${a!.agentType.replace(/^sisyphus:/, '')}, ${a!.status})`)
+      .join(', ');
+    let cycleCtx = `Cycle ${cycleNumber}${modeLabel} complete. Goal: ${truncate(goal, 80)}`;
+    if (spawnedThisCycle) cycleCtx += `\nAgents: ${truncate(spawnedThisCycle, 200)}`;
+    // Include cycle log if available
+    try {
+      const logPath = cycleLogPath(cwd, sessionId, cycleNumber);
+      if (existsSync(logPath)) {
+        const log = readFileSync(logPath, 'utf-8').trim();
+        if (log) cycleCtx += `\nCycle log: ${truncate(log, 200)}`;
+      }
+    } catch { /* best-effort */ }
+    fireCommentary('cycle-boundary', companion, cycleCtx);
   } catch { /* non-fatal */ }
 
   // Respawn on next tick — agents already finished, no delay needed
@@ -602,11 +634,18 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     markEventCompletion();
     const leveledUp = companion.level > prevLevel;
 
-    fireCommentary('session-complete', companion, session.task, true);
+    const goal = readGoal(cwd, sessionId, completedSession.task);
+    const completeCtx = [
+      `Goal: ${truncate(goal, 150)}`,
+      `Result: ${truncate(report, 200)}`,
+      `Stats: ${completedSession.agents.length} agents, ${completedSession.orchestratorCycles.length} cycles, ${formatDuration(completedSession.activeMs)} active`,
+    ].join('\n');
+    fireCommentary('session-complete', companion, completeCtx, true);
 
     if (leveledUp) {
       markEventLevelUp();
-      fireCommentary('level-up', companion, undefined, true);
+      const prevTitle = getTitle(prevLevel);
+      fireCommentary('level-up', companion, `Level ${prevLevel} (${prevTitle}) \u2192 ${companion.level} (${companion.title}). Task: ${truncate(completedSession.task, 100)}`, true);
     }
 
     if (newAchievementIds.length > 0) {
@@ -796,7 +835,12 @@ export async function handlePaneExited(
       onAgentCrashed(companion);
       saveCompanion(companion);
       markEventCrash();
-      fireCommentary('agent-crash', companion);
+      const freshSession = state.getSession(cwd, sessionId);
+      const typeLabel = agent.agentType.replace(/^sisyphus:/, '');
+      let crashCtx = `${agent.name} (${typeLabel}) crashed: ${truncate(agent.instruction, 120)}`;
+      const running = freshSession.agents.filter(a => a.status === 'running').length;
+      crashCtx += `\n${running}/${freshSession.agents.length} agents still running`;
+      fireCommentary('agent-crash', companion, crashCtx);
     } catch { /* companion errors are non-fatal */ }
 
     if (allDone) {
