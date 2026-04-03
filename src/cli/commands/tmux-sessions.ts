@@ -1,10 +1,19 @@
 import { execSync } from 'node:child_process';
+import { readFileSync, existsSync } from 'node:fs';
 import type { Command } from 'commander';
+import { sessionsManifestPath } from '../../shared/paths.js';
 
-interface SessionEntry {
-  name: string;
-  displayName: string;
+interface ManifestEntry {
+  type: 'S' | 'H';
+  tmuxName: string;
+  cwd: string;
   phase: string | null;
+  dashboardWindowId: string | null;
+}
+
+interface Manifest {
+  updatedAt: number;
+  sessions: ManifestEntry[];
 }
 
 const DOT_MAP: Record<string, { icon: string; color: string }> = {
@@ -15,6 +24,16 @@ const DOT_MAP: Record<string, { icon: string; color: string }> = {
   'paused':                  { icon: '○', color: '#d47766' },
   'completed':               { icon: '●', color: '#a9b16e' },
 };
+
+function readManifest(): Manifest | null {
+  const p = sessionsManifestPath();
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as Manifest;
+  } catch {
+    return null;
+  }
+}
 
 function tmuxExec(cmd: string): string | null {
   try {
@@ -29,36 +48,30 @@ export function registerTmuxSessions(program: Command): void {
     .command('tmux-sessions')
     .description('Output sisyphus session list for tmux status bar')
     .action(() => {
-      const cwd = tmuxExec('tmux show-option -v @sisyphus_cwd');
-      if (!cwd) return;
+      const manifest = readManifest();
+      if (!manifest) return;
 
       const currentSession = tmuxExec("tmux display-message -p '#{session_name}'");
 
-      const sessionList = tmuxExec('tmux list-sessions -F "#{session_name}"');
-      if (!sessionList) return;
+      // Find the cwd of the current session from the manifest
+      const currentEntry = manifest.sessions.find(s => s.tmuxName === currentSession);
+      if (!currentEntry) return;
+      const cwd = currentEntry.cwd;
 
-      const entries: SessionEntry[] = [];
-
-      for (const name of sessionList.split('\n').filter(Boolean)) {
-        const scwd = tmuxExec(`tmux show-option -t "${name}" -v @sisyphus_cwd`);
-        if (scwd !== cwd) continue;
-
-        const phase = tmuxExec(`tmux show-option -t "${name}" -v @sisyphus_phase`);
-        const displayName = name.replace(/^ssyph_[^_]+_/, '');
-        entries.push({ name, displayName, phase });
-      }
-
+      // Filter to sessions matching this cwd
+      const entries = manifest.sessions.filter(s => s.cwd === cwd);
       if (entries.length <= 1) return;
 
       const parts = entries.map(e => {
         const dot = e.phase ? DOT_MAP[e.phase] : null;
         const dotStr = dot ? ` #[fg=${dot.color}]${dot.icon}` : '';
-        const isCurrent = e.name === currentSession;
+        const displayName = e.tmuxName.replace(/^ssyph_[^_]+_/, '');
+        const isCurrent = e.tmuxName === currentSession;
 
         if (isCurrent) {
-          return `#[fg=#e2d9c6,bold]${e.displayName}${dotStr}#[default]`;
+          return `#[fg=#e2d9c6,bold]${displayName}${dotStr}#[default]`;
         }
-        return `#[fg=#5e584e]${e.displayName}${dotStr}#[default]`;
+        return `#[fg=#5e584e]${displayName}${dotStr}#[default]`;
       });
 
       process.stdout.write(parts.join('#[fg=#3a3d42] │ '));

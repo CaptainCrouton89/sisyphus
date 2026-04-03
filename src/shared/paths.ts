@@ -112,6 +112,14 @@ export function tmuxSessionName(cwd: string, sessionLabel: string): string {
   return `ssyph_${basename(cwd)}_${sessionLabel}`;
 }
 
+export function sessionsManifestPath(): string {
+  return join(globalDir(), 'sessions-manifest.json');
+}
+
+export function sessionsManifestTsvPath(): string {
+  return join(globalDir(), 'sessions-manifest.tsv');
+}
+
 export function companionPath(): string {
   return join(globalDir(), 'companion.json');
 }

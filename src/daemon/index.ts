@@ -21,9 +21,10 @@ import { startMonitor, stopMonitor, setRespawnCallback, setDotsCallback, trackSe
 import { onAllAgentsDone } from './session-manager.js';
 import { recomputeDots, setTrackedEntriesProvider } from './status-dots.js';
 import { writeStatusBar } from './status-bar.js';
+import { writeManifest, writeEmptyManifest } from './sessions-manifest.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
-import { listPanes, sessionExistsById, sessionNameTaken, resolveSessionId } from './tmux.js';
+import { listPanes, sessionExistsById, sessionNameTaken, resolveSessionId, initSessionMeta, getFirstWindowId } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
@@ -139,7 +140,7 @@ async function recoverSessions(): Promise<void> {
         resetAgentCounterFromState(sessionId, session.agents ?? []);
 
         // Reconnect to tmux panes if info was persisted
-        if (session.tmuxSessionName && session.tmuxWindowId) {
+        if (session.tmuxSessionName) {
           // Check by $N first, fall back to name
           let sessionAlive = false;
           let currentTmuxId = session.tmuxSessionId;
@@ -159,7 +160,7 @@ async function recoverSessions(): Promise<void> {
               sessionAlive = !!currentTmuxId;
               if (currentTmuxId) {
                 // Persist the refreshed $N
-                await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, session.tmuxWindowId!, currentTmuxId);
+                await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, session.tmuxWindowId ?? '', currentTmuxId);
               }
             }
           }
@@ -175,12 +176,24 @@ async function recoverSessions(): Promise<void> {
             continue;
           }
 
-          const livePanes = listPanes(session.tmuxWindowId);
+          // Discover window ID if missing from state
+          let windowId = session.tmuxWindowId;
+          if (!windowId) {
+            windowId = getFirstWindowId(currentTmuxId!) ?? getFirstWindowId(session.tmuxSessionName!) ?? null;
+            if (windowId) {
+              await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, windowId, currentTmuxId);
+              console.log(`[sisyphus] Discovered missing windowId ${windowId} for session ${sessionId}`);
+            }
+          }
+
+          const livePanes = windowId ? listPanes(windowId) : [];
           if (livePanes.length > 0) {
-            registerSessionTmux(sessionId, session.tmuxSessionName, session.tmuxWindowId, currentTmuxId);
-            setWindowId(sessionId, session.tmuxWindowId);
+            // Re-set session meta in case tmux options were lost (server restart, etc.)
+            initSessionMeta(currentTmuxId!, cwd, sessionId);
+            registerSessionTmux(sessionId, session.tmuxSessionName, windowId!, currentTmuxId);
+            setWindowId(sessionId, windowId!);
             trackSession(sessionId, cwd, currentTmuxId, session.tmuxSessionName!);
-            updateTrackedWindow(sessionId, session.tmuxWindowId);
+            updateTrackedWindow(sessionId, windowId!);
             initTimers(sessionId, session);
 
             // Recover orchestrator pane from last incomplete cycle
@@ -252,6 +265,7 @@ async function startDaemon(): Promise<void> {
   setRespawnCallback(onAllAgentsDone);
   setDotsCallback(() => {
     recomputeDots();
+    try { writeManifest(); } catch { /* best-effort */ }
     try { writeStatusBar(); } catch { /* best-effort */ }
   });
   setTrackedEntriesProvider(getTrackedSessionEntries);
@@ -274,6 +288,7 @@ async function startDaemon(): Promise<void> {
     for (const sessionId of getTrackedSessionIds()) {
       try { await flushTimers(sessionId); } catch { /* best-effort */ }
     }
+    try { writeEmptyManifest(); } catch { /* best-effort */ }
     await stopServer();
     releasePidLock();
     process.exit(0);

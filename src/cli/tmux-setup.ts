@@ -35,14 +35,21 @@ function userTmuxConfPath(): string | null {
 }
 
 const CYCLE_SCRIPT = `#!/bin/bash
-cwd=$(tmux show-option -v @sisyphus_cwd 2>/dev/null)
-[ -z "$cwd" ] && exit 0
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+[ ! -f "$MANIFEST" ] && exit 0
 current=$(tmux display-message -p '#{session_name}')
+# Find cwd for current session from manifest
+cwd=""
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
+done < "$MANIFEST"
+[ -z "$cwd" ] && exit 0
+# Collect all sessions (S and H) matching this cwd
 sessions=()
-while IFS= read -r name; do
-  scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  [[ "$type" == "#"* ]] && continue
   [ "$scwd" = "$cwd" ] && sessions+=("$name")
-done < <(tmux list-sessions -F '#{session_name}')
+done < "$MANIFEST"
 (( \${#sessions[@]} <= 1 )) && exit 0
 for (( i=0; i<\${#sessions[@]}; i++ )); do
   if [ "\${sessions[$i]}" = "$current" ]; then
@@ -56,20 +63,23 @@ tmux switch-client -t "\${sessions[0]}"
 
 const HOME_SCRIPT = `#!/bin/bash
 # Jump to the home (non-sisyphus) session that has the dashboard window
-cwd=$(tmux show-option -v @sisyphus_cwd 2>/dev/null)
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+[ ! -f "$MANIFEST" ] && exit 0
+current=$(tmux display-message -p '#{session_name}')
+# Find cwd for current session
+cwd=""
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
+done < "$MANIFEST"
 [ -z "$cwd" ] && exit 0
-while IFS= read -r name; do
-  # Skip sisyphus agent/orchestrator sessions
-  case "$name" in ssyph_*) continue ;; esac
-  scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
-  if [ "$scwd" = "$cwd" ]; then
+# Find home session for this cwd
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
     tmux switch-client -t "$name"
-    # Focus the dashboard window by stored ID (not name)
-    dwid=$(tmux show-option -t "$name" -v @sisyphus_dashboard 2>/dev/null)
     [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
     exit 0
   fi
-done < <(tmux list-sessions -F '#{session_name}')
+done < "$MANIFEST"
 `;
 
 const KILL_PANE_SCRIPT = `#!/bin/bash
@@ -79,20 +89,23 @@ session=$(tmux display-message -p '#{session_name}')
 pane_count=$(tmux list-panes -t "$session" -F '#{pane_id}' | wc -l | tr -d ' ')
 
 if [ "$pane_count" -le 1 ]; then
-  # Last pane — find home session, switch there, then kill sisyphus session
-  cwd=$(tmux show-option -t "$session" -v @sisyphus_cwd 2>/dev/null)
-  if [ -n "$cwd" ]; then
-    while IFS= read -r name; do
-      case "$name" in ssyph_*) continue ;; esac
-      scwd=$(tmux show-option -t "$name" -v @sisyphus_cwd 2>/dev/null)
-      if [ "$scwd" = "$cwd" ]; then
-        tmux switch-client -t "$name"
-        dwid=$(tmux show-option -t "$name" -v @sisyphus_dashboard 2>/dev/null)
-        [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
-        tmux kill-session -t "$session"
-        exit 0
-      fi
-    done < <(tmux list-sessions -F '#{session_name}')
+  # Last pane — find home session from manifest, switch there, then kill
+  MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+  if [ -f "$MANIFEST" ]; then
+    cwd=""
+    while IFS=$'\\t' read -r type name scwd phase dwid; do
+      [ "$name" = "$session" ] && { cwd="$scwd"; break; }
+    done < "$MANIFEST"
+    if [ -n "$cwd" ]; then
+      while IFS=$'\\t' read -r type name scwd phase dwid; do
+        if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
+          tmux switch-client -t "$name"
+          [ -n "$dwid" ] && tmux select-window -t "$dwid" 2>/dev/null
+          tmux kill-session -t "$session"
+          exit 0
+        fi
+      done < "$MANIFEST"
+    fi
   fi
   # No home session found — just kill the pane
   tmux kill-pane

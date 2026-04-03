@@ -97,6 +97,10 @@ function detectPhase(
 
 const sisyphusPhases = new Map<string, { phase: SessionPhase; tmuxSession: string }>();
 
+// Tracks which tmux session names currently have @sisyphus_phase set so we can
+// clear it when a session leaves tracking.
+const sessionNamesWithPhase = new Set<string>();
+
 export function getSisyphusPhases(): ReadonlyMap<string, { phase: SessionPhase; tmuxSession: string }> {
   return sisyphusPhases;
 }
@@ -231,10 +235,8 @@ export function recomputeDots(): void {
         const phase = detectPhase(session, orchPaneId, livePaneIds);
         dots.push({ phase, createdAt: session.createdAt });
 
-        // Write phase to tmux session option for tmux-sessions command
         const tmuxInfo = tmuxInfoMap.get(sessionId);
         if (tmuxInfo) {
-          tmux.setSessionOption(tmuxInfo.id ?? tmuxInfo.name, '@sisyphus_phase', phase);
           sisyphusPhases.set(sessionId, { phase, tmuxSession: tmuxInfo.name });
         }
       } catch {
