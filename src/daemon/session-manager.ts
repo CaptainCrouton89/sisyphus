@@ -211,6 +211,39 @@ export async function reopenWindow(sessionId: string, cwd: string): Promise<{ tm
   return { tmuxSessionName: tmuxName, tmuxWindowId: created.windowId };
 }
 
+export async function reconnectSession(sessionId: string, cwd: string): Promise<{ tmuxSessionName: string; tmuxWindowId: string; tmuxSessionId: string }> {
+  const session = state.getSession(cwd, sessionId);
+  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, session.name ?? sessionId.slice(0, 8));
+
+  // Find the tmux session by name (since $N ID may be stale/missing)
+  if (!tmux.sessionNameTaken(tmuxName)) {
+    throw new Error(`No tmux session named "${tmuxName}" exists. Use \`sisyphus resume\` to create a new one.`);
+  }
+
+  const tmuxSessId = tmux.resolveSessionId(tmuxName);
+  if (!tmuxSessId) {
+    throw new Error(`Could not resolve tmux session ID for "${tmuxName}".`);
+  }
+
+  // Discover the window ID
+  const windowId = tmux.getFirstWindowId(tmuxSessId) ?? tmux.getFirstWindowId(tmuxName);
+  if (!windowId) {
+    throw new Error(`tmux session "${tmuxName}" exists but has no windows.`);
+  }
+
+  // Update state with the live tmux IDs
+  tmux.initSessionMeta(tmuxSessId, cwd, sessionId);
+  await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
+
+  // Re-track in daemon
+  registerSessionTmux(sessionId, tmuxName, windowId, tmuxSessId);
+  trackSession(sessionId, cwd, tmuxSessId, tmuxName);
+  updateTrackedWindow(sessionId, windowId);
+
+  console.log(`[sisyphus] Reconnected session ${sessionId} to tmux session ${tmuxName} (${tmuxSessId}, window ${windowId})`);
+  return { tmuxSessionName: tmuxName, tmuxWindowId: windowId, tmuxSessionId: tmuxSessId };
+}
+
 export async function resumeSession(sessionId: string, cwd: string, message?: string): Promise<Session> {
   const session = state.getSession(cwd, sessionId);
 

@@ -20,6 +20,7 @@ export type Request =
   | { type: 'rollback'; sessionId: string; cwd: string; toCycle: number }
   | { type: 'delete'; sessionId: string; cwd: string }
   | { type: 'reopen-window'; sessionId: string; cwd: string }
+  | { type: 'reconnect'; sessionId: string; cwd: string }
   | { type: 'companion'; name?: string };
 
 export type Response =
