@@ -120,6 +120,11 @@ export class NvimBridge {
 
       let settled = false;
 
+      // Feed xterm responses (DSR, DA, etc.) back to nvim so it can detect terminal capabilities
+      this.xterm.onData((response: string) => {
+        this.pty?.write(response);
+      });
+
       this.pty.onData((data: string) => {
         // Track DECSCUSR cursor shape sequences (\x1b[N q) so we can
         // forward them to the real terminal alongside cursor positioning
