@@ -5,14 +5,81 @@ import { companionPath, globalDir } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
 import type {
   AchievementId,
+  CompanionBaselines,
   CompanionState,
   CompanionStats,
   Mood,
   MoodSignals,
   RepoMemory,
+  RunningStats,
   UnlockedAchievement,
 } from '../shared/companion-types.js';
 export { ACHIEVEMENTS } from '../shared/companion-types.js';
+
+// ---------------------------------------------------------------------------
+// Welford's online algorithm — deviation-based mood scoring
+// ---------------------------------------------------------------------------
+
+const MIN_SAMPLES = 5;
+const MIN_STDDEV_RATIO = 0.20;
+
+type BaselineMetric = 'sessionMs' | 'cycleCount' | 'agentCount' | 'sessionsPerDay';
+
+const ABSOLUTE_STDDEV_FLOORS: Record<BaselineMetric, number> = {
+  sessionMs: 300_000,     // 5 minutes
+  cycleCount: 1.0,
+  agentCount: 1.0,
+  sessionsPerDay: 0.5,
+};
+
+const COLD_START_DEFAULTS: Record<BaselineMetric, { mean: number; stddev: number }> = {
+  sessionMs:      { mean: 3_600_000, stddev: 2_400_000 },
+  cycleCount:     { mean: 5,         stddev: 3 },
+  agentCount:     { mean: 5,         stddev: 4 },
+  sessionsPerDay: { mean: 3,         stddev: 2 },
+};
+
+export function emptyStats(): RunningStats {
+  return { count: 0, mean: 0, m2: 0 };
+}
+
+export function defaultBaselines(): CompanionBaselines {
+  return {
+    sessionMs: emptyStats(),
+    cycleCount: emptyStats(),
+    agentCount: emptyStats(),
+    sessionsPerDay: emptyStats(),
+    lastCountedDay: null,
+    pendingDayCount: 0,
+  };
+}
+
+export function welfordUpdate(stats: RunningStats, value: number): void {
+  stats.count++;
+  const delta = value - stats.mean;
+  stats.mean += delta / stats.count;
+  const delta2 = value - stats.mean;
+  stats.m2 += delta * delta2;
+}
+
+export function zScore(
+  value: number,
+  stats: RunningStats,
+  metric: BaselineMetric,
+): number {
+  const defaults = COLD_START_DEFAULTS[metric];
+  const floor = ABSOLUTE_STDDEV_FLOORS[metric];
+
+  if (stats.count < MIN_SAMPLES) {
+    if (defaults.stddev === 0) return 0;
+    return (value - defaults.mean) / defaults.stddev;
+  }
+
+  const rawStddev = stats.count >= 2 ? Math.sqrt(stats.m2 / stats.count) : 0;
+  const stddev = Math.max(rawStddev, stats.mean * MIN_STDDEV_RATIO, floor);
+  if (stddev === 0) return 0;
+  return (value - stats.mean) / stddev;
+}
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -37,6 +104,7 @@ export function loadCompanion(): CompanionState {
   if (state.lifetimeAgentsSpawned == null) state.lifetimeAgentsSpawned = 0;
   if (state.consecutiveEfficientSessions == null) state.consecutiveEfficientSessions = 0;
   if (state.spinnerVerbIndex == null) state.spinnerVerbIndex = 0;
+  if (state.baselines == null) state.baselines = defaultBaselines();
   return state;
 }
 
@@ -81,6 +149,7 @@ export function createDefaultCompanion(): CompanionState {
     dailyRepos: {},
     recentCompletions: [],
     spinnerVerbIndex: 0,
+    baselines: defaultBaselines(),
   };
 }
 
@@ -176,69 +245,77 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   const cycleCount = signals.cycleCount ?? 0;
   const sessionsCompletedToday = signals.sessionsCompletedToday ?? 0;
 
-  // Happy — "things are going well right now"
+  // Deviation-based z-scores from personal baselines
+  const baselines = companion.baselines ?? defaultBaselines();
+  const sessionZ = zScore(signals.sessionLengthMs, baselines.sessionMs, 'sessionMs');
+  const cycleZ = zScore(cycleCount, baselines.cycleCount, 'cycleCount');
+  const agentZ = zScore(signals.totalAgentCount ?? 0, baselines.agentCount, 'agentCount');
+  const dailyZ = zScore(sessionsCompletedToday, baselines.sessionsPerDay, 'sessionsPerDay');
+
+  // Happy — event-driven + deviation-based quick wins
   if (signals.justCompleted) scores.happy += 50;
-  if (signals.justCompleted && signals.sessionLengthMs < 1_200_000) scores.happy += 15; // quick win (<20min)
-  if (sessionsCompletedToday >= 3) scores.happy += 20; // productive day
-  if (sessionsCompletedToday >= 5) scores.happy += 10; // really productive day
-  if (signals.hourOfDay >= 6 && signals.hourOfDay < 12) scores.happy += 15;
-  if (signals.hourOfDay >= 12 && signals.hourOfDay < 17) scores.happy += 8;
-  if ((signals.activeAgentCount ?? 0) >= 1 && signals.sessionLengthMs < 900_000) scores.happy += 12; // early session optimism
+  if (signals.justCompleted && sessionZ < -0.5) scores.happy += 15; // quicker than usual
+  if (dailyZ > 0.5) scores.happy += 20; // productive day
+  if (dailyZ > 1.5) scores.happy += 10; // really productive
+  if (signals.hourOfDay >= 6 && signals.hourOfDay < 12) scores.happy += 15; // morning
+  if (signals.hourOfDay >= 12 && signals.hourOfDay < 17) scores.happy += 8; // afternoon
+  if ((signals.activeAgentCount ?? 0) >= 1 && sessionZ < -0.5) scores.happy += 12; // early session optimism
   // Flow state: last completion was recent (within 30min) and we're in a new session
   const lastCompletion = companion.recentCompletions.length > 0
     ? Date.now() - new Date(companion.recentCompletions[companion.recentCompletions.length - 1]!).getTime()
     : Infinity;
-  if (lastCompletion < 1_800_000 && signals.sessionLengthMs > 0) scores.happy += 20; // flow
+  if (lastCompletion < 1_800_000 && signals.sessionLengthMs > 0) scores.happy += 20;
 
-  // Grinding — 20min/60min/120min tiers
-  if (signals.sessionLengthMs > 1_200_000) scores.grinding += 12;
-  if (signals.sessionLengthMs > 3_600_000) scores.grinding += 15;
-  if (signals.sessionLengthMs > 7_200_000) scores.grinding += 8;
-  if ((signals.activeAgentCount ?? 0) >= 3) scores.grinding += 10;
-  if (cycleCount >= 3) scores.grinding += 8;
+  // Grinding — deviation-based deep work
+  if (sessionZ > 0.5) scores.grinding += 15; // longer than usual
+  if (sessionZ > 1.0) scores.grinding += 10; // significantly longer
+  if (sessionZ > 1.5) scores.grinding += 8;  // very long for this user
+  if (agentZ > 0.5) scores.grinding += 10;   // more agents than usual
+  if (cycleZ > 0.5) scores.grinding += 8;    // more cycles than usual
 
-  // Frustrated — churning, stuck, long sessions with many cycles
-  if (cycleCount >= 5) scores.frustrated += 15;
-  if (cycleCount >= 8) scores.frustrated += 15;
-  if (cycleCount >= 12) scores.frustrated += 10;
-  if (signals.sessionLengthMs > 3_600_000) scores.frustrated += 12; // >60min
-  if (signals.sessionLengthMs > 7_200_000) scores.frustrated += 15; // >120min
-  if (signals.sessionLengthMs > 10_800_000) scores.frustrated += 10; // >180min
-  if (signals.justCrashed) scores.frustrated += 30; // crashes still matter when they do happen
-  if (signals.recentCrashes >= 2) scores.frustrated += 20; // multiple crashes is genuinely bad
+  // Frustrated — deviation-based churning
+  if (cycleZ > 1.0) scores.frustrated += 15;  // significantly more cycles than usual
+  if (cycleZ > 2.0) scores.frustrated += 15;  // way more cycles
+  if (cycleZ > 3.0) scores.frustrated += 10;  // extreme cycle count
+  if (sessionZ > 1.5) scores.frustrated += 12; // session running much longer than usual
+  if (sessionZ > 2.5) scores.frustrated += 15; // extremely long
+  if (sessionZ > 1.0 && cycleZ > 1.0) scores.frustrated += 10; // both high = stuck
+  if (signals.justCrashed) scores.frustrated += 30; // crashes are always frustrating
+  if (signals.recentCrashes >= 2) scores.frustrated += 20; // multiple crashes
 
-  // Zen — calm, unhurried, things are fine
+  // Zen — deviation-based "normal" + absolute calm
   if (companion.stats.patience > 30) scores.zen += 15;
   if (signals.idleDurationMs > 120_000 && signals.idleDurationMs <= 900_000) scores.zen += 25; // 2-15min idle
-  if (signals.sessionLengthMs > 0 && signals.sessionLengthMs < 1_200_000) scores.zen += 15; // short session, no stress
-  if (signals.hourOfDay >= 6 && signals.hourOfDay < 10 && (signals.activeAgentCount ?? 0) === 0) scores.zen += 10; // calm morning
-  if (sessionsCompletedToday >= 1 && sessionsCompletedToday <= 2) scores.zen += 10; // easy day
+  if (sessionZ > -1.0 && sessionZ < 0.3) scores.zen += 15; // session length is normal
+  if (cycleZ < 0) scores.zen += 10; // fewer cycles than usual, smooth sailing
+  if (signals.hourOfDay >= 6 && signals.hourOfDay < 10 && (signals.activeAgentCount ?? 0) === 0) scores.zen += 10;
+  if (dailyZ >= -0.5 && dailyZ <= 0.5) scores.zen += 10; // normal day
 
-  // Sleepy
+  // Sleepy — absolute (idle duration + time of day)
   if (signals.idleDurationMs > 900_000) scores.sleepy += 30;   // >15min
   if (signals.idleDurationMs > 2_700_000) scores.sleepy += 25;  // >45min
   if (signals.idleDurationMs > 5_400_000) scores.sleepy += 15;  // >90min
   if (signals.hourOfDay >= 22 || signals.hourOfDay < 6) scores.sleepy += 20;
-  if (signals.idleDurationMs > 300_000 && (signals.hourOfDay >= 22 || signals.hourOfDay < 6)) scores.sleepy += 15; // >5min late night
+  if (signals.idleDurationMs > 300_000 && (signals.hourOfDay >= 22 || signals.hourOfDay < 6)) scores.sleepy += 15;
+  if (sessionZ > 2.5) scores.sleepy += 12; // exhaustion from extreme session
 
-  // Excited
+  // Excited — event-driven + deviation-based swarms
   if (signals.justLeveledUp) scores.excited += 60;
-  if (signals.justCompleted && (session?.agents.length ?? 0) >= 5) scores.excited += 30;
-  if ((signals.activeAgentCount ?? 0) >= 4) scores.excited += 20;
-  if (signals.sessionLengthMs > 0 && signals.sessionLengthMs < 600_000) scores.excited += 15;
-  if ((signals.activeAgentCount ?? 0) >= 6) scores.excited += 15; // large swarm
-  if (signals.justCompleted && signals.sessionLengthMs < 1_200_000) scores.excited += 20; // fast win
+  if (signals.justCompleted && agentZ > 1.0) scores.excited += 30; // completed with notably many agents
+  if (agentZ > 1.5) scores.excited += 20; // way more agents than usual
+  if (agentZ > 2.0) scores.excited += 15; // massive swarm for this user
+  if (signals.justCompleted && sessionZ < -1.0) scores.excited += 20; // way faster than usual
 
-  // Existential
+  // Existential — absolute (late night + experience)
   if (signals.hourOfDay >= 2 && signals.hourOfDay < 6) scores.existential += 25;
-  if (signals.hourOfDay >= 0 && signals.hourOfDay < 2) scores.existential += 10; // midnight-2am
+  if (signals.hourOfDay >= 0 && signals.hourOfDay < 2) scores.existential += 10;
   const enduranceHours = companion.stats.endurance / 3_600_000;
   if (enduranceHours > 40) scores.existential += 15;
   if (signals.hourOfDay >= 2 && signals.hourOfDay < 6 && enduranceHours > 40) {
-    scores.existential += 25; // late night + experienced
+    scores.existential += 25;
   }
-  if (companion.sessionsCompleted > 15) scores.existential += 8; // seen enough to question meaning
-  if (sessionsCompletedToday >= 4) scores.existential += 5; // heavy use day
+  if (companion.sessionsCompleted > 15) scores.existential += 8;
+  if (dailyZ > 1.5) scores.existential += 5; // heavy use day
 
   const moodOrder: Mood[] = ['happy', 'grinding', 'frustrated', 'zen', 'sleepy', 'excited', 'existential'];
   let best: Mood = 'grinding';
@@ -520,14 +597,32 @@ export function onSessionStart(companion: CompanionState, cwd: string): void {
   recomputeXpLevelTitle(companion);
 }
 
-function isEfficientSession(session: Session): boolean {
-  const completed = session.agents.filter(a => a.status === 'completed' && a.activeMs > 0);
-  if (completed.length < 2) return false;
-  const times = completed.map(a => a.activeMs);
-  const mean = times.reduce((a, b) => a + b, 0) / times.length;
-  const variance = times.reduce((acc, t) => acc + Math.pow(t - mean, 2), 0) / times.length;
-  const stddev = Math.sqrt(variance);
-  return stddev < mean * 0.6;
+/**
+ * Compute wisdom points earned for a session. Rewards:
+ * - Clean agent execution: high completion rate without restarts
+ * - Good parallelization: more agents per orchestrator cycle
+ * - Orchestration variety: using different modes (strategy, implementation, validation, completion)
+ *
+ * Returns 0-3 points per session.
+ */
+function computeWisdomGain(session: Session): number {
+  let wisdom = 0;
+  const totalAgents = session.agents.length;
+  const totalCycles = session.orchestratorCycles?.length ?? 0;
+  if (totalAgents === 0 || totalCycles === 0) return 0;
+
+  // Clean execution: ≥80% of agents completed without being killed/crashed/lost
+  const cleanCompletions = session.agents.filter(a => a.status === 'completed').length;
+  if (cleanCompletions / totalAgents >= 0.8) wisdom++;
+
+  // Good parallelization: averaged ≥2 agents per cycle
+  if (totalAgents / totalCycles >= 2) wisdom++;
+
+  // Mode variety: used ≥2 distinct orchestrator modes
+  const modes = new Set((session.orchestratorCycles ?? []).map(c => c.mode).filter(Boolean));
+  if (modes.size >= 2) wisdom++;
+
+  return wisdom;
 }
 
 export function onSessionComplete(companion: CompanionState, session: Session): AchievementId[] {
@@ -554,10 +649,8 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   if (allModes.has('validation') && !prevModes.has('validation')) companion.stats.patience += 1;
   if (allModes.has('completion') && !prevModes.has('completion')) companion.stats.patience += 1;
 
-  // Wisdom: efficient orchestration
-  if (isEfficientSession(session)) {
-    companion.stats.wisdom++;
-  }
+  // Wisdom: clean execution, parallelization, mode variety
+  companion.stats.wisdom += computeWisdomGain(session);
 
   // Repo memory
   updateRepoMemory(companion, session.cwd, 'completion');
@@ -587,6 +680,37 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   // Task history tracking (normalize task string to simple hash)
   const taskKey = normalizeTask(session.task, session.cwd);
   companion.taskHistory[taskKey] = (companion.taskHistory[taskKey] ?? 0) + 1;
+
+  // Update deviation baselines (Welford's online algorithm)
+  const baselines = companion.baselines ?? defaultBaselines();
+  welfordUpdate(baselines.sessionMs, session.activeMs);
+  welfordUpdate(baselines.cycleCount, totalCycles);
+  welfordUpdate(baselines.agentCount, session.agents.length);
+
+  // Daily session count tracking with day-boundary handling
+  const today = todayIso();
+  if (baselines.lastCountedDay === null) {
+    baselines.lastCountedDay = today;
+    baselines.pendingDayCount = 1;
+  } else if (baselines.lastCountedDay === today) {
+    baselines.pendingDayCount++;
+  } else {
+    // Day rolled over: finalize the previous day
+    welfordUpdate(baselines.sessionsPerDay, baselines.pendingDayCount);
+    // Fill gap days (zero-session days) between lastCountedDay and yesterday
+    const lastDay = new Date(baselines.lastCountedDay + 'T12:00:00');
+    const yesterdayDate = new Date(today + 'T12:00:00');
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const cursor = new Date(lastDay);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor < yesterdayDate) {
+      welfordUpdate(baselines.sessionsPerDay, 0);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    baselines.lastCountedDay = today;
+    baselines.pendingDayCount = 1;
+  }
+  companion.baselines = baselines;
 
   recomputeXpLevelTitle(companion);
 

@@ -105,6 +105,22 @@ export interface CompanionStats {
   patience: number;    // persistence score (cycles + lifecycle bonuses)
 }
 
+// Welford's online algorithm — tracks running mean + variance in O(1) space
+export interface RunningStats {
+  count: number;
+  mean: number;
+  m2: number;  // sum of squared deviations from mean
+}
+
+export interface CompanionBaselines {
+  sessionMs: RunningStats;       // active time per completed session
+  cycleCount: RunningStats;      // cycles per completed session
+  agentCount: RunningStats;      // total agents per completed session
+  sessionsPerDay: RunningStats;  // sessions completed per active day
+  lastCountedDay: string | null; // YYYY-MM-DD for day-boundary tracking
+  pendingDayCount: number;       // current day's running total (finalized tomorrow)
+}
+
 export interface UnlockedAchievement {
   id: AchievementId;
   unlockedAt: string;  // ISO timestamp
@@ -154,6 +170,8 @@ export interface CompanionState {
   dailyRepos: Record<string, string[]>; // ISO date → array of repo paths
   recentCompletions: string[];          // last 3 ISO timestamps for momentum check
   spinnerVerbIndex: number;
+  // Deviation-based mood scoring: running statistics for personal baselines
+  baselines?: CompanionBaselines;
   // Debug: last mood signals and scores (written by pane-monitor, read by TUI debug overlay)
   debugMood?: {
     signals: MoodSignals;
@@ -187,6 +205,7 @@ export interface MoodSignals {
   justLeveledUp: boolean;     // level up just happened
   hourOfDay: number;          // 0-23
   activeAgentCount?: number;  // agents currently with status === 'running'
+  totalAgentCount?: number;   // total agents spawned in current session (for z-score baselines)
   // NEW fields for richer mood scoring
   cycleCount?: number;              // current session orchestrator cycle count
   sessionsCompletedToday?: number;  // sessions completed today

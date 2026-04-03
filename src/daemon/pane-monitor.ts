@@ -101,6 +101,14 @@ export async function flushTimers(sessionId: string): Promise<void> {
   }
 }
 
+export function registerAgentTimer(sessionId: string, agentId: string): void {
+  const entry = activeTimers.get(sessionId);
+  if (!entry) return;
+  if (!entry.agentMs.has(agentId)) {
+    entry.agentMs.set(agentId, 0);
+  }
+}
+
 export function flushAgentTimer(sessionId: string, agentId: string): number {
   const entry = activeTimers.get(sessionId);
   if (!entry) return 0;
@@ -155,6 +163,15 @@ export function trackSession(sessionId: string, cwd: string, tmuxSessionId: stri
   // windowId is registered separately via updateTrackedWindow after spawnOrchestrator sets it
   const existing = trackedSessions.get(sessionId);
   trackedSessions.set(sessionId, { id: sessionId, cwd, tmuxSessionId, tmuxSessionName, windowId: existing ? existing.windowId : null });
+
+  // Initialize timers immediately so agents that complete before the first poll cycle
+  // still accumulate time via flushAgentTimer.
+  if (!activeTimers.has(sessionId)) {
+    try {
+      const session = state.getSession(cwd, sessionId);
+      initTimers(sessionId, session);
+    } catch { /* state may not exist yet in edge cases — pollSession will init lazily */ }
+  }
 }
 
 export function updateTrackedWindow(sessionId: string, windowId: string): void {

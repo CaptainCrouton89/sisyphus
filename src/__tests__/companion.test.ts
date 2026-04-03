@@ -15,9 +15,13 @@ import {
   updateRepoMemory,
   ACHIEVEMENTS,
   hasAchievement,
+  welfordUpdate,
+  zScore,
+  emptyStats,
+  defaultBaselines,
 } from '../daemon/companion.js';
 import type { Session, Agent, OrchestratorCycle, Message } from '../shared/types.js';
-import type { CompanionState, MoodSignals, RepoMemory } from '../shared/companion-types.js';
+import type { CompanionState, MoodSignals, RepoMemory, RunningStats } from '../shared/companion-types.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures / helpers
@@ -335,42 +339,75 @@ describe('onSessionComplete', () => {
     assert.equal(c.consecutiveEfficientSessions, 0);
   });
 
-  it('increments wisdom when session has 2+ agents with similar times', () => {
+  it('wisdom: +1 for clean execution (≥80% agents completed)', () => {
     const c = makeCompanion();
     const agents = [
-      makeAgent({ id: 'agent-001', activeMs: 100_000 }),
-      makeAgent({ id: 'agent-002', activeMs: 120_000 }),
+      makeAgent({ id: 'agent-001', status: 'completed' }),
+      makeAgent({ id: 'agent-002', status: 'completed' }),
+      makeAgent({ id: 'agent-003', status: 'completed' }),
+      makeAgent({ id: 'agent-004', status: 'completed' }),
+      makeAgent({ id: 'agent-005', status: 'crashed' }),
     ];
-    onSessionComplete(c, makeSession({ agents }));
-    assert.equal(c.stats.wisdom, 1);
+    // 4/5 = 80% → qualifies. 1 cycle, 5 agents → parallelization qualifies too.
+    onSessionComplete(c, makeSession({
+      agents,
+      orchestratorCycles: [{ cycle: 1, timestamp: new Date().toISOString() } as OrchestratorCycle],
+    }));
+    assert.ok(c.stats.wisdom >= 1, `Expected wisdom >= 1, got ${c.stats.wisdom}`);
   });
 
-  it('does NOT increment wisdom when agents have wildly different times', () => {
+  it('wisdom: +1 for good parallelization (≥2 agents per cycle)', () => {
     const c = makeCompanion();
     const agents = [
-      makeAgent({ id: 'agent-001', activeMs: 10_000 }),
-      makeAgent({ id: 'agent-002', activeMs: 100_000 }),
+      makeAgent({ id: 'agent-001' }),
+      makeAgent({ id: 'agent-002' }),
+      makeAgent({ id: 'agent-003' }),
+      makeAgent({ id: 'agent-004' }),
     ];
-    onSessionComplete(c, makeSession({ agents }));
+    // 4 agents / 2 cycles = 2 agents per cycle
+    onSessionComplete(c, makeSession({
+      agents,
+      orchestratorCycles: [
+        { cycle: 1, timestamp: new Date().toISOString() } as OrchestratorCycle,
+        { cycle: 2, timestamp: new Date().toISOString() } as OrchestratorCycle,
+      ],
+    }));
+    assert.ok(c.stats.wisdom >= 1, `Expected wisdom >= 1, got ${c.stats.wisdom}`);
+  });
+
+  it('wisdom: +1 for mode variety (≥2 distinct modes)', () => {
+    const c = makeCompanion();
+    const agents = [makeAgent({ id: 'agent-001' })];
+    onSessionComplete(c, makeSession({
+      agents,
+      orchestratorCycles: [
+        { cycle: 1, mode: 'strategy', timestamp: new Date().toISOString() } as OrchestratorCycle,
+        { cycle: 2, mode: 'implementation', timestamp: new Date().toISOString() } as OrchestratorCycle,
+      ],
+    }));
+    assert.ok(c.stats.wisdom >= 1, `Expected wisdom >= 1, got ${c.stats.wisdom}`);
+  });
+
+  it('wisdom: 0 when no agents or cycles', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ agents: [], orchestratorCycles: [] }));
     assert.equal(c.stats.wisdom, 0);
   });
 
-  it('does NOT increment wisdom with fewer than 2 completed agents', () => {
+  it('wisdom: max 3 when all criteria met', () => {
     const c = makeCompanion();
-    onSessionComplete(c, makeSession({ agents: [makeAgent()] }));
-    assert.equal(c.stats.wisdom, 0);
-  });
-
-  it('increments wisdom with moderate time variance (within 60% stddev)', () => {
-    const c = makeCompanion();
-    // mean = 100k, times [60k, 100k, 140k] → stddev ≈ 32.7k = 32.7% of mean → passes 60%
-    const agents = [
-      makeAgent({ id: 'agent-001', activeMs: 60_000 }),
-      makeAgent({ id: 'agent-002', activeMs: 100_000 }),
-      makeAgent({ id: 'agent-003', activeMs: 140_000 }),
-    ];
-    onSessionComplete(c, makeSession({ agents }));
-    assert.equal(c.stats.wisdom, 1);
+    const agents = Array.from({ length: 6 }, (_, i) =>
+      makeAgent({ id: `agent-00${i + 1}`, status: 'completed' }),
+    );
+    onSessionComplete(c, makeSession({
+      agents,
+      orchestratorCycles: [
+        { cycle: 1, mode: 'strategy', timestamp: new Date().toISOString() } as OrchestratorCycle,
+        { cycle: 2, mode: 'implementation', timestamp: new Date().toISOString() } as OrchestratorCycle,
+      ],
+    }));
+    // 6/6 = 100% clean, 6/2 = 3 agents/cycle, 2 modes
+    assert.equal(c.stats.wisdom, 3);
   });
 
   it('patience uses sqrt scaling (diminishing returns on high-cycle sessions)', () => {
@@ -1059,5 +1096,225 @@ describe('updateRepoMemory', () => {
     const c = makeCompanion();
     const result = updateRepoMemory(c, '/test/repo', 'visit');
     assert.equal(result, c);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Welford's algorithm & z-score
+// ---------------------------------------------------------------------------
+
+describe('welfordUpdate', () => {
+  it('single value: mean equals value, m2 is 0', () => {
+    const s = emptyStats();
+    welfordUpdate(s, 10);
+    assert.equal(s.count, 1);
+    assert.equal(s.mean, 10);
+    assert.equal(s.m2, 0);
+  });
+
+  it('two values: correct mean and m2', () => {
+    const s = emptyStats();
+    welfordUpdate(s, 10);
+    welfordUpdate(s, 20);
+    assert.equal(s.count, 2);
+    assert.equal(s.mean, 15);
+    // m2 = (10-15)^2 + (20-15)^2 = 25 + 25 = 50, but Welford accumulates differently
+    // variance = m2/count = 25 → stddev = 5
+    const variance = s.m2 / s.count;
+    assert.ok(Math.abs(variance - 25) < 0.001, `Expected variance ~25, got ${variance}`);
+  });
+
+  it('many values converge to correct mean', () => {
+    const s = emptyStats();
+    const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    for (const v of values) welfordUpdate(s, v);
+    assert.equal(s.count, 10);
+    assert.ok(Math.abs(s.mean - 5.5) < 0.001);
+    // Population stddev of 1..10 = sqrt(8.25) ≈ 2.872
+    const stddev = Math.sqrt(s.m2 / s.count);
+    assert.ok(Math.abs(stddev - 2.872) < 0.01, `Expected stddev ~2.872, got ${stddev}`);
+  });
+});
+
+describe('zScore', () => {
+  it('uses cold-start defaults when count < 5', () => {
+    const s = emptyStats();
+    welfordUpdate(s, 100);
+    // sessionMs defaults: mean=3600000, stddev=2400000
+    // zScore(0, s, 'sessionMs') should use defaults since count=1 < 5
+    const z = zScore(0, s, 'sessionMs');
+    assert.ok(Math.abs(z - (-3_600_000 / 2_400_000)) < 0.001);
+  });
+
+  it('uses learned stats when count >= 5', () => {
+    const s = emptyStats();
+    // Feed 10 sessions of 1h each
+    for (let i = 0; i < 10; i++) welfordUpdate(s, 3_600_000);
+    // Mean = 3600000, raw stddev = 0
+    // Floor = max(0, 3600000 * 0.20, 300000) = 720000
+    // z for 3600000 = (3600000 - 3600000) / 720000 = 0
+    assert.equal(zScore(3_600_000, s, 'sessionMs'), 0);
+    // z for a 2h session: (7200000 - 3600000) / 720000 ≈ 5.0
+    const z2h = zScore(7_200_000, s, 'sessionMs');
+    assert.ok(Math.abs(z2h - 5.0) < 0.001);
+  });
+
+  it('applies absolute stddev floor', () => {
+    const s = emptyStats();
+    // Feed 10 sessions with very small values (mean ~100, well below absolute floor)
+    for (let i = 0; i < 10; i++) welfordUpdate(s, 100);
+    // Mean = 100, raw stddev = 0, ratio floor = 20, absolute floor = 300000
+    // Effective stddev = max(0, 20, 300000) = 300000
+    const z = zScore(300_100, s, 'sessionMs');
+    assert.ok(Math.abs(z - 1.0) < 0.01, `Expected z ~1.0, got ${z}`);
+  });
+
+  it('applies ratio floor over raw stddev', () => {
+    const s = emptyStats();
+    // Feed consistent cycle counts (all 10): stddev near 0
+    for (let i = 0; i < 10; i++) welfordUpdate(s, 10);
+    // Mean = 10, raw stddev = 0, ratio floor = 2.0, absolute floor = 1.0
+    // Effective stddev = max(0, 2.0, 1.0) = 2.0
+    const z = zScore(12, s, 'cycleCount');
+    assert.ok(Math.abs(z - 1.0) < 0.001, `Expected z ~1.0, got ${z}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeMood — deviation-based scoring
+// ---------------------------------------------------------------------------
+
+describe('computeMood z-score integration', () => {
+  /** Create a companion with established baselines (count >= 5) */
+  function companionWithBaselines(overrides: {
+    sessionMsMean?: number;
+    cycleCountMean?: number;
+    agentCountMean?: number;
+  } = {}): CompanionState {
+    const c = makeCompanion();
+    const b = defaultBaselines();
+
+    // Feed enough data points to activate learned stats (MIN_SAMPLES = 5)
+    const sessionMs = overrides.sessionMsMean ?? 7_200_000; // default 2h
+    const cycles = overrides.cycleCountMean ?? 10;
+    const agents = overrides.agentCountMean ?? 15;
+    for (let i = 0; i < 10; i++) {
+      // Add slight variance so stddev is nonzero
+      welfordUpdate(b.sessionMs, sessionMs + (i - 5) * 100_000);
+      welfordUpdate(b.cycleCount, cycles + (i % 3 - 1));
+      welfordUpdate(b.agentCount, agents + (i % 5 - 2));
+    }
+    c.baselines = b;
+    return c;
+  }
+
+  it('normal session does NOT trigger frustrated (z-scores near 0)', () => {
+    const c = companionWithBaselines({ sessionMsMean: 7_200_000, cycleCountMean: 10 });
+    const mood = computeMood(c, undefined, makeSignals({
+      sessionLengthMs: 7_200_000,
+      cycleCount: 10,
+      totalAgentCount: 15,
+      hourOfDay: 14,
+    }));
+    assert.notEqual(mood, 'frustrated', 'A normal session should not be frustrated');
+  });
+
+  it('extreme cycles trigger frustrated (z > 2)', () => {
+    const c = companionWithBaselines({ cycleCountMean: 5 });
+    const mood = computeMood(c, undefined, makeSignals({
+      sessionLengthMs: 10_000_000,
+      cycleCount: 30,  // way above mean of 5
+      totalAgentCount: 15,
+      hourOfDay: 14,
+    }));
+    assert.equal(mood, 'frustrated');
+  });
+
+  it('session longer than usual triggers grinding', () => {
+    const c = companionWithBaselines({ sessionMsMean: 3_600_000 });
+    const mood = computeMood(c, undefined, makeSignals({
+      sessionLengthMs: 7_200_000, // 2x the baseline mean
+      cycleCount: 5,
+      totalAgentCount: 8,
+      hourOfDay: 14,
+    }));
+    assert.equal(mood, 'grinding');
+  });
+
+  it('quick completion triggers happy', () => {
+    const c = companionWithBaselines({ sessionMsMean: 7_200_000 });
+    const mood = computeMood(c, undefined, makeSignals({
+      justCompleted: true,
+      sessionLengthMs: 1_000_000, // way under 2h baseline
+      hourOfDay: 10,
+    }));
+    assert.equal(mood, 'happy');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onSessionComplete — baseline updates
+// ---------------------------------------------------------------------------
+
+describe('onSessionComplete baselines', () => {
+  it('updates session-scale baselines on completion', () => {
+    const c = makeCompanion();
+    const session = makeSession({
+      activeMs: 5_000_000,
+      agents: [makeAgent(), makeAgent({ id: 'agent-002' }), makeAgent({ id: 'agent-003' })],
+      orchestratorCycles: [
+        { cycle: 1, timestamp: new Date().toISOString() } as OrchestratorCycle,
+        { cycle: 2, timestamp: new Date().toISOString() } as OrchestratorCycle,
+      ],
+    });
+    onSessionComplete(c, session);
+
+    const b = c.baselines!;
+    assert.equal(b.sessionMs.count, 1);
+    assert.equal(b.sessionMs.mean, 5_000_000);
+    assert.equal(b.cycleCount.count, 1);
+    assert.equal(b.cycleCount.mean, 2);
+    assert.equal(b.agentCount.count, 1);
+    assert.equal(b.agentCount.mean, 3);
+  });
+
+  it('accumulates baselines across multiple completions', () => {
+    const c = makeCompanion();
+    // Session 1: 2M ms, 3 cycles, 5 agents
+    onSessionComplete(c, makeSession({
+      activeMs: 2_000_000,
+      agents: Array.from({ length: 5 }, (_, i) => makeAgent({ id: `agent-00${i + 1}` })),
+      orchestratorCycles: Array.from({ length: 3 }, (_, i) => ({
+        cycle: i + 1, timestamp: new Date().toISOString(),
+      }) as OrchestratorCycle),
+    }));
+    // Session 2: 4M ms, 7 cycles, 10 agents
+    onSessionComplete(c, makeSession({
+      activeMs: 4_000_000,
+      agents: Array.from({ length: 10 }, (_, i) => makeAgent({ id: `agent-0${String(i + 1).padStart(2, '0')}` })),
+      orchestratorCycles: Array.from({ length: 7 }, (_, i) => ({
+        cycle: i + 1, timestamp: new Date().toISOString(),
+      }) as OrchestratorCycle),
+    }));
+
+    const b = c.baselines!;
+    assert.equal(b.sessionMs.count, 2);
+    assert.ok(Math.abs(b.sessionMs.mean - 3_000_000) < 1); // (2M + 4M) / 2
+    assert.equal(b.cycleCount.count, 2);
+    assert.equal(b.cycleCount.mean, 5); // (3 + 7) / 2
+    assert.equal(b.agentCount.count, 2);
+    assert.equal(b.agentCount.mean, 7.5); // (5 + 10) / 2
+  });
+
+  it('tracks daily session count with same-day increments', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ activeMs: 1_000_000 }));
+    assert.equal(c.baselines!.pendingDayCount, 1);
+    assert.equal(c.baselines!.lastCountedDay, new Date().toISOString().slice(0, 10));
+
+    onSessionComplete(c, makeSession({ activeMs: 2_000_000 }));
+    assert.equal(c.baselines!.pendingDayCount, 2);
+    // sessionsPerDay not finalized yet (still today)
+    assert.equal(c.baselines!.sessionsPerDay.count, 0);
   });
 });

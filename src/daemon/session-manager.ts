@@ -4,7 +4,7 @@ import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
 import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
-import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, markEventCompletion, markEventCrash, markEventLevelUp, updateCycleCount } from './pane-monitor.js';
+import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp, updateCycleCount } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { loadConfig } from '../shared/config.js';
 import { goalPath, cycleLogPath, sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
@@ -520,6 +520,7 @@ export async function handleSpawn(
     repo,
   });
 
+  registerAgentTimer(sessionId, agent.id);
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
 
   emitHistoryEvent(sessionId, 'agent-spawned', { agentId: agent.id, name, agentType, instruction: instruction.slice(0, 500), repo });
