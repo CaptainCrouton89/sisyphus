@@ -35,7 +35,7 @@ import {
 import { copyToClipboard } from './lib/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
 import { renderTreePanel } from './panels/tree.js';
-import { renderDetailRows, renderLogsRows, type DetailContext } from './panels/detail.js';
+import { renderDetailRows, renderLogsRows, renderDigestRows, type DetailContext } from './panels/detail.js';
 import { renderNvimDetailRows } from './panels/nvim-detail.js';
 import { renderStatusLine } from './panels/bottom.js';
 import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay, renderCompanionOverlay, renderCompanionDebugOverlay } from './panels/overlays.js';
@@ -44,11 +44,11 @@ import type { CompanionState } from '../shared/companion-types.js';
 import { NvimBridge } from './lib/nvim-bridge.js';
 import { resolveNvimFile } from './lib/overview-writer.js';
 import { loadConfig } from '../shared/config.js';
-import { roadmapPath, goalPath, strategyPath, logsDir, contextDir } from '../shared/paths.js';
+import { roadmapPath, goalPath, strategyPath, logsDir, contextDir, digestPath } from '../shared/paths.js';
 import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDisplayName, truncate, ansiColor, ansiDim, ansiBold } from './lib/format.js';
 import { COMPOSE_HEADERS } from './state.js';
 import type { TreeNode } from './types/tree.js';
-import type { Agent, Session } from '../shared/types.js';
+import type { Agent, Session, StatusDigest } from '../shared/types.js';
 
 // ── Module-level companion cache (reloads on mtime change, ~poll interval) ────
 
@@ -206,6 +206,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       let goalContent = '';
       let logsContent = '';
       let logsCycles: CycleLog[] = [];
+      let digestData: StatusDigest | null = null;
       let paneAlive = true;
       let contextFiles: string[] = [];
 
@@ -321,6 +322,24 @@ export function startApp(state: AppState, cleanup: () => void): void {
         } catch {
           // context dir may not exist yet
         }
+
+        try {
+          const dp = digestPath(state.cwd, state.selectedSessionId);
+          if (existsSync(dp)) {
+            const raw = JSON.parse(readFileSync(dp, 'utf-8'));
+            if (
+              raw &&
+              typeof raw.recentWork === 'string' &&
+              typeof raw.currentActivity === 'string' &&
+              typeof raw.whatsNext === 'string' &&
+              Array.isArray(raw.unusualEvents)
+            ) {
+              digestData = raw as StatusDigest;
+            }
+          }
+        } catch {
+          // digest.json may not exist or be malformed
+        }
       }
 
       // Resolve report files in poll (not render) to avoid sync disk reads on keypress
@@ -338,6 +357,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.goalContent = goalContent;
       state.logsContent = logsContent;
       state.logsCycles = logsCycles;
+      state.digestData = digestData;
       state.paneAlive = paneAlive;
       state.contextFiles = contextFiles;
       state.error = null;
@@ -433,11 +453,14 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.selectedSessionId = newSessionId;
       state.detailScroll.reset();
       state.logsScroll.reset();
+      state.digestScroll.reset();
       state.cachedDetailLines = null;
       state.detailCacheKey = '';
       state.prevNvimFile = null;
       state.cachedLogsLines = null;
       state.logsCacheKey = '';
+      state.cachedDigestLines = null;
+      state.digestCacheKey = '';
     }
 
     // Trigger debounced poll when session changes (avoids poll storm during rapid scrolling)
@@ -597,12 +620,17 @@ export function startApp(state: AppState, cleanup: () => void): void {
     } else {
       detailRows = renderDetailRows(detailRect, state, detailCtx);
     }
-    const logsRows = logsRect ? renderLogsRows(logsRect, state) : null;
+    let rightPanelRows: string[] | null = null;
+    if (logsRect) {
+      rightPanelRows = state.rightPanelMode === 'logs'
+        ? renderLogsRows(logsRect, state)
+        : renderDigestRows(logsRect, state);
+    }
 
     // Compose panel rows into buffer by concatenation (no slicing/splicing)
     for (let i = 0; i < contentHeight; i++) {
-      if (logsRows) {
-        buf.lines[i] = treeRows[i]! + detailRows[i]! + logsRows[i]!;
+      if (rightPanelRows) {
+        buf.lines[i] = treeRows[i]! + detailRows[i]! + rightPanelRows[i]!;
       } else {
         buf.lines[i] = treeRows[i]! + detailRows[i]!;
       }
@@ -736,6 +764,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     stopResize();
     state.detailScroll.destroy();
     state.logsScroll.destroy();
+    state.digestScroll.destroy();
     state.nvimBridge?.destroy();
     origCleanup();
   };

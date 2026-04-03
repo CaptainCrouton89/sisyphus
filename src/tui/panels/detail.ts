@@ -12,7 +12,7 @@ import type {
   MessageTreeNode,
   ContextFileTreeNode,
 } from '../types/tree.js';
-import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
+import type { Session, Agent, OrchestratorCycle, StatusDigest } from '../../shared/types.js';
 import { computeActiveTimeMs } from '../../shared/utils.js';
 import type { ReportBlock } from '../lib/reports.js';
 import {
@@ -843,6 +843,73 @@ export function renderDetailRows(
   }
 
   return buildPanelRows(rect, lines, scrollOffset, focused, borderColor, state.detailRenderedCache);
+}
+
+// ---------------------------------------------------------------------------
+// buildDigestLines / renderDigestRows
+// ---------------------------------------------------------------------------
+
+function buildDigestLines(digest: StatusDigest, width: number): DetailLine[] {
+  const lines: DetailLine[] = [];
+  const contentWidth = width - 4;
+
+  // Recent Work
+  lines.push([seg('  Recent Work', { color: 'cyan', bold: true })]);
+  for (const wl of wrapText(digest.recentWork, contentWidth - 4)) {
+    lines.push(singleLine(`    ${wl}`));
+  }
+  lines.push(singleLine(''));
+
+  // Current Activity
+  lines.push([seg('  Now', { color: 'white', bold: true })]);
+  for (const wl of wrapText(digest.currentActivity, contentWidth - 4)) {
+    lines.push(singleLine(`    ${wl}`));
+  }
+  lines.push(singleLine(''));
+
+  // What's Next
+  lines.push([seg('  Up Next', { color: 'white', bold: true })]);
+  for (const wl of wrapText(digest.whatsNext, contentWidth - 4)) {
+    lines.push([seg(`    ${wl}`, { dim: true })]);
+  }
+  lines.push(singleLine(''));
+
+  // Unusual Events
+  if (digest.unusualEvents.length > 0) {
+    lines.push([seg('  Unusual', { color: 'yellow', bold: true })]);
+    for (const event of digest.unusualEvents) {
+      for (const wl of wrapText(`· ${event}`, contentWidth - 4)) {
+        lines.push([seg(`    ${wl}`, { color: 'yellow' })]);
+      }
+    }
+  }
+
+  return lines;
+}
+
+export function renderDigestRows(
+  rect: Rect,
+  state: AppState,
+): string[] {
+  const focused = state.focusPane === 'logs';
+  const scrollOffset = state.digestScroll.offset;
+  const digest = state.digestData;
+
+  if (!digest) {
+    return buildEmptyPanelRows(rect, focused, 'cyan', '\x1b[2mAwaiting digest...\x1b[0m');
+  }
+
+  const cacheKey = `${JSON.stringify(digest)}:${rect.w}`;
+  let lines: DetailLine[];
+  if (cacheKey === state.digestCacheKey && state.cachedDigestLines !== null) {
+    lines = state.cachedDigestLines;
+  } else {
+    lines = buildDigestLines(digest, rect.w);
+    state.cachedDigestLines = lines;
+    state.digestCacheKey = cacheKey;
+  }
+
+  return buildPanelRows(rect, lines, scrollOffset, focused, 'cyan', state.digestRenderedCache);
 }
 
 export function renderLogsRows(

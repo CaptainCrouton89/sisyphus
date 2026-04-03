@@ -163,10 +163,12 @@ export interface AppState {
   notification: string | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
   showCombinedView: boolean;
+  rightPanelMode: 'digest' | 'logs';
 
   // Scroll
   detailScroll: ThrottledScroll;
   logsScroll: ThrottledScroll;
+  digestScroll: ThrottledScroll;
 
   // Polling data (from daemon)
   sessions: SessionSummary[];
@@ -176,6 +178,7 @@ export interface AppState {
   goalContent: string;
   logsContent: string;
   logsCycles: CycleLog[];
+  digestData: import('../shared/types.js').StatusDigest | null;
   paneAlive: boolean;
   contextFiles: string[];
   error: string | null;
@@ -195,6 +198,9 @@ export interface AppState {
   cachedLogsLines: import('./lib/format.js').DetailLine[] | null;
   logsCacheKey: string;
   logsRenderedCache: import('./render.js').RenderedCache;
+  cachedDigestLines: import('./lib/format.js').DetailLine[] | null;
+  digestCacheKey: string;
+  digestRenderedCache: import('./render.js').RenderedCache;
 
   // Neovim integration
   nvimBridge: import('./lib/nvim-bridge.js').NvimBridge | null;
@@ -220,6 +226,7 @@ export function createAppState(cwd: string): AppState {
 
   const detailScroll = new ThrottledScroll(requestRender);
   const logsScroll = new ThrottledScroll(requestRender);
+  const digestScroll = new ThrottledScroll(requestRender);
 
   return {
     rows,
@@ -234,9 +241,11 @@ export function createAppState(cwd: string): AppState {
     targetAgentId: null,
     notification: null,
     notificationTimer: null,
-    showCombinedView: false,
+    showCombinedView: true,
+    rightPanelMode: 'digest',
     detailScroll,
     logsScroll,
+    digestScroll,
     sessions: [],
     selectedSession: null,
     planContent: '',
@@ -244,6 +253,7 @@ export function createAppState(cwd: string): AppState {
     goalContent: '',
     logsContent: '',
     logsCycles: [],
+    digestData: null,
     paneAlive: true,
     contextFiles: [],
     error: null,
@@ -259,6 +269,9 @@ export function createAppState(cwd: string): AppState {
     cachedLogsLines: null,
     logsCacheKey: '',
     logsRenderedCache: { lines: [], ansi: [] },
+    cachedDigestLines: null,
+    digestCacheKey: '',
+    digestRenderedCache: { lines: [], ansi: [] },
     nvimBridge: null,
     nvimEnabled: true,
     prevNvimFile: null,

@@ -54,6 +54,13 @@ export interface Session {
   companionCreditedActiveMs?: number;
 }
 
+export interface StatusDigest {
+  recentWork: string;
+  unusualEvents: string[];
+  currentActivity: string;
+  whatsNext: string;
+}
+
 export interface Agent {
   id: string;
   name: string;

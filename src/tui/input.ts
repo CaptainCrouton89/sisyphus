@@ -654,7 +654,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     if (state.focusPane === 'detail') {
       state.detailScroll.scrollBy(-1);
     } else if (state.focusPane === 'logs') {
-      state.logsScroll.scrollBy(-1);
+      const rightScroll = state.rightPanelMode === 'digest' ? state.digestScroll : state.logsScroll;
+      rightScroll.scrollBy(-1);
     } else {
       state.cursorIndex = Math.max(0, state.cursorIndex - 1);
       state.cursorNodeId = nodes[state.cursorIndex]?.id ?? state.cursorNodeId;
@@ -668,7 +669,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     if (state.focusPane === 'detail') {
       state.detailScroll.scrollBy(1);
     } else if (state.focusPane === 'logs') {
-      state.logsScroll.scrollBy(1);
+      const rightScroll = state.rightPanelMode === 'digest' ? state.digestScroll : state.logsScroll;
+      rightScroll.scrollBy(1);
     } else {
       state.cursorIndex = Math.min(nodes.length - 1, state.cursorIndex + 1);
       state.cursorNodeId = nodes[state.cursorIndex]?.id ?? state.cursorNodeId;
@@ -1055,13 +1057,15 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // t: toggle logs panel
+  // t: toggle right panel content between digest and logs
   if (input === 't') {
-    if (state.showCombinedView) {
-      if (state.focusPane === 'logs') state.focusPane = 'detail';
+    if (state.rightPanelMode === 'digest') {
+      state.rightPanelMode = 'logs';
       state.logsScroll.reset();
+    } else {
+      state.rightPanelMode = 'digest';
+      state.digestScroll.reset();
     }
-    state.showCombinedView = !state.showCombinedView;
     requestRender();
     return;
   }

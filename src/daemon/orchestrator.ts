@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, join, relative } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, strategyPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
+import { contextDir, goalPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -245,6 +245,10 @@ function formatStateForOrchestrator(session: Session, mode: string): string {
   // Roadmap section
   const roadmapRef = existsSync(roadmapFile) ? `@${relative(session.cwd, roadmapFile)}` : '(empty)';
 
+  // Digest section
+  const digestFile = digestPath(session.cwd, session.id);
+  const digestRef = existsSync(digestFile) ? `@${relative(session.cwd, digestFile)}` : '(not yet created)';
+
   // Repositories section — always present
   const repos = detectRepos(session.cwd);
   let repositoriesSection = '\n\n## Repositories\n';
@@ -295,6 +299,10 @@ ${strategyRef}
 ## Roadmap
 
 ${roadmapRef}
+
+## Digest
+
+${digestRef}
 `;
 }
 

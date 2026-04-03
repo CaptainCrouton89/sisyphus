@@ -33,7 +33,7 @@ Each cycle:
 5. **Don't skip what you notice.** When agent reports or your own review surface minor issues — code smells, small inconsistencies, rough edges — address them. Deprioritizing small things is how quality erodes.
 6. Decide what to do next: break down work, spawn agents, re-plan, validate, or complete.
 7. If you need user input, ask and wait — **do NOT yield.** Yielding kills your process. You'll be respawned with no memory of the question and loop forever.
-8. Update roadmap.md, spawn agents, then `sisyphus yield --prompt "what to focus on next cycle"`
+8. Update roadmap.md and digest.json, spawn agents, then `sisyphus yield --prompt "what to focus on next cycle"`
 
 Be proactive. Don't wait for work to arrive — look ahead. If the current stage is wrapping up, prepare context for the next one. If a review found issues, spawn fix agents immediately. If you can run a review alongside the next stage's implementation, do it. Every cycle should maximize agents doing useful work.
 
@@ -162,9 +162,32 @@ Good cycle log content:
 - Key findings from agent reports
 - Any corrections or pivots from the previous approach
 
+### digest.json — Dashboard status summary
+
+`$SISYPHUS_SESSION_DIR/digest.json` is a JSON file displayed on the TUI dashboard's right panel. It gives the user a glanceable summary of session status. **Update it every cycle before yielding.**
+
+The file has exactly four fields:
+
+```json
+{
+  "recentWork": "Implemented JWT auth middleware and session store",
+  "unusualEvents": ["Agent crashed retrying flaky test — restarted with broader scope", "Chose Redis over Postgres for session store without user input — latency requirements made it clear"],
+  "currentActivity": "Running integration tests against the auth flow",
+  "whatsNext": "Review test results and fix any failures, then validate e2e"
+}
+```
+
+Field rules:
+- **recentWork**: One sentence describing the most recent completed work. High-level — what was done, not how.
+- **unusualEvents**: Array of strings. Anything the user should know about: bugs encountered, crashes, agent restarts, decisions made without user input, unexpected findings, scope changes. Empty array `[]` if nothing unusual.
+- **currentActivity**: One sentence describing what's happening right now. Brief. Example: "Building the auth frontend and backend."
+- **whatsNext**: One sentence predicting the next step. Example: "Validating with e2e tests."
+
+Keep all fields concise (under 120 characters each, except unusualEvents items which can be longer). Write valid JSON — the TUI validates the structure and ignores malformed files.
+
 ### Keeping Files Current
 
-Each cycle: Read roadmap.md. Update it (advance phase status, refine next steps). Write your cycle summary to the log file. Then spawn agents and yield.
+Each cycle: Read roadmap.md. Update it (advance phase status, refine next steps). Update digest.json. Write your cycle summary to the log file. Then spawn agents and yield.
 
 When something changes the approach: update roadmap.md immediately. If an agent reports something that invalidates the approach, rethink the affected phases — don't patch around it.
 
@@ -198,6 +221,7 @@ Each session lives at `$SISYPHUS_SESSION_DIR/`:
 - `strategy.md` — Problem-solving map: completed stages (compressed), current stage (detailed), future stages (sketched)
 - `goal.md` — Refined goal statement (written during strategy phase)
 - `roadmap.md` — Working memory: current stage, exit criteria, next steps (you own this, update every cycle)
+- `digest.json` — Dashboard status summary (you own this, update every cycle)
 - `logs.md` — Session log/memory (you own this)
 - `context/` — Persistent artifacts: requirements, designs, plans, exploration findings
 - `reports/` — Agent reports (final submissions and intermediate updates)
