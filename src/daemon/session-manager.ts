@@ -592,6 +592,7 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 }
 
 export async function handleComplete(sessionId: string, cwd: string, report: string): Promise<void> {
+  const t0 = Date.now();
   await flushTimers(sessionId);
   await orchestrator.handleOrchestratorComplete(sessionId, cwd, report);
   const session = state.getSession(cwd, sessionId);
@@ -664,6 +665,9 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   if (completeKillTarget) {
     tmux.killSession(completeKillTarget);
   }
+
+  const sessionName = session.name ?? sessionId.slice(0, 8);
+  console.log(`[sisyphus] Session ${sessionName} completed (${session.agents.length} agents, ${session.orchestratorCycles.length} cycles, ${Date.now() - t0}ms)`);
 }
 
 export async function handleContinue(sessionId: string, cwd: string): Promise<void> {
@@ -671,6 +675,10 @@ export async function handleContinue(sessionId: string, cwd: string): Promise<vo
 }
 
 export async function handleKill(sessionId: string, cwd: string): Promise<number> {
+  const t0 = Date.now();
+  const sessionName = state.getSession(cwd, sessionId).name ?? sessionId.slice(0, 8);
+  console.log(`[sisyphus] Killing session ${sessionName} (${sessionId})`);
+
   await flushTimers(sessionId);
   const session = state.getSession(cwd, sessionId);
   const windowId = orchestrator.getWindowId(sessionId);
@@ -722,6 +730,7 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   emitHistoryEvent(sessionId, 'session-end', { status: 'killed', activeMs: killedSession.activeMs, agentCount: killedSession.agents.length, cycleCount: killedSession.orchestratorCycles.length });
   writeSessionSummary(killedSession);
 
+  console.log(`[sisyphus] Session ${sessionName} killed (${killedAgents} agents, ${Date.now() - t0}ms)`);
   return killedAgents;
 }
 
