@@ -88,17 +88,21 @@ go_home() {
 }`.trim();
 
 const HOME_SCRIPT = `#!/bin/bash
-# Jump to the home session's dashboard window
+# Jump to the dashboard window — prefer current session, then manifest lookup
 ${HOME_SCRIPT_JUMP}
+current=$(tmux display-message -p '#{session_name}')
+# If current session has a dashboard window, just select it (no session switch)
+local_dwid=$(tmux show-options -t "$current" -v @sisyphus_dashboard 2>/dev/null)
+if [ -n "$local_dwid" ]; then
+  tmux select-window -t "\${current}:\${local_dwid}" 2>/dev/null && exit 0
+fi
+# Otherwise, find the right home session via manifest
 MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
 [ ! -f "$MANIFEST" ] && exit 0
-current=$(tmux display-message -p '#{session_name}')
-# Find cwd for current session from manifest
 cwd=""
 while IFS=$'\\t' read -r type name scwd phase dwid; do
   [ "$name" = "$current" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
-# If cwd found, go to matching home session
 if [ -n "$cwd" ]; then
   while IFS=$'\\t' read -r type name scwd phase dwid; do
     if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
@@ -107,13 +111,6 @@ if [ -n "$cwd" ]; then
     fi
   done < "$MANIFEST"
 fi
-# Fallback: current session not in manifest — go to first home session with a dashboard
-while IFS=$'\\t' read -r type name scwd phase dwid; do
-  if [ "$type" = "H" ] && [ "$dwid" != "-" ]; then
-    go_home "$name" "$dwid"
-    exit 0
-  fi
-done < "$MANIFEST"
 `;
 
 const KILL_PANE_SCRIPT = `#!/bin/bash
