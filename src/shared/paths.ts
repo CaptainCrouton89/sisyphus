@@ -124,6 +124,22 @@ export function companionPath(): string {
   return join(globalDir(), 'companion.json');
 }
 
+export function historyBaseDir(): string {
+  return join(globalDir(), 'history');
+}
+
+export function historySessionDir(sessionId: string): string {
+  return join(historyBaseDir(), sessionId);
+}
+
+export function historyEventsPath(sessionId: string): string {
+  return join(historySessionDir(sessionId), 'events.jsonl');
+}
+
+export function historySessionSummaryPath(sessionId: string): string {
+  return join(historySessionDir(sessionId), 'session.json');
+}
+
 export function isSisyphusSession(name: string): boolean {
   return name.startsWith('ssyph_');
 }

@@ -8,6 +8,7 @@ import { loadCompanion, saveCompanion, computeMood } from './companion.js';
 import { generateCommentary } from './companion-commentary.js';
 import { flashCompanion } from './status-bar.js';
 import type { MoodSignals } from '../shared/companion-types.js';
+import { emitHistoryEvent } from './history.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
 type DotsCallback = () => void;
@@ -261,10 +262,14 @@ async function pollAllSessions(): Promise<void> {
 
     const newMood = computeMood(companion, undefined, signals);
     if (newMood !== companion.mood) {
+      const oldMood = companion.mood;
       companion.mood = newMood;
       companion.moodUpdatedAt = new Date().toISOString();
       // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
       saveCompanion(companion);
+      for (const [sessionId] of trackedSessions) {
+        emitHistoryEvent(sessionId, 'signals-snapshot', { from: oldMood, to: newMood, signals });
+      }
     }
     // Late-night commentary (2-6am, throttled to once per 30min)
     const hour = new Date().getHours();

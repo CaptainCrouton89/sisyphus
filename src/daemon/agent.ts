@@ -18,6 +18,7 @@ import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { resolveRequiredPluginDirs } from './plugins.js';
+import { emitHistoryEvent } from './history.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -425,6 +426,7 @@ export async function handleAgentSubmit(
     completedAt: new Date().toISOString(),
     activeMs: flushedActiveMs,
   });
+  emitHistoryEvent(sessionId, 'agent-completed', { agentId, status: 'completed', activeMs: flushedActiveMs, reportSummary: report.slice(0, 500) });
 
   // Kill the pane — Claude doesn't exit on its own after running a bash command.
   // But if this is the last agent, defer the kill to onAllAgentsDone() so the tmux
@@ -456,6 +458,7 @@ export async function handleAgentKilled(
     completedAt: new Date().toISOString(),
     activeMs: flushedActiveMs,
   });
+  emitHistoryEvent(sessionId, 'agent-exited', { agentId, status: 'killed', activeMs: flushedActiveMs });
 
   const session = state.getSession(cwd, sessionId);
   return allAgentsDone(session);

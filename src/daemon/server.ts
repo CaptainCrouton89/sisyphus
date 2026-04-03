@@ -8,6 +8,7 @@ import * as sessionManager from './session-manager.js';
 import { loadCompanion, saveCompanion } from './companion.js';
 import * as state from './state.js';
 import { lookupPane, unregisterPane } from './pane-registry.js';
+import { emitHistoryEvent } from './history.js';
 import { getActiveTimers } from './pane-monitor.js';
 
 let server: Server | null = null;
@@ -348,6 +349,7 @@ async function handleRequest(req: Request): Promise<Response> {
           ...(filePath ? { filePath } : {}),
           timestamp: new Date().toISOString(),
         });
+        emitHistoryEvent(req.sessionId, 'message', { source: source.type, content: req.content });
         return { ok: true };
       }
 

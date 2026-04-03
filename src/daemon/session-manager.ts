@@ -19,6 +19,7 @@ import { loadCompanion, saveCompanion, onSessionStart, onSessionComplete, onAgen
 import { generateCommentary, generateNickname } from './companion-commentary.js';
 import { flashCompanion } from './status-bar.js';
 import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
+import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -79,6 +80,9 @@ export async function startSession(task: string, cwd: string, context?: string, 
   tmux.killPane(initialPaneId);
 
   pruneOldSessions(cwd);
+  pruneHistory();
+
+  emitHistoryEvent(sessionId, 'session-start', { task, cwd, model: model ?? null, context: context?.slice(0, 2000) ?? null });
 
   // Fire-and-forget: auto-generate a descriptive session name via Haiku
   if (!name) {
@@ -130,6 +134,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
           }
         }
       }
+      emitHistoryEvent(sessionId, 'session-named', { name: finalName });
       console.log(`[sisyphus] Session ${sessionId} named: ${finalName}`);
     }).catch((err) => {
       console.error(`[sisyphus] Name generation failed for session ${sessionId}:`, err);
@@ -382,6 +387,11 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     state.createSnapshot(cwd, sessionId, cycleNumber);
   }
 
+  const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+  if (lastCycle) {
+    emitHistoryEvent(sessionId, 'cycle-boundary', { cycle: lastCycle.cycle, mode: lastCycle.mode ?? null, agentsSpawned: lastCycle.agentsSpawned.length, activeMs: session.activeMs });
+  }
+
   // Fire companion commentary at cycle boundary (50% chance)
   try {
     const companion = loadCompanion();
@@ -477,6 +487,8 @@ export async function handleSpawn(
 
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
 
+  emitHistoryEvent(sessionId, 'agent-spawned', { agentId: agent.id, name, agentType, instruction: instruction.slice(0, 500), repo });
+
   try { recomputeDots(); } catch { /* best-effort */ }
 
   // Companion hook — fire-and-forget, errors must not break session flow
@@ -487,6 +499,7 @@ export async function handleSpawn(
     generateNickname(companion).then(nickname => {
       if (nickname) {
         state.updateAgent(cwd, sessionId, agent.id, { nickname }).catch(() => {});
+        emitHistoryEvent(sessionId, 'agent-nicknamed', { agentId: agent.id, nickname });
       }
     }).catch(() => {});
   } catch { /* companion errors are non-fatal */ }
@@ -558,12 +571,21 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
 
   try { recomputeDots(); } catch { /* best-effort */ }
 
+  const completedSession = state.getSession(cwd, sessionId);
+  emitHistoryEvent(sessionId, 'session-end', { status: 'completed', activeMs: completedSession.activeMs, wallClockMs: completedSession.wallClockMs ?? null, agentCount: completedSession.agents.length, cycleCount: completedSession.orchestratorCycles.length, completionReport: completedSession.completionReport ?? null });
+  writeSessionSummary(completedSession);
+
   // Companion hook — fire-and-forget, errors must not break session flow
   try {
     const companion = loadCompanion();
     const prevLevel = companion.level;
-    const newAchievementIds = onSessionComplete(companion, session);
+    const newAchievementIds = onSessionComplete(companion, completedSession);
     saveCompanion(companion);
+    // Record what was credited so continue→re-complete doesn't double-count
+    await state.updateSession(cwd, sessionId, {
+      companionCreditedCycles: completedSession.orchestratorCycles.length,
+      companionCreditedActiveMs: completedSession.activeMs,
+    });
     markEventCompletion();
     const leveledUp = companion.level > prevLevel;
 
@@ -642,6 +664,11 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   orchestratorDone.delete(sessionId);
 
   try { recomputeDots(); } catch { /* best-effort */ }
+
+  const killedSession = state.getSession(cwd, sessionId);
+  emitHistoryEvent(sessionId, 'session-end', { status: 'killed', activeMs: killedSession.activeMs, agentCount: killedSession.agents.length, cycleCount: killedSession.orchestratorCycles.length });
+  writeSessionSummary(killedSession);
+
   return killedAgents;
 }
 
@@ -747,6 +774,8 @@ export async function handlePaneExited(
     sendTerminalNotification('Sisyphus', `Agent ${label} exited without submitting a report`, session.tmuxSessionName);
 
     const allDone = await handleAgentKilled(cwd, sessionId, agentId, 'pane exited');
+
+    emitHistoryEvent(sessionId, 'agent-exited', { agentId, status: 'crashed', activeMs: agent?.activeMs ?? 0 });
 
     // Companion hook — fire-and-forget, errors must not break session flow
     try {
