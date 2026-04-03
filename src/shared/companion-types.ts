@@ -1,6 +1,6 @@
 export type Mood = 'happy' | 'grinding' | 'frustrated' | 'zen' | 'sleepy' | 'excited' | 'existential';
 
-export type CompanionField = 'face' | 'boulder' | 'title' | 'commentary' | 'mood' | 'level' | 'stats' | 'achievements';
+export type CompanionField = 'face' | 'boulder' | 'title' | 'commentary' | 'mood' | 'level' | 'stats' | 'achievements' | 'verb' | 'hobby';
 
 export type CommentaryEvent =
   | 'session-start'
@@ -153,6 +153,7 @@ export interface CompanionState {
   taskHistory: Record<string, number>; // normalized task hash → attempt count
   dailyRepos: Record<string, string[]>; // ISO date → array of repo paths
   recentCompletions: string[];          // last 3 ISO timestamps for momentum check
+  spinnerVerbIndex: number;
   // Debug: last mood signals and scores (written by pane-monitor, read by TUI debug overlay)
   debugMood?: {
     signals: MoodSignals;
@@ -173,6 +174,7 @@ export interface CompanionRenderOpts {
   tmuxFormat?: boolean;
   repoPath?: string;
   agentCount?: number;
+  verbIndex?: number;
 }
 
 export interface MoodSignals {

@@ -171,8 +171,8 @@ describe('getStatCosmetics', () => {
 // ---------------------------------------------------------------------------
 
 describe('getBoulderForm', () => {
-  it('agentCount undefined → "."', () => assert.equal(getBoulderForm(), '.'));
-  it('agentCount 0 → "."',        () => assert.equal(getBoulderForm(0), '.'));
+  it('agentCount undefined → ""', () => assert.equal(getBoulderForm(), ''));
+  it('agentCount 0 → ""',        () => assert.equal(getBoulderForm(0), ''));
   it('agentCount 1 → "o"',        () => assert.equal(getBoulderForm(1), 'o'));
   it('agentCount 2 → "O"',        () => assert.equal(getBoulderForm(2), 'O'));
   it('agentCount 4 → "O"',        () => assert.equal(getBoulderForm(4), 'O'));
@@ -183,8 +183,8 @@ describe('getBoulderForm', () => {
   it('agentCount 21 → "@@"',      () => assert.equal(getBoulderForm(21), '@@'));
   it('agentCount 50 → "@@"',      () => assert.equal(getBoulderForm(50), '@@'));
 
-  it('with nickname → includes quoted nickname', () => {
-    const form = getBoulderForm(0, 'myrepo');
+  it('with nickname and agents → includes quoted nickname', () => {
+    const form = getBoulderForm(1, 'myrepo');
     assert.ok(form.includes('"myrepo"'), `Expected quoted nickname in "${form}"`);
   });
 
@@ -328,8 +328,13 @@ describe('renderCompanion', () => {
   });
 
   it('boulder field without face renders boulder standalone', () => {
-    const result = renderCompanion(createDefaultCompanion(), ['boulder']);
+    const result = renderCompanion(createDefaultCompanion(), ['boulder'], { agentCount: 3 });
     assert.ok(result.length > 0 && !result.includes('FACE'));
+  });
+
+  it('boulder is empty when no agents running', () => {
+    const result = renderCompanion(createDefaultCompanion(), ['boulder']);
+    assert.strictEqual(result, '');
   });
 
   it('repoPath with known nickname includes nickname in boulder', () => {
@@ -351,12 +356,12 @@ describe('renderCompanion', () => {
   // but broke when dynamic boulder didn't match. These tests lock in correct
   // {BOULDER} substitution at every level tier.
 
-  it('level 15, 0 agents → flexing body with small boulder .', () => {
+  it('level 15, 0 agents → flexing body with no boulder', () => {
     const c = makeCompanion({ level: 15, mood: 'happy' });
     const result = renderCompanion(c, ['face'], { agentCount: 0 });
     assert.ok(result.includes('ᕦ'), `Expected flex body at level 15: "${result}"`);
-    assert.ok(result.includes('.'), `Expected small boulder at 0 agents: "${result}"`);
     assert.ok(!result.includes('{BOULDER}'), `Placeholder must not appear in output: "${result}"`);
+    assert.ok(result.endsWith('ᕤ'), `Expected no trailing boulder: "${result}"`);
   });
 
   it('level 15, 1 agent → flexing body with o boulder', () => {
@@ -379,15 +384,12 @@ describe('renderCompanion', () => {
     assert.ok(!result.includes('{BOULDER}'), `Placeholder must not appear in output: "${result}"`);
   });
 
-  it('level 20, 0 agents → flexing body with . (not embedded @)', () => {
+  it('level 20, 0 agents → flexing body with no boulder', () => {
     const c = makeCompanion({ level: 20, mood: 'happy' });
     const result = renderCompanion(c, ['face'], { agentCount: 0 });
     assert.ok(result.includes('ᕦ'), `Expected flex body at level 20: "${result}"`);
-    assert.ok(result.includes('.'), `Expected small boulder at 0 agents: "${result}"`);
-    // The old bug: level 20 getBaseForm returned 'ᕦ(FACE)ᕤ @' — if agentCount=0
-    // gives boulder='.', splitBodyAndBoulder would discard '@' and output '.' correctly
-    // by accident. With placeholder design this is explicitly correct.
     assert.ok(!result.includes('{BOULDER}'), `Placeholder must not appear in output: "${result}"`);
+    assert.ok(result.endsWith('ᕤ'), `Expected no trailing boulder: "${result}"`);
   });
 
   it('level 20, 10+ agents → large @ boulder substituted', () => {

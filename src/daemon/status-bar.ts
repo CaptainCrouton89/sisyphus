@@ -294,13 +294,18 @@ export function writeStatusBar(): void {
     rendered: renderSisyphusSession(tmuxName, phase, SISYPHUS_BG),
   }));
 
-  // Companion face + boulder
+  // Companion face + boulder + verb (verb only shown when sisyphus sessions are active)
   let companionStr = '';
   try {
-    companionStr = renderCompanion(getCachedCompanion(), ['face', 'boulder'], {
-      maxWidth: 20,
+    const companion = getCachedCompanion();
+    const fields: Parameters<typeof renderCompanion>[1] = sisyphusSessions.length > 0
+      ? ['face', 'boulder', 'verb']
+      : ['face', 'boulder', 'hobby'];
+    companionStr = renderCompanion(companion, fields, {
+      maxWidth: 38,
       tmuxFormat: true,
       agentCount: getTotalRunningAgents(),
+      verbIndex: companion.spinnerVerbIndex,
     });
   } catch { /* non-fatal */ }
 

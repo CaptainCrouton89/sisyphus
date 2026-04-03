@@ -6,6 +6,99 @@ import type {
   Mood,
 } from './companion-types.js';
 
+// --- Idle hobbies ---
+
+export const IDLE_HOBBIES: string[] = [
+  'reading Camus',
+  'stacking pebbles',
+  'watching clouds',
+  'sketching boulders',
+  'counting stars',
+  'writing haiku',
+  'practicing zen',
+  'studying geology',
+  'polishing rocks',
+  'mapping the hill',
+  'resting',
+  'stargazing',
+  'whittling',
+  'collecting fossils',
+  'napping on summit',
+  'journaling',
+  'stretching',
+  'humming',
+  'doodling',
+  'tending moss',
+  'making tea',
+  'reading Myth of Sisyphus',
+  'reorganizing rocks',
+  'people watching',
+  'whistling',
+];
+
+// --- Spinner verbs ---
+
+export const SPINNER_VERBS: string[] = [
+  // physical
+  'pushing',
+  'hauling',
+  'heaving',
+  'toiling',
+  'straining',
+  'trudging',
+  'laboring',
+  'rolling',
+  'ascending',
+  'dragging',
+  'shouldering',
+  'hoisting',
+  'lugging',
+  'schlepping',
+  'grinding',
+  'lifting',
+  'bracing',
+  'climbing',
+  'leaning in',
+  'digging in',
+  // philosophical
+  'philosophizing',
+  'contemplating',
+  'pondering',
+  'musing',
+  'ruminating',
+  'reflecting',
+  'meditating',
+  'wondering',
+  'questioning',
+  'theorizing',
+  'considering',
+  'deliberating',
+  'introspecting',
+  'cogitating',
+  'brooding',
+  // endurance
+  'persevering',
+  'enduring',
+  'persisting',
+  'sustaining',
+  'weathering',
+  'carrying on',
+  'pressing on',
+  'holding steady',
+  'keeping at it',
+  'not stopping',
+  // light/silly
+  'napping',
+  'procrastinating',
+  'daydreaming',
+  'vibing',
+  'winging it',
+  'hoping',
+  'improvising',
+  'making do',
+  'whistling',
+];
+
 // --- Base form ---
 //
 // Returns a template with two placeholders:
@@ -63,7 +156,7 @@ export function getStatCosmetics(stats: CompanionStats): string[] {
 export function getBoulderForm(agentCount?: number, repoNickname?: string): string {
   let boulder: string;
   if (agentCount === undefined || agentCount <= 0) {
-    boulder = '.';
+    boulder = '';
   } else if (agentCount <= 1) {
     boulder = 'o';
   } else if (agentCount <= 4) {
@@ -96,21 +189,28 @@ export function composeLine(
 
   let hasZenPrefix = false;
 
-  for (const c of cosmetics) {
-    switch (c) {
-      case 'wisps':
-        b = `~${b}~`;
-        break;
-      case 'trail':
-        b = `${b} ...`;
-        break;
-      case 'zen-prefix':
-        hasZenPrefix = true;
-        break;
+  if (boulder !== '') {
+    for (const c of cosmetics) {
+      switch (c) {
+        case 'wisps':
+          b = `~${b}~`;
+          break;
+        case 'trail':
+          b = `${b} ...`;
+          break;
+        case 'zen-prefix':
+          hasZenPrefix = true;
+          break;
+      }
     }
+  } else {
+    // Zen prefix is a character trait, not boulder-related
+    if (cosmetics.includes('zen-prefix')) hasZenPrefix = true;
   }
 
-  let line = body.replace('{BOULDER}', b);
+  let line = b === ''
+    ? body.replace(' {BOULDER}', '')
+    : body.replace('{BOULDER}', b);
 
   if (hasZenPrefix) line = `☯ ${line}`;
 
@@ -136,6 +236,10 @@ const MOOD_COLORS: Record<Mood, MoodColor> = {
   excited:     { ansi: 97,  tmux: 'white' },
   existential: { ansi: 35,  tmux: 'magenta' },
 };
+
+export function getMoodTmuxColor(mood: Mood): string {
+  return MOOD_COLORS[mood].tmux;
+}
 
 function colorize(text: string, mood: Mood, tmux: boolean): string {
   const { ansi, tmux: tmuxColor } = MOOD_COLORS[mood];
@@ -216,6 +320,17 @@ export function renderCompanion(
       case 'achievements':
         parts.push(`${companion.achievements.length} achievements`);
         break;
+      case 'verb': {
+        const idx = (opts?.verbIndex ?? companion.spinnerVerbIndex) % SPINNER_VERBS.length;
+        parts.push(SPINNER_VERBS[idx]!);
+        break;
+      }
+      case 'hobby': {
+        // Rotate hourly based on hour + companion level as seed for variety
+        const hobbyIdx = (new Date().getHours() + companion.level) % IDLE_HOBBIES.length;
+        parts.push(IDLE_HOBBIES[hobbyIdx]!);
+        break;
+      }
     }
   }
 
