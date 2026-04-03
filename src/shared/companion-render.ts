@@ -27,18 +27,25 @@ export function getBaseForm(level: number): string {
 }
 
 // --- Mood face ---
+//
+// Each mood has three intensity tiers driven by the winning mood score:
+//   mild (score < 30), moderate (30–70), intense (> 70)
 
-export function getMoodFace(mood: Mood): string {
-  switch (mood) {
-    case 'happy':       return '^.^';
-    case 'grinding':    return '>.<';
-    case 'frustrated':  return '>.<#';
-    case 'zen':         return '‾.‾';
-    case 'sleepy':      return '-.-)zzZ';
-    case 'excited':     return '*o*';
-    case 'existential': return '◉_◉';
-    default: throw new Error(`Unknown mood: ${mood as string}`);
-  }
+const MOOD_FACES: Record<Mood, [string, string, string]> = {
+  happy:       ['^.^',    '^‿^',    '✧‿✧'],
+  grinding:    ['>.<',    '>_<',    'ò.ó'],
+  frustrated:  ['>.<#',   'ಠ_ಠ',   'ಠ益ಠ'],
+  zen:         ['‾.‾',    '‾‿‾',   '˘‿˘'],
+  sleepy:      ['-.-)zzZ','-_-)zzZ','˘.˘)zzZ'],
+  excited:     ['*o*',    '*◡*',   '✦◡✦'],
+  existential: ['◉_◉',   '⊙_⊙',   '◉‸◉'],
+};
+
+export function getMoodFace(mood: Mood, intensity: number = 0): string {
+  const faces = MOOD_FACES[mood];
+  if (!faces) throw new Error(`Unknown mood: ${mood as string}`);
+  const tier = intensity < 30 ? 0 : intensity <= 70 ? 1 : 2;
+  return faces[tier];
 }
 
 // --- Stat cosmetics ---
@@ -87,7 +94,6 @@ export function composeLine(
 ): string {
   let b = boulder;
 
-  let hasSparkle = false;
   let hasZenPrefix = false;
 
   for (const c of cosmetics) {
@@ -98,9 +104,6 @@ export function composeLine(
       case 'trail':
         b = `${b} ...`;
         break;
-      case 'sparkle':
-        hasSparkle = true;
-        break;
       case 'zen-prefix':
         hasZenPrefix = true;
         break;
@@ -109,8 +112,7 @@ export function composeLine(
 
   let line = body.replace('{BOULDER}', b);
 
-  if (hasZenPrefix) line = `o ${line}`;
-  if (hasSparkle) line = `* ${line} *`;
+  if (hasZenPrefix) line = `☯ ${line}`;
 
   return line;
 }
@@ -172,7 +174,8 @@ export function renderCompanion(
 
   if (hasFace) {
     const baseForm = getBaseForm(companion.level);
-    const face = getMoodFace(companion.mood);
+    const intensity = companion.debugMood?.scores[companion.mood] ?? 0;
+    const face = getMoodFace(companion.mood, intensity);
     const bodyWithFace = baseForm.replace('FACE', face);
     facePart = composeLine(bodyWithFace, cosmetics, boulder);
   } else if (hasBoulder) {

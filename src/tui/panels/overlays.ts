@@ -2,6 +2,7 @@ import { drawBorder, writeClipped, type FrameBuffer } from '../render.js';
 import { ansiColor, ansiDim, ansiBold } from '../lib/format.js';
 import type { CompanionState, AchievementDef, Mood } from '../../shared/companion-types.js';
 import { getMoodFace } from '../../shared/companion-render.js';
+import { computeLevelProgress } from '../../daemon/companion.js';
 import { ACHIEVEMENTS } from '../../shared/companion-types.js';
 import {
   createBadgeGallery,
@@ -220,7 +221,8 @@ function renderProfilePage(buf: FrameBuffer, rows: number, cols: number, compani
 
   const endH = Math.floor(companion.stats.endurance / 3_600_000);
 
-  const face = getMoodFace(companion.mood);
+  const intensity = companion.debugMood?.scores[companion.mood] ?? 0;
+  const face = getMoodFace(companion.mood, intensity);
   const moodColor = MOOD_COLORS[companion.mood];
   const moodIcon = MOOD_ICONS[companion.mood];
   const faceColored = ansiColor(`(${face})`, moodColor, true);
@@ -232,9 +234,9 @@ function renderProfilePage(buf: FrameBuffer, rows: number, cols: number, compani
 
   const barW = 18;
 
-  // XP progress within level (approximate — 50xp per level)
-  const xpInLevel = companion.xp % 50;
-  const xpBar = statBar(xpInLevel, 50, 20, 'cyan');
+  // XP progress within current level
+  const { xpIntoLevel, xpForNextLevel } = computeLevelProgress(companion.xp);
+  const xpBar = statBar(xpIntoLevel, xpForNextLevel, 20, 'cyan');
 
   // Most recent achievement
   const lastAchievement = companion.achievements.length > 0
@@ -495,7 +497,8 @@ export function renderCompanionDebugOverlay(buf: FrameBuffer, rows: number, cols
   const innerWidth = DEBUG_WIDTH - 2;
   const x = Math.max(0, Math.floor((cols - DEBUG_WIDTH) / 2));
 
-  const face = getMoodFace(companion.mood);
+  const intensity = companion.debugMood?.scores[companion.mood] ?? 0;
+  const face = getMoodFace(companion.mood, intensity);
   const debug = companion.debugMood;
 
   const contentLines: string[] = [

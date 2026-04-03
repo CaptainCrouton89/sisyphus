@@ -79,13 +79,32 @@ describe('getBaseForm', () => {
 // ---------------------------------------------------------------------------
 
 describe('getMoodFace', () => {
-  it('happy → "^.^"',       () => assert.equal(getMoodFace('happy'), '^.^'));
-  it('grinding → ">.<"',    () => assert.equal(getMoodFace('grinding'), '>.<'));
-  it('frustrated → ">.<#"', () => assert.equal(getMoodFace('frustrated'), '>.<#'));
-  it('zen → "‾.‾"',         () => assert.equal(getMoodFace('zen'), '‾.‾'));
-  it('sleepy → "-.-)zzZ"',  () => assert.equal(getMoodFace('sleepy'), '-.-)zzZ'));
-  it('excited → "*o*"',     () => assert.equal(getMoodFace('excited'), '*o*'));
-  it('existential → "◉_◉"', () => assert.equal(getMoodFace('existential'), '◉_◉'));
+  // Mild intensity (score < 30, default)
+  it('happy mild → "^.^"',       () => assert.equal(getMoodFace('happy'), '^.^'));
+  it('grinding mild → ">.<"',    () => assert.equal(getMoodFace('grinding', 10), '>.<'));
+  it('frustrated mild → ">.<#"', () => assert.equal(getMoodFace('frustrated', 29), '>.<#'));
+  it('zen mild → "‾.‾"',         () => assert.equal(getMoodFace('zen'), '‾.‾'));
+  it('sleepy mild → "-.-)zzZ"',  () => assert.equal(getMoodFace('sleepy', 0), '-.-)zzZ'));
+  it('excited mild → "*o*"',     () => assert.equal(getMoodFace('excited', 15), '*o*'));
+  it('existential mild → "◉_◉"', () => assert.equal(getMoodFace('existential'), '◉_◉'));
+
+  // Moderate intensity (score 30–70)
+  it('happy moderate → "^‿^"',       () => assert.equal(getMoodFace('happy', 30), '^‿^'));
+  it('grinding moderate → ">_<"',    () => assert.equal(getMoodFace('grinding', 45), '>_<'));
+  it('frustrated moderate → "ಠ_ಠ"',  () => assert.equal(getMoodFace('frustrated', 70), 'ಠ_ಠ'));
+  it('zen moderate → "‾‿‾"',         () => assert.equal(getMoodFace('zen', 40), '‾‿‾'));
+  it('sleepy moderate → "-_-)zzZ"',  () => assert.equal(getMoodFace('sleepy', 50), '-_-)zzZ'));
+  it('excited moderate → "*◡*"',     () => assert.equal(getMoodFace('excited', 35), '*◡*'));
+  it('existential moderate → "⊙_⊙"', () => assert.equal(getMoodFace('existential', 55), '⊙_⊙'));
+
+  // Intense (score > 70)
+  it('happy intense → "✧‿✧"',       () => assert.equal(getMoodFace('happy', 71), '✧‿✧'));
+  it('grinding intense → "ò.ó"',    () => assert.equal(getMoodFace('grinding', 80), 'ò.ó'));
+  it('frustrated intense → "ಠ益ಠ"',  () => assert.equal(getMoodFace('frustrated', 105), 'ಠ益ಠ'));
+  it('zen intense → "˘‿˘"',         () => assert.equal(getMoodFace('zen', 75), '˘‿˘'));
+  it('sleepy intense → "˘.˘)zzZ"',  () => assert.equal(getMoodFace('sleepy', 71), '˘.˘)zzZ'));
+  it('excited intense → "✦◡✦"',     () => assert.equal(getMoodFace('excited', 90), '✦◡✦'));
+  it('existential intense → "◉‸◉"', () => assert.equal(getMoodFace('existential', 100), '◉‸◉'));
 
   it('unknown mood throws', () => {
     assert.throws(() => getMoodFace('unknown' as never), /Unknown mood/);
@@ -196,15 +215,9 @@ describe('composeLine', () => {
     assert.equal(result, '(^.^) . ...');
   });
 
-  it('sparkle wraps whole line with "* ... *"', () => {
-    const result = composeLine('(^.^) {BOULDER}', ['sparkle'], '.');
-    assert.ok(result.startsWith('* '), `Expected "* " prefix in "${result}"`);
-    assert.ok(result.endsWith(' *'), `Expected " *" suffix in "${result}"`);
-  });
-
-  it('zen-prefix prepends "o "', () => {
+  it('zen-prefix prepends "☯ "', () => {
     const result = composeLine('(^.^) {BOULDER}', ['zen-prefix'], '.');
-    assert.ok(result.startsWith('o '), `Expected "o " prefix in "${result}"`);
+    assert.ok(result.startsWith('☯ '), `Expected "☯ " prefix in "${result}"`);
   });
 
   it('multiple cosmetics (wisps + trail) both applied', () => {
