@@ -4,6 +4,7 @@ import {
   createDefaultCompanion,
   computeXP,
   computeLevel,
+  computeLevelProgress,
   getTitle,
   computeMood,
   checkAchievements,
@@ -187,6 +188,37 @@ describe('computeLevel', () => {
 });
 
 // ---------------------------------------------------------------------------
+// computeLevelProgress
+// ---------------------------------------------------------------------------
+
+describe('computeLevelProgress', () => {
+  it('xp=0 → 0 into level, 150 needed', () => {
+    const p = computeLevelProgress(0);
+    assert.equal(p.xpIntoLevel, 0);
+    assert.equal(p.xpForNextLevel, 150);
+  });
+
+  it('xp=100 → 100 into level 1, 150 needed', () => {
+    const p = computeLevelProgress(100);
+    assert.equal(p.xpIntoLevel, 100);
+    assert.equal(p.xpForNextLevel, 150);
+  });
+
+  it('xp=150 → 0 into level 2, 202 needed', () => {
+    const p = computeLevelProgress(150);
+    assert.equal(p.xpIntoLevel, 0);
+    assert.equal(p.xpForNextLevel, 202);
+  });
+
+  it('xp=1034 (user scenario) → 43 into level 5, 495 needed', () => {
+    // cumulative: 150 + 202 + 272 + 367 = 991; next threshold = floor(367 * 1.35) = 495
+    const p = computeLevelProgress(1034);
+    assert.equal(p.xpIntoLevel, 43);
+    assert.equal(p.xpForNextLevel, 495);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getTitle
 // ---------------------------------------------------------------------------
 
@@ -301,6 +333,89 @@ describe('onSessionComplete', () => {
     }));
     onSessionComplete(c, makeSession({ orchestratorCycles }));
     assert.equal(c.consecutiveEfficientSessions, 0);
+  });
+
+  it('increments wisdom when session has 2+ agents with similar times', () => {
+    const c = makeCompanion();
+    const agents = [
+      makeAgent({ id: 'agent-001', activeMs: 100_000 }),
+      makeAgent({ id: 'agent-002', activeMs: 120_000 }),
+    ];
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.wisdom, 1);
+  });
+
+  it('does NOT increment wisdom when agents have wildly different times', () => {
+    const c = makeCompanion();
+    const agents = [
+      makeAgent({ id: 'agent-001', activeMs: 10_000 }),
+      makeAgent({ id: 'agent-002', activeMs: 100_000 }),
+    ];
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.wisdom, 0);
+  });
+
+  it('does NOT increment wisdom with fewer than 2 completed agents', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ agents: [makeAgent()] }));
+    assert.equal(c.stats.wisdom, 0);
+  });
+
+  it('increments wisdom with moderate time variance (within 60% stddev)', () => {
+    const c = makeCompanion();
+    // mean = 100k, times [60k, 100k, 140k] → stddev ≈ 32.7k = 32.7% of mean → passes 60%
+    const agents = [
+      makeAgent({ id: 'agent-001', activeMs: 60_000 }),
+      makeAgent({ id: 'agent-002', activeMs: 100_000 }),
+      makeAgent({ id: 'agent-003', activeMs: 140_000 }),
+    ];
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.wisdom, 1);
+  });
+
+  it('patience uses sqrt scaling (diminishing returns on high-cycle sessions)', () => {
+    const c = makeCompanion();
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 9 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    onSessionComplete(c, makeSession({ orchestratorCycles }));
+    // ceil(sqrt(9)) = 3, not 9
+    assert.equal(c.stats.patience, 3);
+  });
+
+  it('only credits delta on re-completion (continue→re-complete)', () => {
+    const c = makeCompanion();
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 4 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    // First completion: ceil(sqrt(4)) = 2
+    onSessionComplete(c, makeSession({ orchestratorCycles, activeMs: 60_000 }));
+    assert.equal(c.stats.patience, 2);
+    assert.equal(c.stats.endurance, 60_000);
+
+    // Simulate continue→re-complete: session now has 9 cycles, 90s active
+    const moreCycles: OrchestratorCycle[] = Array.from({ length: 9 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    onSessionComplete(c, makeSession({
+      orchestratorCycles: moreCycles,
+      activeMs: 90_000,
+      companionCreditedCycles: 4,
+      companionCreditedActiveMs: 60_000,
+    }));
+    // Delta patience: ceil(sqrt(9)) - ceil(sqrt(4)) = 3 - 2 = 1
+    assert.equal(c.stats.patience, 3);  // 2 + 1, not 2 + 3
+    assert.equal(c.stats.endurance, 90_000);  // 60k + 30k, not 60k + 90k
+    assert.equal(c.stats.strength, 2);  // strength always +1 per completion
   });
 });
 

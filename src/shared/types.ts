@@ -48,6 +48,10 @@ export interface Session {
   startHour?: number;
   startDayOfWeek?: number;
   launchConfig?: { model?: string; context?: string; orchestratorPrompt?: string; };
+  /** Cycles already credited to companion stats (prevents double-counting on continue→re-complete) */
+  companionCreditedCycles?: number;
+  /** activeMs already credited to companion stats */
+  companionCreditedActiveMs?: number;
 }
 
 export interface Agent {

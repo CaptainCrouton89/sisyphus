@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
-import { getOrchestratorPaneId } from './orchestrator.js';
 import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
 
@@ -64,7 +63,6 @@ export function readClaudeState(paneId: string): 'idle' | 'processing' | 'stoppe
 
 function detectPhase(
   session: Session,
-  orchPaneId: string | undefined,
   livePaneIds: Set<string>,
 ): SessionPhase {
   if (session.status === 'completed') return 'completed';
@@ -73,23 +71,22 @@ function detectPhase(
   // Active session — determine sub-phase
   if (respawningSessions.has(session.id)) return 'between-cycles';
 
+  // Derive orchestrator pane from persisted cycle state (survives daemon restarts)
+  const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+  const orchPaneId = lastCycle && !lastCycle.completedAt ? lastCycle.paneId : undefined;
   const orchAlive = orchPaneId != null && livePaneIds.has(orchPaneId);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
 
   if (orchAlive) {
-    // Orchestrator is running — check Claude state from hook files
-    // Hook states: idle = no prompt yet, processing = Claude working, stopped = waiting for input
     const claudeState = readClaudeState(orchPaneId!);
     if (claudeState === 'idle' || claudeState === 'stopped') {
       return 'orchestrator:idle';
     }
-    // Default: processing (covers processing, missing hook file)
     return 'orchestrator:processing';
   }
 
   if (hasRunningAgents) return 'agents:running';
 
-  // No orchestrator, no running agents — between cycles or stuck
   return 'between-cycles';
 }
 
@@ -229,10 +226,9 @@ export function recomputeDots(): void {
       try {
         const session = state.getSession(cwd, sessionId);
         totalRunningAgents += session.agents.filter(a => a.status === 'running').length;
-        const orchPaneId = getOrchestratorPaneId(sessionId);
         const livePanes = tmux.listPanes(windowId);
         const livePaneIds = new Set(livePanes.map(p => p.paneId));
-        const phase = detectPhase(session, orchPaneId, livePaneIds);
+        const phase = detectPhase(session, livePaneIds);
         dots.push({ phase, createdAt: session.createdAt });
 
         const tmuxInfo = tmuxInfoMap.get(sessionId);

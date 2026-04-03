@@ -106,6 +106,17 @@ export function computeLevel(xp: number): number {
   return level;
 }
 
+/** Returns { xpIntoLevel, xpForNextLevel } so callers can render accurate progress bars. */
+export function computeLevelProgress(xp: number): { xpIntoLevel: number; xpForNextLevel: number } {
+  let threshold = 150;
+  let cumulative = 0;
+  while (cumulative + threshold <= xp) {
+    cumulative += threshold;
+    threshold = Math.floor(threshold * 1.35);
+  }
+  return { xpIntoLevel: xp - cumulative, xpForNextLevel: threshold };
+}
+
 const TITLE_MAP: Record<number, string> = {
   1: 'Boulder Intern',
   2: 'Pebble Pusher',
@@ -504,23 +515,32 @@ function isEfficientSession(session: Session): boolean {
   const mean = times.reduce((a, b) => a + b, 0) / times.length;
   const variance = times.reduce((acc, t) => acc + Math.pow(t - mean, 2), 0) / times.length;
   const stddev = Math.sqrt(variance);
-  return stddev < mean * 0.3;
+  return stddev < mean * 0.6;
 }
 
 export function onSessionComplete(companion: CompanionState, session: Session): AchievementId[] {
+  // Delta-safe: only credit what hasn't been credited yet (prevents inflation on continue→re-complete)
+  const creditedCycles = session.companionCreditedCycles ?? 0;
+  const creditedActiveMs = session.companionCreditedActiveMs ?? 0;
+  const totalCycles = session.orchestratorCycles?.length ?? 0;
+  const deltaCycles = Math.max(0, totalCycles - creditedCycles);
+  const deltaActiveMs = Math.max(0, session.activeMs - creditedActiveMs);
+
   // Increment counters
   companion.sessionsCompleted++;
-  companion.totalActiveMs += session.activeMs;
-  companion.stats.endurance += session.activeMs;
+  companion.totalActiveMs += deltaActiveMs;
+  companion.stats.endurance += deltaActiveMs;
   companion.stats.strength++;
 
-  // Patience: persistence through complex sessions
-  const cycleCount = session.orchestratorCycles?.length ?? 0;
-  companion.stats.patience += cycleCount;
-  // Bonus for sessions that went through full lifecycle
-  const modes = new Set((session.orchestratorCycles ?? []).map(c => c.mode));
-  if (modes.has('validation')) companion.stats.patience += 3;
-  if (modes.has('completion')) companion.stats.patience += 2;
+  // Patience: diminishing returns on high-cycle sessions (sqrt scale)
+  const patienceFromCycles = Math.ceil(Math.sqrt(totalCycles)) - Math.ceil(Math.sqrt(creditedCycles));
+  companion.stats.patience += Math.max(0, patienceFromCycles);
+  // Bonus for sessions that went through full lifecycle (only new modes)
+  const allModes = new Set((session.orchestratorCycles ?? []).map(c => c.mode));
+  const creditedModesCycles = (session.orchestratorCycles ?? []).slice(0, creditedCycles);
+  const prevModes = new Set(creditedModesCycles.map(c => c.mode));
+  if (allModes.has('validation') && !prevModes.has('validation')) companion.stats.patience += 1;
+  if (allModes.has('completion') && !prevModes.has('completion')) companion.stats.patience += 1;
 
   // Wisdom: efficient orchestration
   if (isEfficientSession(session)) {
@@ -531,7 +551,7 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   updateRepoMemory(companion, session.cwd, 'completion');
 
   // Track consecutive efficient sessions (for iron-will)
-  if (cycleCount <= 3) {
+  if (totalCycles <= 3) {
     companion.consecutiveEfficientSessions++;
   } else {
     companion.consecutiveEfficientSessions = 0;
