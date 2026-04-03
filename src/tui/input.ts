@@ -807,7 +807,23 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
       return;
     }
 
-    // Window is dead or session is completed — resume the last orchestrator Claude session
+    // Window is dead — reopen via daemon (recreates tmux session/window)
+    if (session.status !== 'completed') {
+      void (async () => {
+        try {
+          const res = await actions.send({ type: 'reopen-window', sessionId: state.selectedSessionId!, cwd: state.cwd });
+          if (!res.ok) { notify(state, `Error: ${res.error}`); return; }
+          const data = res.data as { tmuxSessionName: string; tmuxWindowId: string };
+          actions.switchToSession(data.tmuxSessionName);
+          actions.selectWindow(data.tmuxWindowId);
+        } catch (err) {
+          notify(state, `Error: ${(err as Error).message}`);
+        }
+      })();
+      return;
+    }
+
+    // Completed session — resume the last orchestrator Claude session for review
     const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
     const claudeSessionId = lastCycle?.claudeSessionId;
     if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
