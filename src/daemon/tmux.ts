@@ -2,40 +2,45 @@ import { shellQuote } from '../shared/shell.js';
 import { exec, execSafe } from '../shared/exec.js';
 export { EXEC_ENV } from '../shared/exec.js';
 
+// Escape tmux -t targets for shell. Session IDs like $34 contain $ which
+// gets expanded by /bin/sh when passed through execSync. shellQuote wraps
+// in single quotes, preventing all expansion.
+const t = (target: string): string => shellQuote(target);
+
 export function createPane(windowTarget: string, cwd?: string, position: 'left' | 'right' = 'right'): string {
   const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
   // Target the first/last pane in the window to ensure absolute left/right placement
   const panes = listPanes(windowTarget);
   const target = position === 'left' ? panes[0]?.paneId : panes[panes.length - 1]?.paneId;
-  const targetFlag = target ? ` -t "${target}"` : ` -t "${windowTarget}"`;
+  const targetFlag = target ? ` -t ${t(target)}` : ` -t ${t(windowTarget)}`;
   const beforeFlag = position === 'left' ? 'b' : '';
   const paneId = exec(`tmux split-window -h${beforeFlag}${targetFlag}${cwdFlag} -P -F "#{pane_id}"`);
-  execSafe(`tmux select-layout -t "${windowTarget}" even-horizontal`);
+  execSafe(`tmux select-layout -t ${t(windowTarget)} even-horizontal`);
   return paneId;
 }
 
 export function sendKeys(paneTarget: string, command: string): void {
-  exec(`tmux send-keys -t "${paneTarget}" ${shellQuote(command)} Enter`);
+  exec(`tmux send-keys -t ${t(paneTarget)} ${shellQuote(command)} Enter`);
 }
 
 export function killPane(paneTarget: string): void {
-  execSafe(`tmux kill-pane -t "${paneTarget}"`);
+  execSafe(`tmux kill-pane -t ${t(paneTarget)}`);
 }
 
 export function killWindow(windowTarget: string): void {
-  execSafe(`tmux kill-window -t "${windowTarget}"`);
+  execSafe(`tmux kill-window -t ${t(windowTarget)}`);
 }
 
 export function createSession(sessionName: string, cwd: string): { windowId: string; initialPaneId: string; sessionId: string } {
-  const sessionId = exec(`tmux new-session -d -s "${sessionName}" -n main -c ${shellQuote(cwd)} -P -F "#{session_id}"`);
-  const windowId = exec(`tmux display-message -t "${sessionId}:main" -p "#{window_id}"`);
-  const initialPaneId = exec(`tmux display-message -t "${sessionId}:main" -p "#{pane_id}"`);
+  const sessionId = exec(`tmux new-session -d -s ${t(sessionName)} -n main -c ${shellQuote(cwd)} -P -F "#{session_id}"`);
+  const windowId = exec(`tmux display-message -t ${t(sessionId + ':main')} -p "#{window_id}"`);
+  const initialPaneId = exec(`tmux display-message -t ${t(sessionId + ':main')} -p "#{pane_id}"`);
   configureSessionDefaults(sessionId, windowId);
   return { windowId, initialPaneId, sessionId };
 }
 
 export function paneExists(paneTarget: string): boolean {
-  return execSafe(`tmux display-message -t "${paneTarget}" -p "#{pane_id}"`) !== null;
+  return execSafe(`tmux display-message -t ${t(paneTarget)} -p "#{pane_id}"`) !== null;
 }
 
 /**
@@ -43,7 +48,7 @@ export function paneExists(paneTarget: string): boolean {
  * $N IDs use exact integer matching (no prefix-match risk).
  */
 export function sessionExistsById(tmuxSessionId: string): boolean {
-  return execSafe(`tmux has-session -t "${tmuxSessionId}"`) !== null;
+  return execSafe(`tmux has-session -t ${t(tmuxSessionId)}`) !== null;
 }
 
 /**
@@ -62,7 +67,15 @@ export function sessionNameTaken(sessionName: string): boolean {
  * Used for recovery after tmux server restart when stored $N is stale.
  */
 export function resolveSessionId(sessionName: string): string | null {
-  return execSafe(`tmux display-message -t "=${sessionName}" -p "#{session_id}"`);
+  // Use list-sessions with exact match filter rather than display-message,
+  // which may fail without an attached client in daemon context.
+  const output = execSafe('tmux list-sessions -F "#{session_id} #{session_name}"');
+  if (!output) return null;
+  for (const line of output.split('\n').filter(Boolean)) {
+    const { sessionId, name } = parseSessionLine(line);
+    if (name === sessionName) return sessionId;
+  }
+  return null;
 }
 
 /**
@@ -84,15 +97,19 @@ export function initSessionMeta(tmuxTarget: string, cwd: string, sisyphusSession
 }
 
 export function killSession(target: string): void {
-  execSafe(`tmux kill-session -t "${target}"`);
+  execSafe(`tmux kill-session -t ${t(target)}`);
 }
 
 export function renameSession(target: string, newName: string): void {
-  exec(`tmux rename-session -t "${target}" "${newName}"`);
+  exec(`tmux rename-session -t ${t(target)} ${t(newName)}`);
 }
 
 export function setSessionOption(target: string, option: string, value: string): void {
-  execSafe(`tmux set-option -t "${target}" ${option} ${shellQuote(value)}`);
+  execSafe(`tmux set-option -t ${t(target)} ${option} ${shellQuote(value)}`);
+}
+
+export function unsetSessionOption(target: string, option: string): void {
+  execSafe(`tmux set-option -u -t ${t(target)} ${option}`);
 }
 
 function parseSessionLine(line: string): { sessionId: string; name: string } {
@@ -107,18 +124,18 @@ export function findHomeSession(cwd: string): string | null {
   for (const line of output.split('\n').filter(Boolean)) {
     const { sessionId: sessId, name } = parseSessionLine(line);
     if (name.startsWith('ssyph_')) continue;
-    const val = execSafe(`tmux show-options -t "${sessId}" -v @sisyphus_cwd`);
+    const val = execSafe(`tmux show-options -t ${t(sessId)} -v @sisyphus_cwd`);
     if (val?.trim() === normalizedCwd) return sessId;
   }
   return null;
 }
 
 export function switchAttachedClients(sourceTarget: string, destTarget: string): void {
-  if (execSafe(`tmux has-session -t "${destTarget}"`) === null) return;
-  const output = execSafe(`tmux list-clients -t "${sourceTarget}" -F "#{client_tty}"`);
+  if (execSafe(`tmux has-session -t ${t(destTarget)}`) === null) return;
+  const output = execSafe(`tmux list-clients -t ${t(sourceTarget)} -F "#{client_tty}"`);
   if (!output) return;
   for (const tty of output.split('\n').filter(Boolean)) {
-    execSafe(`tmux switch-client -c "${tty}" -t "${destTarget}"`);
+    execSafe(`tmux switch-client -c ${t(tty)} -t ${t(destTarget)}`);
   }
 }
 
@@ -128,8 +145,12 @@ export interface PaneInfo {
   panePid: string;
 }
 
+export function getFirstWindowId(sessionTarget: string): string | null {
+  return execSafe(`tmux list-windows -t ${t(sessionTarget)} -F "#{window_id}" -f "#{==:#{window_index},0}"`)?.trim() || null;
+}
+
 export function listPanes(windowTarget: string): PaneInfo[] {
-  const output = execSafe(`tmux list-panes -t "${windowTarget}" -F "#{pane_id} #{pane_pid}"`);
+  const output = execSafe(`tmux list-panes -t ${t(windowTarget)} -F "#{pane_id} #{pane_pid}"`);
   if (!output) return [];
   return output
     .split('\n')
@@ -141,7 +162,7 @@ export function listPanes(windowTarget: string): PaneInfo[] {
 }
 
 export function setPaneTitle(paneTarget: string, title: string): void {
-  execSafe(`tmux select-pane -t "${paneTarget}" -T ${shellQuote(title)}`);
+  execSafe(`tmux select-pane -t ${t(paneTarget)} -T ${shellQuote(title)}`);
 }
 
 export interface PaneMeta {
@@ -158,11 +179,11 @@ export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta):
 
   // Store structured metadata as per-pane user variables so the format string
   // resolves them independently per pane (one format, per-pane values).
-  execSafe(`tmux set -p -t "${paneTarget}" @pane_role ${shellQuote(meta.role)}`);
-  execSafe(`tmux set -p -t "${paneTarget}" @pane_session ${shellQuote(meta.session)}`);
-  execSafe(`tmux set -p -t "${paneTarget}" @pane_cycle ${shellQuote(meta.cycle)}`);
+  execSafe(`tmux set -p -t ${t(paneTarget)} @pane_role ${shellQuote(meta.role)}`);
+  execSafe(`tmux set -p -t ${t(paneTarget)} @pane_session ${shellQuote(meta.session)}`);
+  execSafe(`tmux set -p -t ${t(paneTarget)} @pane_cycle ${shellQuote(meta.cycle)}`);
   if (meta.mode) {
-    execSafe(`tmux set -p -t "${paneTarget}" @pane_mode ${shellQuote(meta.mode)}`);
+    execSafe(`tmux set -p -t ${t(paneTarget)} @pane_mode ${shellQuote(meta.mode)}`);
   }
 
   // Visual hierarchy: role badge (bg color) > session name (fg color) > mode (italic) > cycle + path (dim)
@@ -177,13 +198,13 @@ export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta):
     `#[default]`,
   ].join('');
 
-  execSafe(`tmux set -p -t "${paneTarget}" pane-border-format ${shellQuote(fmt)}`);
+  execSafe(`tmux set -p -t ${t(paneTarget)} pane-border-format ${shellQuote(fmt)}`);
   // Store color as a per-pane user variable. The window-level border styles use a
   // format string that resolves #{@pane_color} per-pane at render time, giving each
   // pane its own border color (pane-border-style itself is window-level / last-write-wins).
-  execSafe(`tmux set -p -t "${paneTarget}" @pane_color "${color}"`);
-  execSafe(`tmux set -w -t "${paneTarget}" pane-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
-  execSafe(`tmux set -w -t "${paneTarget}" pane-active-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
+  execSafe(`tmux set -p -t ${t(paneTarget)} @pane_color "${color}"`);
+  execSafe(`tmux set -w -t ${t(paneTarget)} pane-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
+  execSafe(`tmux set -w -t ${t(paneTarget)} pane-active-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
 }
 
 /**
@@ -191,22 +212,22 @@ export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta):
  * Used by auto-naming to update session name across all live panes.
  */
 export function updatePaneMeta(paneTarget: string, updates: Partial<PaneMeta>): void {
-  if (updates.role !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_role ${shellQuote(updates.role)}`);
-  if (updates.session !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_session ${shellQuote(updates.session)}`);
-  if (updates.cycle !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_cycle ${shellQuote(updates.cycle)}`);
-  if (updates.mode !== undefined) execSafe(`tmux set -p -t "${paneTarget}" @pane_mode ${shellQuote(updates.mode)}`);
+  if (updates.role !== undefined) execSafe(`tmux set -p -t ${t(paneTarget)} @pane_role ${shellQuote(updates.role)}`);
+  if (updates.session !== undefined) execSafe(`tmux set -p -t ${t(paneTarget)} @pane_session ${shellQuote(updates.session)}`);
+  if (updates.cycle !== undefined) execSafe(`tmux set -p -t ${t(paneTarget)} @pane_cycle ${shellQuote(updates.cycle)}`);
+  if (updates.mode !== undefined) execSafe(`tmux set -p -t ${t(paneTarget)} @pane_mode ${shellQuote(updates.mode)}`);
 }
 
 export function selectLayout(windowTarget: string, layout: string = 'even-horizontal'): void {
-  execSafe(`tmux select-layout -t "${windowTarget}" ${layout}`);
+  execSafe(`tmux select-layout -t ${t(windowTarget)} ${layout}`);
 }
 
 export function setWindowOption(windowTarget: string, option: string, value: string): void {
-  execSafe(`tmux set-option -w -t "${windowTarget}" ${option} ${shellQuote(value)}`);
+  execSafe(`tmux set-option -w -t ${t(windowTarget)} ${option} ${shellQuote(value)}`);
 }
 
 export function getSessionOption(target: string, option: string): string | null {
-  return execSafe(`tmux show-options -t "${target}" -v ${option}`);
+  return execSafe(`tmux show-options -t ${t(target)} -v ${option}`);
 }
 
 export function getGlobalOption(option: string): string | null {
@@ -242,12 +263,12 @@ export function listAllPanes(): Array<{ sessionName: string; paneId: string }> {
  */
 function configureSessionDefaults(sessionName: string, windowId: string): void {
   // Pane border labels at top of each pane
-  execSafe(`tmux set -w -t "${windowId}" pane-border-status top`);
+  execSafe(`tmux set -w -t ${t(windowId)} pane-border-status top`);
   // Prevent tmux from overwriting pane/window titles we set
-  execSafe(`tmux set -w -t "${windowId}" allow-rename off`);
-  execSafe(`tmux set -w -t "${windowId}" automatic-rename off`);
+  execSafe(`tmux set -w -t ${t(windowId)} allow-rename off`);
+  execSafe(`tmux set -w -t ${t(windowId)} automatic-rename off`);
   // Re-tile when a pane dies so remaining panes fill the space
-  execSafe(`tmux set-hook -t "${sessionName}" after-kill-pane "select-layout even-horizontal"`);
-  execSafe(`tmux set-hook -t "${sessionName}" pane-exited "select-layout even-horizontal"`);
+  execSafe(`tmux set-hook -t ${t(sessionName)} after-kill-pane "select-layout even-horizontal"`);
+  execSafe(`tmux set-hook -t ${t(sessionName)} pane-exited "select-layout even-horizontal"`);
 }
 
