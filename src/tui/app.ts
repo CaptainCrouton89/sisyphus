@@ -182,7 +182,9 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
   // Initialize NvimBridge
   const treeWidth = 36;
-  const initialDetailW = (state.cols - treeWidth) - 4; // detail width minus borders
+  const remaining = state.cols - treeWidth;
+  const detailW = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
+  const initialDetailW = detailW - 4; // detail width minus borders
   const initialDetailH = (state.rows - 1) - 2 - STATUS_ROW_COUNT - 1; // content height minus borders, status, separator
   const bridge = new NvimBridge(
     Math.max(1, initialDetailW),
@@ -740,11 +742,12 @@ export function startApp(state: AppState, cleanup: () => void): void {
     prevFrame = []; // force full redraw
 
     // Resize nvim bridge to match new detail panel dimensions
-    // Account for: borders (2), status rows (STATUS_ROW_COUNT), separator (1)
+    // Account for: combined view split, borders (2), status rows (STATUS_ROW_COUNT), separator (1)
     if (state.nvimBridge) {
-      const detailW = state.cols - 36; // treeWidth=36
+      const resizeRemaining = state.cols - 36; // treeWidth=36
+      const resizeDetailW = state.showCombinedView ? Math.floor(resizeRemaining * 0.6) : resizeRemaining;
       const contentH = state.rows - 1; // bottomBar=1
-      state.nvimBridge.resize(Math.max(1, detailW - 4), Math.max(1, contentH - 2 - STATUS_ROW_COUNT - 1));
+      state.nvimBridge.resize(Math.max(1, resizeDetailW - 4), Math.max(1, contentH - 2 - STATUS_ROW_COUNT - 1));
     }
 
     requestRender();
