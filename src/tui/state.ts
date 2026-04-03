@@ -299,7 +299,7 @@ export function notify(state: AppState, msg: string): void {
     state.notification = null;
     state.notificationTimer = null;
     requestRender();
-  }, 3000);
+  }, 30_000);
 }
 
 // ---------------------------------------------------------------------------
