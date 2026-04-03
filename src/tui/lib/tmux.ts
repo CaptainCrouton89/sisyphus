@@ -13,15 +13,15 @@ export function getWindowId(): string {
 }
 
 export function selectWindow(windowId: string): void {
-  execSafe(`tmux select-window -t "${windowId}"`);
+  execSafe(`tmux select-window -t ${shellQuote(windowId)}`);
 }
 
 export function selectPane(paneId: string): void {
-  execSafe(`tmux select-pane -t "${paneId}"`);
+  execSafe(`tmux select-pane -t ${shellQuote(paneId)}`);
 }
 
 export function windowExists(windowId: string): boolean {
-  return execSafe(`tmux display-message -t "${windowId}" -p "#{window_id}"`) !== null;
+  return execSafe(`tmux display-message -t ${shellQuote(windowId)} -p "#{window_id}"`) !== null;
 }
 
 export function listAllWindowIds(): Set<string> {
@@ -89,7 +89,7 @@ export function openCompanionPane(cwd: string): void {
 const TERMINAL_EDITORS = new Set(['nvim', 'vim', 'vi', 'nano', 'emacs', 'micro', 'helix', 'hx', 'joe', 'ne', 'kak']);
 
 export function switchToSession(sessionName: string): void {
-  execSafe(`tmux switch-client -t "${sessionName}"`);
+  execSafe(`tmux switch-client -t ${shellQuote(sessionName)}`);
 }
 
 export function editInPopup(cwd: string, editor: string, opts?: { content?: string; size?: { w: string; h: string } }): string | null {
