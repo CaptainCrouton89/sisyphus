@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getMoodFace, getMoodTmuxColor } from '../shared/companion-render.js';
 import { loadCompanion } from './companion.js';
+import { loadConfig } from '../shared/config.js';
 import { execSafe } from '../shared/exec.js';
 import { shellQuote } from '../shared/shell.js';
 
@@ -30,6 +31,9 @@ function wrapText(text: string, width: number): string[] {
 
 export function showCommentaryPopup(text: string): void {
   try {
+    const config = loadConfig(process.cwd());
+    if (config.companionPopup === false) return;
+
     const companion = loadCompanion();
     const intensity = companion.debugMood?.scores[companion.mood] ?? 0;
     const face = getMoodFace(companion.mood, intensity);

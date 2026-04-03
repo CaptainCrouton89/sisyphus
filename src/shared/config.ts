@@ -24,6 +24,7 @@ export interface Config {
   editor?: string;
   repos?: string[];
   notifications?: NotificationConfig;
+  companionPopup?: boolean;
   requiredPlugins?: RequiredPlugin[];
 }
 
@@ -35,6 +36,7 @@ const DEFAULT_CONFIG: Config = {
     enabled: true,
     sound: '/System/Library/Sounds/Hero.aiff',
   },
+  companionPopup: true,
   requiredPlugins: [
     { name: 'devcore', marketplace: 'crouton-kit' },
   ],
