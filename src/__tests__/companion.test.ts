@@ -19,6 +19,7 @@ import {
   zScore,
   emptyStats,
   defaultBaselines,
+  computeStrengthGain,
 } from '../daemon/companion.js';
 import type { Session, Agent, OrchestratorCycle, Message } from '../shared/types.js';
 import type { CompanionState, MoodSignals, RepoMemory, RunningStats } from '../shared/companion-types.js';
@@ -146,30 +147,48 @@ describe('computeXP', () => {
     assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 0, patience: 0 }), 0);
   });
 
-  it('strength * 80', () => {
-    assert.equal(computeXP({ strength: 5, endurance: 0, wisdom: 0, patience: 0 }), 400);
+  it('strength * 50', () => {
+    assert.equal(computeXP({ strength: 5, endurance: 0, wisdom: 0, patience: 0 }), 250);
   });
 
-  it('endurance: (ms / 3_600_000) * 15', () => {
-    assert.equal(computeXP({ strength: 0, endurance: 7_200_000, wisdom: 0, patience: 0 }), 30);
+  it('endurance: (ms / 3_600_000) * 20', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 7_200_000, wisdom: 0, patience: 0 }), 40);
   });
 
   it('wisdom * 40', () => {
     assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 4, patience: 0 }), 160);
   });
 
-  it('patience: count * 5', () => {
-    assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 0, patience: 10 }), 50);
+  it('patience: count * 8', () => {
+    assert.equal(computeXP({ strength: 0, endurance: 0, wisdom: 0, patience: 10 }), 80);
   });
 
-  it('combined formula: strength=1, endurance=3.6M ms, wisdom=1, patience=1 → 136', () => {
-    // 80 + 15 + 40 + 5 = 140
-    assert.equal(computeXP({ strength: 1, endurance: 3_600_000, wisdom: 1, patience: 1 }), 140);
+  it('combined formula: strength=1, endurance=3.6M ms, wisdom=1, patience=1 → 118', () => {
+    // 50 + 20 + 40 + 8 = 118
+    assert.equal(computeXP({ strength: 1, endurance: 3_600_000, wisdom: 1, patience: 1 }), 118);
   });
 
   it('floors fractional XP (1ms endurance → 0)', () => {
     assert.equal(computeXP({ strength: 0, endurance: 1, wisdom: 0, patience: 0 }), 0);
   });
+});
+
+// ---------------------------------------------------------------------------
+// computeStrengthGain
+// ---------------------------------------------------------------------------
+
+describe('computeStrengthGain', () => {
+  it('0 agents → 0', () => assert.equal(computeStrengthGain(0), 0));
+  it('1 agent → 1',  () => assert.equal(computeStrengthGain(1), 1));
+  it('2 agents → 1', () => assert.equal(computeStrengthGain(2), 1));
+  it('3 agents → 2', () => assert.equal(computeStrengthGain(3), 2));
+  it('5 agents → 2', () => assert.equal(computeStrengthGain(5), 2));
+  it('6 agents → 3', () => assert.equal(computeStrengthGain(6), 3));
+  it('10 agents → 3', () => assert.equal(computeStrengthGain(10), 3));
+  it('11 agents → 4', () => assert.equal(computeStrengthGain(11), 4));
+  it('20 agents → 4', () => assert.equal(computeStrengthGain(20), 4));
+  it('21 agents → 5', () => assert.equal(computeStrengthGain(21), 5));
+  it('100 agents → 5', () => assert.equal(computeStrengthGain(100), 5));
 });
 
 // ---------------------------------------------------------------------------
@@ -285,10 +304,57 @@ describe('computeMood', () => {
 // ---------------------------------------------------------------------------
 
 describe('onSessionComplete', () => {
-  it('increments strength by 1', () => {
+  it('strength +0 for 0 agents', () => {
     const c = makeCompanion();
     onSessionComplete(c, makeSession({ activeMs: 0, agents: [] }));
+    assert.equal(c.stats.strength, 0);
+  });
+
+  it('strength +1 for 1-2 agents', () => {
+    const c = makeCompanion();
+    onSessionComplete(c, makeSession({ agents: [makeAgent()] }));
     assert.equal(c.stats.strength, 1);
+  });
+
+  it('strength +2 for 3-5 agents', () => {
+    const c = makeCompanion();
+    const agents = Array.from({ length: 4 }, (_, i) => makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }));
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.strength, 2);
+  });
+
+  it('strength +3 for 6-10 agents', () => {
+    const c = makeCompanion();
+    const agents = Array.from({ length: 8 }, (_, i) => makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }));
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.strength, 3);
+  });
+
+  it('strength +4 for 11-20 agents', () => {
+    const c = makeCompanion();
+    const agents = Array.from({ length: 15 }, (_, i) => makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }));
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.strength, 4);
+  });
+
+  it('strength +5 for 21+ agents', () => {
+    const c = makeCompanion();
+    const agents = Array.from({ length: 25 }, (_, i) => makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }));
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.strength, 5);
+  });
+
+  it('strength delta-safe: does not double-credit on continue→re-complete', () => {
+    const c = makeCompanion();
+    const agents = Array.from({ length: 8 }, (_, i) => makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }));
+    // First complete: 8 agents → tier 3
+    onSessionComplete(c, makeSession({ agents }));
+    assert.equal(c.stats.strength, 3);
+    // Continue + add more agents (total 15), re-complete with credited strength
+    const moreAgents = Array.from({ length: 15 }, (_, i) => makeAgent({ id: `agent-${String(i + 1).padStart(3, '0')}` }));
+    onSessionComplete(c, makeSession({ agents: moreAgents, companionCreditedStrength: 3 }));
+    // 15 agents → tier 4, delta = 4 - 3 = 1
+    assert.equal(c.stats.strength, 4);
   });
 
   it('adds session.activeMs to endurance', () => {
@@ -337,6 +403,30 @@ describe('onSessionComplete', () => {
     }));
     onSessionComplete(c, makeSession({ orchestratorCycles }));
     assert.equal(c.consecutiveEfficientSessions, 0);
+  });
+
+  it('increments consecutiveHighCycleSessions when session has >= 8 cycles', () => {
+    const c = makeCompanion({ consecutiveHighCycleSessions: 2 });
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 8 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    onSessionComplete(c, makeSession({ orchestratorCycles }));
+    assert.equal(c.consecutiveHighCycleSessions, 3);
+  });
+
+  it('resets consecutiveHighCycleSessions when session has < 8 cycles', () => {
+    const c = makeCompanion({ consecutiveHighCycleSessions: 4 });
+    const orchestratorCycles: OrchestratorCycle[] = Array.from({ length: 7 }, (_, i) => ({
+      cycle: i + 1,
+      timestamp: new Date().toISOString(),
+      activeMs: 1000,
+      agentsSpawned: [],
+    }));
+    onSessionComplete(c, makeSession({ orchestratorCycles }));
+    assert.equal(c.consecutiveHighCycleSessions, 0);
   });
 
   it('wisdom: +1 for clean execution (≥80% agents completed)', () => {
@@ -452,7 +542,7 @@ describe('onSessionComplete', () => {
     // Delta patience: ceil(sqrt(9)) - ceil(sqrt(4)) = 3 - 2 = 1
     assert.equal(c.stats.patience, 3);  // 2 + 1, not 2 + 3
     assert.equal(c.stats.endurance, 90_000);  // 60k + 30k, not 60k + 90k
-    assert.equal(c.stats.strength, 2);  // strength always +1 per completion
+    assert.equal(c.stats.strength, 0);  // 0 agents in both calls → tier 0, no gain
   });
 });
 
@@ -527,8 +617,8 @@ describe('onSessionComplete — sessionsCrashed', () => {
 // ---------------------------------------------------------------------------
 
 describe('ACHIEVEMENTS', () => {
-  it('contains exactly 66 entries', () => {
-    assert.equal(ACHIEVEMENTS.length, 66);
+  it('contains exactly 67 entries', () => {
+    assert.equal(ACHIEVEMENTS.length, 67);
   });
 
   it('all entries have id, name, category, and description', () => {
@@ -707,8 +797,16 @@ describe('checkAchievements session', () => {
     assert.ok(!checkAchievements(makeCompanion(), session).includes('flawless'));
   });
 
-  it('iron-will: consecutiveEfficientSessions >= 10', () => {
-    assert.ok(checkAchievements(makeCompanion({ consecutiveEfficientSessions: 10 })).includes('iron-will'));
+  it('speed-demon: consecutiveEfficientSessions >= 10', () => {
+    assert.ok(checkAchievements(makeCompanion({ consecutiveEfficientSessions: 10 })).includes('speed-demon'));
+  });
+
+  it('iron-will: consecutiveHighCycleSessions >= 5', () => {
+    assert.ok(checkAchievements(makeCompanion({ consecutiveHighCycleSessions: 5 })).includes('iron-will'));
+  });
+
+  it('iron-will: does not fire below 5', () => {
+    assert.ok(!checkAchievements(makeCompanion({ consecutiveHighCycleSessions: 4 })).includes('iron-will'));
   });
 
   it('glass-cannon: 5+ agents all crashed, session completed', () => {

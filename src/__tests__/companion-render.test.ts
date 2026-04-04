@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import stringWidth from 'string-width';
 import {
   getBaseForm,
   getMoodFace,
@@ -174,13 +175,14 @@ describe('getBoulderForm', () => {
   it('agentCount undefined → ""', () => assert.equal(getBoulderForm(), ''));
   it('agentCount 0 → ""',        () => assert.equal(getBoulderForm(0), ''));
   it('agentCount 1 → "o"',        () => assert.equal(getBoulderForm(1), 'o'));
-  it('agentCount 2 → "O"',        () => assert.equal(getBoulderForm(2), 'O'));
-  it('agentCount 4 → "O"',        () => assert.equal(getBoulderForm(4), 'O'));
-  it('agentCount 5 → "◉"',        () => assert.equal(getBoulderForm(5), '◉'));
-  it('agentCount 9 → "◉"',        () => assert.equal(getBoulderForm(9), '◉'));
-  it('agentCount 10 → "@"',       () => assert.equal(getBoulderForm(10), '@'));
-  it('agentCount 20 → "@"',       () => assert.equal(getBoulderForm(20), '@'));
-  it('agentCount 21 → "@@"',      () => assert.equal(getBoulderForm(21), '@@'));
+  it('agentCount 2 → "o"',        () => assert.equal(getBoulderForm(2), 'o'));
+  it('agentCount 3 → "O"',        () => assert.equal(getBoulderForm(3), 'O'));
+  it('agentCount 6 → "O"',        () => assert.equal(getBoulderForm(6), 'O'));
+  it('agentCount 7 → "◉"',        () => assert.equal(getBoulderForm(7), '◉'));
+  it('agentCount 15 → "◉"',       () => assert.equal(getBoulderForm(15), '◉'));
+  it('agentCount 16 → "@"',       () => assert.equal(getBoulderForm(16), '@'));
+  it('agentCount 35 → "@"',       () => assert.equal(getBoulderForm(35), '@'));
+  it('agentCount 36 → "@@"',      () => assert.equal(getBoulderForm(36), '@@'));
   it('agentCount 50 → "@@"',      () => assert.equal(getBoulderForm(50), '@@'));
 
   it('with nickname and agents → includes quoted nickname', () => {
@@ -189,7 +191,7 @@ describe('getBoulderForm', () => {
   });
 
   it('with nickname, larger boulder still starts with boulder char', () => {
-    const form = getBoulderForm(10, 'big-project');
+    const form = getBoulderForm(16, 'big-project');
     assert.ok(form.startsWith('@'), `Expected @ prefix in "${form}"`);
     assert.ok(form.includes('"big-project"'));
   });
@@ -284,7 +286,7 @@ describe('renderCompanion', () => {
     assert.ok(result.includes('hello world'), `Expected commentary in "${result}"`);
   });
 
-  it('maxWidth truncates output to at most maxWidth chars', () => {
+  it('maxWidth truncates output to at most maxWidth display columns', () => {
     const c = makeCompanion({
       lastCommentary: {
         text: 'A'.repeat(100),
@@ -293,7 +295,7 @@ describe('renderCompanion', () => {
       },
     });
     const result = renderCompanion(c, ['face', 'commentary'], { maxWidth: 50 });
-    assert.ok(result.length <= 50, `Expected length <= 50, got ${result.length}: "${result}"`);
+    assert.ok(stringWidth(result) <= 50, `Expected display width <= 50, got ${stringWidth(result)}: "${result}"`);
   });
 
   it('maxWidth: result shorter than full when commentary is truncated', () => {
@@ -307,6 +309,22 @@ describe('renderCompanion', () => {
     const full = renderCompanion(c, ['face', 'commentary']);
     const truncated = renderCompanion(c, ['face', 'commentary'], { maxWidth: 50 });
     assert.ok(truncated.length < full.length, 'Truncated should be shorter than full');
+  });
+
+  it('maxWidth respects display width of wide characters (ಠ益ಠ)', () => {
+    // 益 is CJK, 2 display columns but .length = 1 — old code used .length
+    const c = makeCompanion({
+      mood: 'frustrated',
+      level: 8, // \(FACE)/ form
+      debugMood: {
+        winner: 'frustrated',
+        signals: {} as never,
+        scores: { happy: 0, grinding: 0, frustrated: 105, zen: 0, sleepy: 0, excited: 0, existential: 0 },
+      },
+    });
+    const result = renderCompanion(c, ['face', 'hobby'], { maxWidth: 20 });
+    const dw = stringWidth(result);
+    assert.ok(dw <= 20, `Expected display width <= 20, got ${dw}: "${result}"`);
   });
 
   it('color: true wraps face in ANSI escape codes', () => {
