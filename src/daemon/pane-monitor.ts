@@ -4,7 +4,7 @@ import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
 import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
-import { loadCompanion, saveCompanion, computeMood } from './companion.js';
+import { loadCompanion, saveCompanion, recordCommentary, computeMood } from './companion.js';
 import { generateCommentary } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
 import type { MoodSignals } from '../shared/companion-types.js';
@@ -29,16 +29,11 @@ let lastMoodCompute = 0;
 let lastCompletionTime = 0;  // epoch ms
 let lastCrashTime = 0;       // epoch ms
 let lastLevelUpTime = 0;     // epoch ms
-let currentMaxCycleCount = 0;
 let lastLateNightCommentary = 0;  // epoch ms — throttle late-night commentary to once per 30min
 
 export function markEventCompletion(): void { lastCompletionTime = Date.now(); }
 export function markEventCrash(): void { lastCrashTime = Date.now(); }
 export function markEventLevelUp(): void { lastLevelUpTime = Date.now(); }
-export function updateCycleCount(count: number): void {
-  if (count > currentMaxCycleCount) currentMaxCycleCount = count;
-}
-export function resetCycleCount(): void { currentMaxCycleCount = 0; }
 
 interface ActiveTimerEntry {
   sessionMs: number;
@@ -220,6 +215,7 @@ async function pollAllSessions(): Promise<void> {
     let idleDurationMs = 0;
     let activeAgentCount = 0;
     let totalAgentCount = 0;
+    let maxCycleCount = 0;
     const cutoff = nowMs - 30 * 60 * 1000;
 
     for (const { id: sessionId, cwd } of trackedSessions.values()) {
@@ -228,6 +224,7 @@ async function pollAllSessions(): Promise<void> {
         if (s.status === 'active') {
           sessionLengthMs = Math.max(sessionLengthMs, s.activeMs);
           totalAgentCount = Math.max(totalAgentCount, s.agents.length);
+          maxCycleCount = Math.max(maxCycleCount, s.orchestratorCycles?.length ?? 0);
           for (const agent of s.agents) {
             if (agent.status === 'crashed' && agent.completedAt && new Date(agent.completedAt).getTime() > cutoff) {
               recentCrashes++;
@@ -253,7 +250,7 @@ async function pollAllSessions(): Promise<void> {
             if (text) {
               try {
                 const c = loadCompanion();
-                c.lastCommentary = { text, event: 'idle-wake', timestamp: new Date().toISOString() };
+                recordCommentary(c, text, 'idle-wake');
                 saveCompanion(c);
               } catch { /* non-fatal */ }
             }
@@ -276,7 +273,7 @@ async function pollAllSessions(): Promise<void> {
       hourOfDay: new Date().getHours(),
       activeAgentCount,
       totalAgentCount,
-      cycleCount: currentMaxCycleCount,
+      cycleCount: maxCycleCount,
       sessionsCompletedToday: companion.recentCompletions.filter(t => t.startsWith(new Date().toISOString().slice(0, 10))).length,
     };
 
@@ -309,7 +306,7 @@ async function pollAllSessions(): Promise<void> {
         if (text) {
           try {
             const c = loadCompanion();
-            c.lastCommentary = { text, event: 'late-night', timestamp: new Date().toISOString() };
+            recordCommentary(c, text, 'late-night');
             saveCompanion(c);
             showCommentaryPopup(text);
           } catch { /* non-fatal */ }

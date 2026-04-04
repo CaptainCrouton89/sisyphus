@@ -4,7 +4,7 @@ import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
 import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
-import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp, updateCycleCount } from './pane-monitor.js';
+import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { loadConfig } from '../shared/config.js';
 import { goalPath, cycleLogPath, sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
@@ -15,10 +15,11 @@ import { generateSessionName, generateSentiment } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
-import { loadCompanion, saveCompanion, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS } from './companion.js';
+import { loadCompanion, saveCompanion, recordCommentary, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain } from './companion.js';
 import { SPINNER_VERBS } from '../shared/companion-render.js';
 import { generateCommentary, generateNickname } from './companion-commentary.js';
-import { showCommentaryPopup } from './companion-popup.js';
+import { showCommentaryPopup, showCommentaryPopupQueue } from './companion-popup.js';
+import type { PopupPage } from './companion-popup.js';
 import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
 import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.js';
 import { formatDuration } from '../shared/format.js';
@@ -42,10 +43,40 @@ function fireCommentary(event: CommentaryEvent, companion: CompanionState, conte
     if (text) {
       try {
         const c = loadCompanion();
-        c.lastCommentary = { text, event, timestamp: new Date().toISOString() };
+        recordCommentary(c, text, event);
         saveCompanion(c);
         if (flash) showCommentaryPopup(text);
       } catch { /* non-fatal */ }
+    }
+  }).catch(() => {});
+}
+
+/**
+ * Generate all completion commentaries in parallel, then show them as a queued popup
+ * (Enter advances through pages). Each event also saves to lastCommentary.
+ */
+function fireCompletionCommentary(
+  events: Array<{ event: CommentaryEvent; companion: CompanionState; context?: string; popupTitle?: string }>,
+): void {
+  if (events.length === 0) return;
+  Promise.all(
+    events.map(({ event, companion, context }) =>
+      generateCommentary(event, companion, context).catch(() => null)
+    )
+  ).then(results => {
+    const pages: PopupPage[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const text = results[i];
+      if (!text) continue;
+      try {
+        const c = loadCompanion();
+        recordCommentary(c, text, events[i].event);
+        saveCompanion(c);
+      } catch { /* non-fatal */ }
+      pages.push({ text, title: events[i].popupTitle });
+    }
+    if (pages.length > 0) {
+      showCommentaryPopupQueue(pages);
     }
   }).catch(() => {});
 }
@@ -335,12 +366,12 @@ export function getSessionStatus(cwd: string, sessionId: string): Session {
   return state.getSession(cwd, sessionId);
 }
 
-export function listSessions(cwd: string): Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> {
+export function listSessions(cwd: string): Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];
 
   const entries = readdirSync(dir, { withFileTypes: true });
-  const sessions: Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> = [];
+  const sessions: Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -353,6 +384,7 @@ export function listSessions(cwd: string): Array<{ id: string; name?: string; ta
         status: session.status,
         createdAt: session.createdAt,
         agentCount: session.agents.length,
+        runningAgentCount: session.agents.filter(a => a.status === 'running').length,
         tmuxSessionName: session.tmuxSessionName,
         tmuxWindowId: session.tmuxWindowId,
       });
@@ -430,7 +462,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         if (log) cycleCtx += `\nCycle log: ${truncate(log, 200)}`;
       }
     } catch { /* best-effort */ }
-    fireCommentary('cycle-boundary', companion, cycleCtx);
+    fireCommentary('cycle-boundary', companion, cycleCtx, true);
   } catch { /* non-fatal */ }
 
   // Respawn on next tick — agents already finished, no delay needed
@@ -574,7 +606,6 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
   try { recomputeDots(); } catch { /* best-effort */ }
 
   const session = state.getSession(cwd, sessionId);
-  updateCycleCount(session.orchestratorCycles.length);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
   if (!hasRunningAgents) {
     // Fall back to state's tmuxWindowId if in-memory map is missing (e.g., after daemon restart)
@@ -616,7 +647,15 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   const userMessages = completedSession.messages
     .filter(m => typeof m.source === 'object' && m.source.type === 'user')
     .map(m => m.content);
-  generateSentiment(completedSession.task, userMessages).then(sentiment => {
+  generateSentiment({
+    task: completedSession.task,
+    completionReport: completedSession.completionReport,
+    agentCount: completedSession.agents.length,
+    cycleCount: completedSession.orchestratorCycles.length,
+    crashCount: completedSession.agents.filter(a => a.status === 'crashed').length,
+    activeMs: completedSession.activeMs,
+    messages: userMessages,
+  }).then(sentiment => {
     if (sentiment) {
       writeSessionSummary(completedSession, { sentiment });
     }
@@ -632,6 +671,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     await state.updateSession(cwd, sessionId, {
       companionCreditedCycles: completedSession.orchestratorCycles.length,
       companionCreditedActiveMs: completedSession.activeMs,
+      companionCreditedStrength: computeStrengthGain(completedSession.agents.length),
     });
     markEventCompletion();
     const leveledUp = companion.level > prevLevel;
@@ -642,20 +682,35 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
       `Result: ${truncate(report, 200)}`,
       `Stats: ${completedSession.agents.length} agents, ${completedSession.orchestratorCycles.length} cycles, ${formatDuration(completedSession.activeMs)} active`,
     ].join('\n');
-    fireCommentary('session-complete', companion, completeCtx, true);
+
+    // Collect all completion events — shown as queued popup pages (Enter advances)
+    const completionEvents: Array<{ event: CommentaryEvent; companion: CompanionState; context?: string; popupTitle?: string }> = [
+      { event: 'session-complete', companion, context: completeCtx },
+    ];
 
     if (leveledUp) {
       markEventLevelUp();
       const prevTitle = getTitle(prevLevel);
-      fireCommentary('level-up', companion, `Level ${prevLevel} (${prevTitle}) \u2192 ${companion.level} (${companion.title}). Task: ${truncate(completedSession.task, 100)}`, true);
+      completionEvents.push({
+        event: 'level-up',
+        companion,
+        context: `Level ${prevLevel} (${prevTitle}) \u2192 ${companion.level} (${companion.title}). Task: ${truncate(completedSession.task, 100)}`,
+        popupTitle: ` \u2B06 Level ${companion.level} (${companion.title}) `,
+      });
     }
 
     if (newAchievementIds.length > 0) {
-      const names = newAchievementIds
-        .map(id => ACHIEVEMENTS.find(a => a.id === id)?.name ?? id)
-        .join(', ');
-      fireCommentary('achievement', companion, names, true);
+      const achievementNames = newAchievementIds
+        .map(id => ACHIEVEMENTS.find(a => a.id === id)?.name ?? id);
+      completionEvents.push({
+        event: 'achievement',
+        companion,
+        context: achievementNames.join(', '),
+        popupTitle: ` \u2605 ${achievementNames[0]} `,
+      });
     }
+
+    fireCompletionCommentary(completionEvents);
   } catch { /* companion errors are non-fatal */ }
 
   switchToHomeSession(session);

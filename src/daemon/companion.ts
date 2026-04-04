@@ -5,9 +5,11 @@ import { companionPath, globalDir } from '../shared/paths.js';
 import type { Session } from '../shared/types.js';
 import type {
   AchievementId,
+  CommentaryEvent,
   CompanionBaselines,
   CompanionState,
   CompanionStats,
+  LastCommentary,
   Mood,
   MoodSignals,
   RepoMemory,
@@ -103,8 +105,10 @@ export function loadCompanion(): CompanionState {
   if (state.recentCompletions == null) state.recentCompletions = [];
   if (state.lifetimeAgentsSpawned == null) state.lifetimeAgentsSpawned = 0;
   if (state.consecutiveEfficientSessions == null) state.consecutiveEfficientSessions = 0;
+  if (state.consecutiveHighCycleSessions == null) state.consecutiveHighCycleSessions = 0;
   if (state.spinnerVerbIndex == null) state.spinnerVerbIndex = 0;
   if (state.baselines == null) state.baselines = defaultBaselines();
+  if (state.commentaryHistory == null) state.commentaryHistory = [];
   return state;
 }
 
@@ -115,6 +119,22 @@ export function saveCompanion(state: CompanionState): void {
   const tmp = join(dir, `.companion.${randomUUID()}.tmp`);
   writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
   renameSync(tmp, path);
+}
+
+const MAX_COMMENTARY_HISTORY = 30;
+
+/**
+ * Push a commentary entry to lastCommentary + commentaryHistory ring buffer.
+ * Mutates the companion in-place; caller must saveCompanion() afterward.
+ */
+export function recordCommentary(companion: CompanionState, text: string, event: CommentaryEvent): void {
+  const entry: LastCommentary = { text, event, timestamp: new Date().toISOString() };
+  companion.lastCommentary = entry;
+  if (!companion.commentaryHistory) companion.commentaryHistory = [];
+  companion.commentaryHistory.push(entry);
+  if (companion.commentaryHistory.length > MAX_COMMENTARY_HISTORY) {
+    companion.commentaryHistory = companion.commentaryHistory.slice(-MAX_COMMENTARY_HISTORY);
+  }
 }
 
 export function createDefaultCompanion(): CompanionState {
@@ -137,12 +157,14 @@ export function createDefaultCompanion(): CompanionState {
     achievements: [],
     repos: {},
     lastCommentary: null,
+    commentaryHistory: [],
     sessionsCompleted: 0,
     sessionsCrashed: 0,
     totalActiveMs: 0,
     lifetimeAgentsSpawned: 0,
     consecutiveCleanSessions: 0,
     consecutiveEfficientSessions: 0,
+    consecutiveHighCycleSessions: 0,
     consecutiveDaysActive: 0,
     lastActiveDate: null,
     taskHistory: {},
@@ -158,11 +180,20 @@ export function createDefaultCompanion(): CompanionState {
 // ---------------------------------------------------------------------------
 
 export function computeXP(stats: CompanionStats): number {
-  const strengthXP = stats.strength * 80;
-  const enduranceXP = (stats.endurance / 3_600_000) * 15;
+  const strengthXP = stats.strength * 50;
+  const enduranceXP = (stats.endurance / 3_600_000) * 20;
   const wisdomXP = stats.wisdom * 40;
-  const patienceXP = stats.patience * 5;
+  const patienceXP = stats.patience * 8;
   return Math.floor(strengthXP + enduranceXP + wisdomXP + patienceXP);
+}
+
+export function computeStrengthGain(agentCount: number): number {
+  if (agentCount <= 0) return 0;
+  if (agentCount <= 2) return 1;
+  if (agentCount <= 5) return 2;
+  if (agentCount <= 10) return 3;
+  if (agentCount <= 20) return 4;
+  return 5;
 }
 
 export function computeLevel(xp: number): number {
@@ -385,7 +416,8 @@ const ACHIEVEMENT_CHECKERS: Record<AchievementId, AchievementChecker> = {
   'flash': (_c, s) => s != null && s.activeMs < 120_000 && s.status === 'completed',
   'flawless': (_c, s) => s != null && s.agents.length >= 10 && s.status === 'completed' &&
     s.agents.every(a => a.status !== 'crashed' && a.status !== 'killed'),
-  'iron-will': (c) => c.consecutiveEfficientSessions >= 10,
+  'speed-demon': (c) => c.consecutiveEfficientSessions >= 10,
+  'iron-will': (c) => c.consecutiveHighCycleSessions >= 5,
   'glass-cannon': (_c, s) => {
     if (!s || s.status !== 'completed' || s.agents.length < 5) return false;
     return s.agents.every(a => a.status === 'crashed' || a.killedReason != null);
@@ -637,7 +669,9 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   companion.sessionsCompleted++;
   companion.totalActiveMs += deltaActiveMs;
   companion.stats.endurance += deltaActiveMs;
-  companion.stats.strength++;
+  const creditedStrength = session.companionCreditedStrength ?? 0;
+  const totalStrength = computeStrengthGain(session.agents.length);
+  companion.stats.strength += Math.max(0, totalStrength - creditedStrength);
 
   // Patience: diminishing returns on high-cycle sessions (sqrt scale)
   const patienceFromCycles = Math.ceil(Math.sqrt(totalCycles)) - Math.ceil(Math.sqrt(creditedCycles));
@@ -655,11 +689,18 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   // Repo memory
   updateRepoMemory(companion, session.cwd, 'completion');
 
-  // Track consecutive efficient sessions (for iron-will)
+  // Track consecutive efficient sessions (for speed-demon)
   if (totalCycles <= 3) {
     companion.consecutiveEfficientSessions++;
   } else {
     companion.consecutiveEfficientSessions = 0;
+  }
+
+  // Track consecutive high-cycle sessions (for iron-will)
+  if (totalCycles >= 8) {
+    companion.consecutiveHighCycleSessions++;
+  } else {
+    companion.consecutiveHighCycleSessions = 0;
   }
 
   // Consecutive clean sessions

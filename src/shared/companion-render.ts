@@ -1,3 +1,4 @@
+import stringWidth from 'string-width';
 import type {
   CompanionState,
   CompanionField,
@@ -5,6 +6,23 @@ import type {
   CompanionStats,
   Mood,
 } from './companion-types.js';
+
+// --- Display-width-aware string slice ---
+
+/** Slice a plain-text string to fit within `maxCols` display columns. */
+function sliceToWidth(s: string, maxCols: number): string {
+  let w = 0;
+  let i = 0;
+  while (i < s.length) {
+    const cp = s.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    const cw = stringWidth(ch);
+    if (w + cw > maxCols) break;
+    w += cw;
+    i += ch.length;
+  }
+  return s.slice(0, i);
+}
 
 // --- Idle hobbies ---
 
@@ -157,13 +175,13 @@ export function getBoulderForm(agentCount?: number, repoNickname?: string): stri
   let boulder: string;
   if (agentCount === undefined || agentCount <= 0) {
     boulder = '';
-  } else if (agentCount <= 1) {
+  } else if (agentCount <= 2) {
     boulder = 'o';
-  } else if (agentCount <= 4) {
+  } else if (agentCount <= 6) {
     boulder = 'O';
-  } else if (agentCount <= 9) {
+  } else if (agentCount <= 15) {
     boulder = '◉';
-  } else if (agentCount <= 20) {
+  } else if (agentCount <= 35) {
     boulder = '@';
   } else {
     boulder = '@@';
@@ -338,27 +356,33 @@ export function renderCompanion(
     }
   }
 
-  // Apply maxWidth: truncate commentary first, then right-truncate
+  // Apply maxWidth: truncate commentary first, then right-truncate.
+  // Use display width (stringWidth) not .length — faces like ಠ益ಠ contain
+  // wide characters where .length < displayWidth, causing writeClipped to
+  // hard-clip the line without an ellipsis.
   if (opts?.maxWidth !== undefined) {
     const maxWidth = opts.maxWidth;
     const joined = parts.join('  ');
-    if (joined.length > maxWidth && commentary !== null && commentary.length > 0) {
+    const joinedWidth = stringWidth(joined);
+    if (joinedWidth > maxWidth && commentary !== null && commentary.length > 0) {
       // Shorten commentary progressively
       const commentaryIdx = parts.indexOf(commentary);
       if (commentaryIdx !== -1) {
-        const overhead = joined.length - commentary.length;
+        const commentaryWidth = stringWidth(commentary);
+        const overhead = joinedWidth - commentaryWidth;
         const available = maxWidth - overhead - 2; // account for double-space
         if (available < 0) {
           parts[commentaryIdx] = '';
         } else {
-          parts[commentaryIdx] = commentary.slice(0, available);
+          parts[commentaryIdx] = sliceToWidth(commentary, available);
         }
         commentary = parts[commentaryIdx];
       }
     }
     const result = parts.filter(p => p.length > 0).join('  ');
-    const final = result.length > maxWidth
-      ? result.slice(0, maxWidth - 1) + '…'
+    const resultWidth = stringWidth(result);
+    const final = resultWidth > maxWidth
+      ? sliceToWidth(result, maxWidth - 1) + '…'
       : result;
 
     return applyColor(final, fields, facePart, companion.mood, opts);

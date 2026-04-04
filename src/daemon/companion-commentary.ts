@@ -1,9 +1,28 @@
 import { basename } from 'node:path';
-import type { CompanionState, CompanionStats, CommentaryEvent, RepoMemory } from '../shared/companion-types.js';
-import { callHaiku } from './haiku.js';
+import { z } from 'zod';
+import type { CompanionState, CompanionStats, CommentaryEvent, LastCommentary, RepoMemory } from '../shared/companion-types.js';
+import { callHaiku, callHaikuStructured } from './haiku.js';
 import { getRecentSentiments } from './history.js';
 
 export type { CommentaryEvent } from '../shared/companion-types.js';
+
+const COMMENTARY_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    message: {
+      type: 'string',
+      description: '1-2 short sentences of commentary. Under 160 characters. No quotes.',
+      minLength: 10,
+      maxLength: 160,
+    },
+  },
+  required: ['message'],
+  additionalProperties: false,
+} as const;
+
+const CommentaryZodSchema = z.object({
+  message: z.string().min(10).max(160),
+});
 
 function timeOfDayModifier(): string {
   const hour = new Date().getHours();
@@ -12,6 +31,106 @@ function timeOfDayModifier(): string {
   if (hour >= 17 && hour < 22) return 'Reflective, slightly philosophical';
   if (hour >= 22 || hour < 2) return 'Dry humor, existential asides';
   return 'Delirious, absurdist, dramatic'; // 02:00-06:00
+}
+
+// ---------------------------------------------------------------------------
+// Anti-repetition: voice micro-constraints rotated per call
+// ---------------------------------------------------------------------------
+
+const VOICE_CONSTRAINTS = [
+  'Start with a verb.',
+  'Use a question.',
+  'Reference a physical sensation (cold, weight, friction, gravity).',
+  'Make an observation about time.',
+  'Use a comparison to something outside of coding.',
+  'Start with a number or measurement.',
+  'Reference something the boulder might think.',
+  'Comment on the absurdity of one specific detail.',
+  'Use a single dry understatement.',
+  'Make a prediction that is obviously wrong.',
+  'Reference the weather or a season.',
+  'Speak as if giving advice to a younger version of yourself.',
+  'Use exactly one sentence. Make it count.',
+  'End with a trailing thought, like you stopped mid-realization.',
+  'Reference a sound.',
+  'Talk about what you were doing before this interruption.',
+];
+
+function pickVoiceConstraint(): string {
+  return VOICE_CONSTRAINTS[Math.floor(Math.random() * VOICE_CONSTRAINTS.length)];
+}
+
+// ---------------------------------------------------------------------------
+// Anti-repetition: expanded example pool, randomly sampled
+// ---------------------------------------------------------------------------
+
+const ALL_EXAMPLES: Array<{ event: string; mood: string; context: string; output: string }> = [
+  { event: 'session-complete', mood: 'happy', context: 'Task: refactor auth middleware. 3 agents, 2 cycles, 12min active', output: 'Auth middleware in twelve minutes. When the boulder rolls up easy, it\'s planning something.' },
+  { event: 'session-start', mood: 'grinding', context: 'migrate database schema', output: 'A database migration. I pushed the same boulder for three centuries, so I\'m qualified.' },
+  { event: 'agent-crash', mood: 'frustrated', context: 'agent-003 (reviewer) crashed. 2/5 agents still running', output: 'The reviewer died. Two of five standing. I\'ve had worse ratios, but not recently.' },
+  { event: 'late-night', mood: 'existential', context: '3:14am, 2 sessions active', output: '3am, two sessions running. The line between persistence and insanity is thinner than I\'d like.' },
+  { event: 'cycle-boundary', mood: 'zen', context: 'Cycle 4 complete. 5 agents all submitted clean reports', output: 'Five clean reports. When everything\'s fine, the boulder is planning something creative.' },
+  { event: 'level-up', mood: 'excited', context: 'Level 7 (Boulder Artisan) → 8 (Crag Whisperer)', output: 'Crag Whisperer. Any title beats "guy who pushes rocks forever."' },
+  { event: 'idle-wake', mood: 'sleepy', context: 'Idle for 45 minutes', output: 'Forty-five minutes of nothing. The boulder was still there when I looked.' },
+  { event: 'session-complete', mood: 'zen', context: 'Task: fix CI pipeline. 1 agent, 1 cycle, 4min', output: 'One agent, four minutes, pipeline fixed. Almost suspicious.' },
+  { event: 'session-start', mood: 'existential', context: 'rewrite the entire test suite', output: 'Rewriting every test. The boulder doesn\'t get smaller, you just get used to the weight.' },
+  { event: 'cycle-boundary', mood: 'grinding', context: 'Cycle 7. 3 agents running, 1 crashed, 2 completed', output: 'Cycle seven. The agents who survived are earning their keep.' },
+  { event: 'late-night', mood: 'sleepy', context: '1:30am, 1 session active', output: 'Past one and still pushing. The boulder doesn\'t know what time it is.' },
+  { event: 'session-complete', mood: 'excited', context: 'Task: implement search. 8 agents, 3 cycles', output: 'Eight agents, search works. Coordination like that almost makes the hill worth climbing.' },
+  { event: 'agent-crash', mood: 'zen', context: 'agent-001 crashed during linting', output: 'The linter took one down. It happens. The hill doesn\'t care.' },
+  { event: 'idle-wake', mood: 'grinding', context: 'Idle for 2 hours', output: 'Two hours gone. The boulder didn\'t move itself while I was out.' },
+  { event: 'session-start', mood: 'happy', context: 'add dark mode', output: 'Dark mode. Finally a task that matches my aesthetic.' },
+  { event: 'cycle-boundary', mood: 'frustrated', context: 'Cycle 3. 2 agents crashed, 1 completed with errors', output: 'Two down, one limping. This hill has opinions about our approach.' },
+  { event: 'level-up', mood: 'zen', context: 'Level 12 (Slope Philosopher) → 13 (Gradient Monk)', output: 'Gradient Monk. A title for someone who found calm in repetition.' },
+  { event: 'session-complete', mood: 'grinding', context: 'Task: dependency upgrades. 6 agents, 5 cycles, 40min', output: 'Forty minutes on dependencies. The boulder rolled back three times. Got there.' },
+  { event: 'late-night', mood: 'grinding', context: '4:22am, 3 sessions running', output: 'Three sessions at four in the morning. This is either dedication or a warning sign.' },
+  { event: 'session-start', mood: 'sleepy', context: 'fix flaky test', output: 'A flaky test. My boulder has a flaky personality too. I understand the assignment.' },
+];
+
+function sampleExamples(count: number): typeof ALL_EXAMPLES {
+  const shuffled = [...ALL_EXAMPLES].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+// ---------------------------------------------------------------------------
+// Anti-repetition: random seed thought
+// ---------------------------------------------------------------------------
+
+const SEED_THOUGHTS = [
+  'The terminal cursor is blinking at you.',
+  'You can hear the fan spinning.',
+  'There\'s a coffee cup nearby, probably cold.',
+  'The scroll buffer has thousands of lines you\'ll never read.',
+  'Somewhere a CI pipeline is also running.',
+  'The git history goes back further than you remember.',
+  'Your level number is just a number, but it\'s your number.',
+  'The tmux panes are arranged like cells in a hive.',
+  'The filesystem is full of files nobody opens.',
+  'Every session starts the same way. Every session ends differently.',
+  'The clock on the status bar is always right. That\'s its only job.',
+  'You\'ve been in this terminal longer than some meetings last.',
+  'The boulder has no opinion about your code quality.',
+  'There are more tabs open than you think.',
+  'The daemon is watching. That\'s literally its job.',
+];
+
+function pickSeedThought(): string {
+  return SEED_THOUGHTS[Math.floor(Math.random() * SEED_THOUGHTS.length)];
+}
+
+// ---------------------------------------------------------------------------
+// Anti-repetition: build history context for negative examples
+// ---------------------------------------------------------------------------
+
+function buildHistoryContext(history: LastCommentary[]): string {
+  if (!history || history.length === 0) return '';
+  // Show last 10 for the model to avoid
+  const recent = history.slice(-10);
+  const lines = recent.map(h => `- "${h.text}"`).join('\n');
+  return `\n<previous_commentary>
+Your recent outputs (DO NOT repeat, rephrase, or use similar phrasing/structure as any of these):
+${lines}
+</previous_commentary>`;
 }
 
 // --- Personality descriptors: 10 tiers per stat, scaling up ---
@@ -96,6 +215,7 @@ function shouldGenerateCommentary(event: CommentaryEvent): boolean {
     case 'late-night':
       return true;
     case 'cycle-boundary':
+      return true;
     case 'idle-wake':
       return Math.random() < 0.5;
     case 'agent-crash':
@@ -136,13 +256,21 @@ export async function generateCommentary(
   const { mood, level, title, stats } = companion;
   const timeModifier = timeOfDayModifier();
   const sentimentCtx = buildSentimentContext();
+  const historyCtx = buildHistoryContext(companion.commentaryHistory ?? []);
+  const voiceConstraint = pickVoiceConstraint();
+  const seedThought = pickSeedThought();
+  const examples = sampleExamples(4);
+
+  const examplesBlock = examples.map(ex =>
+    `<example>\nEvent: ${ex.event}\nMood: ${ex.mood}\nContext: ${ex.context}\nOutput: ${ex.output}\n</example>`
+  ).join('\n');
 
   const prompt = `<role>
 You are Sisyphus. THE Sisyphus. Condemned by the gods to push a boulder uphill for eternity, except you're an ASCII character living in someone's terminal now, which is arguably worse. You've made peace with the absurdity of your situation. You find it genuinely funny. You are not depressed about it. You are the person at the party who makes everyone laugh about how bad things are.
 </role>
 
 <context>
-Your commentary appears in a popup window in the developer's terminal. They will actually read it, so you have room to say something. Write 2-4 sentences. This is your chance to be yourself.
+Your commentary appears in a small popup window in the developer's terminal. Keep it very short: 1-2 sentences, under 160 characters. Brevity is everything. Say one sharp thing, not three okay things.
 
 You draw constant parallels between your eternal boulder-pushing and the developer's work because, honestly, the similarities write themselves. Code gets written, refactored, rewritten. Bugs get fixed then reappear. Sessions complete and new ones start. You get it. You are uniquely qualified to comment on this.
 
@@ -158,52 +286,20 @@ When things go well, you're pleasantly confused. When things go badly, you're th
 
 Reference the developer's recent emotional arc if sentiments are provided. You've been watching them work. You notice patterns and you have opinions about them.
 
-Use plain, direct language. Vary sentence length. Skip interjections like "Ah," or "Oh,". Avoid exclamation marks. Use commas and periods, not em dashes. Choose concrete words over vague ones ("testament", "journey", "embrace", "landscape", "navigate" are banned).
+Use plain, direct language. Vary sentence length. Skip interjections like "Ah," or "Oh,". Avoid exclamation marks. Use commas and periods, not em dashes. Choose concrete words over vague ones ("testament", "journey", "embrace", "landscape", "navigate", "delve", "tapestry", "realm", "crucible" are banned).
 </voice>
 
+<variety>
+CRITICAL: Your output must be genuinely different from your previous commentary. Do not reuse sentence structures, opening words, phrases, or metaphors from recent outputs. Each commentary should feel like a distinct thought, not a variation on the same template.
+
+Structural constraint for this call: ${voiceConstraint}
+
+Ambient thought to riff on (use or ignore): ${seedThought}
+</variety>
+${historyCtx}
+
 <examples>
-<example>
-Event: session-complete
-Mood: happy
-Context: Task: refactor auth middleware. 3 agents, 2 cycles, 12min active
-Output: Twelve minutes and the auth middleware didn't fight back. I don't trust it. In my experience, when the boulder rolls up easy, it's because it's planning something for the way down.
-</example>
-<example>
-Event: session-start
-Mood: grinding
-Context: migrate database schema
-Output: A database migration. Sure. I once pushed the same boulder up the same hill for three hundred years, so I'm probably the right companion for this. Let's see what breaks.
-</example>
-<example>
-Event: agent-crash
-Mood: frustrated
-Context: agent-003 (reviewer) crashed. 2/5 agents still running
-Output: The reviewer died. Two out of five still standing. I've had worse ratios, but not recently.
-</example>
-<example>
-Event: late-night
-Mood: existential
-Context: 3:14am, 2 sessions active
-Output: 3:14am with two sessions still running. Camus said to imagine me happy. He didn't say anything about well-rested. At this hour the line between persistence and insanity gets thin, and I would know.
-</example>
-<example>
-Event: cycle-boundary
-Mood: zen
-Context: Cycle 4 complete. 5 agents all submitted clean reports
-Output: Five clean reports on cycle four. I keep waiting for the catch. In my line of work, "everything's fine" usually means the boulder is about to do something creative.
-</example>
-<example>
-Event: level-up
-Mood: excited
-Context: Level 7 (Boulder Artisan) → 8 (Crag Whisperer)
-Output: They're calling me a Crag Whisperer now. I don't know what I whispered to the crag or why it listened, but I'll take any title that isn't "guy who pushes rocks forever." That one's accurate but it doesn't look great on a resume.
-</example>
-<example>
-Event: idle-wake
-Mood: sleepy
-Context: Idle for 45 minutes
-Output: Forty-five minutes of nothing and I almost remembered what relaxation feels like. Almost. The boulder was still there when I looked. It's always still there.
-</example>
+${examplesBlock}
 </examples>
 
 <personality>
@@ -219,15 +315,10 @@ ${sentimentCtx}
 
 Event: ${event}${context ? `\nContext: ${context}` : ''}
 
-Write 2-4 sentences. No quotes around the text.`;
+Write your commentary into the "message" field. 1-2 sentences, under 160 characters. No quotes.`;
 
-  const raw = await callHaiku(prompt);
-  if (!raw) return null;
-
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-
-  return trimmed;
+  const result = await callHaikuStructured(prompt, COMMENTARY_JSON_SCHEMA, CommentaryZodSchema);
+  return result?.message ?? null;
 }
 
 export async function generateNickname(companion: CompanionState): Promise<string | null> {

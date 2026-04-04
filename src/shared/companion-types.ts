@@ -54,6 +54,7 @@ export type AchievementId =
   | 'speed-run'
   | 'flash'
   | 'flawless'
+  | 'speed-demon'
   | 'iron-will'
   | 'glass-cannon'
   | 'solo'
@@ -156,6 +157,7 @@ export interface CompanionState {
   achievements: UnlockedAchievement[];
   repos: Record<string, RepoMemory>;  // keyed by absolute cwd path
   lastCommentary: LastCommentary | null;
+  commentaryHistory: LastCommentary[];  // ring buffer of last 30 commentaries for anti-repetition
   // Lifetime counters (redundant with derivable stats but kept for fast achievement checks)
   sessionsCompleted: number;
   sessionsCrashed: number;
@@ -164,6 +166,7 @@ export interface CompanionState {
   // Achievement tracking counters
   consecutiveCleanSessions: number;
   consecutiveEfficientSessions: number;
+  consecutiveHighCycleSessions: number;
   consecutiveDaysActive: number;
   lastActiveDate: string | null;       // ISO date string YYYY-MM-DD
   taskHistory: Record<string, number>; // normalized task hash → attempt count
@@ -205,7 +208,7 @@ export interface MoodSignals {
   justLeveledUp: boolean;     // level up just happened
   hourOfDay: number;          // 0-23
   activeAgentCount?: number;  // agents currently with status === 'running'
-  totalAgentCount?: number;   // total agents spawned in current session (for z-score baselines)
+  totalAgentCount?: number;   // max total agents (agents.length) across tracked active sessions (for z-score baselines)
   // NEW fields for richer mood scoring
   cycleCount?: number;              // current session orchestrator cycle count
   sessionsCompletedToday?: number;  // sessions completed today
@@ -247,7 +250,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'speed-run', name: 'Speed Run', category: 'session', description: 'Complete a session in under 15 minutes.', badge: null },
   { id: 'flash', name: 'Flash', category: 'session', description: 'Complete a session in under 2 minutes.', badge: null },
   { id: 'flawless', name: 'Flawless', category: 'session', description: 'Complete a session with 10+ agents and zero crashes.', badge: '*' },
-  { id: 'iron-will', name: 'Iron Will', category: 'session', description: '10 consecutive sessions completing in 3 or fewer cycles.', badge: '[]' },
+  { id: 'speed-demon', name: 'Speed Demon', category: 'session', description: '10 consecutive sessions completing in 3 or fewer cycles.', badge: '⚡' },
+  { id: 'iron-will', name: 'Iron Will', category: 'session', description: '5 consecutive sessions each with 8+ orchestrator cycles.', badge: '[]' },
   { id: 'glass-cannon', name: 'Glass Cannon', category: 'session', description: '5+ agents, all crashed, but session completed anyway.', badge: null },
   { id: 'solo', name: 'Solo', category: 'session', description: 'Complete a session with exactly one agent.', badge: null },
   { id: 'one-more-cycle', name: 'One More Cycle', category: 'session', description: 'A session with 10+ orchestrator cycles.', badge: null },

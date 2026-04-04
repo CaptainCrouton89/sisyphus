@@ -1,14 +1,35 @@
 import { callHaiku } from './haiku.js';
 
+export interface SentimentInput {
+  task: string;
+  completionReport?: string;
+  agentCount: number;
+  cycleCount: number;
+  crashCount: number;
+  activeMs: number;
+  messages: string[];
+}
+
+const SENTIMENT_SYSTEM = 'You are a concise text generator. Output only what is asked for, nothing else.';
+
 /**
  * Generate a one-sentence sentiment read for the session.
  * Non-blocking: callers should fire-and-forget.
  */
-export async function generateSentiment(task: string, messages: string[]): Promise<string | null> {
-  const taskSlice = task.slice(0, 1000);
-  const messagesSlice = messages.slice(0, 10).map(m => m.slice(0, 500)).join('\n');
+export async function generateSentiment(input: SentimentInput): Promise<string | null> {
+  const parts: string[] = [];
+  parts.push(`Task: ${input.task.slice(0, 500)}`);
+  if (input.completionReport) {
+    parts.push(`Outcome: ${input.completionReport.slice(0, 500)}`);
+  }
+  const hours = (input.activeMs / 3_600_000).toFixed(1);
+  parts.push(`Stats: ${input.agentCount} agents, ${input.cycleCount} cycles, ${input.crashCount} crashes, ${hours}h active`);
+  if (input.messages.length > 0) {
+    parts.push(`User messages:\n${input.messages.slice(0, 5).map(m => m.slice(0, 300)).join('\n')}`);
+  }
   const text = await callHaiku(
-    `Read this session's task and user messages. Write one sentence capturing how the user felt about this work — their emotional register, not what they did. Be specific and human. Examples: 'Frustrated with architectural debt but energized about the redesign.' 'Calm, methodical debugging of a customer escalation.' 'Ambitious and patient — willing to invest in doing it right.'\n\nTask: ${taskSlice}\n\nMessages:\n${messagesSlice}`,
+    `Write one sentence capturing how the developer likely felt about this coding session — their emotional register, not what they did. Be specific and human. Examples: 'Frustrated with architectural debt but energized about the redesign.' 'Calm, methodical debugging of a customer escalation.' 'Ambitious and patient — willing to invest in doing it right.'\n\n${parts.join('\n\n')}`,
+    SENTIMENT_SYSTEM,
   );
   if (!text) return null;
   return text.slice(0, 200);
