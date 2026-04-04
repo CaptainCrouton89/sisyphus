@@ -171,11 +171,16 @@ function buildOrchestratorNode(
   return lines;
 }
 
+/** Canonical stem column — all vertical connectors use this */
+function stemCol(width: number): number {
+  return Math.floor(width / 2);
+}
+
 /** Build the vertical connector line between orchestrator and agent branch */
 function buildVerticalConnector(width: number, dim: boolean): DetailLine {
-  const mid = Math.floor((width - 2) / 2);
+  const col = stemCol(width);
   return [
-    seg(' '.repeat(mid + 1)),
+    seg(' '.repeat(col)),
     seg('│', { dim }),
   ];
 }
@@ -188,16 +193,8 @@ function buildBranchConnector(
   direction: 'down' | 'up',
 ): DetailLine[] {
   if (count === 0) return [];
-  const totalBoxWidth = boxWidth * count;
-  const leftPad = Math.floor((totalWidth - totalBoxWidth) / 2);
-
-  // Calculate box center positions relative to start of row
-  const centers: number[] = [];
-  for (let i = 0; i < count; i++) {
-    centers.push(leftPad + i * boxWidth + Math.floor(boxWidth / 2));
-  }
-
-  const mid = Math.floor(totalWidth / 2);
+  const centers = boxCenters(boxWidth, count, totalWidth);
+  const mid = stemCol(totalWidth);
   const lineStart = centers[0]!;
   const lineEnd = centers[centers.length - 1]!;
 
@@ -240,6 +237,67 @@ function agentSummary(a: Agent, maxW: number): string {
   return truncate(a.instruction.split('\n')[0]!, maxW);
 }
 
+/**
+ * Compute leftPad so the center box's ┴/┬ aligns with stemCol.
+ * For odd counts the middle box aligns exactly; for even counts
+ * we fall back to simple centering (no single "middle" box).
+ */
+function alignedLeftPad(boxWidth: number, count: number, totalWidth: number): number {
+  if (count === 0) return 0;
+  const stem = stemCol(totalWidth);
+  const midIdx = Math.floor((count - 1) / 2);
+  const idealPad = stem - midIdx * boxWidth - Math.floor(boxWidth / 2);
+  return Math.max(0, idealPad);
+}
+
+/** Compute box center positions for a row of `count` boxes */
+function boxCenters(boxWidth: number, count: number, totalWidth: number): number[] {
+  const leftPad = alignedLeftPad(boxWidth, count, totalWidth);
+  const centers: number[] = [];
+  for (let i = 0; i < count; i++) {
+    centers.push(leftPad + i * boxWidth + Math.floor(boxWidth / 2));
+  }
+  return centers;
+}
+
+/** Build a fan-in line from multiple box-bottom ┬ to a single stem center */
+function buildInterRowFanIn(
+  prevCenters: number[],
+  totalWidth: number,
+): DetailLine[] {
+  const mid = stemCol(totalWidth);
+  if (prevCenters.length <= 1) {
+    // Single box — just vertical at the box center (might differ from stem)
+    const col = prevCenters[0] ?? mid;
+    if (col === mid) return [buildVerticalConnector(totalWidth, false)];
+    // Connect box center to stem
+    const row = new Array(totalWidth).fill(' ');
+    const left = Math.min(col, mid);
+    const right = Math.max(col, mid);
+    row[left] = '└';
+    row[right] = '┘';
+    for (let i = left + 1; i < right; i++) row[i] = '─';
+    if (col === left) row[col] = '┴';
+    if (col === right) row[col] = '┴';
+    row[mid] = mid === left || mid === right ? '┼' : '┼';
+    // Overwrite corners that are the stem
+    return [[seg(row.join(''))], buildVerticalConnector(totalWidth, false)];
+  }
+  const lineStart = Math.min(prevCenters[0]!, mid);
+  const lineEnd = Math.max(prevCenters[prevCenters.length - 1]!, mid);
+  const row = new Array(totalWidth).fill(' ');
+  row[lineStart] = '└';
+  row[lineEnd] = '┘';
+  for (let i = lineStart + 1; i < lineEnd; i++) row[i] = '─';
+  row[mid] = '┼';
+  for (const c of prevCenters) {
+    if (c !== lineStart && c !== lineEnd && c !== mid) row[c] = '┴';
+    if (c === lineStart && c !== mid) row[c] = '┴';
+    if (c === lineEnd && c !== mid) row[c] = '┴';
+  }
+  return [[seg(row.join(''))], buildVerticalConnector(totalWidth, false)];
+}
+
 /** Build agent box rows (4 lines per box, max 3 per row) */
 function buildAgentBoxRows(
   agents: Agent[],
@@ -254,10 +312,23 @@ function buildAgentBoxRows(
   for (let rowStart = 0; rowStart < agents.length; rowStart += maxPerRow) {
     const rowAgents = agents.slice(rowStart, rowStart + maxPerRow);
     const count = rowAgents.length;
-    const leftPad = Math.floor((totalWidth - boxWidth * count) / 2);
+    const leftPad = alignedLeftPad(boxWidth, count, totalWidth);
     const isFirstRow = rowStart === 0;
 
-    // Top borders with ┴ connector (first row only)
+    // Inter-row connector: fan-in from previous row → stem → fan-out to this row
+    if (!isFirstRow) {
+      const prevCount = Math.min(agents.length - (rowStart - maxPerRow), maxPerRow);
+      const prevCents = boxCenters(boxWidth, prevCount, totalWidth);
+      lines.push(...buildInterRowFanIn(prevCents, totalWidth));
+      // Fan-out from stem to this row's boxes
+      if (count > 1) {
+        lines.push(...buildBranchConnector(boxWidth, count, totalWidth, 'down'));
+      } else {
+        lines.push(buildVerticalConnector(totalWidth, false));
+      }
+    }
+
+    // Top borders with ┴ connector (first row gets ┴ from branch above, subsequent rows from inter-row fan-out)
     const topSegs: Seg[] = [];
     if (leftPad > 0) topSegs.push(seg(' '.repeat(leftPad)));
     for (let i = 0; i < count; i++) {
@@ -266,14 +337,8 @@ function buildAgentBoxRows(
       const borderColor = isError ? 'red' : resolveColor(a.color);
       const dim = !bright;
 
-      if (isFirstRow) {
-        const mid = Math.floor(innerW / 2);
-        const left = mid;
-        const right = innerW - mid - 1;
-        topSegs.push(seg('╭' + '─'.repeat(left) + '┴' + '─'.repeat(right) + '╮', { color: borderColor, dim }));
-      } else {
-        topSegs.push(seg('╭' + '─'.repeat(innerW) + '╮', { color: borderColor, dim }));
-      }
+      const mid = Math.floor(innerW / 2);
+      topSegs.push(seg('╭' + '─'.repeat(mid) + '┴' + '─'.repeat(innerW - mid - 1) + '╮', { color: borderColor, dim }));
     }
     lines.push(topSegs);
 
@@ -379,29 +444,29 @@ function buildFanInConnector(
     return [buildVerticalConnector(totalWidth, false)];
   }
 
-  const totalBoxWidth = boxWidth * count;
-  const leftPad = Math.floor((totalWidth - totalBoxWidth) / 2);
-  const centers: number[] = [];
-  for (let i = 0; i < count; i++) {
-    centers.push(leftPad + i * boxWidth + Math.floor(boxWidth / 2));
-  }
-
+  const centers = boxCenters(boxWidth, count, totalWidth);
   const lineStart = centers[0]!;
   const lineEnd = centers[centers.length - 1]!;
-  const mid = Math.floor((lineStart + lineEnd) / 2);
+  const mid = stemCol(totalWidth);
 
   const row = new Array(totalWidth).fill(' ');
-  row[lineStart] = '└';
-  row[lineEnd] = '┘';
-  for (let i = lineStart + 1; i < lineEnd; i++) {
+  // Extend horizontal line to include stem if it's outside the box cluster
+  const hStart = Math.min(lineStart, mid);
+  const hEnd = Math.max(lineEnd, mid);
+  row[hStart] = '└';
+  row[hEnd] = '┘';
+  for (let i = hStart + 1; i < hEnd; i++) {
     row[i] = '─';
   }
   row[mid] = '┼';
-  // Inner centers become ┴
+  // Box centers become ┴
   for (const c of centers) {
-    if (c !== lineStart && c !== lineEnd && c !== mid) {
+    if (c !== mid && c !== hStart && c !== hEnd) {
       row[c] = '┴';
     }
+    // Corner chars that coincide with a box center
+    if (c === hStart && c !== mid) row[c] = '┴';
+    if (c === hEnd && c !== mid) row[c] = '┴';
   }
 
   const result: DetailLine[] = [];
@@ -532,6 +597,7 @@ function renderCycleFlow(
   const maxPerRow = 3;
   const boxWidth = Math.max(12, Math.floor((width - 4) / maxPerRow));
   const firstRowCount = Math.min(cycleAgents.length, maxPerRow);
+  const lastRowCount = cycleAgents.length > 0 ? ((cycleAgents.length - 1) % maxPerRow) + 1 : 0;
 
   // Determine brightness for each section
   let orchBright = false;
@@ -563,8 +629,8 @@ function renderCycleFlow(
     // Agent boxes
     lines.push(...buildAgentBoxRows(cycleAgents, boxWidth, width, agentsBright, maxPerRow));
 
-    // Fan-in merge
-    lines.push(...buildFanInConnector(boxWidth, firstRowCount, width));
+    // Fan-in merge (from last row's boxes)
+    lines.push(...buildFanInConnector(boxWidth, lastRowCount, width));
   } else if (hasConnectorFromOrch) {
     lines.push(buildVerticalConnector(width, true));
   }
@@ -600,6 +666,10 @@ export function buildCycleFlowLines(
   const firstRowAgentCount = (c: OrchestratorCycle) => {
     const agents = session.agents.filter(a => c.agentsSpawned.includes(a.id));
     return Math.min(agents.length, maxPerRow);
+  };
+  const lastRowAgentCount = (c: OrchestratorCycle) => {
+    const count = session.agents.filter(a => c.agentsSpawned.includes(a.id)).length;
+    return count > 0 ? ((count - 1) % maxPerRow) + 1 : 0;
   };
 
   // Header
@@ -669,7 +739,7 @@ export function buildCycleFlowLines(
       // Previous = agent boxes (slightly dim)
       if (currentAgents.length > 0) {
         lines.push(...buildAgentBoxRows(currentAgents, boxWidth, width, false, maxPerRow));
-        lines.push(...buildFanInConnector(boxWidth, firstRowAgentCount(currentCycle), width));
+        lines.push(...buildFanInConnector(boxWidth, lastRowAgentCount(currentCycle), width));
       }
     }
 
@@ -679,7 +749,7 @@ export function buildCycleFlowLines(
     } else if (phase === 'agents') {
       // Agent boxes bright
       lines.push(...buildAgentBoxRows(currentAgents, boxWidth, width, true, maxPerRow));
-      lines.push(...buildFanInConnector(boxWidth, firstRowAgentCount(currentCycle), width));
+      lines.push(...buildFanInConnector(boxWidth, lastRowAgentCount(currentCycle), width));
     } else if (phase === 'between') {
       // Yield prompt bright
       lines.push(...buildYieldNode(currentCycle.nextPrompt, width, true, true));
@@ -687,7 +757,7 @@ export function buildCycleFlowLines(
       // Previous = last agents dim
       if (currentAgents.length > 0) {
         lines.push(...buildAgentBoxRows(currentAgents, boxWidth, width, false, maxPerRow));
-        lines.push(...buildFanInConnector(boxWidth, firstRowAgentCount(currentCycle), width));
+        lines.push(...buildFanInConnector(boxWidth, lastRowAgentCount(currentCycle), width));
       }
       // Complete node bright
       lines.push(...buildCompleteNode(session, width));
