@@ -16,11 +16,19 @@ const origError = console.error.bind(console);
 console.log = (...args: unknown[]) => origLog(`[${ts()}]`, ...args);
 console.error = (...args: unknown[]) => origError(`[${ts()}]`, ...args);
 import { loadConfig } from '../shared/config.js';
-import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry } from './server.js';
+import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry, setCompositor } from './server.js';
 import { startMonitor, stopMonitor, setRespawnCallback, setDotsCallback, trackSession, updateTrackedWindow, flushTimers, initTimers, getTrackedSessionIds, getTrackedSessionEntries } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 import { recomputeDots, setTrackedEntriesProvider } from './status-dots.js';
-import { writeStatusBar } from './status-bar.js';
+import {
+  Compositor,
+  DEFAULT_STATUS_BAR_CONFIG,
+  createSessionsSegment,
+  createSisyphusSessionsSegment,
+  createCompanionSegment,
+  createWindowsSegment,
+  createSessionNameSegment,
+} from './segments/index.js';
 import { writeManifest, writeEmptyManifest } from './sessions-manifest.js';
 import { resetAgentCounterFromState } from './agent.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
@@ -29,6 +37,7 @@ import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
 import { checkAndApply, startPeriodicUpdateCheck, stopPeriodicUpdateCheck } from './updater.js';
+import { installPlugin } from './plugin-install.js';
 
 function ensureDirs(): void {
   mkdirSync(globalDir(), { recursive: true });
@@ -254,6 +263,7 @@ async function recoverSessions(): Promise<void> {
 async function startDaemon(): Promise<void> {
   console.log('[sisyphus] Starting daemon...');
   ensureDirs();
+  installPlugin();
 
   const config = loadConfig(process.cwd());
   if (config.autoUpdate !== false) {
@@ -262,11 +272,31 @@ async function startDaemon(): Promise<void> {
 
   acquirePidLock();
 
+  // Build status bar config with deep merge from user config
+  const statusBarConfig = { ...DEFAULT_STATUS_BAR_CONFIG };
+  statusBarConfig.colors = { ...DEFAULT_STATUS_BAR_CONFIG.colors, ...config.statusBar?.colors };
+  statusBarConfig.segments = { ...DEFAULT_STATUS_BAR_CONFIG.segments, ...config.statusBar?.segments };
+  if (config.statusBar?.left) statusBarConfig.left = config.statusBar.left;
+  if (config.statusBar?.right) statusBarConfig.right = config.statusBar.right;
+
+  const compositor = new Compositor(statusBarConfig);
+
+  // Register built-in segments
+  const sessionsBg = statusBarConfig.segments.sessions?.bg ?? DEFAULT_STATUS_BAR_CONFIG.segments.sessions!.bg!;
+  compositor.register(createSessionsSegment(sessionsBg));
+  compositor.register(createSisyphusSessionsSegment());
+  compositor.register(createCompanionSegment());
+  compositor.register(createWindowsSegment());
+  compositor.register(createSessionNameSegment());
+
+  // Expose compositor for external segment handlers in server.ts
+  setCompositor(compositor);
+
   setRespawnCallback(onAllAgentsDone);
   setDotsCallback(() => {
     recomputeDots();
     try { writeManifest(); } catch { /* best-effort */ }
-    try { writeStatusBar(); } catch { /* best-effort */ }
+    try { compositor.render(); } catch { /* best-effort */ }
   });
   setTrackedEntriesProvider(getTrackedSessionEntries);
 
@@ -274,7 +304,7 @@ async function startDaemon(): Promise<void> {
   startMonitor(config.pollIntervalMs);
 
   await recoverSessions();
-  try { writeStatusBar(); } catch { /* best-effort */ }
+  try { compositor.render(); } catch { /* best-effort */ }
 
   if (config.autoUpdate !== false) {
     startPeriodicUpdateCheck();

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { globalConfigPath, projectConfigPath } from './paths.js';
+import type { StatusBarConfig } from './types.js';
 
 export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
 
@@ -26,6 +27,7 @@ export interface Config {
   notifications?: NotificationConfig;
   companionPopup?: boolean;
   requiredPlugins?: RequiredPlugin[];
+  statusBar?: StatusBarConfig;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -52,7 +54,25 @@ function readJsonFile(filePath: string): Partial<Config> {
 }
 
 export function loadConfig(cwd: string): Config {
-  const global = readJsonFile(globalConfigPath());
-  const project = readJsonFile(projectConfigPath(cwd));
-  return { ...DEFAULT_CONFIG, ...global, ...project };
+  const globalConfig = readJsonFile(globalConfigPath());
+  const projectConfig = readJsonFile(projectConfigPath(cwd));
+  const merged: Config = { ...DEFAULT_CONFIG, ...globalConfig, ...projectConfig };
+  if (globalConfig.statusBar || projectConfig.statusBar) {
+    merged.statusBar = {
+      ...merged.statusBar,
+      ...globalConfig.statusBar,
+      ...projectConfig.statusBar,
+      colors: {
+        ...merged.statusBar?.colors,
+        ...globalConfig.statusBar?.colors,
+        ...projectConfig.statusBar?.colors,
+      },
+      segments: {
+        ...merged.statusBar?.segments,
+        ...globalConfig.statusBar?.segments,
+        ...projectConfig.statusBar?.segments,
+      },
+    };
+  }
+  return merged;
 }

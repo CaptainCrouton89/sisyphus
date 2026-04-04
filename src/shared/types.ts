@@ -1,5 +1,27 @@
 export type Provider = 'anthropic' | 'openai';
 
+export interface StatusBarColors {
+  processing?: string;
+  stopped?: string;
+  idle?: string;
+  activeBg?: string;
+  activeText?: string;
+  inactiveText?: string;
+}
+
+export interface SegmentConfig {
+  bg?: string;
+  activeBg?: string;
+  [key: string]: unknown;
+}
+
+export interface StatusBarConfig {
+  colors?: StatusBarColors;
+  left?: string[];
+  right?: string[];
+  segments?: Record<string, SegmentConfig>;
+}
+
 export type SessionStatus = 'active' | 'paused' | 'completed';
 
 export type MessageSource =
@@ -52,6 +74,8 @@ export interface Session {
   companionCreditedCycles?: number;
   /** activeMs already credited to companion stats */
   companionCreditedActiveMs?: number;
+  /** Strength already credited to companion stats */
+  companionCreditedStrength?: number;
 }
 
 export interface StatusDigest {

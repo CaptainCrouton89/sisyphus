@@ -10,8 +10,14 @@ import * as state from './state.js';
 import { lookupPane, unregisterPane } from './pane-registry.js';
 import { emitHistoryEvent } from './history.js';
 import { getActiveTimers } from './pane-monitor.js';
+import type { Compositor } from './segments/index.js';
 
 let server: Server | null = null;
+let compositor: Compositor | null = null;
+
+export function setCompositor(c: Compositor): void {
+  compositor = c;
+}
 
 interface SessionTracking {
   cwd: string;
@@ -447,6 +453,34 @@ async function handleRequest(req: Request): Promise<Response> {
           saveCompanion(companion);
         }
         return { ok: true, data: companion as unknown as Record<string, unknown> };
+      }
+
+      case 'register-segment': {
+        if (!compositor) return { ok: false, error: 'Compositor not initialized' };
+        compositor.registerExternal({
+          id: req.id,
+          side: req.side,
+          priority: req.priority,
+          bg: req.bg,
+          content: req.content,
+        });
+        return { ok: true };
+      }
+
+      case 'update-segment': {
+        if (!compositor) return { ok: false, error: 'Compositor not initialized' };
+        try {
+          compositor.updateExternal(req.id, req.content);
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, error: (e as Error).message };
+        }
+      }
+
+      case 'unregister-segment': {
+        if (!compositor) return { ok: false, error: 'Compositor not initialized' };
+        compositor.unregisterExternal(req.id);
+        return { ok: true };
       }
 
       default:

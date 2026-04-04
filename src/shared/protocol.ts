@@ -21,7 +21,10 @@ export type Request =
   | { type: 'delete'; sessionId: string; cwd: string }
   | { type: 'reopen-window'; sessionId: string; cwd: string }
   | { type: 'reconnect'; sessionId: string; cwd: string }
-  | { type: 'companion'; name?: string };
+  | { type: 'companion'; name?: string }
+  | { type: 'register-segment'; id: string; side: 'left' | 'right'; priority: number; bg: string; content: string }
+  | { type: 'update-segment'; id: string; content: string }
+  | { type: 'unregister-segment'; id: string };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }

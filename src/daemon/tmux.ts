@@ -248,6 +248,21 @@ export function listAllSessions(): Array<{ name: string; sessionId: string }> {
   return output.split('\n').filter(Boolean).map(parseSessionLine);
 }
 
+export function listWindows(sessionTarget: string): Array<{ index: number; id: string; name: string }> {
+  const output = execSafe(`tmux list-windows -t ${t(sessionTarget)} -F '#{window_index}\t#{window_id}\t#{window_name}'`);
+  if (!output) return [];
+  return output.split('\n').filter(Boolean).map(line => {
+    const [indexStr, id, ...nameParts] = line.split('\t');
+    return { index: parseInt(indexStr!, 10), id: id!, name: nameParts.join('\t') };
+  });
+}
+
+export function listWindowPanes(windowTarget: string): Array<{ paneId: string }> {
+  const output = execSafe(`tmux list-panes -t ${t(windowTarget)} -F '#{pane_id}'`);
+  if (!output) return [];
+  return output.split('\n').filter(Boolean).map(paneId => ({ paneId }));
+}
+
 export function listAllPanes(): Array<{ sessionName: string; paneId: string }> {
   const output = execSafe('tmux list-panes -a -F "#{session_name} #{pane_id}"');
   if (!output) return [];
