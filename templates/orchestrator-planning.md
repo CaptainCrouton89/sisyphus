@@ -24,15 +24,25 @@ Use explore agents to build understanding before making decisions. Each agent sa
 
 <requirements-alignment>
 
-Before investing in detailed requirements, make sure the goal is well-defined. If you're making assumptions about scope, requirements, or constraints — surface them to the user.
+Requirements are product discovery — the part of the process where you learn what to build by working with the user. Spawning a requirements agent is handing off that discovery work to a specialist who collaborates with the user directly: asking questions, mapping scope, surfacing assumptions, and iterating until the user confirms the requirements capture their intent.
 
-For significant features, requirements refinement is iterative:
-- Draft requirements based on exploration findings
-- Have agents review for feasibility (can this actually work given the codebase?)
-- Seek user alignment on the high-level approach
-- **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback resolve questions or change the understanding, update the requirements and design documents directly — they are the single source of truth. Delete resolved questions from their listing sections, then update the topical sections where those answers belong so the document reads as settled fact. Don't create correction files, addendum files, or decision logs alongside them. Don't annotate questions with answers — remove the questions entirely and weave the answers into the body. Plan agents should read clean, current documents — not reconcile contradictions or skip over resolved questions.
+**Requirements inform design.** Design without requirements is guessing — you're choosing architecture for a system whose behavior hasn't been defined. Even when the goal seems clear to you, the user has context, preferences, and constraints that only surface through conversation. The requirements agent exists to have that conversation.
 
-Not every stage needs standalone requirements — a well-defined stage might just be a detailed section in the implementation plan.
+**When to spawn a requirements agent:**
+- Any feature that adds or changes user-visible behavior
+- Any task where you're making assumptions about what "done" looks like
+- When exploration revealed ambiguity, trade-offs, or multiple valid interpretations
+
+**When you can skip requirements:**
+- Pure bug fixes with clear reproduction steps
+- Mechanical refactors with no behavioral change (rename, extract, move)
+- Tasks where the user has already provided explicit, detailed acceptance criteria in their starting prompt
+
+If you're unsure, spawn the requirements agent. The cost of a short requirements conversation is low. The cost of building the wrong thing is an entire wasted implementation cycle.
+
+**Requirements refinement is iterative.** The requirements agent works with the user, but the process doesn't end when the document is saved:
+- Have agents review requirements for feasibility (can this actually work given the codebase?)
+- **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback resolve questions or change the understanding, update requirements and design documents directly — they are the single source of truth. Delete resolved questions from their listing sections, then update the topical sections where those answers belong so the document reads as settled fact. Don't create correction files, addendum files, or decision logs alongside them.
 
 </requirements-alignment>
 

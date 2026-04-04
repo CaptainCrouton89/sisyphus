@@ -117,6 +117,7 @@ function createAgentPlugin(
   const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
   const userPromptHooks: Record<string, string> = {
     'plan': 'plan-user-prompt.sh',
+    'requirements': 'requirements-user-prompt.sh',
     'review': 'review-user-prompt.sh',
     'review-plan': 'review-plan-user-prompt.sh',
     'debug': 'debug-user-prompt.sh',

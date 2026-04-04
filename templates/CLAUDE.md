@@ -5,14 +5,20 @@ System prompt templates for orchestrator and agent initialization.
 ## Core Templates
 
 - **orchestrator-base.md** — Core orchestrator system prompt. Defines orchestrator role (coordinator, not implementer), cycle workflow, context persistence via roadmap.md/logs.md, and validation patterns. Rendered as foundation for all orchestrator prompts.
-- **orchestrator-planning.md** — Planning-phase orchestrator guidance. Emphasis on exploration, requirements/design/plan phases, verification recipe, and scaled rigor. Appended when `--mode planning` (default).
+- **orchestrator-planning.md** — Planning-phase orchestrator guidance. Appended when `--mode planning` (default).
+  - **Ordering constraint:** context docs → requirements → design → roadmap refinement → detailed plan.
+  - **Roadmap refinement happens after requirements + design are aligned** — that's the first point of honest scope. Roadmap has four canonical sections: current stage, exit criteria, active context references, next steps. Decisions fold into context docs, not the roadmap.
+  - **Requirements doc maintenance:** When reviews or user feedback resolve questions or change understanding, update requirements/design docs directly — delete resolved questions from listing sections and update the topical sections where those answers belong. Never create correction files, addendum files, or decision logs alongside authoritative docs.
+  - **One plan lead per feature** — delegate outcomes, not implementation structure. Pre-splitting by domain (backend/frontend) skips synthesis where cross-domain conflicts are caught. Multiple plan leads only for features with no shared files or integration points.
+  - **Skip requirements** for pure bug fixes with clear repro, mechanical refactors (no behavioral change), or tasks with explicit detailed acceptance criteria already given. Otherwise spawn one.
+  - **Progressive sizing:** small (1–3 files, single domain) → skip phases, short checklist roadmap. Large (3+ stages, multiple domains) → full phased development with stage artifacts saved as `context/plan-stage-N-*.md`; detail-plan one stage at a time because stage N informs stage N+1.
+  - Requires `context/e2e-recipe.md` written before transitioning — executable steps + success criteria, not aspirational. Both `--mode implementation` and `--mode validation` reference it. If no concrete verification method exists, ask the user before proceeding.
 - **orchestrator-strategy.md** — Strategy-phase orchestrator guidance. Maps out visible stages, acknowledges constraints ahead, and establishes lifecycle ownership.
 - **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, and verification patterns. Appended when `--mode implementation`.
 - **orchestrator-validation.md** — Validation-phase orchestrator guidance. Emphasis on proving features work end-to-end via e2e recipes and operator agents for UI features.
 - **orchestrator-completion.md** — Completion-phase orchestrator guidance. Appended when `--mode completion`.
 - **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Rendered once per agent spawn.
 - **dashboard-claude.md** — Dashboard companion prompt. Guides a Claude instance embedded in the TUI to help users manage sessions. Contains `{{CWD}}` and `{{SESSIONS_CONTEXT}}` placeholders.
-- **banner.txt** — ASCII banner (cosmetic).
 
 ## Configuration Files
 
@@ -38,19 +44,7 @@ System prompt templates for orchestrator and agent initialization.
 4. Load settings from `orchestrator-settings.json` (or project override)
 5. Pass via `--append-system-prompt` flag
 
-**Agent prompt**:
-1. Read `agent-suffix.md`
-2. Replace `{{SESSION_ID}}` with session UUID
-3. Replace `{{INSTRUCTION}}` with task instruction
-4. Pass via `--append-system-prompt` flag
+**Agent prompt**: `agent-suffix.md` with `{{SESSION_ID}}` / `{{INSTRUCTION}}` substituted, passed via `--append-system-prompt`.
 
-**Plugin prompts** (`agent-plugin/*.md` or `orchestrator-plugin/*.md`):
-- Used when agent/orchestrator spawned with specialized type
-- Same placeholder substitution rules apply
+**Plugin prompts** (`agent-plugin/*.md`, `orchestrator-plugin/*.md`): same placeholder substitution rules as agent prompts.
 
-## Key Patterns
-
-- **Phase modes**: Each mode appends a phase-specific template to orchestrator-base.md
-- **Context files**: agents save findings to `.sisyphus/sessions/$SISYPHUS_SESSION_ID/context/` and pass references to downstream agents
-- **Placeholders**: always use `{{SESSION_ID}}`, `{{INSTRUCTION}}`—never hardcode values
-- Settings files are valid JSON; use project overrides to customize per-workspace
