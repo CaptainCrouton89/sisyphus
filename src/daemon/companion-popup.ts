@@ -9,7 +9,7 @@ import { shellQuote } from '../shared/shell.js';
 
 const POPUP_WIDTH = 38;
 const INNER_WIDTH = POPUP_WIDTH - 4; // 2 border + 2 padding each side
-const POPUP_DURATION = 8;
+const POPUP_DURATION = 15;
 const POPUP_TMP = join(tmpdir(), 'sisyphus-popup.txt');
 const POPUP_SCRIPT = join(tmpdir(), 'sisyphus-popup.sh');
 
