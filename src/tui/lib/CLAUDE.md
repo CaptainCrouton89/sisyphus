@@ -16,7 +16,13 @@
 - Sessions sorted: active+open → active+closed → paused+open → paused+closed → completed (by recency within groups)
 - `buildTree(sessions, selectedSession, expanded, cwd, polledContextFiles)` — expands only selected session to avoid rendering all hierarchies
 - Node IDs prefixed: `session:`, `cycle:`, `agent:`, `report:`, `messages:`, `message:`, `context:`, `context-file:`
-- `findParentIndex(nodes, index)` — locate ancestor in node list
+- **`SessionTreeNode.expanded = isExpanded && isSelected`** — a session in `expanded` set only renders children when it's also the selected session; expanding a non-selected session is silently deferred until selection
+- **`SessionTreeNode.cycleCount` and `completedAt` are only populated for `isSelected`** — non-selected sessions emit `cycleCount: 0` and `completedAt: undefined` regardless of actual state. **`runningAgentCount` is not gated** — always populated from `SessionSummary` for all sessions (drives companion spinner rate; see parent CLAUDE.md).
+- **`AgentTreeNode.expanded = agentExpanded && hasReports`** — same gate as session: an agent in `expanded` set with no reports renders as non-expanded; `expandable` is also false, so the `expanded` flag is permanently deferred until a report arrives
+- **Unassigned agents bucketed into latest cycle**: agents whose IDs don't appear in any cycle's `agentsSpawned` are appended to `cycles[0]` (most recent). Handles agents spawned outside the orchestrator flow — they appear in the latest cycle, not as orphans.
+- **`messages` group only emitted when messages exist** — unlike `context`, no empty placeholder. `selectedSession.messages ?? []` guards against field absence on older session objects. Content: `msg.summary || msg.content`. `messageSourceLabel()` called here — throws if source is `'agent'` and `agentId` undefined (see format.ts).
+- **`context` node always emitted** even with 0 files. `expanded` additionally gated on `contextFiles.length > 0` — toggling expanded on empty context silently defers until files appear. `polledContextFiles` is `[]` for non-selected sessions — context-file children never render except for selected session.
+- `findParentIndex(nodes, index)` — walks backward to first node with `depth ≤ targetDepth`; returns `index` (not -1) for depth-0 nodes, `0` as ultimate fallback — callers cannot distinguish "already at root" from "parent is node 0"
 
 ### Claude Companion Context (context.ts)
 - XML format: `buildCompanionContext()` aggregates recent sessions (≤7 days) with task, status, agent counts, goal (first line), roadmap todos

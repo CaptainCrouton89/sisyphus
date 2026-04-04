@@ -2,53 +2,65 @@
 
 ## companion-render.test.ts
 
-### `{BOULDER}` placeholder regression (lines 354–405)
-The bottom block of `renderCompanion` tests are regression guards for a prior bug: `getBaseForm` used to embed literal boulder chars (`OO`, `@`) in the template string. `splitBodyAndBoulder` discarded them via `lastIndexOf`, which produced correct output by accident until agent count diverged from the embedded char. The fix replaced all embedded boulders with the `{BOULDER}` placeholder. Any test asserting `!result.includes('{BOULDER}')` is verifying this contract holds end-to-end.
+### Tier breakpoints & `{BOULDER}` placeholder
+`getBaseForm` must emit `{BOULDER}`, never literal `@`/`OO` — `splitBodyAndBoulder` previously discarded them via `lastIndexOf`, broke on dynamic boulder mismatch.
+`getBaseForm`: 1–2 → `(FACE) {BOULDER}`, 3–7 → `(FACE)/ {BOULDER}`, 8–11 → `\(FACE)/ {BOULDER}`, 12–19 → `ᕦ(FACE)ᕤ {BOULDER}`, 20+ → crowned (♛ + ᕦᕤ).
+`getBoulderForm`: 0→`""`, 1–2→`"o"`, 3–6→`"O"`, 7–15→`"◉"`, 16–35→`"@"`, 36+→`"@@"`. Nickname appended as `' "name"'`. No agentCount arg → `''`.
 
-### `endurance` stat is milliseconds
-`getStatCosmetics` threshold is `endurance > 36_000_000` — that's 10 hours in ms. Tests use raw ms values; the stat summary converts to hours (`Math.floor(endurance / 3_600_000)`).
+### `getMoodFace` face strings (pinned by tests — easy to accidentally change)
+Intensity: mild (<30) / moderate (30–70) / intense (>70). Unknown mood throws.
+`happy`: `^.^` / `^‿^` / `✧‿✧` · `grinding`: `>.<` / `>_<` / `ò.ó` · `frustrated`: `>.<#` / `ಠ_ಠ` / `ಠ益ಠ` · `zen`: `‾.‾` / `‾‿‾` / `˘‿˘` · `sleepy`: `-.-)zzZ` / `-_-)zzZ` / `˘.˘)zzZ` · `excited`: `*o*` / `*◡*` / `✦◡✦` · `existential`: `◉_◉` / `⊙_⊙` / `◉‸◉`.
+`createDefaultCompanion()` has no `debugMood`; pass via `makeCompanion` to test non-mild tiers.
 
-### Intensity tier defaults to 0 (mild) in tests
-`getMoodFace` intensity comes from `companion.debugMood?.scores[companion.mood] ?? 0`. `createDefaultCompanion()` does not populate `debugMood`, so all `renderCompanion` face tests use mild-tier faces. To test moderate/intense faces, pass `debugMood` overrides via `makeCompanion`.
+### `getStatCosmetics` strict-`>` thresholds
+`wisdom > 5` → `wisps`, `endurance > 36_000_000` → `trail`, `patience > 50` → `zen-prefix`. Boundary value returns nothing.
+`composeLine` order: `wisps` wraps boulder as `~{B}~`, `trail` appends ` ...`, `zen-prefix` prepends `☯ ` to the entire line.
 
-### Color wraps the entire face line, not just the face chars
-`applyColor` calls `result.replace(facePart, coloredFace)` where `facePart` is the fully-composed body+boulder string (e.g. `ᕦ(^‿^)ᕤ .`). If `facePart` appears more than once in `result` (e.g. it also matches commentary text), only the first occurrence is colorized. Color is a no-op when `face` is not in `fields`.
-
-### `boulder` field is silently skipped when `face` is present
-`renderCompanion` embeds the boulder inside the face line. If `fields` includes both `face` and `boulder`, the `boulder` case is a no-op — the boulder renders only once via the face line. `boulder`-only output requires `face` to be absent from `fields`.
-
-### `maxWidth` truncation algorithm
-Commentary is shortened first: `available = maxWidth - (totalLength - commentaryLength) - 2` (the `-2` accounts for the double-space joiner). If `available < 0`, commentary is dropped entirely. A hard `result.slice(0, maxWidth - 1) + '…'` truncates the full joined string only if still over limit after commentary shrink.
+### `renderCompanion` options
+- `color: true` → ANSI `\x1b[` codes; `tmuxFormat: true` → `#[fg=...]`; both false by default.
+- `repoPath` → resolves `companion.repos[repoPath].nickname` and appends it to the boulder string.
+- `['face', 'boulder']` — `boulder` is a no-op; boulder renders inside the face line. Boulder-only requires `face` absent.
+- `maxWidth` uses `string-width` (display columns, not `.length`) — CJK/wide chars count as 2. Commentary shrinks first; hard `slice(0, maxWidth-1) + '…'` only if still over.
 
 ## companion.test.ts
 
-### Re-completion delta crediting (`companionCreditedCycles` / `companionCreditedActiveMs`)
-`onSessionComplete` only credits the delta when called on a session that was previously completed and continued. The session must carry `companionCreditedCycles` and `companionCreditedActiveMs` from the prior completion; the function subtracts these before applying stats. Without these fields, a re-complete call double-credits everything. `strength` always increments by 1 regardless of delta — it's per-call, not per-delta.
+### XP / level / title
+`computeXP`: `strength×50 + floor(endurance/3_600_000)×20 + wisdom×40 + patience×8`.
+Level thresholds: L2:150 L3:352 L4:624 L5:991 L10:5912 (base 150, each costs `floor(prev × 1.35)`). `computeLevelProgress.xpForNextLevel` = next level cost only, not cumulative.
+Title checkpoints (between levels fall back to previous): 1→"Boulder Intern", 5→"Slope Familiar", 10→"Boulder Brother", 20→"The Absurd Hero", 25→"One Must Imagine Him Happy", 30→"He Has Always Been Here".
 
-### `onAgentCrashed` does NOT increment `sessionsCrashed`
-`onAgentCrashed` only resets `consecutiveCleanSessions`. `sessionsCrashed` is incremented at most once per session in `onSessionComplete` (when any agent has `status: 'crashed'`). Multiple crashes in one session → one `sessionsCrashed`. Tests at lines 450–490 guard this explicitly.
+### `ACHIEVEMENTS` guard / session scope
+Line 621 asserts exactly 67 entries — adding/removing without updating this count fails the suite.
+Without `session` arg to `checkAchievements`, only companion-state achievements fire; session-scoped ones (`blitz`, `quick-draw`, `marathon`, `flawless`, `glass-cannon`, etc.) silently don't evaluate.
 
-### `patience` uses `ceil(sqrt(cycleCount))`
-9 cycles → 3 patience, not 9. The test at line 380 is the contract: `ceil(sqrt(9)) = 3`. Delta crediting applies here too — `ceil(sqrt(newCycles)) - ceil(sqrt(creditedCycles))`.
+### Re-completion delta crediting
+`onSessionComplete` subtracts `companionCreditedCycles`, `companionCreditedActiveMs`, `companionCreditedStrength` before applying stats — prevents double-credit on continue→re-complete. Wisdom excluded (quality signal, not cumulative).
 
-### `wisdom` is per-session, capped at 3 per call
-`onSessionComplete` awards up to 3 wisdom points per invocation — one for each criterion met: (1) ≥80% of agents completed, (2) ≥2 agents per orchestrator cycle, (3) ≥2 distinct orchestrator `mode` values. Sessions with zero agents or zero cycles score 0. Delta crediting does not apply to wisdom (it's a quality signal, not a cumulative counter).
+### Stat mechanics
+- `computeStrengthGain` tiers: 0→0, 1–2→1, 3–5→2, 6–10→3, 11–20→4, 21+→5.
+- `patience` = `ceil(sqrt(cycleCount))`; delta: `ceil(sqrt(new)) - ceil(sqrt(credited))`.
+- `wisdom` per session, capped at 3: (1) ≥80% completed, (2) ≥2 agents/cycle, (3) ≥2 distinct orchestrator `mode` values.
+- `onAgentCrashed` only resets `consecutiveCleanSessions`; `sessionsCrashed` increments once per session via `onSessionComplete`.
 
-### `consecutiveEfficientSessions` threshold is ≤3 cycles
-`onSessionComplete` increments `consecutiveEfficientSessions` when `orchestratorCycles.length ≤ 3`, resets to 0 otherwise. The `iron-will` achievement fires at ≥10. Separate from `consecutiveCleanSessions` (crash-free runs).
+### Streak counters
+`consecutiveEfficientSessions`: increments ≤3 cycles (`speed-demon` at ≥10). `consecutiveHighCycleSessions`: increments ≥8 cycles (`iron-will` at ≥5). Both independent of `consecutiveCleanSessions` (`hot-streak` at ≥15). `consecutiveDaysActive`: `streak` ≥7, `iron-streak` ≥14.
 
-### `zScore` cold-start and stddev floor
-- Uses hardcoded defaults until `RunningStats.count >= 5` (MIN_SAMPLES). Cold-start for `sessionMs`: mean=3,600,000, stddev=2,400,000.
-- Effective stddev = `max(rawStddev, mean * ratioFloor, absoluteFloor)`. For `sessionMs`: ratioFloor=0.20, absoluteFloor=300,000. For `cycleCount`: ratioFloor=0.20, absoluteFloor=1.0. Raw stddev of 0 does not produce division-by-zero.
+### `zScore` / baselines
+Cold-start `sessionMs` defaults (count < 5): mean=3,600,000 stddev=2,400,000. Effective stddev = `max(rawStddev, mean×0.20, absoluteFloor)` (absoluteFloor: 300,000 for `sessionMs`, 1.0 for `cycleCount`). `computeMood`: explicit signals (`justCompleted`/`justCrashed`/`justLeveledUp`) override z-scores; `cycleCount z > 2 → frustrated`, `sessionLengthMs z > threshold → grinding`.
+`baselines.pendingDayCount` accumulates same-day completions; `sessionsPerDay` (Welford) only finalizes when calendar day changes — checked via `baselines.lastCountedDay`.
 
-### `sessionsPerDay` baseline finalizes on day rollover
-`pendingDayCount` accumulates completions for the current calendar day. `sessionsPerDay` Welford stats only get a new sample when the first completion of a *new* day is detected (comparing ISO date prefix). Same-day completions grow `pendingDayCount` but leave `sessionsPerDay.count === 0`.
+### Achievement thresholds (easy to mix up)
+Speed: `flash` < 120,000ms, `blitz` < 300,000ms, `speed-run` < 900,000ms (all require `completed`). Messages: `pair-programming` ≥8, `message-in-a-bottle` ≥10, `deep-conversation` ≥20.
+Agents: `solo` = exactly 1, `squad` ≥10, `marathon` ≥15, `flawless` ≥10 all completed (not 15), `glass-cannon` ≥5 all crashed. `quick-draw`: first agent `spawnedAt` within 30s of `createdAt`.
+Cycles: `one-more-cycle` ≥10, `deep-dive` ≥15, `one-shot` ≥5 agents + exactly 1 cycle. Streaks: `regular` ≥10 sessions, `centurion` ≥100, `thousand-boulder` ≥1000; `cartographer` ≥5 repos, `world-traveler` ≥15; `swarm-starter` ≥50, `hive-mind` ≥500 agents; `old-growth` ≥14d, `ancient` ≥365d.
 
-### `night-owl` fires for hours 1–5, not hour 0
-The achievement checks `hour >= 1 && hour < 6` (exclusive of midnight). A session started exactly at midnight (hour 0) does NOT trigger `night-owl`. Contrast with `early-bird` which fires for hour < 6 (includes midnight).
+### Time-based achievement edge cases
+- `night-owl`: `hour >= 1 && hour < 6` — midnight (hour 0) does NOT fire. `early-bird`: `hour < 6` — hour 0 fires. `witching-hour`: exactly hour 3 (not a range).
+- `dawn-patrol`: overlap with 0–6am ≥3 hours (handles midnight-spanning). `weekend-warrior` checks `completedAt` day-of-week, not `createdAt`.
 
-### `taskHistory` key format
-Keys are `'repoPath:taskDescription'` (colon-separated). The `sisyphean` achievement fires at entry value ≥ 3, `stubborn` at ≥ 5 (also requires `sessionsCompleted > 0`), `one-must-imagine` at ≥ 10.
-
-### `patient-one` measures gap between cycle `completedAt` and next cycle `timestamp`
-The 30-minute threshold compares `cycles[i].completedAt` to `cycles[i+1].timestamp` — not two consecutive `timestamp` fields. A cycle without `completedAt` skips the gap check entirely.
+### Behavioral achievement field dependencies
+- `comeback-kid`: requires `session.parentSessionId`. `wanderer`: reads `companion.dailyRepos` (date → repo array), fires at ≥3 repos same day.
+- `momentum`: `companion.recentCompletions`, fires when 5+ completions span ≤4 hours. `overdrive`: 6+ with today's date prefix.
+- `creature-of-habit` ≥20 visits, `loyal` ≥50 visits (reads `companion.repos[path].visits`).
+- `taskHistory` key: `'repoPath:taskDescription'`. `sisyphean` ≥3, `stubborn` ≥5 (`sessionsCompleted > 0` required), `one-must-imagine` ≥10.
+- `patient-one`: compares `cycles[i].completedAt` to `cycles[i+1].timestamp`; cycle without `completedAt` skips.
