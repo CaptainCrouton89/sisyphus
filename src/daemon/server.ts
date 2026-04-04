@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:net';
-import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
-import { socketPath, globalDir, messagesDir } from '../shared/paths.js';
+import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { socketPath, globalDir, messagesDir, sessionsDir } from '../shared/paths.js';
 import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
 import type { MessageSource } from '../shared/types.js';
@@ -71,8 +71,95 @@ function unknownSessionError(sessionId: string): Response {
   return { ok: false, error: `Unknown session: ${sessionId}. Run \`sisyphus list --all\` to see available sessions.` };
 }
 
+/**
+ * Build a map of sessionId → cwd from all known sources:
+ * in-memory tracking map, persisted registry, and on-disk session directories.
+ */
+function collectAllSessionIds(): Map<string, string> {
+  const idToCwd = new Map<string, string>();
+
+  // 1. In-memory tracking map (authoritative for active sessions)
+  for (const [id, tracking] of sessionTrackingMap) {
+    idToCwd.set(id, tracking.cwd);
+  }
+
+  // 2. Persisted registry
+  const registry = loadSessionRegistry();
+  for (const [id, cwd] of Object.entries(registry)) {
+    if (!idToCwd.has(id)) idToCwd.set(id, cwd);
+  }
+
+  // 3. Scan on-disk session dirs across all known cwds
+  const scannedCwds = new Set<string>();
+  for (const cwd of idToCwd.values()) {
+    if (scannedCwds.has(cwd)) continue;
+    scannedCwds.add(cwd);
+    try {
+      const dir = sessionsDir(cwd);
+      if (!existsSync(dir)) continue;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory() && !idToCwd.has(entry.name)) {
+          idToCwd.set(entry.name, cwd);
+        }
+      }
+    } catch { /* skip unreadable dirs */ }
+  }
+
+  return idToCwd;
+}
+
+/**
+ * Resolve a potentially partial session ID to a full UUID.
+ * Checks in-memory tracking map, persisted registry, and on-disk sessions.
+ * Returns the full ID on unique match, or an error response on ambiguity.
+ * Also hydrates the tracking map so downstream handlers get the correct cwd.
+ */
+function resolvePartialSessionId(partial: string): { id: string } | { error: Response } {
+  // Exact match in memory — fast path
+  if (sessionTrackingMap.has(partial)) return { id: partial };
+
+  const allSessions = collectAllSessionIds();
+
+  // Exact match across all sources
+  if (allSessions.has(partial)) {
+    ensureTracked(partial, allSessions);
+    return { id: partial };
+  }
+
+  // Prefix match
+  const matches = [...allSessions.keys()].filter(id => id.startsWith(partial));
+  if (matches.length === 1) {
+    const id = matches[0]!;
+    ensureTracked(id, allSessions);
+    return { id };
+  }
+  if (matches.length > 1) {
+    const list = matches.map(id => `  ${id}`).join('\n');
+    return { error: { ok: false, error: `Ambiguous session prefix "${partial}" matches ${matches.length} sessions:\n${list}` } };
+  }
+
+  // No match — let downstream handlers produce their own errors
+  return { id: partial };
+}
+
+/** If a session is not in the tracking map, hydrate it from the known cwd. */
+function ensureTracked(id: string, idToCwd: Map<string, string>): void {
+  if (sessionTrackingMap.has(id)) return;
+  const cwd = idToCwd.get(id);
+  if (cwd) {
+    sessionTrackingMap.set(id, { cwd, messageCounter: 0 });
+  }
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   try {
+    // Resolve partial session IDs before dispatching
+    if ('sessionId' in req && req.sessionId) {
+      const resolved = resolvePartialSessionId(req.sessionId);
+      if ('error' in resolved) return resolved.error;
+      (req as Record<string, unknown>).sessionId = resolved.id;
+    }
+
     switch (req.type) {
       case 'start': {
         const session = await sessionManager.startSession(req.task, req.cwd, req.context, req.name);
