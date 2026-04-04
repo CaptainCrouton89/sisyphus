@@ -58,6 +58,7 @@ export function buildTree(
       status: s.status,
       cycleCount: isSelected ? (selectedSession?.orchestratorCycles.length ?? 0) : 0,
       agentCount: s.agentCount,
+      runningAgentCount: s.runningAgentCount,
       createdAt: s.createdAt,
       completedAt: isSelected ? selectedSession?.completedAt : undefined,
     } satisfies SessionTreeNode);

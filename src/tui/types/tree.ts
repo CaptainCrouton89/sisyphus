@@ -18,6 +18,7 @@ export interface SessionTreeNode extends BaseTreeNode {
   status: string;
   cycleCount: number;
   agentCount: number;
+  runningAgentCount: number;
   createdAt: string;
   completedAt?: string;
 }

@@ -87,6 +87,14 @@ let prevFrame: string[] = [];
 
 let prevTreeInputs = '';
 let prevBottomInputs = '';
+
+// ── Dynamic tree width ──────────────────────────────────────────────────────
+// Scale tree panel with terminal width so session names aren't aggressively
+// truncated on wide terminals. Min 36 (fits 80-col), max 70.
+
+function computeTreeWidth(cols: number): number {
+  return Math.min(70, Math.max(36, Math.floor(cols * 0.25)));
+}
 let prevOverlayMode = '';
 let cachedTreeRows: string[] = [];
 
@@ -182,7 +190,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
   const config = loadConfig(state.cwd);
 
   // Initialize NvimBridge
-  const treeWidth = 36;
+  const treeWidth = computeTreeWidth(state.cols);
   const remaining = state.cols - treeWidth;
   const detailW = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
   const initialDetailW = detailW - 4; // detail width minus borders
@@ -377,7 +385,9 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
       requestRender();
     } catch (err) {
+      const wasError = state.error !== null;
       state.error = (err as Error).message;
+      if (!wasError) prevFrame = []; // force full redraw on error transition
       requestRender();
     }
   }
@@ -402,7 +412,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     }
 
     // Compute layout
-    const treeWidth = 36;
+    const treeWidth = computeTreeWidth(state.cols);
     const remaining = state.cols - treeWidth;
     const detailWidth = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
     const logsWidth = state.showCombinedView ? remaining - detailWidth : 0;
@@ -747,7 +757,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     // Resize nvim bridge to match new detail panel dimensions
     // Account for: combined view split, borders (2), status rows (STATUS_ROW_COUNT), separator (1)
     if (state.nvimBridge) {
-      const resizeRemaining = state.cols - 36; // treeWidth=36
+      const resizeRemaining = state.cols - computeTreeWidth(state.cols);
       const resizeDetailW = state.showCombinedView ? Math.floor(resizeRemaining * 0.6) : resizeRemaining;
       const contentH = state.rows - 1; // bottomBar=1
       state.nvimBridge.resize(Math.max(1, resizeDetailW - 4), Math.max(1, contentH - 2 - STATUS_ROW_COUNT - 1));

@@ -1,3 +1,4 @@
+import stringWidth from 'string-width';
 import type { FrameBuffer, Rect } from '../render.js';
 import { drawBorder, writeClipped, colorToSGR } from '../render.js';
 import { renderCompanion, getMoodAnsiCode } from '../../shared/companion-render.js';
@@ -172,12 +173,19 @@ export function renderTreePanel(
     if (commentaryText) {
       const words = commentaryText.split(' ');
       let current = '';
+      let currentWidth = 0;
       for (const word of words) {
-        if (current.length + word.length + 1 > innerW && current.length > 0) {
+        const wordWidth = stringWidth(word);
+        if (currentWidth + wordWidth + 1 > innerW && currentWidth > 0) {
           _companionCommentaryLines.push(current);
           current = word;
+          currentWidth = wordWidth;
+        } else if (currentWidth === 0) {
+          current = word;
+          currentWidth = wordWidth;
         } else {
-          current = current.length > 0 ? `${current} ${word}` : word;
+          current = `${current} ${word}`;
+          currentWidth += 1 + wordWidth;
         }
       }
       if (current.length > 0) _companionCommentaryLines.push(current);
@@ -272,7 +280,7 @@ export function renderTreePanel(
     const commentaryCount = _companionCommentaryLines.length;
     const faceRow = y + h - 2 - commentaryCount;
     const totalAgents = nodes
-      .filter((n) => n.type === 'session')
+      .filter((n): n is import('../types/tree.js').SessionTreeNode => n.type === 'session' && n.status === 'active')
       .reduce((sum, n) => sum + n.agentCount, 0);
     const hasActive = nodes.some((n) => n.type === 'session' && n.status === 'active');
     const fields: CompanionField[] = hasActive

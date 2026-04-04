@@ -12,6 +12,7 @@ export interface SessionSummary {
   task: string;
   status: string;
   agentCount: number;
+  runningAgentCount: number;
   createdAt: string;
   tmuxWindowId?: string;
   /** Cached result of windowExists check — avoids synchronous subprocess in render */

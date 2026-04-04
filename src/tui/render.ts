@@ -115,6 +115,8 @@ export function clipAnsi(content: string, maxWidth: number): string {
       }
     }
     const cp = content.codePointAt(i)!;
+    // Skip control characters (newlines, tabs, etc.) — they break frame output
+    if (cp < 0x20 && cp !== 0x1b) { i++; continue; }
     const ch = String.fromCodePoint(cp);
     const chWidth = cp < 128 ? 1 : stringWidth(ch);
     if (displayWidth + chWidth > maxWidth) break;
@@ -241,6 +243,8 @@ export function writeClipped(
 
     // Get the next character (handle surrogate pairs)
     const cp = content.codePointAt(i)!;
+    // Skip control characters (newlines, tabs, etc.) — they break frame output
+    if (cp < 0x20 && cp !== 0x1b) { i++; continue; }
     const ch = String.fromCodePoint(cp);
     const chWidth = cp < 128 ? 1 : stringWidth(ch);
 
