@@ -175,6 +175,8 @@ export type Seg = {
   dim?: boolean;
   italic?: boolean;
   inverse?: boolean;
+  /** ANSI 48;2;R;G;B background tint (e.g. '48;2;40;35;20') */
+  bg?: string;
 };
 
 export type DetailLine = Seg[];

@@ -28,12 +28,13 @@ export function colorToSGR(color: string): number {
 export function renderLine(segs: Seg[]): string {
   let out = '';
   for (const s of segs) {
-    const codes: number[] = [];
-    if (s.bold) codes.push(1);
-    if (s.dim) codes.push(2);
-    if (s.italic) codes.push(3);
-    if (s.inverse) codes.push(7);
-    if (s.color) codes.push(colorToSGR(s.color));
+    const codes: string[] = [];
+    if (s.bold) codes.push('1');
+    if (s.dim) codes.push('2');
+    if (s.italic) codes.push('3');
+    if (s.inverse) codes.push('7');
+    if (s.color) codes.push(String(colorToSGR(s.color)));
+    if (s.bg) codes.push(s.bg);
     if (codes.length > 0) {
       out += `\x1b[${codes.join(';')}m${s.text}\x1b[0m`;
     } else {
