@@ -216,6 +216,9 @@ export interface AppState {
   composePollTimer: ReturnType<typeof setInterval> | null;
   composePrevNvimFile: string | null;
 
+  // Cycle flow
+  flowExpanded: boolean;
+
   // Config
   cwd: string;
 }
@@ -282,6 +285,7 @@ export function createAppState(cwd: string): AppState {
     composeSignalFile: null,
     composePollTimer: null,
     composePrevNvimFile: null,
+    flowExpanded: false,
     cwd,
   };
 }

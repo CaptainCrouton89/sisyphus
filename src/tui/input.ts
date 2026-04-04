@@ -81,6 +81,7 @@ export interface InputActions {
   // Editor/tmux operations (injected — input.ts must not import these directly)
   openEditorPopup: typeof import('./lib/tmux.js').openEditorPopup;
   editInPopup: typeof import('./lib/tmux.js').editInPopup;
+  promptInPopup: typeof import('./lib/tmux.js').promptInPopup;
   openCompanionPane: typeof import('./lib/tmux.js').openCompanionPane;
   openClaudeResumePopup: typeof import('./lib/tmux.js').openClaudeResumePopup;
   openClaudeResumeSession: typeof import('./lib/tmux.js').openClaudeResumeSession;
@@ -211,20 +212,25 @@ function cancelCompose(state: AppState): void {
 function checkComposeSignal(state: AppState, actions: InputActions): void {
   if (!state.composeSignalFile || !state.composeAction) return;
 
-  // Auto-cancel if nvim died
-  if (!state.nvimBridge?.ready) {
-    cancelCompose(state);
-    return;
-  }
+  // Check signal file BEFORE nvim health — :wq writes signal then exits,
+  // and nvim may die before this 100ms poll fires. We must read a valid
+  // submit signal even if nvim is already gone.
+  if (existsSync(state.composeSignalFile)) {
+    let signalContent = '';
+    try { signalContent = readFileSync(state.composeSignalFile, 'utf-8').trim(); } catch { /* ignore */ }
 
-  if (!existsSync(state.composeSignalFile)) return;
+    if (signalContent === 'cancel') {
+      cancelCompose(state);
+      return;
+    }
 
-  // Read signal type: "1" = submit, "cancel" = cancel (from :q / QuitPre)
-  let signalContent = '';
-  try { signalContent = readFileSync(state.composeSignalFile, 'utf-8').trim(); } catch { /* ignore */ }
-
-  if (signalContent === 'cancel') {
-    cancelCompose(state);
+    // Signal is a submit — fall through to dispatch below
+  } else {
+    // No signal file yet — cancel if nvim died (unexpected exit, not :wq)
+    if (!state.nvimBridge?.ready) {
+      cancelCompose(state);
+      return;
+    }
     return;
   }
 
@@ -412,16 +418,15 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'delete-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      const editor = actions.resolveEditor();
       try {
-        const text = actions.editInPopup(state.cwd, editor);
+        const text = actions.promptInPopup('Delete session? (yes/no):');
         if (text?.trim() === 'yes') {
           actions.sendAndNotify({ type: 'delete', sessionId: selectedSessionId, cwd: state.cwd }, 'Session deleted');
         } else {
-          notify(state, 'Delete cancelled (type "yes" to confirm)');
+          notify(state, 'Delete cancelled');
         }
       } catch {
-        notify(state, 'Failed to open editor');
+        notify(state, 'Failed to open prompt');
       }
       break;
     }
@@ -527,14 +532,13 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'shell-command': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      const editor = actions.resolveEditor();
       try {
-        const text = actions.editInPopup(state.cwd, editor);
+        const text = actions.promptInPopup('$', { w: '80%' });
         if (text?.trim()) {
           actions.openShellPopup(state.cwd, text.trim());
         }
       } catch {
-        notify(state, 'Failed to open editor');
+        notify(state, 'Failed to open prompt');
       }
       break;
     }
@@ -649,7 +653,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   const cursorNode = actions.getCursorNode();
   const session = state.selectedSession;
 
-  // j / ↑
+  // k / ↑
   if (key.upArrow || input === 'k') {
     if (state.focusPane === 'detail') {
       state.detailScroll.scrollBy(-1);
@@ -1006,9 +1010,8 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     {
       const sessionId = state.selectedSessionId;
-      const editor = actions.resolveEditor();
       try {
-        const text = actions.editInPopup(state.cwd, editor);
+        const text = actions.promptInPopup('Rollback to cycle:');
         if (text?.trim()) {
           const toCycle = parseInt(text.trim(), 10);
           if (isNaN(toCycle) || toCycle < 1) { notify(state, 'Invalid cycle number'); return; }
@@ -1018,7 +1021,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
           );
         }
       } catch {
-        notify(state, 'Failed to open editor');
+        notify(state, 'Failed to open prompt');
       }
     }
     return;
@@ -1045,6 +1048,17 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
       actions.openEditorPopup(state.cwd, editor, sp);
     } catch {
       notify(state, `Failed to open strategy in ${editor}`);
+    }
+    return;
+  }
+
+  // F: toggle cycle flow expanded/collapsed
+  if (input === 'F') {
+    if (state.rightPanelMode === 'digest' || cursorNode?.type === 'session') {
+      state.flowExpanded = !state.flowExpanded;
+      state.cachedDetailLines = null;
+      state.cachedDigestLines = null;
+      requestRender();
     }
     return;
   }

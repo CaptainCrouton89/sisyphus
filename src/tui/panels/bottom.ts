@@ -46,6 +46,7 @@ export function renderStatusLine(
       B('[jk/↑↓]') + D(' scroll  ') +
       B('[h/←/tab]') + D(' back  ') +
       B('[t]') + D('oggle view  ') +
+      B('[F]') + D('low ±  ') +
       SEP +
       B('[m]') + D('sg  ') +
       B('[g]') + D('oal  ') +

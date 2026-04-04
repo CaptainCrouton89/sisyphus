@@ -31,6 +31,7 @@ import {
   openLogPopup,
   openShellPopup,
   openInFileManager,
+  promptInPopup,
 } from './lib/tmux.js';
 import { copyToClipboard } from './lib/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
@@ -463,6 +464,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.logsCacheKey = '';
       state.cachedDigestLines = null;
       state.digestCacheKey = '';
+      state.flowExpanded = false;
     }
 
     // Trigger debounced poll when session changes (avoids poll storm during rapid scrolling)
@@ -704,6 +706,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     send,
     openEditorPopup,
     editInPopup,
+    promptInPopup,
     openCompanionPane,
     openClaudeResumePopup,
     openClaudeResumeSession,

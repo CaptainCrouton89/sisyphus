@@ -35,9 +35,9 @@ import {
   messageSourceColor,
   extractFirstSentence,
   divider,
-  abbreviateMode,
   type DetailLine,
 } from '../lib/format.js';
+import { buildCycleFlowLines } from './cycle-flow.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -169,12 +169,12 @@ function buildSessionLines(
   width: number,
   paneAlive: boolean,
   strategyContent: string = '',
+  flowExpanded: boolean = false,
 ): DetailLine[] {
   const lines: DetailLine[] = [];
   const contentWidth = width - 4;
   const agents = session.agents;
   const cycles = session.orchestratorCycles;
-  const messages = session.messages;
   const isDead = session.status === 'active' && !paneAlive;
   // Goal text
   const goalText = goalContent
@@ -253,112 +253,9 @@ function buildSessionLines(
     });
   }
 
-  // Cycles section — newest first
+  // Cycle flow visualization
   lines.push(singleLine(' '));
-  lines.push([
-    seg('  ▎ ⟳ CYCLES', { color: 'blue', bold: true }),
-    seg(` (${cycles.length})`, { dim: true }),
-  ]);
-
-  const pushMsgLine = (msg: (typeof messages)[number], connector: '└▸' | '├▸') => {
-    const time = formatTime(msg.timestamp);
-    const agentId = msg.source.type === 'agent' ? msg.source.agentId : undefined;
-    const label = messageSourceLabel(msg.source.type, agentId);
-    const labelColor = messageSourceColor(msg.source.type);
-    const maxContent = Math.max(10, contentWidth - label.length - 18);
-    lines.push([
-      seg(`    ${connector} `, { dim: true }),
-      seg(`[${time}] `, { dim: true }),
-      seg(`${label} `, { color: labelColor, bold: true }),
-      seg(truncate(msg.summary.length > 0 ? msg.summary : msg.content, maxContent), { dim: true }),
-    ]);
-  };
-
-  if (cycles.length === 0) {
-    lines.push(singleLine('    waiting for orchestrator…', { dim: true, italic: true }));
-  } else {
-    const sortedMsgs = [...messages].sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-    );
-    const reversedCycles = [...cycles].reverse();
-
-    const shortType = (t: string) => {
-      const colonIdx = t.indexOf(':');
-      return colonIdx >= 0 ? t.slice(colonIdx + 1) : t;
-    };
-
-    for (let i = 0; i < reversedCycles.length; i++) {
-      const cycle = reversedCycles[i]!;
-      const olderCycle = reversedCycles[i + 1];
-
-      const isRunning = !cycle.completedAt;
-      const isNewest = i === 0;
-      const isSecond = i === 1;
-      const dot = isRunning ? '●' : '○';
-      const dotColor = isRunning ? 'green' : isNewest ? 'white' : 'gray';
-      const rowDim = !isRunning && !isNewest && !isSecond;
-      const duration = isRunning ? 'running' : formatDuration(cycle.activeMs);
-      const n = cycle.agentsSpawned.length;
-      const startTime = formatTime(cycle.timestamp);
-
-      const modeLabel = abbreviateMode(cycle.mode);
-      const cycModeColor = modeColor(cycle.mode);
-
-      const cycleAgents = agents.filter((a) => cycle.agentsSpawned.includes(a.id));
-
-      const cyclePad = `C${cycle.cycle}`.padEnd(4);
-      const durPad = (isRunning ? 'running' : duration).padEnd(9);
-
-      const headerRow: DetailLine = [
-        seg(`  ${dot} `, { color: dotColor }),
-        seg(cyclePad, { bold: isRunning || isNewest, dim: rowDim }),
-        ...(isRunning
-          ? [seg(durPad, { color: 'green', bold: true })]
-          : [seg(durPad, { dim: rowDim })]),
-        seg(startTime, { dim: true }),
-        ...(modeLabel ? [seg('  ', {}), seg(modeLabel, { color: cycModeColor })] : []),
-      ];
-      lines.push(headerRow);
-
-      if (cycleAgents.length > 0) {
-        const typeGroups = new Map<string, number>();
-        for (const a of cycleAgents) {
-          const t = shortType(a.agentType !== '' ? a.agentType : a.name !== '' ? a.name : a.id);
-          const prev = typeGroups.get(t);
-          typeGroups.set(t, prev !== undefined ? prev + 1 : 1);
-        }
-        const agentNames = [...typeGroups.entries()]
-          .map(([t, count]) => count > 1 ? `${count}× ${t}` : t)
-          .join(', ');
-        lines.push([
-          seg('      ', {}),
-          seg(truncate(agentNames, contentWidth - 6), { dim: rowDim }),
-        ]);
-      } else if (n > 0) {
-        lines.push([
-          seg('      ', {}),
-          seg(`${n} agent${n !== 1 ? 's' : ''}`, { dim: rowDim }),
-        ]);
-      }
-
-      const cycleTime = new Date(cycle.timestamp).getTime();
-      const olderCycleTime = olderCycle ? new Date(olderCycle.timestamp).getTime() : 0;
-      const cycleMsgs = sortedMsgs.filter((m) => {
-        const t = new Date(m.timestamp).getTime();
-        return t < cycleTime && t >= olderCycleTime;
-      });
-      cycleMsgs.forEach((msg, mi) => {
-        pushMsgLine(msg, mi < cycleMsgs.length - 1 ? '├▸' : '└▸');
-      });
-    }
-
-    // Messages predating all cycles
-    const firstCycleTime = new Date(reversedCycles[reversedCycles.length - 1]!.timestamp).getTime();
-    const preMsgs = sortedMsgs.filter((m) => new Date(m.timestamp).getTime() < firstCycleTime);
-    preMsgs.forEach((msg, mi) => {
-      pushMsgLine(msg, mi < preMsgs.length - 1 ? '├▸' : '└▸');
-    });
-  }
+  lines.push(...buildCycleFlowLines(session, contentWidth, flowExpanded));
 
   return lines;
 }
@@ -680,6 +577,7 @@ export function renderDetailRows(
     session.messages.length,
     state.contextFiles.length,
     contextFileContent?.length ?? -1,
+    state.flowExpanded,
   ].join(':');
 
   let lines: DetailLine[];
@@ -690,7 +588,7 @@ export function renderDetailRows(
   } else {
     switch (cursorNode.type) {
       case 'session': {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         break;
       }
 
@@ -698,7 +596,7 @@ export function renderDetailRows(
         const cycleNode = cursorNode as CycleTreeNode;
         const cycle = session.orchestratorCycles.find((c) => c.cycle === cycleNode.cycleNumber);
         if (!cycle) {
-          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         } else {
           lines = buildCycleLines(cycle, session.agents, rect.w);
         }
@@ -709,7 +607,7 @@ export function renderDetailRows(
         const agentNode = cursorNode as AgentTreeNode;
         const agent = agents.find((a) => a.id === agentNode.agentId);
         if (!agent) {
-          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         } else {
           lines = buildAgentLines(agent, detailReportBlocks, rect.w);
         }
@@ -720,7 +618,7 @@ export function renderDetailRows(
         const reportNode = cursorNode as ReportTreeNode;
         const agent = agents.find((a) => a.id === reportNode.agentId);
         if (!agent) {
-          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
           break;
         }
         const reportIdx = reportNode.reportIndex;
@@ -817,7 +715,7 @@ export function renderDetailRows(
       }
 
       default: {
-        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         break;
       }
     }
@@ -894,17 +792,39 @@ export function renderDigestRows(
   const focused = state.focusPane === 'logs';
   const scrollOffset = state.digestScroll.offset;
   const digest = state.digestData;
+  const session = state.selectedSession;
 
-  if (!digest) {
+  if (!digest && !session) {
     return buildEmptyPanelRows(rect, focused, 'cyan', '\x1b[2mAwaiting digest...\x1b[0m');
   }
 
-  const cacheKey = `${JSON.stringify(digest)}:${rect.w}`;
+  // Combined cache key: digest + flow inputs
+  const lastCycle = session?.orchestratorCycles[session.orchestratorCycles.length - 1];
+  const agentStatuses = session?.agents.map(a => `${a.id}:${a.status}`).join(',') ?? '';
+  const cacheKey = [
+    JSON.stringify(digest),
+    session?.id ?? '',
+    session?.orchestratorCycles.length ?? 0,
+    lastCycle?.completedAt ?? '',
+    lastCycle?.agentsSpawned.length ?? 0,
+    lastCycle?.nextPrompt?.length ?? 0,
+    agentStatuses,
+    state.flowExpanded,
+    rect.w,
+  ].join(':');
+
   let lines: DetailLine[];
   if (cacheKey === state.digestCacheKey && state.cachedDigestLines !== null) {
     lines = state.cachedDigestLines;
   } else {
-    lines = buildDigestLines(digest, rect.w);
+    lines = [];
+    if (digest) {
+      lines.push(...buildDigestLines(digest, rect.w));
+    }
+    if (session) {
+      lines.push(singleLine(''));
+      lines.push(...buildCycleFlowLines(session, rect.w - 4, state.flowExpanded));
+    }
     state.cachedDigestLines = lines;
     state.digestCacheKey = cacheKey;
   }
