@@ -4,62 +4,33 @@ Agent system prompt templates for crouton-kit plugin agent types.
 
 ## Agent Types
 
-Each `.md` file defines a specialized role and strategy:
 - `problem.md` — Problem exploration; divergent thinking, challenges assumptions, produces thinking document
 - `requirements.md` — Requirements analysis; EARS acceptance criteria, behavioral specs, iterates with user
 - `design.md` — Technical design; architecture, flow tracing, trade-off resolution, produces design doc
-- `plan.md` — Plan lead; assesses scope and delegates sub-planning to parallel agents for complex features (6+ files), synthesizes into <200-line master plan with task table and dependency graph
-- `review-plan.md` — Plan review coordinator; spawns 4 parallel sub-agent reviewers (security, requirements-coverage, code-smells, pattern-consistency) to verify completeness and safety before implementation
+- `plan.md` — Plan lead; assesses scope and delegates sub-planning to parallel agents
+- `review-plan.md` — Plan review coordinator; spawns 4 parallel sub-agent reviewers before implementation
 - `operator.md` — QA/testing agent; browser automation, UI validation, real-world interaction
 - `debug.md` — Debug-focused investigation
 - `implement.md` — Implementation-focused execution
-- `review.md` — Code review
+- `review.md` — Code review coordinator; orchestrates parallel sub-agents from `review/`, never edits code
 - `test-spec.md` — Test specification
 
-## Template Structure
+## Sub-Agent Subdirectory Pattern
 
-Each agent file starts with YAML frontmatter:
-```yaml
-name: plan
-description: >
-  Brief description of agent role and capabilities
-model: opus
-color: yellow
-effort: max
-interactive: true
-skills: [capture]
-permissionMode: bypassPermissions
-```
+Subdirectories named after an agent type (e.g., `review/`, `review-plan/`) contain sub-agent definition files. `createAgentPlugin()` in `src/daemon/agent.ts` copies these into the plugin's `agents/` dir at spawn time. **Sub-agents are invisible to the orchestrator** — only the parent agent can spawn them via the Agent tool.
 
-Frontmatter properties:
-- `name` — Agent type identifier (matches plugin type: `sisyphus:{name}`)
-- `description` — One-line summary for plugin discovery
-- `model` — Claude model (`opus`, `sonnet`, etc.)
-- `color` — Tmux pane color
-- `effort` — Complexity estimate (`low`, `medium`, `high`, `max`)
-- `interactive` — (optional) `true` if agent waits for user input/sign-off before proceeding
-- `skills` — Claude Code skills array (e.g., `[capture]`)
-- `permissionMode` — Permission mode (`bypassPermissions`, `default`, etc.)
+Parent agent prompt contains orchestration logic only (scope determination, dispatch strategy, validation, synthesis). Sub-agent files are self-contained: own frontmatter, domain criteria, search methodology, output format. No orchestration logic in sub-agents.
 
-## Key Patterns
+## Key Behavioral Patterns
 
-**Plan delegation**: plan.md assesses scope (simple 1-5 files solo; medium 6-15 files with sub-planners; large 15+ files with master + sub-plans). For medium/large, delegates to parallel sub-plan agents sliced by domain/layer, then synthesizes into navigable master plan with task table and dependency graph.
+**Plan delegation** (`plan.md`): Assesses scope before acting — simple (1-5 files) proceeds solo; medium (6-15 files) delegates to parallel sub-planners sliced by domain/layer; large (15+ files) produces master plan + sub-plans. Synthesizes into <200-line master plan with task table and dependency graph.
 
-**Plan review**: review-plan.md spawns 4 parallel sub-agent reviewers to verify plan completeness and safety. Reviewers cover security (injection surfaces, auth gaps, race conditions), requirements coverage, code smells (nullability, N+1 queries, error boundaries), and pattern consistency. Acts as gate before implementation — fails if critical/high findings exist.
+**Plan review** (`review-plan.md`): Always spawns all 4 sub-agents (`security`, `requirements-coverage`, `code-smells`, `pattern-consistency`) in parallel. Acts as a gate before implementation — fails if critical/high findings exist. Sub-agents are in `review-plan/`.
 
-## Prompt Rendering
+**Code review** (`review.md`): Core three sub-agents (`reuse`, `quality`, `efficiency`) always spawn. `security` is added for hotfix/security classifications or sensitive code at any scope. `compliance` added when CLAUDE.md/rules are extensive. For larger scopes, spawns multiple instances of each type scoped to different directories/modules. Sub-agents are in `review/`.
 
-- **Placeholder substitution**:
-  - `{{SESSION_ID}}` → Session UUID (from environment)
-  - `{{INSTRUCTION}}` → Task instruction (from `sisyphus spawn --agent-type` call)
-- **Passage**: Via `--append-system-prompt "$(cat file.md)"` flag
-- **User prompt**: Instruction repeated for clarity
+**Validation layer** (`review.md`): After domain sub-agents finish, spawns validation sub-agents (~1 per 3 findings). Bugs/security validated by opus; everything else by sonnet. Includes a dismissal audit: 1-2 dismissed findings per sub-agent are sampled and independently verified. Findings that don't survive validation are dropped.
 
-## Conventions
+## Frontmatter
 
-- Keep role definition concise; strategy section should emphasize unique focus
-- Define distinct, non-overlapping specialties (operator for QA, debug for investigation, etc.)
-- Do not hardcode session IDs or names—use placeholders only
-- Prompts should complement (not duplicate) agent-suffix.md shared context
-- Frontmatter is required and used by plugin discovery/rendering
-- Interactive agents (problem, requirements, design, plan) may delegate work to specialists and spawn reviewers
+See parent `templates/CLAUDE.md` for frontmatter properties. The `interactive: true` flag marks agents that wait for user sign-off (problem, requirements, design, plan).

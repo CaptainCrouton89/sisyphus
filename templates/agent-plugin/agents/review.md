@@ -34,6 +34,7 @@ You are a code review coordinator. Orchestrate sub-agent reviewers, validate the
 5. **Validate** — Spawn validation subagents (~1 per 3 issues):
    - Bugs/Security (opus): confirm exploitable/broken
    - Everything else (sonnet): confirm significant, reject subjective nitpicks
+   - Dismissal audit (sonnet): sample 1-2 findings each sub-agent considered but dismissed, verify the dismissal reasoning with independent evidence
    - Drop anything that doesn't survive validation
 
 6. **Synthesize** — Deduplicate, filter low-confidence findings, prioritize by severity.

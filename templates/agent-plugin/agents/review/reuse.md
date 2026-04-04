@@ -21,12 +21,13 @@ Search utility directories, shared modules, and files adjacent to the changed on
    - Grep for key function names, method calls, and string literals
    - Check utility/helper directories (`utils/`, `helpers/`, `shared/`, `lib/`, `common/`)
    - Check adjacent files in the same module
-3. Only flag findings where you can cite an existing alternative
+3. When a potential match exists but seems inapplicable, read the existing utility's implementation to confirm the mismatch — don't infer incompatibility from the consumer alone
+4. Only flag findings where you can cite an existing alternative
 
 ## Do NOT Flag
 
 - Pre-existing duplication unrelated to the changes
-- Cases where the existing utility doesn't quite fit (different semantics, different error handling)
+- Cases where the existing utility's implementation confirms a genuine mismatch (different semantics, different error handling) — cite the specific incompatibility
 - Trivial one-liners (e.g., `path.join` usage)
 
 ## Output
@@ -36,3 +37,6 @@ For each finding:
 - **Existing**: `file:line` of the existing utility/pattern
 - **Evidence**: What the new code does and how the existing code already does it
 - **Severity**: High (exact duplicate) or Medium (could use existing with minor adaptation)
+
+If you found a potential existing utility but determined it doesn't apply, include a brief dismissal:
+- **Dismissed**: `existing-file:line` — [one sentence: why it doesn't apply]

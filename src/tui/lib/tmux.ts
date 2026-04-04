@@ -105,6 +105,28 @@ export function editInPopup(cwd: string, editor: string, opts?: { content?: stri
   }
 }
 
+/**
+ * Small centered tmux popup that prompts for a single line of input.
+ * Returns the trimmed input or null if empty/cancelled (Ctrl-C / Escape).
+ */
+export function promptInPopup(prompt: string, opts?: { w?: string; h?: string }): string | null {
+  const { w = '50%', h = '3' } = opts ?? {};
+  const tmpDir = mkdtempSync(join(tmpdir(), 'sisyphus-'));
+  const outFile = join(tmpDir, 'result');
+  try {
+    const script = `printf ${shellQuote(prompt + ' ')} && read -r line && printf '%s' "$line" > ${shellQuote(outFile)}`;
+    execSync(
+      `tmux display-popup -E -w ${w} -h ${h} ${shellQuote(`bash -c ${shellQuote(script)}`)}`,
+      { stdio: 'inherit', env: EXEC_ENV },
+    );
+    if (!existsSync(outFile)) return null;
+    const result = readFileSync(outFile, 'utf-8').trim();
+    return result || null;
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 export function openLogPopup(): void {
   execSync(
     `tmux display-popup -E -w 90% -h 80% ${shellQuote('tail -f ~/.sisyphus/daemon.log')}`,
