@@ -1,7 +1,7 @@
 import type { FrameBuffer, Rect } from '../render.js';
 import { drawBorder, writeClipped, colorToSGR } from '../render.js';
-import { renderCompanion } from '../../shared/companion-render.js';
-import type { CompanionState } from '../../shared/companion-types.js';
+import { renderCompanion, getMoodAnsiCode } from '../../shared/companion-render.js';
+import type { CompanionField, CompanionState } from '../../shared/companion-types.js';
 import type { TreeNode } from '../types/tree.js';
 import { renderTreePrefix } from '../lib/tree-render.js';
 import {
@@ -271,11 +271,25 @@ export function renderTreePanel(
   if (companion) {
     const commentaryCount = _companionCommentaryLines.length;
     const faceRow = y + h - 2 - commentaryCount;
-    const faceLine = renderCompanion(companion, ['face', 'boulder'], { maxWidth: innerW, color: true });
-    writeClipped(buf, innerX, faceRow, faceLine, innerW);
+    const totalAgents = nodes
+      .filter((n) => n.type === 'session')
+      .reduce((sum, n) => sum + n.agentCount, 0);
+    const hasActive = nodes.some((n) => n.type === 'session' && n.status === 'active');
+    const fields: CompanionField[] = hasActive
+      ? ['face', 'boulder', 'verb']
+      : ['face', 'boulder', 'hobby'];
+    // Don't use renderCompanion's internal color — applyColor's string replace
+    // breaks when maxWidth truncates the result. Apply mood color externally.
+    const faceLine = renderCompanion(companion, fields, {
+      maxWidth: innerW,
+      agentCount: totalAgents,
+      verbIndex: companion.spinnerVerbIndex,
+    });
+    const moodCode = getMoodAnsiCode(companion.mood);
+    writeClipped(buf, innerX, faceRow, `\x1b[${moodCode}m${faceLine}\x1b[0m`, innerW);
 
     for (let i = 0; i < commentaryCount; i++) {
-      writeClipped(buf, innerX, faceRow + 1 + i, `\x1b[2m${_companionCommentaryLines[i]}\x1b[0m`, innerW);
+      writeClipped(buf, innerX, faceRow + 1 + i, `\x1b[${moodCode}m${_companionCommentaryLines[i]}\x1b[0m`, innerW);
     }
   }
 }

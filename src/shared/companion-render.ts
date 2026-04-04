@@ -241,6 +241,10 @@ export function getMoodTmuxColor(mood: Mood): string {
   return MOOD_COLORS[mood].tmux;
 }
 
+export function getMoodAnsiCode(mood: Mood): number {
+  return MOOD_COLORS[mood].ansi;
+}
+
 function colorize(text: string, mood: Mood, tmux: boolean): string {
   const { ansi, tmux: tmuxColor } = MOOD_COLORS[mood];
   if (tmux) {
