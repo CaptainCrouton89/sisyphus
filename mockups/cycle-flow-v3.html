@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sisyphus — Cycle Flow v3</title>
+<style>
+:root {
+  --term-bg: #1a1b26;
+  --term-fg: #c0caf5;
+  --term-dim: #565f89;
+  --term-border: #33384d;
+  --term-green: #9ece6a;
+  --term-cyan: #7dcfff;
+  --term-yellow: #e0af68;
+  --term-blue: #7aa2f7;
+  --term-magenta: #bb9af7;
+  --term-red: #f7768e;
+  --term-white: #c0caf5;
+  --term-gray: #565f89;
+
+  --page-bg: #0d0e14;
+  --card-bg: #13141c;
+  --card-border: #1e2030;
+  --doc-fg: #8b95b0;
+  --doc-muted: #505878;
+  --doc-heading: #c0caf5;
+  --tag-teal: #7dcfff;
+  --tag-amber: #e0af68;
+  --tag-pink: #f7768e;
+  --tag-blue: #7aa2f7;
+  --tag-green: #9ece6a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  background: var(--page-bg);
+  color: var(--doc-fg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: #0a0b10;
+  border-bottom: 1px solid var(--card-border);
+  padding: 0.625rem 1.25rem;
+  display: flex; gap: 0.25rem; overflow-x: auto;
+}
+.nav a {
+  color: var(--doc-muted); text-decoration: none; font-size: 0.6875rem;
+  padding: 0.25rem 0.625rem; border-radius: 0.25rem; white-space: nowrap;
+  transition: all 0.15s; letter-spacing: 0.03em;
+}
+.nav a:hover, .nav a.active { color: var(--doc-heading); background: rgba(122,162,247,0.08); }
+
+.section { max-width: 72rem; margin: 1.5rem auto; padding: 0 1.25rem; }
+.section-card {
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: 0.5rem; padding: 1.75rem 2rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.section-card + .section-card { margin-top: 1rem; }
+
+.tag { font-size: 0.5625rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.375rem; }
+.tag.rec { color: var(--tag-teal); }
+.tag.state { color: var(--tag-blue); }
+.tag.note { color: var(--tag-amber); }
+.tag.detail { color: var(--tag-green); }
+
+.section-title { font-size: 1.125rem; font-weight: 600; color: var(--doc-heading); margin-bottom: 0.25rem; }
+.section-desc { font-size: 0.75rem; color: var(--doc-muted); max-width: 42rem; margin-bottom: 1.25rem; line-height: 1.5; }
+
+.term-frame {
+  background: var(--term-bg); border: 1px solid var(--term-border);
+  border-radius: 0.375rem; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.term-titlebar {
+  background: #14151f; padding: 0.5rem 0.75rem;
+  display: flex; align-items: center; gap: 0.375rem;
+  border-bottom: 1px solid var(--term-border);
+}
+.term-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; }
+.term-dot.r { background: #f7768e; }
+.term-dot.y { background: #e0af68; }
+.term-dot.g { background: #9ece6a; }
+.term-titlebar-text { font-size: 0.625rem; color: var(--term-dim); margin-left: 0.5rem; }
+
+.term-body {
+  padding: 0.75rem 1rem; font-size: 0.75rem; line-height: 1.5;
+  color: var(--term-fg); white-space: pre; overflow-x: auto;
+}
+
+/* ANSI simulation classes */
+.g { color: var(--term-green); }
+.c { color: var(--term-cyan); }
+.y { color: var(--term-yellow); }
+.b { color: var(--term-blue); }
+.m { color: var(--term-magenta); }
+.r { color: var(--term-red); }
+.w { color: var(--term-white); }
+.d { color: var(--term-dim); }
+.B { font-weight: 700; }
+/* dim/done */
+.x { opacity: 0.35; }
+.xx { opacity: 0.55; }
+
+/* BG colors — ANSI bg simulation.
+   In real terminal: \x1b[43m (yellow bg), \x1b[42m (green bg), etc.
+   These are dark tinted backgrounds like a real terminal would show. */
+.bg-y  { background: rgba(224,175,104,0.15); }
+.bg-g  { background: rgba(158,206,106,0.12); }
+.bg-b  { background: rgba(122,162,247,0.12); }
+.bg-m  { background: rgba(187,154,247,0.12); }
+.bg-c  { background: rgba(125,207,255,0.10); }
+.bg-d  { background: rgba(86,95,137,0.15); }
+.bg-r  { background: rgba(247,118,142,0.12); }
+
+.state-label {
+  display: inline-block; font-size: 0.625rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--doc-muted); margin-top: 1rem; margin-bottom: 0.375rem;
+}
+
+.callout {
+  padding: 0.625rem 0.875rem; border-radius: 0.25rem;
+  font-size: 0.6875rem; line-height: 1.5; margin-top: 0.875rem;
+}
+.callout.green { background: rgba(158,206,106,0.06); border-left: 3px solid var(--term-green); color: var(--term-green); }
+.callout.amber { background: rgba(224,175,104,0.06); border-left: 3px solid var(--term-yellow); color: var(--term-yellow); }
+.callout.blue { background: rgba(122,162,247,0.06); border-left: 3px solid var(--term-blue); color: var(--term-blue); }
+.callout-label { font-size: 0.5625rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem; }
+
+::-webkit-scrollbar { width: 0.3125rem; height: 0.3125rem; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 0.15rem; }
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <a href="#model" class="active">Phase Model</a>
+  <a href="#agents-phase">In Agents Phase</a>
+  <a href="#orch-phase">In Orchestration Phase</a>
+  <a href="#between">Between Phases</a>
+  <a href="#wrapping">Agent Wrapping</a>
+  <a href="#edges">Edge Cases</a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PHASE MODEL -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="model">
+  <div class="section-card">
+    <div class="tag rec">DESIGN MODEL</div>
+    <div class="section-title">Three-Phase Sliding Window</div>
+    <div class="section-desc">
+      The lifecycle is a sequence of phases: orchestrator → agents → yield → orchestrator → agents → …
+      We show exactly 3 phases at a time: the one before, the current one, and what's coming next.
+      The window slides forward as the session progresses.
+    </div>
+
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <span class="term-titlebar-text">visual language</span>
+      </div>
+      <div class="term-body">
+  <span class="w B">Visual Language</span>
+
+  <span class="w B">  Brightness:</span>
+  <span class="x">    ╭──────────╮  dim/faded    = completed, in the past</span>
+  <span class="w">    ╭──────────╮</span><span class="w B">  bright/bold   = active right now</span>
+  <span class="d">    ╌ ╌ ╌ ╌ ╌ ╌</span>   <span class="d">dotted/dashed = planned, hasn't happened yet</span>
+
+  <span class="w B">  Background tints</span> <span class="d">(ANSI bg colors, dark-tinted):</span>
+    <span class="bg-y y"> ● C2 impl          running </span>  <span class="d">← orchestrator: yellow bg</span>
+    <span class="bg-b b"> ▶ a-004  backend    12m     </span>  <span class="d">← agent: its assigned color bg</span>
+    <span class="bg-g g"> ▶ a-005  migrate    8m      </span>  <span class="d">← agent: green bg</span>
+    <span class="bg-d d">   yield: "Run compliance…"   </span>  <span class="d">← yield prompt: gray bg</span>
+
+  <span class="w B">  Status icons:</span>
+    <span class="g B">●</span> <span class="d">orchestrator running</span>    <span class="g B">▶</span> <span class="d">agent running</span>
+    <span class="d">○</span> <span class="d">orchestrator done</span>       <span class="c">✓</span> <span class="d">agent completed</span>
+    <span class="r">✕</span> <span class="d">killed</span>    <span class="r">!</span> <span class="d">crashed</span>    <span class="y">?</span> <span class="d">lost</span>
+
+  <span class="w B">  Mode colors</span> <span class="d">(on orchestrator nodes):</span>
+    <span class="b">plan</span>  <span class="g">impl</span>  <span class="y">strat</span>  <span class="m">valid</span>
+</div>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-label">KEY INSIGHT</div>
+      Background tints replace box borders as the primary grouping signal. A tinted row
+      reads as "this is a node" without needing ╭──╮ everywhere. Borders become optional
+      structural lines. This is more compact and avoids box-drawing alignment problems.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- AGENTS PHASE -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="agents-phase">
+  <div class="section-card">
+    <div class="tag state">CURRENT PHASE: AGENTS</div>
+    <div class="section-title">Agents Working — 3 Visible Phases</div>
+    <div class="section-desc">
+      Previous = orchestrator (dim). Current = agents (bright). Next = yield prompt (dotted/planned).
+    </div>
+
+    <!-- Main example: agents phase, 3 agents, mixed status -->
+    <div class="state-label">3 agents — 2 running, 1 done</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <span class="term-titlebar-text">detail panel · 70 cols · agents phase</span>
+      </div>
+      <div class="term-body">
+ <span class="w B">Refactor auth middleware for compliance</span>
+  <span class="d">active · cycle 2 · </span><span class="g">impl</span><span class="d"> · 1h 23m · 2 running · 1 done</span>
+
+  <span class="y B">▎ ◈ CYCLE FLOW</span>                     <span class="d">[F] full</span>
+
+  <span class="x">  ╭──────────────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C2  impl              22m    10:14 </span><span class="x">│</span>
+  <span class="x">  ╰──────────────┬─────────────────────╯</span>
+                  <span class="d">│</span>
+        <span class="d">┌─────────┼─────────┐</span>
+   <span class="b">╭────┴─────╮</span><span class="g">╭────┴─────╮</span><span class="c">╭────┴─────╮</span>
+   <span class="b">│</span><span class="bg-b"><span class="g B"> ▶</span><span class="b"> a-004   </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="g B"> ▶</span><span class="g"> a-005   </span></span><span class="g">│</span><span class="c">│</span><span class="bg-c"><span class="c"> ✓</span><span class="d"> a-006   </span></span><span class="c">│</span>
+   <span class="b">│</span><span class="bg-b"><span class="b"> backend  </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="g"> migrate  </span></span><span class="g">│</span><span class="c">│</span><span class="bg-c"><span class="d"> types    </span></span><span class="c">│</span>
+   <span class="b">│</span><span class="bg-b"><span class="d"> 12m      </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="d"> 8m       </span></span><span class="g">│</span><span class="c">│</span><span class="bg-c"><span class="d"> 3m       </span></span><span class="c">│</span>
+   <span class="b">╰────┬─────╯</span><span class="g">╰────┬─────╯</span><span class="c">╰────┬─────╯</span>
+        <span class="d">└─────────┼─────────┘</span>
+                  <span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+  <span class="d">  ┊</span><span class="bg-d"><span class="d">  awaiting agents…                    </span></span><span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+</div>
+    </div>
+
+    <div class="callout blue">
+      <div class="callout-label">READING ORDER</div>
+      <strong>Previous (dim):</strong> Orchestrator C2 that spawned these agents — faded, context only.<br>
+      <strong>Current (bright):</strong> The 3 agent boxes with bg tints in their assigned colors. Running agents
+      have bright borders + bold ▶. Completed agent (a-006) has cyan border but dimmed content.<br>
+      <strong>Next (dotted):</strong> Yield prompt placeholder — dashed outline, gray bg. Content unknown
+      until all agents finish and orchestrator yields.
+    </div>
+
+    <!-- Same thing but agents all done, yield prompt is known -->
+    <div class="state-label">All 3 agents done — yield prompt known</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <span class="term-titlebar-text">detail panel · all agents complete</span>
+      </div>
+      <div class="term-body">
+ <span class="w B">Refactor auth middleware for compliance</span>
+  <span class="d">active · cycle 2 · </span><span class="g">impl</span><span class="d"> · 1h 48m · 0 running · 3 done</span>
+
+  <span class="y B">▎ ◈ CYCLE FLOW</span>                     <span class="d">[F] full</span>
+
+  <span class="x">  ╭──────────────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C2  impl              22m    10:14 </span><span class="x">│</span>
+  <span class="x">  ╰──────────────┬─────────────────────╯</span>
+                  <span class="d">│</span>
+        <span class="d">┌─────────┼─────────┐</span>
+   <span class="xx c">╭────┴─────╮╭────┴─────╮╭────┴─────╮</span>
+   <span class="xx c">│</span><span class="xx bg-c"><span class="c"> ✓</span><span class="d"> a-004   </span></span><span class="xx c">│</span><span class="xx c">│</span><span class="xx bg-c"><span class="c"> ✓</span><span class="d"> a-005   </span></span><span class="xx c">│</span><span class="xx c">│</span><span class="xx bg-c"><span class="c"> ✓</span><span class="d"> a-006   </span></span><span class="xx c">│</span>
+   <span class="xx c">│</span><span class="xx bg-c"><span class="d"> backend  </span></span><span class="xx c">│</span><span class="xx c">│</span><span class="xx bg-c"><span class="d"> migrate  </span></span><span class="xx c">│</span><span class="xx c">│</span><span class="xx bg-c"><span class="d"> types    </span></span><span class="xx c">│</span>
+   <span class="xx c">│</span><span class="xx bg-c"><span class="d"> 18m      </span></span><span class="xx c">│</span><span class="xx c">│</span><span class="xx bg-c"><span class="d"> 14m      </span></span><span class="xx c">│</span><span class="xx c">│</span><span class="xx bg-c"><span class="d"> 3m       </span></span><span class="xx c">│</span>
+   <span class="xx c">╰────┬─────╯╰────┬─────╯╰────┬─────╯</span>
+        <span class="xx">└─────────┼─────────┘</span>
+                  <span class="d">│</span>
+  <span class="y">  ╭──────────────────────────────────────╮</span>
+  <span class="y">  │</span><span class="bg-d"><span class="d"> Validate all auth endpoints and run  </span></span><span class="y">│</span>
+  <span class="y">  │</span><span class="bg-d"><span class="d"> compliance checker suite              </span></span><span class="y">│</span>
+  <span class="y">  ╰──────────────────────────────────────╯</span>
+                  <span class="d">┊</span>
+          <span class="d">spawning orchestrator…</span>
+</div>
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-label">TRANSITION</div>
+      When all agents complete: agents dim to 0.55 opacity (not fully faded — they just finished).
+      The yield prompt solidifies from dashed → solid yellow border with gray bg showing the actual
+      prompt text. The "next" phase becomes the upcoming orchestrator ("spawning orchestrator…").
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ORCHESTRATION PHASE -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="orch-phase">
+  <div class="section-card">
+    <div class="tag state">CURRENT PHASE: ORCHESTRATOR</div>
+    <div class="section-title">Orchestrator Running — 3 Visible Phases</div>
+    <div class="section-desc">
+      Previous = yield prompt (dim). Current = orchestrator (bright, yellow bg).
+      Next = agents placeholder (dotted — orchestrator hasn't spawned them yet).
+    </div>
+
+    <div class="state-label">Orchestrator running, no agents yet</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <span class="term-titlebar-text">detail panel · orchestration phase</span>
+      </div>
+      <div class="term-body">
+ <span class="w B">Refactor auth middleware for compliance</span>
+  <span class="d">active · cycle 3 · </span><span class="m">valid</span><span class="d"> · 2h 01m · 0 running · 6 done</span>
+
+  <span class="y B">▎ ◈ CYCLE FLOW</span>                     <span class="d">[F] full</span>
+
+  <span class="x">  ╭──────────────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-d"> Validate all auth endpoints and run   </span><span class="x">│</span>
+  <span class="x">  │</span><span class="x bg-d"> compliance checker suite               </span><span class="x">│</span>
+  <span class="x">  ╰──────────────────┬───────────────────╯</span>
+                     <span class="d">│</span>
+  <span class="y">  ╭──────────────────────────────────────╮</span>
+  <span class="y">  │</span><span class="bg-y"><span class="g B"> ● C3 </span><span class="m"> valid </span><span class="y">             </span><span class="g">running    </span></span><span class="y">│</span>
+  <span class="y">  ╰──────────────────────────────────────╯</span>
+                     <span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+  <span class="d">  ┊</span><span class="bg-d"><span class="d">  awaiting orchestrator…                </span></span><span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+</div>
+    </div>
+
+    <div class="callout blue">
+      <div class="callout-label">READING ORDER</div>
+      <strong>Previous (dim):</strong> The yield prompt that triggered this orchestrator — faded.<br>
+      <strong>Current (bright):</strong> Orchestrator C3 with yellow bg, green ● for running, magenta "valid" mode label.<br>
+      <strong>Next (dotted):</strong> Placeholder — orchestrator hasn't decided what agents to spawn yet.
+    </div>
+
+    <!-- First cycle, no previous at all -->
+    <div class="state-label">First Cycle — No Previous Phase</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <span class="term-titlebar-text">detail panel · fresh session</span>
+      </div>
+      <div class="term-body">
+ <span class="w B">Add webhook retry with exponential backoff</span>
+  <span class="d">active · cycle 0 · </span><span class="b">plan</span><span class="d"> · 2m · 0 running · 0 done</span>
+
+  <span class="y B">▎ ◈ CYCLE FLOW</span>
+
+  <span class="y">  ╭──────────────────────────────────────╮</span>
+  <span class="y">  │</span><span class="bg-y"><span class="g B"> ● C0 </span><span class="b"> plan  </span><span class="y">             </span><span class="g">running    </span></span><span class="y">│</span>
+  <span class="y">  ╰──────────────────────────────────────╯</span>
+                     <span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+  <span class="d">  ┊</span><span class="bg-d"><span class="d">  awaiting orchestrator…                </span></span><span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- BETWEEN PHASES -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="between">
+  <div class="section-card">
+    <div class="tag note">TRANSITIONS</div>
+    <div class="section-title">Phase Transitions</div>
+    <div class="section-desc">
+      What the window looks like at the moment agents are spawned by the orchestrator.
+      The "next" placeholder materializes into real agent boxes.
+    </div>
+
+    <div class="state-label">Orchestrator just spawned agents</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <span class="term-titlebar-text">detail panel · agents just spawned</span>
+      </div>
+      <div class="term-body">
+ <span class="w B">Refactor auth middleware for compliance</span>
+  <span class="d">active · cycle 3 · </span><span class="m">valid</span><span class="d"> · 2h 03m · 3 running · 6 done</span>
+
+  <span class="y B">▎ ◈ CYCLE FLOW</span>                     <span class="d">[F] full</span>
+
+  <span class="x">  ╭──────────────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C3  valid             4m     11:02 </span><span class="x">│</span>
+  <span class="x">  ╰──────────────┬─────────────────────╯</span>
+                  <span class="d">│</span>
+        <span class="d">┌─────────┼─────────┐</span>
+   <span class="m">╭────┴─────╮</span><span class="g">╭────┴─────╮</span><span class="b">╭────┴─────╮</span>
+   <span class="m">│</span><span class="bg-m"><span class="g B"> ▶</span><span class="m"> a-007   </span></span><span class="m">│</span><span class="g">│</span><span class="bg-g"><span class="g B"> ▶</span><span class="g"> a-008   </span></span><span class="g">│</span><span class="b">│</span><span class="bg-b"><span class="g B"> ▶</span><span class="b"> a-009   </span></span><span class="b">│</span>
+   <span class="m">│</span><span class="bg-m"><span class="m"> e2e-test </span></span><span class="m">│</span><span class="g">│</span><span class="bg-g"><span class="g"> endpoint </span></span><span class="g">│</span><span class="b">│</span><span class="bg-b"><span class="b"> audit    </span></span><span class="b">│</span>
+   <span class="m">│</span><span class="bg-m"><span class="d"> 0m       </span></span><span class="m">│</span><span class="g">│</span><span class="bg-g"><span class="d"> 0m       </span></span><span class="g">│</span><span class="b">│</span><span class="bg-b"><span class="d"> 0m       </span></span><span class="b">│</span>
+   <span class="m">╰────┬─────╯</span><span class="g">╰────┬─────╯</span><span class="b">╰────┬─────╯</span>
+        <span class="d">└─────────┼─────────┘</span>
+                  <span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+  <span class="d">  ┊</span><span class="bg-d"><span class="d">  awaiting agents…                    </span></span><span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+</div>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-label">BG COLOR IN PRACTICE</div>
+      In a real terminal, bg tints use ANSI 256-color or truecolor escapes:
+      <code>\x1b[48;2;R;G;B m</code>. The tint values are dark enough to keep text legible
+      on the dark terminal background. Each agent's assigned color (blue, green, magenta, etc.)
+      maps to a dim version: <code>rgb(30, 40, 70)</code> for blue bg, <code>rgb(30, 50, 30)</code>
+      for green bg, etc. Only needs ~6 bg colors total.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- WRAPPING -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="wrapping">
+  <div class="section-card">
+    <div class="tag detail">WRAPPING</div>
+    <div class="section-title">4+ Agents: Row Wrapping with BG</div>
+    <div class="section-desc">
+      Max 3 per row. Overflow wraps below, left-aligned. Branch connector only on first row.
+    </div>
+
+    <div class="compare-grid">
+      <!-- 5 agents -->
+      <div>
+        <div class="state-label">5 Agents</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot r"></div>
+            <div class="term-dot y"></div>
+            <div class="term-dot g"></div>
+            <span class="term-titlebar-text">5 agents, 2 rows</span>
+          </div>
+          <div class="term-body">
+  <span class="x">  ╭────────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C3  impl         18m  10:05 </span><span class="x">│</span>
+  <span class="x">  ╰──────────┬─────────────────────╯</span>
+              <span class="d">│</span>
+     <span class="d">┌────────┼────────┐</span>
+  <span class="b">╭───┴────╮</span><span class="g">╭───┴────╮</span><span class="g">╭───┴────╮</span>
+  <span class="b">│</span><span class="bg-b"><span class="g B">▶</span><span class="b"> a-010 </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="g B">▶</span><span class="g"> a-011 </span></span><span class="g">│</span><span class="g">│</span><span class="bg-g"><span class="g B">▶</span><span class="g"> a-012 </span></span><span class="g">│</span>
+  <span class="b">│</span><span class="bg-b"><span class="b"> api    </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="g"> webhk  </span></span><span class="g">│</span><span class="g">│</span><span class="bg-g"><span class="g"> workr  </span></span><span class="g">│</span>
+  <span class="b">│</span><span class="bg-b"><span class="d"> 15m    </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="d"> 12m    </span></span><span class="g">│</span><span class="g">│</span><span class="bg-g"><span class="d"> 8m     </span></span><span class="g">│</span>
+  <span class="b">╰────────╯</span><span class="g">╰────────╯</span><span class="g">╰────────╯</span>
+  <span class="c">╭────────╮</span><span class="m">╭────────╮</span>
+  <span class="c">│</span><span class="bg-c"><span class="c">✓</span><span class="d"> a-013 </span></span><span class="c">│</span><span class="m">│</span><span class="bg-m"><span class="g B">▶</span><span class="m"> a-014 </span></span><span class="m">│</span>
+  <span class="c">│</span><span class="bg-c"><span class="d"> types  </span></span><span class="c">│</span><span class="m">│</span><span class="bg-m"><span class="m"> e2e    </span></span><span class="m">│</span>
+  <span class="c">│</span><span class="bg-c"><span class="d"> 2m     </span></span><span class="c">│</span><span class="m">│</span><span class="bg-m"><span class="d"> 4m     </span></span><span class="m">│</span>
+  <span class="c">╰────────╯</span><span class="m">╰────────╯</span>
+</div>
+        </div>
+      </div>
+
+      <!-- 6 agents -->
+      <div>
+        <div class="state-label">6 Agents — Full 2 Rows</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot r"></div>
+            <div class="term-dot y"></div>
+            <div class="term-dot g"></div>
+            <span class="term-titlebar-text">6 agents, 2 full rows</span>
+          </div>
+          <div class="term-body">
+  <span class="x">  ╭────────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C4  impl         32m  10:30 </span><span class="x">│</span>
+  <span class="x">  ╰──────────┬─────────────────────╯</span>
+              <span class="d">│</span>
+     <span class="d">┌────────┼────────┐</span>
+  <span class="b">╭───┴────╮</span><span class="g">╭───┴────╮</span><span class="g">╭───┴────╮</span>
+  <span class="b">│</span><span class="bg-b"><span class="g B">▶</span><span class="b"> a-020 </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="g B">▶</span><span class="g"> a-021 </span></span><span class="g">│</span><span class="g">│</span><span class="bg-g"><span class="g B">▶</span><span class="g"> a-022 </span></span><span class="g">│</span>
+  <span class="b">│</span><span class="bg-b"><span class="b"> api    </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="g"> webhk  </span></span><span class="g">│</span><span class="g">│</span><span class="bg-g"><span class="g"> workr  </span></span><span class="g">│</span>
+  <span class="b">│</span><span class="bg-b"><span class="d"> 15m    </span></span><span class="b">│</span><span class="g">│</span><span class="bg-g"><span class="d"> 12m    </span></span><span class="g">│</span><span class="g">│</span><span class="bg-g"><span class="d"> 8m     </span></span><span class="g">│</span>
+  <span class="b">╰────────╯</span><span class="g">╰────────╯</span><span class="g">╰────────╯</span>
+  <span class="c">╭────────╮</span><span class="m">╭────────╮</span><span class="r">╭────────╮</span>
+  <span class="c">│</span><span class="bg-c"><span class="c">✓</span><span class="d"> a-023 </span></span><span class="c">│</span><span class="m">│</span><span class="bg-m"><span class="g B">▶</span><span class="m"> a-024 </span></span><span class="m">│</span><span class="r">│</span><span class="bg-r"><span class="r">✕</span><span class="r"> a-025 </span></span><span class="r">│</span>
+  <span class="c">│</span><span class="bg-c"><span class="d"> types  </span></span><span class="c">│</span><span class="m">│</span><span class="bg-m"><span class="m"> e2e    </span></span><span class="m">│</span><span class="r">│</span><span class="bg-r"><span class="r"> migrt  </span></span><span class="r">│</span>
+  <span class="c">│</span><span class="bg-c"><span class="d"> 2m     </span></span><span class="c">│</span><span class="m">│</span><span class="bg-m"><span class="d"> 4m     </span></span><span class="m">│</span><span class="r">│</span><span class="bg-r"><span class="d"> 6m </span><span class="r">kill</span></span><span class="r">│</span>
+  <span class="c">╰────────╯</span><span class="m">╰────────╯</span><span class="r">╰────────╯</span>
+</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- EDGE CASES -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="edges">
+  <div class="section-card">
+    <div class="tag state">EDGES</div>
+    <div class="section-title">Completed Session & Single Agent</div>
+    <div class="section-desc">
+      Terminal states and minimal cases.
+    </div>
+
+    <div class="compare-grid">
+      <div>
+        <div class="state-label">Session Complete</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot r"></div>
+            <div class="term-dot y"></div>
+            <div class="term-dot g"></div>
+            <span class="term-titlebar-text">completed</span>
+          </div>
+          <div class="term-body">
+  <span class="x">  ╭──────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C2  impl       22m  10:14 </span><span class="x">│</span>
+  <span class="x">  ╰──────────┬───────────────────╯</span>
+  <span class="x">        ┌────┼────┐</span>
+  <span class="x">  ╭─────┴──╮╭─────┴──╮╭─────┴──╮</span>
+  <span class="x">  │✓ a-003 ││✓ a-004 ││✓ a-005 │</span>
+  <span class="x">  │ bkend  ││ front  ││ types  │</span>
+  <span class="x">  │ 15m    ││ 8m     ││ 3m     │</span>
+  <span class="x">  ╰────────╯╰────────╯╰────────╯</span>
+              <span class="x">│</span>
+  <span class="c B">  ╭──────────────────────────────╮</span>
+  <span class="c B">  │</span><span class="bg-c"><span class="c B"> ◉ complete      </span><span class="d">34m total  </span></span><span class="c B">│</span>
+  <span class="c B">  ╰──────────────────────────────╯</span>
+</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="state-label">Single Agent</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot r"></div>
+            <div class="term-dot y"></div>
+            <div class="term-dot g"></div>
+            <span class="term-titlebar-text">1 agent</span>
+          </div>
+          <div class="term-body">
+  <span class="x">  ╭──────────────────────────────╮</span>
+  <span class="x">  │</span><span class="x bg-y"> ○ C0  plan        8m  09:00 </span><span class="x">│</span>
+  <span class="x">  ╰──────────────┬───────────────╯</span>
+                  <span class="d">│</span>
+   <span class="b">╭──────────────┴───────────────╮</span>
+   <span class="b">│</span><span class="bg-b"><span class="g B"> ▶</span><span class="b"> a-001   research           </span></span><span class="b">│</span>
+   <span class="b">│</span><span class="bg-b"><span class="d"> Investigate auth patterns in  </span></span><span class="b">│</span>
+   <span class="b">│</span><span class="bg-b"><span class="d"> the codebase                  </span></span><span class="b">│</span>
+   <span class="b">│</span><span class="bg-b"><span class="d"> 5m                            </span></span><span class="b">│</span>
+   <span class="b">╰──────────────────────────────╯</span>
+                  <span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+  <span class="d">  ┊</span><span class="bg-d"><span class="d">  awaiting agent…              </span></span><span class="d">┊</span>
+  <span class="d">  ┊ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ╌ ┊</span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-label">SINGLE AGENT BEHAVIOR</div>
+      With only 1 agent, the box expands to full width and shows the instruction text
+      inside the bg-tinted area. More useful than a tiny box — you can see what it's doing.
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-label">DASHED LINES: IMPLEMENTATION</div>
+      The "planned/future" dashed outline uses <code>┊</code> for verticals and spaced <code>╌</code> for
+      horizontals (<code>┊ ╌ ╌ ╌ ┊</code> with spaces between). The spaces are intentional — they read
+      as "dotted" rather than trying to make ╌╌╌ connect (which fails). This is a feature, not a bug.
+    </div>
+  </div>
+</div>
+
+<script>
+const nav = document.getElementById('nav');
+const sections = document.querySelectorAll('.section');
+const links = nav.querySelectorAll('a');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = nav.querySelector(`a[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -60% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

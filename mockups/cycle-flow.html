@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sisyphus — Cycle Flow v2</title>
+<style>
+:root {
+  --term-bg: #1a1b26;
+  --term-fg: #c0caf5;
+  --term-dim: #565f89;
+  --term-border: #33384d;
+  --term-green: #9ece6a;
+  --term-cyan: #7dcfff;
+  --term-yellow: #e0af68;
+  --term-blue: #7aa2f7;
+  --term-magenta: #bb9af7;
+  --term-red: #f7768e;
+  --term-white: #c0caf5;
+  --term-gray: #565f89;
+
+  --page-bg: #0d0e14;
+  --card-bg: #13141c;
+  --card-border: #1e2030;
+  --doc-fg: #8b95b0;
+  --doc-muted: #505878;
+  --doc-heading: #c0caf5;
+  --tag-teal: #7dcfff;
+  --tag-amber: #e0af68;
+  --tag-pink: #f7768e;
+  --tag-blue: #7aa2f7;
+  --tag-green: #9ece6a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  background: var(--page-bg);
+  color: var(--doc-fg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: #0a0b10;
+  border-bottom: 1px solid var(--card-border);
+  padding: 0.625rem 1.25rem;
+  display: flex; gap: 0.25rem; overflow-x: auto;
+}
+.nav a {
+  color: var(--doc-muted); text-decoration: none; font-size: 0.6875rem;
+  padding: 0.25rem 0.625rem; border-radius: 0.25rem; white-space: nowrap;
+  transition: all 0.15s; letter-spacing: 0.03em;
+}
+.nav a:hover, .nav a.active { color: var(--doc-heading); background: rgba(122,162,247,0.08); }
+
+.section { max-width: 72rem; margin: 1.5rem auto; padding: 0 1.25rem; }
+.section-card {
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: 0.5rem; padding: 1.75rem 2rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.section-card + .section-card { margin-top: 1rem; }
+
+.tag { font-size: 0.5625rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.375rem; }
+.tag.rec { color: var(--tag-teal); }
+.tag.state { color: var(--tag-blue); }
+.tag.wrap { color: var(--tag-green); }
+.tag.note { color: var(--tag-amber); }
+
+.section-title { font-size: 1.125rem; font-weight: 600; color: var(--doc-heading); margin-bottom: 0.25rem; }
+.section-desc { font-size: 0.75rem; color: var(--doc-muted); max-width: 42rem; margin-bottom: 1.25rem; line-height: 1.5; }
+
+.term-frame {
+  background: var(--term-bg); border: 1px solid var(--term-border);
+  border-radius: 0.375rem; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.term-titlebar {
+  background: #14151f; padding: 0.5rem 0.75rem;
+  display: flex; align-items: center; gap: 0.375rem;
+  border-bottom: 1px solid var(--term-border);
+}
+.term-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; }
+.term-dot.red { background: #f7768e; }
+.term-dot.yellow { background: #e0af68; }
+.term-dot.green { background: #9ece6a; }
+.term-titlebar-text { font-size: 0.625rem; color: var(--term-dim); margin-left: 0.5rem; }
+
+.term-body {
+  padding: 0.75rem 1rem; font-size: 0.75rem; line-height: 1.5;
+  color: var(--term-fg); white-space: pre; overflow-x: auto;
+}
+
+.c-green { color: var(--term-green); }
+.c-cyan { color: var(--term-cyan); }
+.c-yellow { color: var(--term-yellow); }
+.c-blue { color: var(--term-blue); }
+.c-magenta { color: var(--term-magenta); }
+.c-red { color: var(--term-red); }
+.c-white { color: var(--term-white); }
+.c-gray { color: var(--term-dim); }
+.c-dim { color: var(--term-dim); opacity: 0.7; }
+.c-bold { font-weight: 700; }
+.c-x { opacity: 0.35; }
+
+.state-label {
+  display: inline-block; font-size: 0.625rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--doc-muted); margin-top: 1rem; margin-bottom: 0.375rem;
+}
+
+.callout {
+  padding: 0.625rem 0.875rem; border-radius: 0.25rem;
+  font-size: 0.6875rem; line-height: 1.5; margin-top: 0.875rem;
+}
+.callout.green { background: rgba(158,206,106,0.06); border-left: 3px solid var(--term-green); color: var(--term-green); }
+.callout.amber { background: rgba(224,175,104,0.06); border-left: 3px solid var(--term-yellow); color: var(--term-yellow); }
+.callout.blue { background: rgba(122,162,247,0.06); border-left: 3px solid var(--term-blue); color: var(--term-blue); }
+
+.callout-label { font-size: 0.5625rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem; }
+
+::-webkit-scrollbar { width: 0.3125rem; height: 0.3125rem; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 0.15rem; }
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <a href="#rendering" class="active">Rendering Fixes</a>
+  <a href="#default">Default View</a>
+  <a href="#wrap">Agent Wrapping</a>
+  <a href="#states">States</a>
+  <a href="#expanded">Expanded History</a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- RENDERING FIXES -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="rendering">
+  <div class="section-card">
+    <div class="tag" style="color: var(--tag-pink);">RENDERING FIXES</div>
+    <div class="section-title">Fixing Visual Artifacts</div>
+    <div class="section-desc">
+      Three problems from the current implementation: (1) ╌ dashed chars have gaps,
+      (2) excess vertical whitespace, (3) connector misalignment. Here are fixes.
+    </div>
+
+    <div class="compare-grid">
+      <!-- BEFORE: the broken version -->
+      <div>
+        <div class="state-label">Before — Current Artifacts</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">broken rendering</span>
+          </div>
+          <div class="term-body">
+  <span class="c-x">╭──────────────────────────────────╮</span>
+  <span class="c-x">│ ○ C1  plan            12m  09:41 │</span>
+  <span class="c-x">╰──────────────────────────────────╯</span>
+  <span class="c-dim">    ← blank line wasted</span>
+                  <span class="c-x">│</span>
+  <span class="c-dim">    ← blank line wasted</span>
+        <span class="c-x">┌─────────┼─────────┐</span>
+        <span class="c-x">│         │         │</span>
+  <span class="c-dim">    ← blank line wasted</span>
+   <span class="c-x">╭─────────╮╭─────────╮╭─────────╮</span>
+   <span class="c-x">│ ✓ a-001  ││ ✓ a-002  ││ ✓ a-003  │</span>
+   <span class="c-x">│ research ││ review   ││ test     │</span>
+   <span class="c-x">│ 8m       ││ 5m       ││ 11m      │</span>
+   <span class="c-x">╰─────────╯╰─────────╯╰─────────╯</span>
+  <span class="c-dim">    ← blank line wasted</span>
+        <span class="c-x">│         │         │</span>
+        <span class="c-x">└─────────┼─────────┘</span>
+  <span class="c-dim">    ← blank line wasted</span>
+                  <span class="c-x">│</span>
+  <span class="c-red c-bold">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-red c-bold">  ╎</span><span class="c-x"> gaps between every ╌ char!       </span><span class="c-red c-bold">╎</span>
+  <span class="c-red c-bold">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+</div>
+        </div>
+      </div>
+
+      <!-- AFTER: fixed version -->
+      <div>
+        <div class="state-label">After — Tight, No Dashes</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">fixed rendering</span>
+          </div>
+          <div class="term-body">
+  <span class="c-x">╭──────────────────────────────────╮</span>
+  <span class="c-x">│ ○ C1  plan            12m  09:41 │</span>
+  <span class="c-x">╰──────┬──────────────────────┬────╯</span>
+         <span class="c-x">├──────────┬───────────┤</span>
+   <span class="c-x">╭─────┴────╮╭─────┴────╮╭─────┴────╮</span>
+   <span class="c-x">│ ✓ a-001   ││ ✓ a-002   ││ ✓ a-003   │</span>
+   <span class="c-x">│ research  ││ review    ││ test      │</span>
+   <span class="c-x">│ 8m        ││ 5m        ││ 11m       │</span>
+   <span class="c-x">╰─────┬────╯╰─────┬────╯╰─────┬────╯</span>
+         <span class="c-x">├──────────┴───────────┤</span>
+  <span class="c-yellow">  ╭╌╌╌╌╌╌┴╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮</span>
+  <span class="c-yellow">  ╎</span> <span class="c-dim">Implement token rotation…</span>      <span class="c-yellow">╎</span>
+  <span class="c-yellow">  ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯</span>
+  <span class="c-dim">    ↑ uses ╌ with ╭╮╰╯ — same gaps!</span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout red" style="background: rgba(247,118,142,0.06); border-left: 3px solid var(--term-red); color: var(--term-red);">
+      <div class="callout-label">ROOT CAUSE</div>
+      The ╌ (box drawings light double dash horizontal, U+254C) does NOT connect flush in
+      most monospace fonts. Each glyph has visible whitespace on both ends. Same problem
+      with ┄ ┈ and other dashed box-drawing chars. This is a font issue, not a code issue —
+      no fix possible with these characters.
+    </div>
+
+    <!-- Yield prompt alternatives -->
+    <div class="state-label" style="margin-top: 1.5rem;">Yield Prompt — 3 Alternative Treatments</div>
+
+    <div class="compare-grid">
+      <!-- Alt 1: Dim solid border -->
+      <div>
+        <div class="state-label">Alt 1: Dim Solid Border</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">dim border — simplest fix</span>
+          </div>
+          <div class="term-body">
+   <span class="c-x">╰─────┬────╯╰─────┬────╯╰─────┬────╯</span>
+         <span class="c-x">╰──────────┬───────────╯</span>
+                  <span class="c-gray">│</span>
+  <span class="c-gray">  ╭──────────────────────────────────╮</span>
+  <span class="c-gray">  │</span> <span class="c-dim">Implement token rotation with</span>     <span class="c-gray">│</span>
+  <span class="c-gray">  │</span> <span class="c-dim">backward compat shim for v2 API</span>   <span class="c-gray">│</span>
+  <span class="c-gray">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl</span><span class="c-yellow">            </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+</div>
+        </div>
+      </div>
+
+      <!-- Alt 2: No box, just indented with bar -->
+      <div>
+        <div class="state-label">Alt 2: Left Bar, No Box</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">bar prefix — most compact</span>
+          </div>
+          <div class="term-body">
+   <span class="c-x">╰─────┬────╯╰─────┬────╯╰─────┬────╯</span>
+         <span class="c-x">╰──────────┬───────────╯</span>
+                  <span class="c-gray">│</span>
+  <span class="c-yellow">  ▎</span> <span class="c-dim">Implement token rotation with</span>
+  <span class="c-yellow">  ▎</span> <span class="c-dim">backward compat shim for v2 API</span>
+                  <span class="c-gray">│</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl</span><span class="c-yellow">            </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare-grid" style="margin-top: 1rem;">
+      <!-- Alt 3: Dot border -->
+      <div>
+        <div class="state-label">Alt 3: Dot · · · Border</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">dots — clear "pending" feel</span>
+          </div>
+          <div class="term-body">
+   <span class="c-x">╰─────┬────╯╰─────┬────╯╰─────┬────╯</span>
+         <span class="c-x">╰──────────┬───────────╯</span>
+                  <span class="c-gray">│</span>
+  <span class="c-yellow">  · · · · · · · · · · · · · · · · · ·</span>
+  <span class="c-yellow">  ·</span> <span class="c-dim">Implement token rotation with</span>    <span class="c-yellow">·</span>
+  <span class="c-yellow">  ·</span> <span class="c-dim">backward compat shim for v2 API</span>  <span class="c-yellow">·</span>
+  <span class="c-yellow">  · · · · · · · · · · · · · · · · · ·</span>
+                  <span class="c-gray">│</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl</span><span class="c-yellow">            </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+</div>
+        </div>
+      </div>
+
+      <!-- Full fixed example with Alt 1 -->
+      <div>
+        <div class="state-label">Full Example (using Alt 1)</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">recommended — full pipeline</span>
+          </div>
+          <div class="term-body">
+  <span class="c-x">╭──────────────────────────────────╮</span>
+  <span class="c-x">│ ○ C1  plan            12m  09:41 │</span>
+  <span class="c-x">╰──────┬──────────────────────┬────╯</span>
+         <span class="c-x">├──────────┬───────────┤</span>
+   <span class="c-x">╭─────┴────╮╭─────┴────╮╭─────┴────╮</span>
+   <span class="c-x">│ ✓ a-001   ││ ✓ a-002   ││ ✓ a-003   │</span>
+   <span class="c-x">│ research  ││ review    ││ test      │</span>
+   <span class="c-x">│ 8m        ││ 5m        ││ 11m       │</span>
+   <span class="c-x">╰─────┬────╯╰─────┬────╯╰─────┬────╯</span>
+         <span class="c-x">╰──────────┬───────────╯</span>
+                  <span class="c-gray">│</span>
+  <span class="c-gray">  ╭──────────────────────────────────╮</span>
+  <span class="c-gray">  │</span> <span class="c-dim">Implement token rotation with</span>     <span class="c-gray">│</span>
+  <span class="c-gray">  │</span> <span class="c-dim">backward compat shim for v2 API</span>   <span class="c-gray">│</span>
+  <span class="c-gray">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl</span><span class="c-yellow">            </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+        <span class="c-gray">┌─────────┼─────────┐</span>
+   <span class="c-blue">╭─────┴────╮</span><span class="c-green">╭─────┴────╮</span><span class="c-cyan">╭─────┴────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-004   │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-005   │</span><span class="c-cyan">│</span> <span class="c-cyan">✓</span><span class="c-cyan"> a-006   │</span>
+   <span class="c-blue">│</span> <span class="c-blue">backend  </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-green">migrate  </span><span class="c-green">│</span><span class="c-cyan">│</span> <span class="c-dim">types    </span><span class="c-cyan">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">12m      </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-dim">8m       </span><span class="c-green">│</span><span class="c-cyan">│</span> <span class="c-dim">3m       </span><span class="c-cyan">│</span>
+   <span class="c-blue">╰──────────╯</span><span class="c-green">╰──────────╯</span><span class="c-cyan">╰──────────╯</span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-label">RENDERING RULES</div>
+      <strong>1. No dashed box-drawing chars</strong> — ╌ ┄ ┈ all have gaps. Use dim solid ─ or no box.<br>
+      <strong>2. Zero blank lines</strong> — connectors flow directly from box bottom to next element.<br>
+      <strong>3. Use ┬ ┴ for connections</strong> — branch lines connect via T-junctions directly into box top/bottom edges.
+      No free-floating │ lines between elements.<br>
+      <strong>4. Box width = fixed per row</strong> — all agents in a row are same width (widest name + padding).
+      Prevents column misalignment.
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-label">IMPLEMENTATION: CONNECTOR MATH</div>
+      Each agent box is <code>boxW</code> chars wide. Total row width = <code>N × boxW</code>.
+      Center column = <code>floor(totalWidth / 2)</code>. Branch T-junction positions = center of each box
+      = <code>i × boxW + floor(boxW / 2)</code>. The ┬/┴ chars in the box top/bottom edges are placed at
+      those exact columns. No separate connector lines needed — the box borders ARE the connectors.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- DEFAULT: 1 previous phase + current -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="default">
+  <div class="section-card">
+    <div class="tag rec">DEFAULT VIEW</div>
+    <div class="section-title">Pipeline — 1 Previous Phase + Current</div>
+    <div class="section-desc">
+      Only the immediately preceding cycle shows as dimmed context.
+      Older history collapsed to a single "↑ N earlier" line.
+      Keybind [F] expands full history.
+    </div>
+
+    <!-- Agents phase: 3 agents active -->
+    <div class="state-label">Agents Phase — 3 agents (2 running, 1 done)</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · session overview · 70 cols</span>
+      </div>
+      <div class="term-body">
+ <span class="c-bold c-white">Refactor auth middleware for compliance</span>
+  <span class="c-dim">active · cycle 2 · </span><span class="c-green">impl</span><span class="c-dim"> · 1h 23m · 2 running · 1 done</span>
+
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>          <span class="c-dim">[F] expand history</span>
+  <span class="c-dim">  ↑ 1 earlier cycle</span>
+
+  <span class="c-x">  ╭──────────────────────────────────╮</span>
+  <span class="c-x">  │ ○ C1  </span><span class="c-x">plan</span><span class="c-x">            12m  09:41 │</span>
+  <span class="c-x">  ╰──────────────────────────────────╯</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">        ┌─────────┼─────────┐</span>
+  <span class="c-x">        │         │         │</span>
+  <span class="c-x">   ╭─────────╮╭─────────╮╭─────────╮</span>
+  <span class="c-x">   │ ✓ a-001  ││ ✓ a-002  ││ ✓ a-003  │</span>
+  <span class="c-x">   │ research ││ review   ││ test     │</span>
+  <span class="c-x">   │ 8m       ││ 5m       ││ 11m      │</span>
+  <span class="c-x">   ╰─────────╯╰─────────╯╰─────────╯</span>
+  <span class="c-x">        │         │         │</span>
+  <span class="c-x">        └─────────┼─────────┘</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-x">  ╎ Implement token rotation with     ╎</span>
+  <span class="c-x">  ╎ backward compat shim for v2 API   ╎</span>
+  <span class="c-x">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+  <span class="c-x">                  │</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl   </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+        <span class="c-gray">┌─────────┼─────────┐</span>
+        <span class="c-gray">│         │         │</span>
+   <span class="c-blue">╭─────────╮</span><span class="c-green">╭─────────╮</span><span class="c-cyan">╭─────────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-004  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-005  │</span><span class="c-cyan">│</span> <span class="c-cyan">✓</span><span class="c-cyan"> a-006  │</span>
+   <span class="c-blue">│</span> <span class="c-blue">backend </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-green">migrate </span><span class="c-green">│</span><span class="c-cyan">│</span> <span class="c-dim">types   </span><span class="c-cyan">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">12m     </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-dim">8m      </span><span class="c-green">│</span><span class="c-cyan">│</span> <span class="c-dim">3m      </span><span class="c-cyan">│</span>
+   <span class="c-blue">╰─────────╯</span><span class="c-green">╰─────────╯</span><span class="c-cyan">╰─────────╯</span>
+</div>
+    </div>
+
+    <!-- Orchestration phase -->
+    <div class="state-label">Orchestration Phase — orchestrator running</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · orchestration active</span>
+      </div>
+      <div class="term-body">
+ <span class="c-bold c-white">Refactor auth middleware for compliance</span>
+  <span class="c-dim">active · cycle 3 · </span><span class="c-magenta">valid</span><span class="c-dim"> · 2h 01m · 0 running · 6 done</span>
+
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>          <span class="c-dim">[F] expand history</span>
+  <span class="c-dim">  ↑ 2 earlier cycles</span>
+
+  <span class="c-x">  ╭──────────────────────────────────╮</span>
+  <span class="c-x">  │ ○ C2  </span><span class="c-x">impl</span><span class="c-x">            32m  10:14 │</span>
+  <span class="c-x">  ╰──────────────────────────────────╯</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">        ┌─────────┼─────────┐</span>
+  <span class="c-x">        │         │         │</span>
+  <span class="c-x">   ╭─────────╮╭─────────╮╭─────────╮</span>
+  <span class="c-x">   │ ✓ a-004  ││ ✓ a-005  ││ ✓ a-006  │</span>
+  <span class="c-x">   │ backend  ││ migrate  ││ types    │</span>
+  <span class="c-x">   │ 18m      ││ 14m      ││ 3m       │</span>
+  <span class="c-x">   ╰─────────╯╰─────────╯╰─────────╯</span>
+  <span class="c-x">        │         │         │</span>
+  <span class="c-x">        └─────────┼─────────┘</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-x">  ╎ Validate all auth endpoints and   ╎</span>
+  <span class="c-x">  ╎ run compliance checker suite       ╎</span>
+  <span class="c-x">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+  <span class="c-x">                  │</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C3 </span><span class="c-magenta">valid  </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">┊</span>
+          <span class="c-dim">awaiting orchestrator…</span>
+</div>
+    </div>
+
+    <!-- First cycle, no history -->
+    <div class="state-label">First Cycle — no previous context</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · fresh session</span>
+      </div>
+      <div class="term-body">
+ <span class="c-bold c-white">Add webhook retry with exponential backoff</span>
+  <span class="c-dim">active · cycle 0 · </span><span class="c-blue">plan</span><span class="c-dim"> · 2m · 0 running · 0 done</span>
+
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C0 </span><span class="c-blue">plan   </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">┊</span>
+          <span class="c-dim">awaiting orchestrator…</span>
+</div>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-label">CONSTRAINT</div>
+      Max 1 previous phase shown. "↑ N earlier cycles" collapses anything older.
+      [F] keybind toggles full history expansion. First cycle has no context above — just the live node.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- AGENT WRAPPING -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="wrap">
+  <div class="section-card">
+    <div class="tag wrap">AGENT WRAPPING</div>
+    <div class="section-title">4+ Agents: Row Wrapping</div>
+    <div class="section-desc">
+      When a cycle spawns more than 3 agents, boxes wrap to a new row.
+      Each row has up to 3 agents. Connector lines adapt.
+    </div>
+
+    <!-- 4 agents -->
+    <div class="state-label">4 Agents — 1 overflow</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · 4 agents</span>
+      </div>
+      <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl   </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+        <span class="c-gray">┌─────────┼─────────┐</span>
+        <span class="c-gray">│         │         │</span>
+   <span class="c-blue">╭─────────╮</span><span class="c-green">╭─────────╮</span><span class="c-magenta">╭─────────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-004  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-005  │</span><span class="c-magenta">│</span> <span class="c-green c-bold">▶</span><span class="c-magenta"> a-006  │</span>
+   <span class="c-blue">│</span> <span class="c-blue">backend </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-green">migrate </span><span class="c-green">│</span><span class="c-magenta">│</span> <span class="c-magenta">e2e-test</span><span class="c-magenta">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">12m     </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-dim">8m      </span><span class="c-green">│</span><span class="c-magenta">│</span> <span class="c-dim">5m      </span><span class="c-magenta">│</span>
+   <span class="c-blue">╰─────────╯</span><span class="c-green">╰─────────╯</span><span class="c-magenta">╰─────────╯</span>
+   <span class="c-cyan">╭─────────╮</span>
+   <span class="c-cyan">│</span> <span class="c-cyan">✓</span><span class="c-cyan"> a-007  │</span>
+   <span class="c-cyan">│</span> <span class="c-dim">types   </span><span class="c-cyan">│</span>
+   <span class="c-cyan">│</span> <span class="c-dim">2m      </span><span class="c-cyan">│</span>
+   <span class="c-cyan">╰─────────╯</span>
+</div>
+    </div>
+
+    <!-- 5 agents -->
+    <div class="state-label">5 Agents — 2 overflow</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · 5 agents</span>
+      </div>
+      <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C3 </span><span class="c-green">impl   </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+        <span class="c-gray">┌─────────┼─────────┐</span>
+        <span class="c-gray">│         │         │</span>
+   <span class="c-blue">╭─────────╮</span><span class="c-green">╭─────────╮</span><span class="c-green">╭─────────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-010  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-011  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-012  │</span>
+   <span class="c-blue">│</span> <span class="c-blue">api     </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-green">webhook </span><span class="c-green">│</span><span class="c-green">│</span> <span class="c-green">workers </span><span class="c-green">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">15m     </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-dim">12m     </span><span class="c-green">│</span><span class="c-green">│</span> <span class="c-dim">8m      </span><span class="c-green">│</span>
+   <span class="c-blue">╰─────────╯</span><span class="c-green">╰─────────╯</span><span class="c-green">╰─────────╯</span>
+   <span class="c-cyan">╭─────────╮</span><span class="c-magenta">╭─────────╮</span>
+   <span class="c-cyan">│</span> <span class="c-cyan">✓</span><span class="c-cyan"> a-013  │</span><span class="c-magenta">│</span> <span class="c-green c-bold">▶</span><span class="c-magenta"> a-014  │</span>
+   <span class="c-cyan">│</span> <span class="c-dim">types   </span><span class="c-cyan">│</span><span class="c-magenta">│</span> <span class="c-magenta">e2e     </span><span class="c-magenta">│</span>
+   <span class="c-cyan">│</span> <span class="c-dim">2m      </span><span class="c-cyan">│</span><span class="c-magenta">│</span> <span class="c-dim">4m      </span><span class="c-magenta">│</span>
+   <span class="c-cyan">╰─────────╯</span><span class="c-magenta">╰─────────╯</span>
+</div>
+    </div>
+
+    <!-- 6 agents (2 full rows) -->
+    <div class="state-label">6 Agents — 2 full rows</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · 6 agents</span>
+      </div>
+      <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C4 </span><span class="c-green">impl   </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+        <span class="c-gray">┌─────────┼─────────┐</span>
+        <span class="c-gray">│         │         │</span>
+   <span class="c-blue">╭─────────╮</span><span class="c-green">╭─────────╮</span><span class="c-green">╭─────────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-020  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-021  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-022  │</span>
+   <span class="c-blue">│</span> <span class="c-blue">api     </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-green">webhook </span><span class="c-green">│</span><span class="c-green">│</span> <span class="c-green">workers </span><span class="c-green">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">15m     </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-dim">12m     </span><span class="c-green">│</span><span class="c-green">│</span> <span class="c-dim">8m      </span><span class="c-green">│</span>
+   <span class="c-blue">╰─────────╯</span><span class="c-green">╰─────────╯</span><span class="c-green">╰─────────╯</span>
+   <span class="c-cyan">╭─────────╮</span><span class="c-magenta">╭─────────╮</span><span class="c-red">╭─────────╮</span>
+   <span class="c-cyan">│</span> <span class="c-cyan">✓</span><span class="c-cyan"> a-023  │</span><span class="c-magenta">│</span> <span class="c-green c-bold">▶</span><span class="c-magenta"> a-024  │</span><span class="c-red">│</span> <span class="c-red">✕</span><span class="c-red"> a-025  │</span>
+   <span class="c-cyan">│</span> <span class="c-dim">types   </span><span class="c-cyan">│</span><span class="c-magenta">│</span> <span class="c-magenta">e2e     </span><span class="c-magenta">│</span><span class="c-red">│</span> <span class="c-red">migrate </span><span class="c-red">│</span>
+   <span class="c-cyan">│</span> <span class="c-dim">2m      </span><span class="c-cyan">│</span><span class="c-magenta">│</span> <span class="c-dim">4m      </span><span class="c-magenta">│</span><span class="c-red">│</span> <span class="c-dim">6m </span><span class="c-red">killed</span><span class="c-red">│</span>
+   <span class="c-cyan">╰─────────╯</span><span class="c-magenta">╰─────────╯</span><span class="c-red">╰─────────╯</span>
+</div>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-label">WRAPPING RULES</div>
+      Max 3 agents per row. Overflow wraps left-aligned below.
+      The top row gets the ┌──┼──┐ branch connector. Subsequent rows are flush-left, no connector —
+      they're visually grouped by proximity to the orchestrator node above.
+      Agent border color = assigned ANSI color. Killed/crashed agents get red border.
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-label">WIDTH ADAPTATION</div>
+      At narrow widths (&lt;45 cols), boxes shrink: drop the duration line, truncate names to 5 chars.
+      Below ~36 cols, switch to a compact list (1 line per agent, no boxes).
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- STATES -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="states">
+  <div class="section-card">
+    <div class="tag state">STATES</div>
+    <div class="section-title">Edge Cases</div>
+    <div class="section-desc">
+      Error states, single-agent cycles, completed session, and the converge-to-yield when
+      all agents finish.
+    </div>
+
+    <div class="compare-grid">
+      <!-- All agents done, yield prompt visible -->
+      <div>
+        <div class="state-label">All Agents Complete → Yield</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">between cycles</span>
+          </div>
+          <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭─────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-dim">○ C1 </span><span class="c-green">impl</span><span class="c-yellow">     22m  10:14  │</span>
+  <span class="c-yellow">  ╰─────────────────────────────╯</span>
+              <span class="c-gray">│</span>
+      <span class="c-gray">┌───────┼───────┐</span>
+      <span class="c-gray">│       │       │</span>
+  <span class="c-cyan"> ╭───────╮╭───────╮╭───────╮</span>
+  <span class="c-cyan"> │ ✓a-001││ ✓a-002││ ✓a-003│</span>
+  <span class="c-cyan"> │</span><span class="c-dim"> bkend </span><span class="c-cyan">││</span><span class="c-dim"> migrt </span><span class="c-cyan">││</span><span class="c-dim"> types </span><span class="c-cyan">│</span>
+  <span class="c-cyan"> │</span><span class="c-dim"> 15m   </span><span class="c-cyan">││</span><span class="c-dim"> 12m   </span><span class="c-cyan">││</span><span class="c-dim"> 3m    </span><span class="c-cyan">│</span>
+  <span class="c-cyan"> ╰───────╯╰───────╯╰───────╯</span>
+      <span class="c-gray">│       │       │</span>
+      <span class="c-gray">└───────┼───────┘</span>
+              <span class="c-gray">│</span>
+  <span class="c-yellow">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-yellow">  ╎</span> <span class="c-dim">Run compliance checker suite</span> <span class="c-yellow">╎</span>
+  <span class="c-yellow">  ╎</span> <span class="c-dim">and validate all endpoints</span>  <span class="c-yellow">╎</span>
+  <span class="c-yellow">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+              <span class="c-gray">┊</span>
+      <span class="c-dim">spawning orchestrator…</span>
+</div>
+        </div>
+      </div>
+
+      <!-- Completed session -->
+      <div>
+        <div class="state-label">Session Complete</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">completed session</span>
+          </div>
+          <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-x">  ╭─────────────────────────────╮</span>
+  <span class="c-x">  │ ○ C1  impl     22m  10:14  │</span>
+  <span class="c-x">  ╰─────────────────────────────╯</span>
+  <span class="c-x">              │</span>
+  <span class="c-x">      ┌───────┼───────┐</span>
+  <span class="c-x">      │       │       │</span>
+  <span class="c-x">  ╭───────╮╭───────╮╭───────╮</span>
+  <span class="c-x">  │ ✓a-003││ ✓a-004││ ✓a-005│</span>
+  <span class="c-x">  │ bkend ││ front ││ types │</span>
+  <span class="c-x">  │ 15m   ││ 8m    ││ 3m    │</span>
+  <span class="c-x">  ╰───────╯╰───────╯╰───────╯</span>
+  <span class="c-x">      │       │       │</span>
+  <span class="c-x">      └───────┼───────┘</span>
+  <span class="c-x">              │</span>
+  <span class="c-cyan c-bold">  ╭─────────────────────────────╮</span>
+  <span class="c-cyan c-bold">  │ ◉ complete</span><span class="c-dim">        34m total</span><span class="c-cyan c-bold"> │</span>
+  <span class="c-cyan c-bold">  ╰─────────────────────────────╯</span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare-grid" style="margin-top: 1rem;">
+      <!-- Single agent -->
+      <div>
+        <div class="state-label">Single Agent</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">1 agent cycle</span>
+          </div>
+          <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭───────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C0 </span><span class="c-blue">plan</span><span class="c-yellow">   </span><span class="c-green">running</span><span class="c-yellow">     │</span>
+  <span class="c-yellow">  ╰───────────────────────────╯</span>
+              <span class="c-gray">│</span>
+   <span class="c-blue">╭─────────────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-001      │</span>
+   <span class="c-blue">│</span> <span class="c-blue">research    </span><span class="c-blue">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">5m          </span><span class="c-blue">│</span>
+   <span class="c-blue">╰─────────────╯</span>
+</div>
+        </div>
+      </div>
+
+      <!-- Mixed errors -->
+      <div>
+        <div class="state-label">Error States in Boxes</div>
+        <div class="term-frame">
+          <div class="term-titlebar">
+            <div class="term-dot red"></div>
+            <div class="term-dot yellow"></div>
+            <div class="term-dot green"></div>
+            <span class="term-titlebar-text">failures</span>
+          </div>
+          <div class="term-body">
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>
+
+  <span class="c-yellow">  ╭───────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C2 </span><span class="c-green">impl</span><span class="c-yellow">   </span><span class="c-green">running</span><span class="c-yellow">     │</span>
+  <span class="c-yellow">  ╰───────────────────────────╯</span>
+             <span class="c-gray">│</span>
+     <span class="c-gray">┌───────┼───────┐</span>
+     <span class="c-gray">│       │       │</span>
+  <span class="c-green">╭───────╮</span><span class="c-red">╭───────╮</span><span class="c-red">╭───────╮</span>
+  <span class="c-green">│</span><span class="c-green c-bold">▶</span><span class="c-green">a-004 │</span><span class="c-red">│</span><span class="c-red">✕</span><span class="c-red">a-005 │</span><span class="c-red">│</span><span class="c-red">!</span><span class="c-red">a-006 │</span>
+  <span class="c-green">│</span><span class="c-green">bkend  │</span><span class="c-red">│</span><span class="c-red">migrt  │</span><span class="c-red">│</span><span class="c-red">types  │</span>
+  <span class="c-green">│</span><span class="c-dim">12m    │</span><span class="c-red">│</span><span class="c-dim">8m </span><span class="c-red">kill</span><span class="c-red">│</span><span class="c-red">│</span><span class="c-dim">3m </span><span class="c-red">crash</span><span class="c-red">│</span>
+  <span class="c-green">╰───────╯</span><span class="c-red">╰───────╯</span><span class="c-red">╰───────╯</span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout blue">
+      <div class="callout-label">ICON LEGEND</div>
+      <span class="c-green">▶</span> running &nbsp; <span class="c-cyan">✓</span> completed &nbsp; <span class="c-red">✕</span> killed &nbsp; <span class="c-red">!</span> crashed &nbsp; <span class="c-yellow">?</span> lost
+      &nbsp;&mdash;&nbsp; Box border color = agent's assigned color (blue/green/magenta/cyan/etc).
+      Red border overrides on kill/crash. Duration line shows "kill"/"crash" tag in red.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- EXPANDED HISTORY -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section" id="expanded">
+  <div class="section-card">
+    <div class="tag note">EXPANDED</div>
+    <div class="section-title">[F] Full History Expanded</div>
+    <div class="section-desc">
+      When the user presses [F], all previous cycles render. The most recent previous cycle
+      is slightly brighter than older ones — two dimming levels.
+    </div>
+
+    <div class="state-label">Full history — 3 cycles, currently in agents phase</div>
+    <div class="term-frame">
+      <div class="term-titlebar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <span class="term-titlebar-text">detail panel · [F] expanded · 70 cols</span>
+      </div>
+      <div class="term-body">
+ <span class="c-bold c-white">Full-stack payments integration</span>
+  <span class="c-dim">active · cycle 3 · </span><span class="c-green">impl</span><span class="c-dim"> · 3h 45m · 3 running · 8 done</span>
+
+  <span class="c-yellow c-bold">▎ ◈ CYCLE FLOW</span>          <span class="c-dim">[F] collapse</span>
+
+  <span class="c-x">  ╭──────────────────────────────────╮</span>
+  <span class="c-x">  │ ○ C0  </span><span class="c-x">plan</span><span class="c-x">            10m  09:00 │</span>
+  <span class="c-x">  ╰──────────────────────────────────╯</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">           ╭─────────╮</span>
+  <span class="c-x">           │ ✓ a-001  │</span>
+  <span class="c-x">           │ research │</span>
+  <span class="c-x">           │ 8m       │</span>
+  <span class="c-x">           ╰─────────╯</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-x">  ╎ Design payment DB schema and     ╎</span>
+  <span class="c-x">  ╎ define Stripe integration plan    ╎</span>
+  <span class="c-x">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">  ╭──────────────────────────────────╮</span>
+  <span class="c-x">  │ ○ C1  </span><span class="c-x">strat</span><span class="c-x">           18m  09:20 │</span>
+  <span class="c-x">  ╰──────────────────────────────────╯</span>
+  <span class="c-x">                  │</span>
+  <span class="c-x">        ┌─────────┼─────────┐</span>
+  <span class="c-x">        │         │         │</span>
+  <span class="c-x">   ╭─────────╮╭─────────╮╭─────────╮</span>
+  <span class="c-x">   │ ✓ a-002  ││ ✓ a-003  ││ ✓ a-004  │</span>
+  <span class="c-x">   │ schema   ││ stripe   ││ types    │</span>
+  <span class="c-x">   │ 22m      ││ 15m      ││ 5m       │</span>
+  <span class="c-x">   ╰─────────╯╰─────────╯╰─────────╯</span>
+  <span class="c-x">        │         │         │</span>
+  <span class="c-x">        └─────────┼─────────┘</span>
+  <span class="c-x">                  │</span>
+  <span class="c-dimmed">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-dimmed">  ╎ Implement Stripe webhook handler  ╎</span>
+  <span class="c-dimmed">  ╎ and payment flow with idempotency ╎</span>
+  <span class="c-dimmed">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+  <span class="c-dimmed">                  │</span>
+  <span class="c-dimmed">  ╭──────────────────────────────────╮</span>
+  <span class="c-dimmed">  │ ○ C2  </span><span class="c-dimmed">impl</span><span class="c-dimmed">            45m  10:05 │</span>
+  <span class="c-dimmed">  ╰──────────────────────────────────╯</span>
+  <span class="c-dimmed">                  │</span>
+  <span class="c-dimmed">        ┌─────────┼─────────┐</span>
+  <span class="c-dimmed">        │         │         │</span>
+  <span class="c-dimmed">   ╭─────────╮╭─────────╮╭─────────╮</span>
+  <span class="c-dimmed">   │ ✓ a-005  ││ ✓ a-006  ││ ✓ a-007  │</span>
+  <span class="c-dimmed">   │ stripe   ││ webhook  ││ db-migrt │</span>
+  <span class="c-dimmed">   │ 28m      ││ 31m      ││ 12m      │</span>
+  <span class="c-dimmed">   ╰─────────╯╰─────────╯╰─────────╯</span>
+  <span class="c-dimmed">   ╭─────────╮</span>
+  <span class="c-dimmed">   │ ✓ a-008  │</span>
+  <span class="c-dimmed">   │ frontend │</span>
+  <span class="c-dimmed">   │ 19m      │</span>
+  <span class="c-dimmed">   ╰─────────╯</span>
+  <span class="c-dimmed">                  │</span>
+  <span class="c-dimmed">  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐</span>
+  <span class="c-dimmed">  ╎ Fix frontend payment form — retry ╎</span>
+  <span class="c-dimmed">  ╎ with updated schema types         ╎</span>
+  <span class="c-dimmed">  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘</span>
+  <span class="c-dimmed">                  │</span>
+  <span class="c-yellow">  ╭──────────────────────────────────╮</span>
+  <span class="c-yellow">  │ </span><span class="c-green c-bold">● C3 </span><span class="c-green">impl   </span><span class="c-yellow">          </span><span class="c-green">running</span><span class="c-yellow">    │</span>
+  <span class="c-yellow">  ╰──────────────────────────────────╯</span>
+                  <span class="c-gray">│</span>
+        <span class="c-gray">┌─────────┼─────────┐</span>
+        <span class="c-gray">│         │         │</span>
+   <span class="c-blue">╭─────────╮</span><span class="c-green">╭─────────╮</span><span class="c-magenta">╭─────────╮</span>
+   <span class="c-blue">│</span> <span class="c-green c-bold">▶</span><span class="c-blue"> a-009  │</span><span class="c-green">│</span> <span class="c-green c-bold">▶</span><span class="c-green"> a-010  │</span><span class="c-magenta">│</span> <span class="c-green c-bold">▶</span><span class="c-magenta"> a-011  │</span>
+   <span class="c-blue">│</span> <span class="c-blue">pay-form</span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-green">checkout</span><span class="c-green">│</span><span class="c-magenta">│</span> <span class="c-magenta">e2e-test</span><span class="c-magenta">│</span>
+   <span class="c-blue">│</span> <span class="c-dim">8m      </span><span class="c-blue">│</span><span class="c-green">│</span> <span class="c-dim">5m      </span><span class="c-green">│</span><span class="c-magenta">│</span> <span class="c-dim">2m      </span><span class="c-magenta">│</span>
+   <span class="c-blue">╰─────────╯</span><span class="c-green">╰─────────╯</span><span class="c-magenta">╰─────────╯</span>
+</div>
+    </div>
+
+    <div class="callout blue">
+      <div class="callout-label">DIMMING LEVELS</div>
+      <strong>Two tiers of dimming:</strong> Cycles older than N-1 render at opacity ~0.35 (deeply faded).
+      The immediately previous cycle (N-1) renders at ~0.5 (dimmed but legible).
+      Current cycle renders at full brightness with colored borders and bold status icons.
+      [F] label changes to "collapse" when expanded.
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-label">SCROLL BEHAVIOR</div>
+      When expanded, the flow auto-scrolls to keep the current cycle visible at the bottom
+      of the panel. User can scroll up to see older cycles. Scroll position resets on cycle change.
+    </div>
+  </div>
+</div>
+
+<script>
+const nav = document.getElementById('nav');
+const sections = document.querySelectorAll('.section');
+const links = nav.querySelectorAll('a');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = nav.querySelector(`a[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -60% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

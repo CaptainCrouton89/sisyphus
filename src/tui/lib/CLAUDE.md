@@ -5,8 +5,12 @@
 ### Text Formatting (format.ts)
 - `stripMarkdown()` is lossy (collapses whitespace); use `cleanMarkdown()` for structure-preserving inline cleanup
 - Both `truncate()` and `cleanMarkdown()` normalize wide emoji → single-width (✅→✓) to prevent terminal wrapping; callers must not double-normalize
-- `Seg` / `DetailLine = Seg[]` — multi-segment styled lines; use `seg(text, opts)` / `singleLine()` builders, not raw objects
-- `agentDisplayName(agent)` — returns `agentType` as fallback when `name` is absent
+- `wrapText(text, width)` calls `cleanMarkdown` internally — callers must not pre-clean or emoji normalization doubles
+- `extractFirstSentence(text, maxLen)` — skips structural lines (headers, fences, tables, `|`-prefixed, length < 5), finds sentence break at `. ` between cols 10–maxLen, falls back to `truncate(stripMarkdown(text), maxLen)`; use over `truncate()` for summary displays
+- `durationColor(startOrMs, endIso?)` — first arg is either ms `number` or ISO start string; thresholds: `''` < 10m, `'yellow'` < 30m, `'red'` ≥ 30m
+- `Seg` / `DetailLine = Seg[]` — multi-segment styled lines; use `seg(text, opts)` / `singleLine()` builders, not raw objects. `Seg.bg` is raw ANSI format (`'48;2;R;G;B'`), not a color name
+- `agentDisplayName(agent)` — returns `agentType` when `name === id` (name defaults to id when unset; this is the "no display name" path, not literally absent)
+- `messageSourceLabel(source, agentId?)` — throws if `source === 'agent'` and `agentId` is undefined
 
 ### Tree Building (tree.ts)
 - Sessions sorted: active+open → active+closed → paused+open → paused+closed → completed (by recency within groups)
