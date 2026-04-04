@@ -34,6 +34,14 @@ export function messageScriptPath(): string {
   return scriptPath('sisyphus-msg');
 }
 
+export function deleteSessionScriptPath(): string {
+  return scriptPath('sisyphus-delete-session');
+}
+
+export function killSessionScriptPath(): string {
+  return scriptPath('sisyphus-kill-session');
+}
+
 export function sisyphusTmuxConfPath(): string {
   return join(globalDir(), 'tmux.conf');
 }
@@ -187,6 +195,65 @@ grep -q '[^[:space:]]' "$tmpfile" || exit 0
 exec sisyphus message --session "$session_id" "$(cat "$tmpfile")"
 `;
 
+// --- Shared session ID + cwd resolution for session-scoped scripts ---
+const SESSION_RESOLVE = `
+session_name=$(tmux display-message -p '#{session_name}')
+session_id=$(tmux show-options -t "$session_name" -v @sisyphus_session_id 2>/dev/null)
+cwd=$(tmux show-options -t "$session_name" -v @sisyphus_cwd 2>/dev/null)
+
+if [ -z "$session_id" ]; then
+  MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+  [ ! -f "$MANIFEST" ] && { echo "No active sessions found"; sleep 1; exit 1; }
+  if [ -z "$cwd" ]; then
+    while IFS=$'\\t' read -r type name scwd phase dwid; do
+      [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
+    done < "$MANIFEST"
+  fi
+  [ -z "$cwd" ] && { echo "Session not in manifest"; sleep 1; exit 1; }
+  while IFS=$'\\t' read -r type name scwd phase dwid; do
+    if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
+      session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
+      [ -n "$session_id" ] && break
+    fi
+  done < "$MANIFEST"
+fi
+
+[ -z "$session_id" ] && { echo "No active sisyphus session found"; sleep 1; exit 1; }
+[ -z "$cwd" ] && cwd=$(tmux display-message -p '#{pane_current_path}')`.trim();
+
+// --- Go-home helper used by kill/delete scripts ---
+const GO_HOME_AFTER = `
+${HOME_SCRIPT_JUMP}
+# After the action, switch back to the home/dashboard session
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+if [ -f "$MANIFEST" ] && [ -n "$cwd" ]; then
+  while IFS=$'\\t' read -r type name scwd phase dwid; do
+    if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
+      go_home "$name" "$dwid"
+      break
+    fi
+  done < "$MANIFEST"
+fi`.trim();
+
+const KILL_SESSION_SCRIPT = `#!/bin/bash
+# Kill the sisyphus session associated with the current tmux session
+${SESSION_RESOLVE}
+
+sisyphus kill "$session_id" >/dev/null 2>&1
+${GO_HOME_AFTER}
+`;
+
+const DELETE_SESSION_SCRIPT = `#!/bin/bash
+# Delete the sisyphus session associated with the current tmux session
+${SESSION_RESOLVE}
+
+printf "\\033[31mType 'yes' to confirm:\\033[0m "
+read -r answer
+[ "$answer" = "yes" ] || exit 0
+sisyphus delete "$session_id" --cwd "$cwd" >/dev/null 2>&1
+${GO_HOME_AFTER}
+`;
+
 function installScript(name: string, content: string): void {
   mkdirSync(join(globalDir(), 'bin'), { recursive: true });
   const path = scriptPath(name);
@@ -200,6 +267,8 @@ function installAllScripts(): void {
   installScript('sisyphus-kill-pane', KILL_PANE_SCRIPT);
   installScript('sisyphus-new', NEW_PROMPT_SCRIPT);
   installScript('sisyphus-msg', MESSAGE_SCRIPT);
+  installScript('sisyphus-kill-session', KILL_SESSION_SCRIPT);
+  installScript('sisyphus-delete-session', DELETE_SESSION_SCRIPT);
 }
 
 export function getExistingBinding(key: string, table: string = 'root'): string | null {
@@ -256,6 +325,8 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     `bind-key -T ${KEY_TABLE} x run-shell ${killPaneScriptPath()}`,
     `bind-key -T ${KEY_TABLE} n display-popup ${popupOpts} -d "#{pane_current_path}" ${newPromptScriptPath()}`,
     `bind-key -T ${KEY_TABLE} m display-popup ${popupOpts} -d "#{pane_current_path}" ${messageScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} k display-popup -E -w 40 -h 5 -S 'fg=red' -T ' Kill Session ' -d "#{pane_current_path}" ${killSessionScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} d display-popup -E -w 40 -h 5 -S 'fg=red' -T ' Delete Session ' -d "#{pane_current_path}" ${deleteSessionScriptPath()}`,
     // prefix-x smart kill
     `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`,
   ];
@@ -289,7 +360,7 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
   if (getExistingBinding(cycleKey) !== null && isSisyphusBinding(getExistingBinding(cycleKey)!)) {
     return {
       status: 'already-installed',
-      message: `Tmux keybindings already configured: ${cycleKey} (cycle), ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill).`,
+      message: `Tmux keybindings already configured: ${cycleKey} (cycle), ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill-pane, k=kill-session, d=delete).`,
     };
   }
 
@@ -298,7 +369,7 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     : `\nNote: No tmux.conf found. Add this to your tmux config for persistence:\n  source-file ${confPath}`;
   return {
     status: 'installed',
-    message: `Tmux keybindings set: ${cycleKey} cycles, ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill)${persistNote}`,
+    message: `Tmux keybindings set: ${cycleKey} cycles, ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill-pane, k=kill-session, d=delete)${persistNote}`,
   };
 }
 
@@ -338,7 +409,7 @@ export function removeTmuxKeybind(): void {
   }
 
   // Remove scripts
-  const scripts = ['sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg'];
+  const scripts = ['sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg', 'sisyphus-kill-session', 'sisyphus-delete-session'];
   for (const name of scripts) {
     const path = scriptPath(name);
     if (existsSync(path)) unlinkSync(path);

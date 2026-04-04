@@ -20,6 +20,7 @@ import { registerReport } from './commands/report.js';
 import { registerResume } from './commands/resume.js';
 import { registerReconnect } from './commands/reconnect.js';
 import { registerKill } from './commands/kill.js';
+import { registerDelete } from './commands/delete.js';
 import { registerUninstall } from './commands/uninstall.js';
 import { registerNotify } from './commands/notify.js';
 import { registerMessage } from './commands/message.js';
@@ -37,6 +38,9 @@ import { registerSetup } from './commands/setup.js';
 import { registerTmuxStatus } from './commands/tmux-status.js';
 import { registerTmuxSessions } from './commands/tmux-sessions.js';
 import { registerHistory } from './commands/history.js';
+import { registerRegisterSegment } from './commands/register-segment.js';
+import { registerUnregisterSegment } from './commands/unregister-segment.js';
+import { registerReview } from './commands/review.js';
 import { globalDir } from '../shared/paths.js';
 
 const program = new Command();
@@ -66,6 +70,7 @@ registerList(program);
 registerResume(program);
 registerReconnect(program);
 registerKill(program);
+registerDelete(program);
 registerUninstall(program);
 registerNotify(program);
 registerMessage(program);
@@ -83,6 +88,9 @@ registerSetup(program);
 registerTmuxStatus(program);
 registerTmuxSessions(program);
 registerHistory(program);
+registerRegisterSegment(program);
+registerUnregisterSegment(program);
+registerReview(program);
 
 program.addHelpText('after', `
 Examples:
