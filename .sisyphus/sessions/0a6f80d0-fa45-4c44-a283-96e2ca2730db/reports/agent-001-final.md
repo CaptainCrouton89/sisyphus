@@ -1,0 +1,1 @@
+Written form-input-design.md (261 lines) to /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/form-input-design.md. All sections complete with real citations.

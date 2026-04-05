@@ -1,0 +1,276 @@
+{
+  "meta": {
+    "title": "Session Clone Design",
+    "subtitle": "sisyphus clone — Technical Architecture",
+    "summary": "Design for `sisyphus clone \"goal\"` which duplicates a running session's accumulated knowledge (context, prompts, reports, snapshots) into a new independent session with a different goal. True fork — no parent-child hierarchy, no cross-session communication. Clone spawns at cycle N+1 in strategy mode with programmatic orientation.",
+    "version": 1,
+    "lastModified": "2026-04-04T12:00:00Z",
+    "draft": 1
+  },
+  "sections": [
+    {
+      "id": "protocol-routing",
+      "name": "Protocol & Routing",
+      "goal": "Understand the new protocol types, history events, and server dispatch path",
+      "context": "Data flow through the system:\n\n  CLI (clone.ts)\n    │ reads SISYPHUS_SESSION_ID from env\n    │ sends clone request over Unix socket\n    ▼\n  Daemon (server.ts)\n    │ resolves partial session ID\n    │ looks up cwd from tracking map\n    ▼\n  SessionManager (session-manager.ts)\n    │ validates source (exists, not completed)\n    │ delegates filesystem work to state.ts\n    │ creates tmux session\n    │ spawns orchestrator\n    ▼\n  Orchestrator (orchestrator.ts)\n    │ cycle N+1, strategy mode\n    │ receives clone orientation in user prompt\n    ▼\n  Running clone session\n\nFollows the same pattern as `start`: CLI → daemon → session-manager → orchestrator.",
+      "items": [
+        {
+          "id": "DES-001",
+          "title": "Clone request/response types",
+          "description": "New protocol types in src/shared/protocol.ts",
+          "content": "Add to the `Request` union in `src/shared/protocol.ts:4`:\n\n```typescript\n| { type: 'clone'; sessionId: string; goal: string; context?: string; name?: string; strategy?: boolean }\n```\n\nResponse uses existing `Response` type — on success:\n```typescript\n{ ok: true, data: { sessionId: string; tmuxSessionName: string } }\n```\n\nThis mirrors the `start` response shape (server.ts:180). The `sessionId` field here is the SOURCE session being cloned. The response returns the CLONE's new session ID.\n\nFields map to requirements:\n- `sessionId` → REQ-001 (source session from env)\n- `goal` → REQ-001 (positional arg)\n- `context` → REQ-002 (`-c, --context`)\n- `name` → REQ-002 (`-n, --name`)\n- `strategy` → REQ-002 (`--strategy`)",
+          "agentNotes": "Follows existing patterns exactly. No new Response type needed — the existing `{ ok: true, data?: Record<string, unknown> }` shape works.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        },
+        {
+          "id": "DES-002",
+          "title": "History event types",
+          "description": "New event types in src/shared/history-types.ts",
+          "content": "Add two new values to the `HistoryEventType` union in `src/shared/history-types.ts:3`:\n\n```typescript\n| 'session-cloned'\n| 'cloned-from'\n```\n\nEvent data shapes:\n\n**`session-cloned`** — emitted on the SOURCE session:\n```json\n{ \"cloneSessionId\": \"<uuid>\", \"cloneGoal\": \"<goal text>\" }\n```\n\n**`cloned-from`** — emitted on the CLONE session:\n```json\n{ \"sourceSessionId\": \"<uuid>\", \"sourceGoal\": \"<source goal text>\" }\n```\n\nBoth use `emitHistoryEvent()` (fire-and-forget, errors swallowed). REQ-023 requires both events.",
+          "agentNotes": "These are audit-trail only — no daemon behavior depends on them. Data shapes aren't type-enforced (HistoryEvent.data is Record<string, unknown>), but keeping them consistent with existing event data patterns.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        },
+        {
+          "id": "DES-003",
+          "title": "Server routing for clone request",
+          "description": "Request dispatch in src/daemon/server.ts",
+          "content": "Add a `case 'clone'` block in `handleRequest()` at `src/daemon/server.ts:160`, following the `start` pattern:\n\n```typescript\ncase 'clone': {\n  const tracking = sessionTrackingMap.get(req.sessionId);\n  if (!tracking) return unknownSessionError(req.sessionId);  // REQ-022\n  const result = await sessionManager.cloneSession(\n    req.sessionId, tracking.cwd, req.goal,\n    req.context, req.name, req.strategy\n  );\n  // Register clone in tracking map (same as start handler)\n  sessionTrackingMap.set(result.id, {\n    cwd: tracking.cwd,\n    tmuxSession: result.tmuxSessionName,\n    windowId: result.tmuxWindowId,\n    tmuxSessionId: result.tmuxSessionId,\n    messageCounter: 0,\n  });\n  persistSessionRegistry();\n  return {\n    ok: true,\n    data: { sessionId: result.id, tmuxSessionName: result.tmuxSessionName }\n  };\n}\n```\n\nThe `resolvePartialSessionId()` call at server.ts:163 already handles partial ID resolution before the switch — clone benefits from this for free.",
+          "agentNotes": "The tracking map registration mirrors startSession's handler exactly. The unknownSessionError call satisfies REQ-022. cwd comes from the source session's tracking entry — clone inherits the same working directory.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "directory-cloning",
+      "name": "Directory Cloning Algorithm",
+      "goal": "Understand what files get copied, how session ID replacement works, and what gets created fresh",
+      "context": "Session directory layout (source → clone):\n\n  .sisyphus/sessions/{sourceId}/        .sisyphus/sessions/{cloneId}/\n  ├── state.json          ──────►       ├── state.json (new)\n  ├── goal.md             ──────►       ├── goal.md (new goal)\n  ├── initial-prompt.md   ──────►       ├── initial-prompt.md (new goal)\n  ├── roadmap.md          ──────►       ├── roadmap.md (seed template)\n  ├── strategy.md         ─ ─ ─►       ├── strategy.md (only with --strategy)\n  ├── context/            ══════►       ├── context/ (deep copy + ID replace)\n  ├── prompts/            ══════►       ├── prompts/ (deep copy + ID replace)\n  ├── reports/            ══════►       ├── reports/ (deep copy + ID replace)\n  ├── snapshots/          ══════►       ├── snapshots/ (deep copy + ID replace)\n  └── logs/               ──────►       └── logs/ (fresh empty)\n\n  ══════► = recursive copy with session ID replacement\n  ──────► = created fresh (not copied)\n  ─ ─ ─► = conditional copy",
+      "items": [
+        {
+          "id": "DES-004",
+          "title": "Directory copy and fresh file creation",
+          "description": "New cloneSessionDir() function in src/daemon/state.ts",
+          "content": "Add `cloneSessionDir()` to `src/daemon/state.ts`. This handles all filesystem operations:\n\n```typescript\nexport function cloneSessionDir(\n  cwd: string,\n  sourceId: string,\n  cloneId: string,\n  goal: string,\n  context?: string,\n  copyStrategy?: boolean,\n): void {\n  const srcDir = sessionDir(cwd, sourceId);\n  const dstDir = sessionDir(cwd, cloneId);\n  mkdirSync(dstDir, { recursive: true });\n\n  // 1. Deep copy directories (REQ-004, REQ-008)\n  for (const subdir of ['context', 'prompts', 'reports', 'snapshots']) {\n    const src = join(srcDir, subdir);\n    const dst = join(dstDir, subdir);\n    if (existsSync(src)) {\n      cpSync(src, dst, { recursive: true });\n    } else {\n      mkdirSync(dst, { recursive: true });\n    }\n  }\n\n  // 2. Conditional strategy copy (REQ-009)\n  if (copyStrategy) {\n    const src = strategyPath(cwd, sourceId);\n    if (existsSync(src)) {\n      copyFileSync(src, strategyPath(cwd, cloneId));\n    }\n  }\n\n  // 3. Session ID replacement in all text files (REQ-005)\n  replaceIdInDir(dstDir, sourceId, cloneId);\n\n  // 4. Fresh files (REQ-006, REQ-008)\n  writeFileSync(goalPath(cwd, cloneId), goal, 'utf-8');\n  writeFileSync(initialPromptPath(cwd, cloneId), goal, 'utf-8');\n  writeFileSync(roadmapPath(cwd, cloneId), ROADMAP_SEED, 'utf-8');\n  mkdirSync(logsDir(cwd, cloneId), { recursive: true });\n\n  // 5. Context file (same as createSession)\n  if (context) {\n    writeFileSync(\n      join(contextDir(cwd, cloneId), 'initial-context.md'),\n      context, 'utf-8'\n    );\n  }\n}\n```\n\nNote: `ROADMAP_SEED` and `CONTEXT_CLAUDE_MD` already exist at the top of state.ts. The context/ CLAUDE.md is already in the copied context/ dir from the source, so we don't re-create it.\n\nImports needed: `copyFileSync` and `cpSync` are already imported in state.ts:2. `strategyPath` needs adding to the paths import.",
+          "agentNotes": "cpSync is Node 16.7+ (we require Node 22). It's already used in state.ts for snapshot operations. The function is synchronous — no session lock needed since the clone directory doesn't exist yet (no concurrent access possible).",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        },
+        {
+          "id": "DES-005",
+          "title": "Session ID replacement in text files",
+          "description": "replaceIdInDir() — recursive text file ID substitution",
+          "content": "Add `replaceIdInDir()` as a private function in `src/daemon/state.ts`:\n\n```typescript\nfunction replaceIdInDir(\n  dir: string,\n  sourceId: string,\n  cloneId: string,\n): void {\n  for (const entry of readdirSync(dir, { withFileTypes: true })) {\n    const fullPath = join(dir, entry.name);\n    if (entry.isDirectory()) {\n      replaceIdInDir(fullPath, sourceId, cloneId);\n    } else {\n      try {\n        const buf = readFileSync(fullPath);\n        // Skip binary files (contain null bytes)\n        if (buf.includes(0)) continue;\n        const text = buf.toString('utf-8');\n        if (text.includes(sourceId)) {\n          writeFileSync(fullPath, text.replaceAll(sourceId, cloneId), 'utf-8');\n        }\n      } catch {\n        // Unreadable file — skip\n      }\n    }\n  }\n}\n```\n\nText detection strategy: **null-byte heuristic**. Read file as raw Buffer, check for null bytes. Files containing null bytes are treated as binary and skipped. This correctly handles:\n- `.md` files (context, prompts, reports)\n- `.json` files (state.json in snapshots, design.json, requirements.json)\n- Any other text files\n- Skips images, compiled binaries\n\nThe UUID format (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) is unlikely to collide with non-session-ID text, so blanket replacement is safe.",
+          "decision": {
+            "proposal": {
+              "title": "Null-byte heuristic for text detection",
+              "description": "Read as Buffer, skip files containing \\0 bytes. Simple, no extension allowlist to maintain, handles all text encodings."
+            },
+            "alternatives": [
+              {
+                "title": "Extension allowlist",
+                "description": "Only process .md, .json, .txt, .ts files. More predictable but requires maintenance as new file types appear in session dirs."
+              }
+            ],
+            "lenses": {
+              "reliability": "Null-byte heuristic is robust for UTF-8 text — no false positives for typical session content",
+              "maintenance": "No allowlist to update when new file types are added to session directories",
+              "performance": "Reads every file once — acceptable for session dirs (typically <100 files)"
+            }
+          },
+          "agentNotes": "readFileSync already imported in state.ts. The replaceAll method is available in Node 22. Buffer.includes(0) is O(n) in file size but session files are small.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "state-model",
+      "name": "State Model",
+      "goal": "Understand how the clone's state.json is constructed from the source session",
+      "context": "The clone state.json is a hybrid: new identity + inherited history.\n\n  Source state.json                Clone state.json\n  ┌─────────────────────┐         ┌─────────────────────┐\n  │ id: source-uuid     │ ──X──►  │ id: clone-uuid      │  ← new\n  │ task: old goal      │ ──X──►  │ task: new goal      │  ← new\n  │ status: active      │ ──X──►  │ status: active      │  ← fresh\n  │ createdAt: old      │ ──X──►  │ createdAt: now      │  ← fresh\n  │ activeMs: 12345     │ ──X──►  │ activeMs: 0         │  ← reset\n  │ completedAt: ...    │ ──X──►  │ completedAt: undef  │  ← cleared\n  │                     │         │                     │\n  │ agents: [...]       │ ═════►  │ agents: [...]       │  ← preserved*\n  │ orchestratorCycles  │ ═════►  │ orchestratorCycles  │  ← preserved\n  │ messages: [...]     │ ═════►  │ messages: [...]     │  ← preserved\n  │ model: opus         │ ═════►  │ model: opus         │  ← preserved\n  │ cwd: /project       │ ═════►  │ cwd: /project       │  ← preserved\n  └─────────────────────┘         └─────────────────────┘\n\n  * agents with status='running' normalized to 'killed'",
+      "items": [
+        {
+          "id": "DES-006",
+          "title": "Clone state.json construction",
+          "description": "New createCloneState() function in src/daemon/state.ts",
+          "content": "Add `createCloneState()` to `src/daemon/state.ts`:\n\n```typescript\nexport function createCloneState(\n  cwd: string,\n  sourceId: string,\n  cloneId: string,\n  goal: string,\n  context?: string,\n  name?: string,\n): Session {\n  const source = getSession(cwd, sourceId);\n  const createdAt = new Date().toISOString();\n  const created = new Date(createdAt);\n\n  // Deep copy agents, normalizing running → killed\n  const agents = source.agents.map(a => ({\n    ...a,\n    ...(a.status === 'running' ? {\n      status: 'killed' as const,\n      completedAt: createdAt,\n      killedReason: 'inherited from source session',\n    } : {}),\n  }));\n\n  // Deep copy cycles and messages\n  const orchestratorCycles = source.orchestratorCycles.map(c => ({ ...c }));\n  const messages = source.messages.map(m => ({ ...m }));\n\n  const clone: Session = {\n    id: cloneId,\n    ...(name ? { name } : {}),\n    task: goal,\n    ...(context ? { context } : {}),\n    cwd,\n    status: 'active',\n    createdAt,\n    activeMs: 0,\n    agents,\n    orchestratorCycles,\n    messages,\n    model: source.model,\n    startHour: created.getHours(),\n    startDayOfWeek: created.getDay(),\n    launchConfig: source.launchConfig\n      ? { ...source.launchConfig }\n      : undefined,\n  };\n\n  atomicWrite(statePath(cwd, cloneId), JSON.stringify(clone, null, 2));\n  return clone;\n}\n```\n\n**Fields explicitly NOT copied** (reset/omitted):\n- `completedAt` — clone is active\n- `completionReport` — clone hasn't completed\n- `tmuxSessionName/Id/WindowId` — set later by session-manager\n- `wallClockMs` — clone starts fresh\n- `parentSessionId` — NOT used for cloning (companion-only field)\n- `companionCredited*` — clone is a new session for companion stats\n- `rollbackCount/resumeCount/continueCount` — fresh counters\n- `companionCreditedWisdom` — fresh\n\n**Fields preserved from source** (REQ-007):\n- `agents` — full history (with status normalization)\n- `orchestratorCycles` — full cycle history\n- `messages` — full message history\n- `model` — same LLM model\n- `launchConfig` — same config for consistency",
+          "agentNotes": "The shallow spread on agents/cycles/messages is sufficient — their fields are all primitives or flat objects. No nested references to worry about. The atomicWrite pattern matches createSession at state.ts:74.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        },
+        {
+          "id": "DES-007",
+          "title": "Agent status normalization",
+          "description": "How inherited running agents are handled in clone state",
+          "content": "**Problem**: `allAgentsDone()` in `src/daemon/agent.ts:492` checks `session.agents.filter(a => a.status === 'running').length === 0`. If the clone inherits agents with `status: 'running'` from the source, the daemon would block orchestrator respawning — those agents have no panes in the clone's tmux session.\n\n**Solution**: When building clone state, any agent with `status === 'running'` gets:\n```json\n{\n  \"status\": \"killed\",\n  \"completedAt\": \"<clone creation timestamp>\",\n  \"killedReason\": \"inherited from source session\"\n}\n```\n\nAll other statuses (`completed`, `crashed`, `killed`, `lost`) are preserved as-is — they're already terminal and won't confuse the daemon.\n\n**Why `killed` and not `completed`**: The agent didn't actually complete its work in the clone's context. Using `killed` is semantically accurate (work was cut short) and distinguishable from agents that genuinely finished. The `killedReason` field makes the origin clear.\n\n**Impact on agent counter**: `resetAgentCounterFromState()` scans all agent IDs regardless of status. If the source had `agent-001` through `agent-005`, the clone's new agents start at `agent-006`. This is correct — avoids ID collisions in reports/ and state.",
+          "decision": {
+            "proposal": {
+              "title": "Mark running agents as 'killed' with explanatory reason",
+              "description": "Semantically accurate (work was interrupted for this session), doesn't confuse allAgentsDone(), and the killedReason field provides audit trail."
+            },
+            "alternatives": [
+              {
+                "title": "Mark as 'completed'",
+                "description": "Simpler but semantically wrong — these agents didn't complete work in the clone context. Could confuse orchestrator interpreting history."
+              },
+              {
+                "title": "Strip all non-terminal agents from clone",
+                "description": "Loses history of in-progress work, which the orchestrator needs for situational awareness."
+              }
+            ],
+            "lenses": {
+              "correctness": "killed + reason is semantically accurate and prevents daemon confusion",
+              "history fidelity": "Preserves all agent records — orchestrator sees full picture of what was in-flight",
+              "daemon safety": "allAgentsDone() returns true since no agents have status='running'"
+            }
+          },
+          "agentNotes": "This is the critical safety item. Without normalization, a clone from an active session with running agents would have a permanently broken daemon tracking state.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "session-lifecycle",
+      "name": "Session Manager Flow",
+      "goal": "Understand the complete cloneSession() orchestration in session-manager.ts",
+      "context": "cloneSession() follows startSession() (session-manager.ts:90) closely:\n\n  cloneSession(sourceId, cwd, goal, context?, name?, strategy?)\n    │\n    ├─ 1. Validate source session\n    │     ├─ getSession() — exists?\n    │     └─ status !== 'completed'?  (REQ-019)\n    │\n    ├─ 2. Generate clone UUID\n    │\n    ├─ 3. Filesystem (state.ts)\n    │     ├─ cloneSessionDir()  — copy dirs, replace IDs, fresh files\n    │     └─ createCloneState() — build state.json\n    │\n    ├─ 4. Model config (same as startSession)\n    │     └─ updateSession({ model, launchConfig })\n    │\n    ├─ 5. Tmux session\n    │     ├─ createSession(tmuxName, cwd)\n    │     ├─ initSessionMeta()\n    │     └─ updateSessionTmux()\n    │\n    ├─ 6. Track & spawn\n    │     ├─ trackSession()\n    │     ├─ spawnOrchestrator(... orientation, 'strategy')\n    │     ├─ updateTrackedWindow()\n    │     └─ killPane(initialPaneId)\n    │\n    ├─ 7. History events (REQ-023)\n    │     ├─ emitHistoryEvent(sourceId, 'session-cloned', ...)\n    │     └─ emitHistoryEvent(cloneId, 'cloned-from', ...)\n    │\n    ├─ 8. Haiku naming (fire-and-forget)\n    │\n    └─ 9. Companion + recomputeDots()",
+      "items": [
+        {
+          "id": "DES-008",
+          "title": "cloneSession() implementation",
+          "description": "Full session-manager.ts function following startSession pattern",
+          "content": "Add `cloneSession()` to `src/daemon/session-manager.ts`, after `startSession()` (~line 200):\n\n```typescript\nexport async function cloneSession(\n  sourceId: string,\n  cwd: string,\n  goal: string,\n  context?: string,\n  name?: string,\n  copyStrategy?: boolean,\n): Promise<Session> {\n  // 1. Validate source\n  const source = state.getSession(cwd, sourceId);\n  if (source.status === 'completed') {\n    throw new Error(\n      `Cannot clone completed session ${sourceId}. ` +\n      `Use \\`sisyphus continue\\` to reactivate it first.`\n    );  // REQ-019\n  }\n\n  // 2. Generate clone identity\n  const cloneId = uuidv4();\n  if (name && !NAME_PATTERN.test(name)) {\n    throw new Error(\n      `Invalid session name \"${name}\": only alphanumeric, hyphens, and underscores allowed`\n    );\n  }\n  const tmuxName = tmuxSessionName(cwd, name ?? cloneId.slice(0, 8));\n  if (tmux.sessionNameTaken(tmuxName)) {\n    throw new Error(`Tmux session \"${tmuxName}\" already exists.`);\n  }\n\n  // 3. Filesystem operations\n  state.cloneSessionDir(cwd, sourceId, cloneId, goal, context, copyStrategy);\n  const session = state.createCloneState(\n    cwd, sourceId, cloneId, goal, context, name\n  );\n\n  // 4. Model config (mirrors startSession)\n  const config = loadConfig(cwd);\n  const model = config.model;\n  await state.updateSession(cwd, cloneId, {\n    model,\n    launchConfig: {\n      model,\n      context,\n      orchestratorPrompt: config.orchestratorPrompt,\n    },\n  });\n\n  // 5. Tmux session\n  const { windowId, initialPaneId, sessionId: tmuxSessId } =\n    tmux.createSession(tmuxName, cwd);\n  tmux.initSessionMeta(tmuxSessId, cwd, cloneId);\n  await state.updateSessionTmux(cwd, cloneId, tmuxName, windowId, tmuxSessId);\n\n  // 6. Track & spawn\n  trackSession(cloneId, cwd, tmuxSessId, tmuxName);\n  resetAgentCounterFromState(cloneId, session.agents);\n\n  // Build orientation message\n  const sourceGoal = readGoal(cwd, sourceId, source.task);\n  const orientationLines = [\n    'This is a **cloned session**, forked from an existing session.',\n    '',\n    `Source session: ${sourceId}`,\n    `Previous goal: ${sourceGoal}`,\n    '',\n    'You have full access to the previous session\\'s context/, reports/,',\n    'and cycle history. Use them as background for your work.',\n    '',\n    `Your new goal is: ${goal}`,\n  ];\n  if (context) {\n    orientationLines.push('', '### Additional Context', '', context);\n  }\n  orientationLines.push(\n    '',\n    '**Important**: The source session continues independently.',\n    'It is the other session\\'s responsibility. You do not need to monitor it.',\n    '',\n    '### Next Steps',\n    '1. Review inherited context/ and reports/',\n    '2. Write strategy.md for your approach',\n    '3. Update roadmap.md with your work plan',\n    '4. Begin delegating work to agents',\n  );\n\n  await orchestrator.spawnOrchestrator(\n    cloneId, cwd, windowId,\n    orientationLines.join('\\n'),\n    'strategy'  // force strategy mode\n  );\n  updateTrackedWindow(cloneId, windowId);\n  tmux.killPane(initialPaneId);\n\n  // 7. History events (REQ-023)\n  emitHistoryEvent(sourceId, 'session-cloned', {\n    cloneSessionId: cloneId, cloneGoal: goal,\n  });\n  emitHistoryEvent(cloneId, 'cloned-from', {\n    sourceSessionId: sourceId, sourceGoal: source.task,\n  });\n\n  // 8. Haiku naming (same pattern as startSession)\n  if (!name) {\n    generateSessionName(goal).then(async (generatedName) => {\n      // ... identical to startSession naming logic\n    }).catch(() => {});\n  }\n\n  // 9. Housekeeping\n  pruneOldSessions(cwd);\n  pruneHistory();\n  try { recomputeDots(); } catch { /* best-effort */ }\n\n  try {\n    const companion = loadCompanion();\n    onSessionStart(companion, cwd);\n    saveCompanion(companion);\n    fireCommentary('session-start', companion, goal);\n  } catch { /* companion errors non-fatal */ }\n\n  return { ...state.getSession(cwd, cloneId), tmuxSessionName: tmuxName };\n}\n```\n\nThe Haiku naming block is identical to startSession's — extract to shared helper if desired, but not required.",
+          "agentNotes": "resetAgentCounterFromState is critical here — without it, new agents spawned by the clone's orchestrator would start at agent-001, colliding with inherited agents. The call at step 6 ensures the counter picks up from the source's last agent number.\n\nNote: pruneOldSessions and pruneHistory are called at the end, same as startSession. This prevents session accumulation.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "orchestrator-orientation",
+      "name": "Orchestrator Orientation",
+      "goal": "Understand how the clone's orchestrator receives fork context and starts in strategy mode",
+      "context": "spawnOrchestrator flow for clone:\n\n  spawnOrchestrator(cloneId, cwd, windowId, message, 'strategy')\n    │\n    ├─ mode = forceMode ?? (lastCycle?.mode ?? 'strategy')\n    │         = 'strategy'  (forced)\n    │\n    ├─ basePrompt = loadOrchestratorPrompt(cwd, cloneId, 'strategy')\n    │\n    ├─ formattedState = formatStateForOrchestrator(session, 'strategy')\n    │   ├─ ## Goal  ← reads clone's goal.md (new goal)\n    │   ├─ ## Context  ← clone's context/ dir (inherited + replaced IDs)\n    │   ├─ ### Most Recent Cycle  ← source's last cycle agents/reports\n    │   ├─ ## Strategy  ← empty (not copied by default)\n    │   └─ ## Roadmap  ← seed template\n    │\n    ├─ userPrompt = formattedState + orientation message\n    │   └─ ## Continuation Instructions\n    │      └─ [clone orientation text]\n    │\n    └─ cycle N+1 recorded in state",
+      "items": [
+        {
+          "id": "DES-009",
+          "title": "forceMode parameter on spawnOrchestrator",
+          "description": "Adding mode override to src/daemon/orchestrator.ts",
+          "content": "Modify `spawnOrchestrator()` signature in `src/daemon/orchestrator.ts:309`:\n\n```typescript\n// Before:\nexport async function spawnOrchestrator(\n  sessionId: string, cwd: string, windowId: string,\n  message?: string\n): Promise<void>\n\n// After:\nexport async function spawnOrchestrator(\n  sessionId: string, cwd: string, windowId: string,\n  message?: string, forceMode?: string\n): Promise<void>\n```\n\nAnd change line ~321:\n```typescript\n// Before:\nconst mode = lastCycle?.mode ?? 'strategy';\n\n// After:\nconst mode = forceMode ?? (lastCycle?.mode ?? 'strategy');\n```\n\nNo other callers are affected — existing calls pass `undefined` for `forceMode` and get the same behavior as before.\n\nThe clone passes `'strategy'` to ensure the orchestrator starts in planning mode regardless of what mode the source session was using (could have been `implementation`, `validation`, etc.).",
+          "agentNotes": "This is a 2-line change with zero impact on existing callers. The alternative — modifying the last cycle's mode in clone state — would corrupt the inherited history.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        },
+        {
+          "id": "DES-010",
+          "title": "Clone orientation message content",
+          "description": "What the orchestrator sees on its first cycle",
+          "content": "The orientation is passed as the `message` parameter to `spawnOrchestrator()`. It appears in the user prompt under `## Continuation Instructions`:\n\n```markdown\n## Continuation Instructions\n\nThe user resumed this session with new instructions:\n\nThis is a **cloned session**, forked from an existing session.\n\nSource session: {sourceId}\nPrevious goal: {sourceGoal}\n\nYou have full access to the previous session's context/, reports/,\nand cycle history. Use them as background for your work.\n\nYour new goal is: {newGoal}\n\n### Additional Context\n\n{context text, if --context was provided}\n\n**Important**: The source session continues independently.\nIt is the other session's responsibility. You do not need to monitor it.\n\n### Next Steps\n1. Review inherited context/ and reports/\n2. Write strategy.md for your approach\n3. Update roadmap.md with your work plan\n4. Begin delegating work to agents\n```\n\nThe `formatStateForOrchestrator()` already provides:\n- `## Goal` → the new goal (from clone's goal.md)\n- `## Context` → inherited context/ dir reference\n- `### Most Recent Cycle` → last cycle's agent reports\n- `## Strategy` → empty (unless --strategy was used)\n- `## Roadmap` → seed template\n\nSo the orchestrator sees the full picture: what was done before (history), what's available (context), and what to do next (orientation).\n\nREQ-011 (programmatic orientation) and REQ-012 (context passthrough) are both satisfied.",
+          "agentNotes": "The 'The user resumed this session with new instructions:' prefix comes from spawnOrchestrator's message handling at orchestrator.ts:377. This framing is close enough — the orchestrator understands it's getting new direction. The orientation body makes the clone nature explicit.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "cli-command",
+      "name": "CLI Command",
+      "goal": "Understand the clone command's argument parsing, output format, and registration",
+      "context": "CLI invocation pattern:\n\n  # From an orchestrator or agent pane (has SISYPHUS_SESSION_ID env)\n  sisyphus clone \"implement the auth system\" \\\n    --context \"focus on OAuth2 flow\" \\\n    --strategy \\\n    --name auth-clone\n\n  # Output (this IS the orchestrator's prompt continuation):\n  Session cloned successfully.\n    Clone: {cloneId}\n    Tmux:  {tmuxSessionName}\n\n  The cloned session now owns: \"implement the auth system\"\n  This is the other session's responsibility.\n  You do not need to monitor it.\n\n  Update your scope:\n  - Remove cloned work from goal.md\n  - Update roadmap.md to reflect reduced scope\n  - Update strategy.md if approach changes",
+      "items": [
+        {
+          "id": "DES-011",
+          "title": "clone.ts command implementation",
+          "description": "New file: src/cli/commands/clone.ts",
+          "content": "Create `src/cli/commands/clone.ts`:\n\n```typescript\nimport type { Command } from 'commander';\nimport { sendRequest } from '../client.js';\nimport type { Request } from '../../shared/protocol.js';\n\nexport function registerClone(program: Command): void {\n  program\n    .command('clone')\n    .description('Clone the current session with a new goal')\n    .argument('<goal>', 'Goal for the cloned session')\n    .option('-c, --context <context>', 'Additional background context')\n    .option('--strategy', 'Copy strategy.md from source session')\n    .option('-n, --name <name>', 'Human-readable name for the clone')\n    .action(async (\n      goal: string,\n      opts: { context?: string; strategy?: boolean; name?: string }\n    ) => {\n      const sessionId = process.env.SISYPHUS_SESSION_ID;\n      if (!sessionId) {\n        console.error(\n          'Error: SISYPHUS_SESSION_ID not set. ' +\n          'Run this from an orchestrator or agent pane.'\n        );  // REQ-003\n        process.exit(1);\n      }\n\n      const request: Request = {\n        type: 'clone',\n        sessionId,\n        goal,\n        context: opts.context,\n        name: opts.name,\n        strategy: opts.strategy ?? false,\n      };\n\n      const response = await sendRequest(request);\n      if (response.ok) {\n        const cloneId = response.data?.sessionId as string;\n        const tmuxName = response.data?.tmuxSessionName as string;\n\n        // Output is orchestrator guidance (REQ-013, REQ-015)\n        console.log('Session cloned successfully.');\n        console.log(`  Clone: ${cloneId}`);\n        console.log(`  Tmux:  ${tmuxName}`);\n        console.log('');\n        console.log(\n          `The cloned session now owns: \"${goal}\"`);\n        console.log(\n          'This is the other session\\'s responsibility. ' +\n          'You do not need to monitor it.');\n        console.log('');\n        console.log('Update your scope:');\n        console.log('- Remove cloned work from goal.md');\n        console.log('- Update roadmap.md to reflect reduced scope');\n        console.log('- Update strategy.md if approach changes');\n      } else {\n        console.error(`Error: ${response.error}`);\n        process.exit(1);\n      }\n    });\n}\n```\n\nRegister in `src/cli/index.ts` — add import and call `registerClone(program)` after `registerStart`.\n\nKey design choices:\n- No `--no-tmux-check` — clone always runs from within a sisyphus pane\n- No `SISYPHUS_CWD` reading — cwd comes from the source session via daemon\n- Session ID from env only (not positional) — clone is always from current session",
+          "agentNotes": "This follows the continue.ts pattern (reads session ID from env) more than the start.ts pattern (which takes cwd from env). The output format is carefully designed as orchestrator guidance per REQ-013/REQ-015 — no `sisyphus status` or `tail -f` commands that would encourage monitoring.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        },
+        {
+          "id": "DES-012",
+          "title": "CLI output as orchestrator guidance",
+          "description": "Output format satisfying REQ-013 and REQ-015",
+          "content": "The CLI output is consumed by the orchestrator (or agent) that called `sisyphus clone`. It's designed as a prompt, not human-facing info.\n\n**REQ-013** (behavioral guidance): The output explicitly states:\n> This is the other session's responsibility. You do not need to monitor it.\n\nThis prevents the orchestrator from trying to track the clone's progress.\n\n**REQ-015** (next-step instructions): The output instructs:\n> Update your scope:\n> - Remove cloned work from goal.md\n> - Update roadmap.md to reflect reduced scope\n> - Update strategy.md if approach changes\n\nThis ensures the source session narrows its own scope after cloning off work.\n\n**What's NOT in the output** (intentional omissions):\n- No `sisyphus status <cloneId>` — would encourage monitoring\n- No `tmux attach -t` — same reason\n- No file paths — the orchestrator knows its own files\n- No `tail -f ~/.sisyphus/daemon.log` — not relevant",
+          "agentNotes": "Compare with start.ts output (lines 54-73) which includes monitor and control commands. The clone output deliberately omits all of that. 'Every output is a prompt' — the requirements are explicit about this design philosophy.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "error-handling",
+      "name": "Error Handling",
+      "goal": "Map every error path from requirements to its implementation point",
+      "context": "Error paths through the system:\n\n  CLI (clone.ts)\n    ├─ SISYPHUS_SESSION_ID not set → exit 1     (REQ-003)\n    └─ sendRequest failure → exit 1\n\n  Server (server.ts)\n    └─ sessionTrackingMap miss → unknownSessionError  (REQ-022)\n\n  SessionManager (session-manager.ts)\n    ├─ source.status === 'completed' → throw      (REQ-019)\n    ├─ invalid name → throw\n    └─ tmux name collision → throw\n\n  State (state.ts)\n    └─ source dir missing → getSession throws     (REQ-022)",
+      "items": [
+        {
+          "id": "DES-013",
+          "title": "Error path matrix",
+          "description": "Complete mapping of requirements to error handling code",
+          "content": "| Requirement | Error Condition | Where Caught | Error Message | Exit |\n|---|---|---|---|---|\n| REQ-003 | `SISYPHUS_SESSION_ID` not set | `clone.ts` | \"SISYPHUS_SESSION_ID not set. Run this from an orchestrator or agent pane.\" | CLI exit 1 |\n| REQ-019 | Source session `status === 'completed'` | `session-manager.ts` cloneSession() | \"Cannot clone completed session {id}. Use `sisyphus continue` to reactivate it first.\" | Daemon throws → CLI exit 1 |\n| REQ-022 | Session ID not in tracking map | `server.ts` unknownSessionError() | \"Unknown session: {id}. Run `sisyphus list --all` to see available sessions.\" | `{ok:false}` → CLI exit 1 |\n| REQ-022 | Session dir missing on disk | `state.ts` getSession() | ENOENT on state.json read | Daemon throws → CLI exit 1 |\n| REQ-017 | Clone from active session | `session-manager.ts` | No error — proceeds normally | N/A |\n| REQ-018 | Clone from paused session | `session-manager.ts` | No error — proceeds normally | N/A |\n| REQ-020 | Empty context/ directory | `state.ts` cloneSessionDir() | No error — cpSync copies empty dir | N/A |\n| REQ-021 | Multiple clones from same source | All layers | No error — each clone gets fresh UUID | N/A |\n| (implicit) | Invalid `--name` format | `session-manager.ts` | \"Invalid session name: only alphanumeric, hyphens, underscores\" | Daemon throws → CLI exit 1 |\n| (implicit) | Tmux session name collision | `session-manager.ts` | \"Tmux session already exists\" | Daemon throws → CLI exit 1 |\n\n**Active session cloning (REQ-017)**: The source session's running agents are irrelevant to the clone. The clone copies state.json (with agent normalization) and files. Running agents in the source continue working — they don't know or care that a clone was made.\n\n**Paused session cloning (REQ-018)**: Same as active. Source stays paused. Clone starts active with its own tmux session.\n\n**Multiple clones (REQ-021)**: Each call generates a fresh UUID. File copies are independent. No cross-clone coordination needed.",
+          "agentNotes": "Error messages follow existing patterns. The unknownSessionError is reused from server.ts:76. The completed-session error suggests `sisyphus continue` as a recovery path, which is the existing mechanism for reactivating completed sessions.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "file-changes",
+      "name": "Implementation File Map",
+      "goal": "Complete list of files to create or modify, with the nature of each change",
+      "context": "All changes organized by layer:\n\n  shared/\n    ├── protocol.ts        (modify — add clone request type)\n    └── history-types.ts   (modify — add 2 event types)\n\n  daemon/\n    ├── state.ts           (modify — add cloneSessionDir, createCloneState,\n    │                                    replaceIdInDir)\n    ├── session-manager.ts (modify — add cloneSession function)\n    ├── server.ts          (modify — add clone case in handleRequest)\n    └── orchestrator.ts    (modify — add forceMode parameter)\n\n  cli/\n    ├── commands/clone.ts  (create — new command file)\n    └── index.ts           (modify — register clone command)",
+      "items": [
+        {
+          "id": "DES-014",
+          "title": "Complete file change manifest",
+          "description": "Every file touched, with line-level change descriptions",
+          "content": "**New files (1):**\n\n1. `src/cli/commands/clone.ts` — ~55 lines. `registerClone(program)` function.\n\n**Modified files (7):**\n\n1. `src/shared/protocol.ts:4` — Add `| { type: 'clone'; sessionId: string; goal: string; context?: string; name?: string; strategy?: boolean }` to Request union.\n\n2. `src/shared/history-types.ts:3` — Add `'session-cloned' | 'cloned-from'` to HistoryEventType union.\n\n3. `src/daemon/state.ts` — Add 3 functions:\n   - `replaceIdInDir()` (~20 lines, private)\n   - `cloneSessionDir()` (~35 lines, exported)\n   - `createCloneState()` (~45 lines, exported)\n   - Add `strategyPath` to paths import\n\n4. `src/daemon/session-manager.ts` — Add `cloneSession()` (~90 lines, exported). Uses existing imports (`uuidv4`, `state`, `orchestrator`, `tmux`, etc.) plus `resetAgentCounterFromState` from agent.ts.\n\n5. `src/daemon/server.ts:160` — Add `case 'clone'` block (~15 lines) in handleRequest switch.\n\n6. `src/daemon/orchestrator.ts:309` — Add `forceMode?: string` parameter, change mode resolution line. 2-line diff.\n\n7. `src/cli/index.ts` — Add import for `registerClone`, add `registerClone(program)` call. 2 lines.\n\n**Total**: ~260 lines of new code across 8 files. No test files listed — implementation agent should add tests to `src/__tests__/` following existing patterns (see `state.test.ts`, `session-logic.test.ts`).",
+          "agentNotes": "The Haiku naming block in cloneSession is ~35 lines of boilerplate identical to startSession's. An implementation agent might extract a shared helper, but that's an implementation detail — not a design decision. The design just requires the same behavior.",
+          "status": "draft",
+          "userNotes": "",
+          "reviewAction": null,
+          "userComment": ""
+        }
+      ],
+      "openQuestions": []
+    }
+  ]
+}

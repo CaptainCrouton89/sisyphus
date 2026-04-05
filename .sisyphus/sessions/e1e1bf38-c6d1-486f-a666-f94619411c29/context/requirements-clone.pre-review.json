@@ -1,0 +1,482 @@
+{
+  "meta": {
+    "title": "Session Cloning Requirements",
+    "subtitle": "EARS Behavioral Spec",
+    "summary": "Defines the behavioral requirements for `sisyphus clone \"goal\"` — a command that duplicates a running session with a new ID and goal, producing a fully independent session. The clone inherits accumulated context but diverges immediately. No parent-child relationship, no cross-session communication, no completion hooks.",
+    "version": 1,
+    "lastModified": "2026-04-04T12:00:00Z",
+    "draft": 1
+  },
+  "groups": [
+    {
+      "id": "cli-command",
+      "name": "CLI Command",
+      "description": "The `sisyphus clone` command interface and invocation behavior.",
+      "context": "The clone command is run by an orchestrator (or user) from within a sisyphus session pane. It reads the current session from the environment and sends a clone request to the daemon.\n\n  Orchestrator pane ──► `sisyphus clone \"new goal\"` ──► Daemon\n                                                          │\n                                                    ┌─────┴─────┐\n                                                    ▼           ▼\n                                              Clone session   Register\n                                              directory       new session\n                                                    │\n                                                    ▼\n                                              Spawn orchestrator\n                                              (strategy mode)\n                                                    │\n                                                    ▼\n                                              Print guidance\n                                              to stdout",
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "title": "Clone command invocation",
+          "ears": {
+            "when": "When the user runs `sisyphus clone \"goal\"`",
+            "shall": "the system shall read SISYPHUS_SESSION_ID from the environment, send a clone request to the daemon with the goal and current working directory, and print structured guidance output on success"
+          },
+          "criteria": [
+            { "text": "Command accepts a positional `task` argument (the new goal)", "checked": false },
+            { "text": "Command reads SISYPHUS_SESSION_ID from environment to identify the source session", "checked": false },
+            { "text": "Command sends a clone request to the daemon via the Unix socket", "checked": false },
+            { "text": "On success, prints guidance output to stdout (see Output Design group)", "checked": false },
+            { "text": "On failure, prints error to stderr and exits with code 1", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Follows the same pattern as `start.ts` — positional arg, `sendRequest()`, structured output. Unlike `start`, this must run from within an existing session (SISYPHUS_SESSION_ID required).",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-002",
+          "title": "Optional flags",
+          "ears": {
+            "where": "Where the user provides optional flags",
+            "shall": "the system shall accept `--prompt <text>` for free-form orchestrator instructions, `--strategy` to copy strategy.md from the source session, and `--name <name>` for a human-readable session name"
+          },
+          "criteria": [
+            { "text": "`--prompt <text>` passes free-form instructions to the clone's orchestrator as initial user prompt content", "checked": false },
+            { "text": "`--strategy` copies strategy.md from the source session into the clone (default: reset)", "checked": false },
+            { "text": "`--name <name>` sets a human-readable name for the cloned session (same validation as `start --name`)", "checked": false },
+            { "text": "All flags are optional — the command works with just the positional goal argument", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "`--prompt` is the primary mechanism for the calling orchestrator to tell the clone what to focus on. The clone always starts in strategy mode and reorients — `--prompt` gives it additional direction beyond the goal.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-003",
+          "title": "Missing session ID error",
+          "ears": {
+            "if": "If SISYPHUS_SESSION_ID is not set in the environment",
+            "shall": "then the system shall print an error indicating the clone command must be run from within a sisyphus session and exit with code 1"
+          },
+          "criteria": [
+            { "text": "Error message clearly states that SISYPHUS_SESSION_ID is required", "checked": false },
+            { "text": "Error message suggests running from an orchestrator or agent pane", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Unlike `start` which can be run from anywhere, `clone` requires a source session. The environment variable is the standard way agents and orchestrators identify their session.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "oq-cli-1",
+          "question": "Should the command name be `clone` or `fork`? The problem doc mentions both.",
+          "options": [
+            { "title": "clone", "description": "Most accurate — it's a copy-and-diverge operation. No git connotations of branching/merging." },
+            { "title": "fork", "description": "Familiar from Unix/GitHub. Implies independence. Slightly shorter to type." }
+          ],
+          "response": ""
+        }
+      ]
+    },
+    {
+      "id": "session-cloning",
+      "name": "Session Cloning Mechanics",
+      "description": "How the daemon creates the cloned session — what gets copied, what gets reset, and how the clone is registered.",
+      "context": "The clone operation creates a new session directory by selectively copying from the source. Accumulated knowledge (context/) is preserved. Operational state (logs, prompts, reports) is reset. The clone gets a fresh state.json with a new ID.\n\n  Source session dir              Clone session dir\n  ┌────────────────┐              ┌────────────────┐\n  │ context/    ───────COPY──────►│ context/       │  (ID-replaced)\n  │ goal.md     ───────NEW───────►│ goal.md        │  (new goal)\n  │ strategy.md    (--strategy)──►│ strategy.md    │  (reset or copy)\n  │ roadmap.md  ───────RESET─────►│ roadmap.md     │  (seed template)\n  │ state.json  ───────NEW───────►│ state.json     │  (fresh state)\n  │ prompts/       ×  not copied  │ prompts/       │  (empty)\n  │ reports/       ×  not copied  │ reports/       │  (empty)\n  │ snapshots/     ×  not copied  │ snapshots/     │  (empty)\n  │ logs/          ×  not copied  │ logs/          │  (empty)\n  └────────────────┘              └────────────────┘",
+      "requirements": [
+        {
+          "id": "REQ-004",
+          "title": "Context directory copying",
+          "ears": {
+            "when": "When the daemon processes a clone request",
+            "shall": "the system shall recursively copy the source session's context/ directory into the clone's session directory, preserving all files and subdirectory structure"
+          },
+          "criteria": [
+            { "text": "All files and subdirectories in context/ are copied to the clone", "checked": false },
+            { "text": "File permissions and structure are preserved", "checked": false },
+            { "text": "The context/CLAUDE.md file is included in the copy", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "context/ is the accumulated knowledge from exploration agents, design decisions, integration maps, etc. This is the primary value of cloning over starting fresh.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-005",
+          "title": "Session ID replacement in copied files",
+          "ears": {
+            "when": "When context files are copied to the clone",
+            "shall": "the system shall replace all occurrences of the source session ID with the new clone session ID in all copied text files"
+          },
+          "criteria": [
+            { "text": "All text files in the copied context/ have the old session ID replaced with the new one", "checked": false },
+            { "text": "Binary files (images, etc.) are copied without modification", "checked": false },
+            { "text": "Replacement is exact string match (UUID format), not regex", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Context files often contain paths that reference the session ID (e.g., `.sisyphus/sessions/{id}/context/`). Without replacement, the clone's context would reference the source session's paths.",
+          "userNotes": "",
+          "questions": [
+            {
+              "id": "q-005-1",
+              "question": "Should strategy.md (when --strategy is used) also get ID replacement?",
+              "response": ""
+            }
+          ]
+        },
+        {
+          "id": "REQ-006",
+          "title": "Goal file creation",
+          "ears": {
+            "when": "When the clone session directory is created",
+            "shall": "the system shall write the new goal (from the positional argument) to goal.md in the clone's session directory"
+          },
+          "criteria": [
+            { "text": "goal.md contains the task string from the clone command", "checked": false },
+            { "text": "The source session's goal.md is NOT copied", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "The whole point of cloning is to diverge with a new goal. The source goal is irrelevant to the clone.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-007",
+          "title": "Fresh state initialization",
+          "ears": {
+            "when": "When the clone session is registered with the daemon",
+            "shall": "the system shall create a new state.json with a fresh UUID, the new task, zero cycles, zero agents, empty messages, and active status"
+          },
+          "criteria": [
+            { "text": "Clone gets a new UUID (not derived from source)", "checked": false },
+            { "text": "state.json has task set to the new goal", "checked": false },
+            { "text": "orchestratorCycles, agents, and messages arrays are empty", "checked": false },
+            { "text": "activeMs starts at 0", "checked": false },
+            { "text": "Status is 'active'", "checked": false },
+            { "text": "No parentSessionId or childSessionIds fields are written", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "The clone is a brand new session from the daemon's perspective. No hierarchy fields. Uses the existing `createSession()` pattern from state.ts, then overlays the copied context.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-008",
+          "title": "Operational directories reset",
+          "ears": {
+            "when": "When the clone session directory is created",
+            "shall": "the system shall create empty prompts/, reports/, snapshots/, and logs/ directories and a seed roadmap.md template"
+          },
+          "criteria": [
+            { "text": "prompts/ directory exists and is empty", "checked": false },
+            { "text": "reports/ directory exists and is empty", "checked": false },
+            { "text": "snapshots/ directory exists and is empty", "checked": false },
+            { "text": "logs/ directory exists and is empty", "checked": false },
+            { "text": "roadmap.md contains the seed template (same as new sessions)", "checked": false },
+            { "text": "digest.json is NOT copied from source", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "These are operational artifacts of a running session. The clone starts fresh — it will generate its own prompts, logs, reports, and roadmap as it works.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-009",
+          "title": "Optional strategy copying",
+          "ears": {
+            "where": "Where the user provides the `--strategy` flag",
+            "shall": "the system shall copy strategy.md from the source session into the clone's session directory"
+          },
+          "criteria": [
+            { "text": "With --strategy: source strategy.md is copied to clone", "checked": false },
+            { "text": "Without --strategy: clone gets no strategy.md (orchestrator creates its own in strategy mode)", "checked": false },
+            { "text": "If source has no strategy.md and --strategy is passed, no error — clone proceeds without it", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Strategy is often session-specific enough that copying it is counterproductive. But in cases where the clone is handling a closely related sub-problem, the original strategy provides useful context for reorientation.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "clone-startup",
+      "name": "Clone Startup & Orientation",
+      "description": "How the cloned session launches and orients itself.",
+      "context": "After the session directory is prepared, the daemon registers the clone and spawns an orchestrator in a new tmux session. The orchestrator starts in strategy mode with a programmatic orientation prompt plus any user-provided --prompt content.\n\n  Daemon ──► Register clone session\n                    │\n                    ▼\n             Create tmux session\n                    │\n                    ▼\n             Spawn orchestrator\n             (strategy mode)\n                    │\n              ┌─────┴──────┐\n              ▼            ▼\n        Programmatic    --prompt\n        context         content\n        (always)        (if provided)",
+      "requirements": [
+        {
+          "id": "REQ-010",
+          "title": "Orchestrator spawned in strategy mode",
+          "ears": {
+            "when": "When the clone session is fully initialized",
+            "shall": "the system shall spawn an orchestrator in a new tmux session in strategy mode"
+          },
+          "criteria": [
+            { "text": "Clone gets its own tmux session (same naming pattern as `start`)", "checked": false },
+            { "text": "Orchestrator starts in strategy mode", "checked": false },
+            { "text": "Clone session is tracked by the daemon (pane monitor, status dots, etc.)", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Strategy mode is the right starting point — the clone has context but a new goal, so it needs to build a new strategy and roadmap before spawning agents.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-011",
+          "title": "Programmatic orientation context",
+          "ears": {
+            "when": "When the clone's orchestrator is spawned",
+            "shall": "the system shall provide programmatic context explaining that this session was cloned from another session, stating the new goal, listing what context was inherited, and instructing it to build a new strategy and roadmap"
+          },
+          "criteria": [
+            { "text": "Context identifies this as a cloned session (not a fresh start)", "checked": false },
+            { "text": "Context states the source session ID for reference", "checked": false },
+            { "text": "Context describes what was inherited (context/ files, optionally strategy.md)", "checked": false },
+            { "text": "Context instructs the orchestrator to reorient: build new strategy and roadmap for the cloned goal", "checked": false },
+            { "text": "Context explicitly states this session is independent — no coordination with the source", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "This is the 'starter prompt' — delivered the same way `start --context` works (written to context/initial-context.md or equivalent). It orients the clone's orchestrator so it doesn't start blind.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-012",
+          "title": "User-provided prompt passthrough",
+          "ears": {
+            "where": "Where the user provides `--prompt <text>`",
+            "shall": "the system shall pass the prompt text to the clone's orchestrator as additional initial context alongside the programmatic orientation"
+          },
+          "criteria": [
+            { "text": "--prompt content is delivered to the orchestrator (not replacing the programmatic context, but alongside it)", "checked": false },
+            { "text": "The orchestrator sees both the programmatic orientation and the user's prompt", "checked": false },
+            { "text": "Without --prompt, only the programmatic context is provided", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "This is how the calling orchestrator passes specific instructions to the clone — e.g., 'Focus on the auth token refresh flow, the relevant exploration is in context/explore-auth.md'.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "oq-startup-1",
+          "question": "Should the clone's initial context reference specific files in context/ that were copied, or just say 'context/ was inherited'?",
+          "options": [
+            { "title": "List specific files", "description": "More helpful for orientation — the orchestrator knows exactly what's available without exploring. But adds complexity and verbosity." },
+            { "title": "Generic reference", "description": "Simpler. The orchestrator will explore context/ in strategy mode anyway. Avoids the prompt growing with large context dirs." }
+          ],
+          "response": ""
+        }
+      ]
+    },
+    {
+      "id": "output-design",
+      "name": "Output Design",
+      "description": "The guidance output printed to stdout after a successful clone — this IS the mechanism for informing the calling orchestrator.",
+      "context": "Following sisyphus's 'every output is a prompt' principle, the clone command's stdout is the primary way the calling orchestrator learns what happened and what to do next. The orchestrator runs the command and reads its output — so the output must be comprehensive and actionable.\n\n  Orchestrator runs clone ──► Reads stdout\n                                   │\n                          ┌────────┼────────┐\n                          ▼        ▼        ▼\n                     Confirmation  Files   Next steps\n                     of clone      copied  for THIS session\n                                           │\n                                    ┌──────┼──────┐\n                                    ▼      ▼      ▼\n                               Update   Update   Do NOT\n                               goal    roadmap  coordinate\n                                                with clone",
+      "requirements": [
+        {
+          "id": "REQ-013",
+          "title": "Clone confirmation output",
+          "ears": {
+            "when": "When the clone operation succeeds",
+            "shall": "the system shall print a confirmation block stating the new session ID, the new goal, and the tmux session name"
+          },
+          "criteria": [
+            { "text": "Output includes the new session ID", "checked": false },
+            { "text": "Output includes the new goal", "checked": false },
+            { "text": "Output includes the tmux session name for attaching", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "This is the 'what happened' section. Brief, factual.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-014",
+          "title": "Files copied summary",
+          "ears": {
+            "when": "When the clone operation succeeds",
+            "shall": "the system shall print a summary of what files were copied from the source session and what session IDs were replaced"
+          },
+          "criteria": [
+            { "text": "Lists files/directories that were copied (context/, optionally strategy.md)", "checked": false },
+            { "text": "States that session IDs were replaced in text files", "checked": false },
+            { "text": "Lists what was reset/not copied (roadmap, state, prompts, reports, logs, snapshots, digest)", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Transparency about what the clone inherited helps the orchestrator understand the clone's starting point.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-015",
+          "title": "Next-step instructions for calling orchestrator",
+          "ears": {
+            "when": "When the clone operation succeeds",
+            "shall": "the system shall print explicit next-step instructions telling the calling orchestrator to update its own goal.md, roadmap.md, and strategy.md to remove the cloned responsibility, and to NOT coordinate with or wait for the clone"
+          },
+          "criteria": [
+            { "text": "Instructs orchestrator to update goal.md to remove the scope that was cloned off", "checked": false },
+            { "text": "Instructs orchestrator to update roadmap.md to remove phases/steps related to the cloned scope", "checked": false },
+            { "text": "Instructs orchestrator to update strategy.md to adjust remaining scope", "checked": false },
+            { "text": "Explicitly states: do NOT coordinate with, wait for, or monitor the clone", "checked": false },
+            { "text": "States that the clone is fully independent and will handle its own scope", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "This is the most important part of the output. The orchestrator needs clear, imperative instructions about what to do with its own session after the clone. Without this, the orchestrator might try to coordinate with the clone or forget to update its own scope.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-016",
+          "title": "Monitor command in output",
+          "ears": {
+            "when": "When the clone operation succeeds",
+            "shall": "the system shall print a `sisyphus status <cloneId>` command that can be used to monitor the clone's progress"
+          },
+          "criteria": [
+            { "text": "Output includes a ready-to-run `sisyphus status <id>` command for the clone", "checked": false },
+            { "text": "Output includes a `tmux attach -t <session>` command for the clone's tmux session", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Informational only — the calling orchestrator should NOT use these to coordinate. They're there for the user to manually check on the clone if desired.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "edge-cases",
+      "name": "Edge Cases & Error Handling",
+      "description": "Behavior when cloning from non-standard session states or encountering unexpected conditions.",
+      "context": "The clone command may be invoked in various session states. Each needs a clear behavior.\n\n  Source session state ──► Clone behavior\n  ─────────────────────────────────────────\n  active (agents running)  ──► Allow (normal case)\n  active (no agents)       ──► Allow\n  paused                   ──► Allow\n  completed                ──► Reject\n  not found                ──► Error",
+      "requirements": [
+        {
+          "id": "REQ-017",
+          "title": "Clone from active session",
+          "ears": {
+            "when": "When a clone is requested from a session with status 'active'",
+            "shall": "the system shall proceed with the clone regardless of whether agents are currently running in the source session"
+          },
+          "criteria": [
+            { "text": "Clone succeeds when source has running agents", "checked": false },
+            { "text": "Clone succeeds when source has no running agents", "checked": false },
+            { "text": "Running agents in the source session are not affected by the clone", "checked": false },
+            { "text": "Source session continues operating normally after clone", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "The clone reads files from the source directory — it doesn't interact with running agents. The source session is unaffected.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-018",
+          "title": "Clone from paused session",
+          "ears": {
+            "when": "When a clone is requested from a session with status 'paused'",
+            "shall": "the system shall proceed with the clone normally — the source session's paused state does not affect the clone"
+          },
+          "criteria": [
+            { "text": "Clone succeeds from a paused session", "checked": false },
+            { "text": "Source session remains paused (clone does not resume it)", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "A paused session still has its full directory with context/, so cloning is perfectly valid.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-019",
+          "title": "Clone from completed session rejected",
+          "ears": {
+            "if": "If a clone is requested from a session with status 'completed'",
+            "shall": "then the system shall reject the clone with an error suggesting `sisyphus start` or `sisyphus continue` instead"
+          },
+          "criteria": [
+            { "text": "Error message states that completed sessions cannot be cloned", "checked": false },
+            { "text": "Error suggests alternatives: `sisyphus start` for a new session or `sisyphus continue` to resume", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Completed sessions are done. Cloning a completed session is ambiguous — if you want to continue the work, use `continue`. If you want a fresh start with context, this is a design question.",
+          "userNotes": "",
+          "questions": [
+            {
+              "id": "q-019-1",
+              "question": "Should completed sessions be clonable? The context/ is still there and potentially valuable. An alternative is to allow it but warn.",
+              "response": ""
+            }
+          ]
+        },
+        {
+          "id": "REQ-020",
+          "title": "Empty context directory",
+          "ears": {
+            "when": "When a clone is requested from a session whose context/ directory is empty or contains only CLAUDE.md",
+            "shall": "the system shall proceed with the clone normally — an empty context is valid"
+          },
+          "criteria": [
+            { "text": "Clone succeeds even with no context files beyond CLAUDE.md", "checked": false },
+            { "text": "Output notes that no substantive context files were inherited", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Early-stage sessions may not have accumulated context yet. Cloning still makes sense — the clone gets the goal divergence even without inherited knowledge.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-021",
+          "title": "Multiple clones from same source",
+          "ears": {
+            "when": "When multiple clone requests are made from the same source session",
+            "shall": "the system shall create independent clones each time — each clone gets its own ID and is unrelated to other clones"
+          },
+          "criteria": [
+            { "text": "Each clone gets a unique session ID", "checked": false },
+            { "text": "Clones are unaware of each other", "checked": false },
+            { "text": "Source session is unmodified by any number of clones", "checked": false },
+            { "text": "Each clone's context/ has the source session ID replaced with its own unique ID", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "No artificial limit on clones. Each is an independent session. An orchestrator might clone multiple times to split work across several sub-problems.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-022",
+          "title": "Source session not found",
+          "ears": {
+            "if": "If the session ID from the environment does not match any registered session",
+            "shall": "then the system shall return an error indicating the source session was not found"
+          },
+          "criteria": [
+            { "text": "Error message includes the session ID that was not found", "checked": false },
+            { "text": "Exits with code 1", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Standard error handling — same pattern as other commands that require an active session.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "oq-edge-1",
+          "question": "Should a history event (`session-cloned`) be emitted on the source session for audit trail purposes?",
+          "options": [
+            { "title": "Yes — emit on source", "description": "Adds traceability. You can see in the source session's history that it was cloned and when. No behavioral effect, purely informational." },
+            { "title": "Yes — emit on both", "description": "Source gets 'session-cloned' event, clone gets 'cloned-from' event. Full bidirectional audit trail." },
+            { "title": "No", "description": "Keep it simple. The clone's existence is visible in `sisyphus list`. No need to pollute history with cross-references." }
+          ],
+          "response": ""
+        }
+      ]
+    }
+  ]
+}

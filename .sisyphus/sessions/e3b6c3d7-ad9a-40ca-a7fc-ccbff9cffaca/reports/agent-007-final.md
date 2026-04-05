@@ -1,0 +1,1 @@
+test/integration/suites/test-base.sh created and all 10 assertions implemented

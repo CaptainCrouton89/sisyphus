@@ -1,0 +1,1 @@
+Wrote /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/cli-terminal-ux.md — 355 lines covering all 11 required sections with real citations from clig.dev, 12-factor-cli, GNU standards, Thoughtworks, Atlassian, Charm/Bubbletea, XDG spec, Lucas Costa, and Google

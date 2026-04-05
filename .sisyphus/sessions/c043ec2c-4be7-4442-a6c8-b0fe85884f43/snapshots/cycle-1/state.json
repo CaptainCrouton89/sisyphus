@@ -1,0 +1,199 @@
+{
+  "id": "c043ec2c-4be7-4442-a6c8-b0fe85884f43",
+  "task": "Create 6 new authoring skills in /Users/silasrhyneer/Code/crouton-kit/plugins/authoring/skills/ — each with SKILL.md and reference.md, deeply researched with citations from papers, blogs, Twitter/X, Reddit. Skills: (1) multi-agent-orchestration, (2) system-vs-user-prompt, (3) structured-output, (4) context-management, (5) tool-design, (6) evaluation-quality-gates. Use research-lead agent types. Read existing output-variety and prompting-effectively skills for format reference.",
+  "context": "Target directory: /Users/silasrhyneer/Code/crouton-kit/plugins/authoring/skills/. Format references: output-variety/SKILL.md + reference.md, prompting-effectively/SKILL.md, skills/SKILL.md (authoring guide). Each SKILL.md ~150-200 lines, each reference.md ~150-250 lines with code examples. Agents should do deep web research FIRST (papers, blogs, Twitter/X, Reddit, HN) before writing. Cite sources inline. Use research-lead agent type for each skill. All 6 skills are independent and can be built in parallel.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "active",
+  "createdAt": "2026-04-04T21:31:49.992Z",
+  "activeMs": 0,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "research-orchestration",
+      "agentType": "sisyphus:research-lead",
+      "provider": "anthropic",
+      "claudeSessionId": "ec734e9d-087b-41ff-8a2d-4bd955cfa996",
+      "color": "blue",
+      "instruction": "Research the topic: **Multi-Agent Orchestration for LLMs**\n\nThis research will be used to write an authoring skill (instructional reference material for prompt engineers building multi-agent systems). Focus on practical, evidence-backed knowledge.\n\n## What to research\n\n1. **Orchestration patterns**: hub-and-spoke, pipeline, debate/critic, hierarchical delegation. What works in production?\n2. **Agent communication**: how agents share context, hand off work, resolve conflicts. Message passing vs shared state.\n3. **Failure modes**: cascading errors, context pollution between agents, coordination overhead, agents fighting each other.\n4. **Practical frameworks**: LangGraph, CrewAI, AutoGen, Anthropic's multi-agent patterns, OpenAI Swarm. What design decisions did they make and why?\n5. **Prompt design for orchestrators vs workers**: how system prompts differ for coordinator agents vs task agents.\n6. **Scaling considerations**: when to use multi-agent vs single agent, diminishing returns, cost/latency tradeoffs.\n\n## Sources to find\n- Academic papers (arXiv, Semantic Scholar)\n- Anthropic's documentation and blog posts on multi-agent patterns\n- OpenAI cookbook / blog posts\n- Practitioner blog posts (Simon Willison, Swyx, etc.)\n- Twitter/X threads from AI engineers\n- Reddit r/LocalLLaMA, r/MachineLearning, r/ClaudeAI discussions\n- Hacker News discussions\n\n## Output\nSave a structured research report to:\n/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-multi-agent-orchestration.md\n\nStructure: Key Findings → Patterns & Techniques (with citations) → Common Mistakes → Notable Sources (with URLs) → Code/Config Examples from real systems",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T21:37:03.395Z",
+      "completedAt": "2026-04-04T21:54:33.371Z",
+      "activeMs": 1050198,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/reports/agent-001-final.md",
+          "summary": "Multi-agent orchestration achieves 81% performance gains on parallelizable tasks but requires stateless patterns to avoid coordination failures that cause 41-86.7% production failure rates.",
+          "timestamp": "2026-04-04T21:54:33.367Z"
+        }
+      ],
+      "paneId": "%237",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='agent-001' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/prompts/agent-001-plugin\" --agent 'sisyphus:research-lead' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Granite"
+    },
+    {
+      "id": "agent-002",
+      "name": "research-system-user",
+      "agentType": "sisyphus:research-lead",
+      "provider": "anthropic",
+      "claudeSessionId": "52ab82ac-0299-42b9-bd9d-e6487663df8b",
+      "color": "blue",
+      "instruction": "Research the topic: **System Prompt vs User Prompt — Placement, Mechanics, and Best Practices**\n\nThis research will be used to write an authoring skill (instructional reference material for prompt engineers). Focus on evidence-backed knowledge about where instructions belong and why.\n\n## What to research\n\n1. **Mechanical differences**: how models treat system vs user content differently (attention patterns, positional encoding, instruction priority). Any papers or benchmarks measuring this.\n2. **Prompt caching implications**: Anthropic's prompt caching, OpenAI's cached prompts — how placement affects cost and latency.\n3. **Security/jailbreak angle**: system prompt as defense layer, user prompt injection attacks, how placement affects robustness.\n4. **Multi-turn degradation**: \"Lost in the Middle\" (Liu et al. 2023) and related work on how instructions degrade over conversation length.\n5. **Provider-specific behaviors**: differences between Anthropic, OpenAI, Google in how they handle system prompts.\n6. **Practical guidelines**: what practitioners actually do — blog posts, threads about system prompt design.\n7. **The \"developer message\" evolution**: OpenAI's shift from system→developer messages, what it means.\n\n## Sources to find\n- Academic papers: \"Lost in the Middle\", attention pattern studies, prompt injection research\n- Anthropic docs on system prompts, prompt caching\n- OpenAI docs on system/developer messages\n- Practitioner blogs and Twitter/X threads\n- Reddit/HN discussions on prompt placement strategies\n\n## Output\nSave to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-system-vs-user-prompt.md\n\nStructure: Key Findings → Mechanics & Evidence (with citations) → Practical Guidelines → Provider Differences → Common Mistakes → Notable Sources (with URLs)",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T21:37:13.243Z",
+      "completedAt": "2026-04-04T21:41:37.274Z",
+      "activeMs": 265053,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/reports/agent-002-final.md",
+          "summary": "Agent research on system vs user prompts completed: comprehensive analysis of mechanical differences, caching strategies, security implications, multi-turn degradation, and provider-specific implementations with academic citations.",
+          "timestamp": "2026-04-04T21:41:37.270Z"
+        }
+      ],
+      "paneId": "%238",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='agent-002' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/prompts/agent-002-plugin\" --agent 'sisyphus:research-lead' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Perseverant"
+    },
+    {
+      "id": "agent-003",
+      "name": "research-structured",
+      "agentType": "sisyphus:research-lead",
+      "provider": "anthropic",
+      "claudeSessionId": "cd6e3116-a9da-4f79-bc0b-71e750105615",
+      "color": "blue",
+      "instruction": "Research the topic: **Structured Output from LLMs — JSON, Schemas, and Constrained Generation**\n\nThis research will be used to write an authoring skill (instructional reference material for prompt engineers). Focus on practical, evidence-backed knowledge.\n\n## What to research\n\n1. **Constrained decoding**: how structured output actually works under the hood (grammar-guided generation, JSON mode, tool_use forcing). Papers and blog posts.\n2. **Schema design for LLMs**: JSON Schema best practices specific to LLM output — what schema patterns models handle well vs poorly. Nested objects, enums, unions, arrays.\n3. **Zod/Pydantic patterns**: using type systems to define and validate LLM output. Anthropic's tool_use, OpenAI's structured outputs, instructor library.\n4. **Failure modes**: schema violations, partial outputs, hallucinated fields, type coercion issues. How to handle gracefully.\n5. **Performance impact**: does forcing structured output affect quality? Any benchmarks comparing free-form vs constrained.\n6. **Tool use as structured output**: using function calling / tool_use as a structured output mechanism even when you don't need tools.\n7. **Streaming structured output**: partial JSON parsing, progressive validation.\n\n## Sources to find\n- Papers on constrained decoding (guidance, outlines, LMQL)\n- Anthropic docs on tool_use and JSON output\n- OpenAI structured outputs documentation and blog posts\n- Jason Liu's instructor library and blog posts\n- Practitioner threads on Twitter/X about structured output gotchas\n- Reddit/HN discussions\n\n## Output\nSave to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-structured-output.md\n\nStructure: Key Findings → Techniques & Patterns (with citations) → Schema Design Guidelines → Failure Modes → Provider Comparison → Notable Sources (with URLs) → Code Examples",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T21:37:23.135Z",
+      "completedAt": "2026-04-04T21:48:02.540Z",
+      "activeMs": 640116,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/reports/agent-003-final.md",
+          "summary": "Researched constrained decoding across 5 agents; compiled 600-line guide covering schema design, provider constraints, failure modes, and streaming patterns with 27+ sources.",
+          "timestamp": "2026-04-04T21:48:02.537Z"
+        }
+      ],
+      "paneId": "%239",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='agent-003' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/prompts/agent-003-plugin\" --agent 'sisyphus:research-lead' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persister"
+    },
+    {
+      "id": "agent-004",
+      "name": "research-context",
+      "agentType": "sisyphus:research-lead",
+      "provider": "anthropic",
+      "claudeSessionId": "925cf4b4-e2ee-4df2-9c90-fae8aff6b907",
+      "color": "blue",
+      "instruction": "Research the topic: **Context Management for LLM Applications — Windows, Retrieval, and Compression**\n\nThis research will be used to write an authoring skill (instructional reference material for prompt engineers building LLM-powered tools). Focus on practical, evidence-backed knowledge.\n\n## What to research\n\n1. **Context window mechanics**: how models use context, attention patterns across window length, the \"lost in the middle\" phenomenon. Recent papers on long-context models.\n2. **RAG (Retrieval-Augmented Generation)**: chunking strategies, embedding models, retrieval quality vs context stuffing. What actually works in production.\n3. **Context compression**: summarization chains, sliding window approaches, recursive summarization. When compression helps vs hurts.\n4. **Token budgeting**: how to allocate context window space between system prompt, conversation history, retrieved documents, and working memory.\n5. **Caching strategies**: Anthropic prompt caching, conversation pruning, cache-friendly prompt design.\n6. **Multi-turn context management**: conversation history pruning, rolling summaries, when to reset context.\n7. **Tool results and context pollution**: managing context when tool calls return large amounts of data.\n\n## Sources to find\n- Papers: \"Lost in the Middle\" (Liu et al.), long-context benchmarks (RULER, Needle-in-Haystack), RAG papers\n- Anthropic docs on context windows, prompt caching\n- OpenAI docs on context management\n- Blog posts from LlamaIndex, LangChain teams on RAG patterns\n- Practitioner posts about context window management in production\n- Twitter/X threads, Reddit/HN discussions\n\n## Output\nSave to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-context-management.md\n\nStructure: Key Findings → Context Window Mechanics (with citations) → RAG Patterns → Compression Techniques → Token Budgeting → Caching → Common Mistakes → Notable Sources (with URLs)",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T21:37:32.145Z",
+      "completedAt": "2026-04-04T22:02:06.378Z",
+      "activeMs": 1475287,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/reports/agent-004-final.md",
+          "summary": "Research complete. Output: .sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-context-management.md (390 lines)\n\nCovers all 7 requested topics with citations:\n1. Context window m",
+          "timestamp": "2026-04-04T22:02:06.374Z"
+        }
+      ],
+      "paneId": "%240",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='agent-004' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/prompts/agent-004-plugin\" --agent 'sisyphus:research-lead' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Trudge"
+    },
+    {
+      "id": "agent-005",
+      "name": "research-tools",
+      "agentType": "sisyphus:research-lead",
+      "provider": "anthropic",
+      "claudeSessionId": "4658e387-ef84-487b-a625-9183cc03840a",
+      "color": "blue",
+      "instruction": "Research the topic: **Tool Design for LLM Agents — Descriptions, Parameters, Schemas, and Composition**\n\nThis research will be used to write an authoring skill (instructional reference material for prompt engineers designing tool interfaces). Focus on practical, evidence-backed knowledge.\n\n## What to research\n\n1. **How models select tools**: what signals drive tool selection — description quality, parameter names, schema structure. Any papers or benchmarks on tool selection accuracy.\n2. **Description writing**: best practices for tool descriptions that models parse correctly. Front-loading, disambiguation, negative examples.\n3. **Parameter design**: naming conventions, enum vs free-text, required vs optional, nested objects. What schema patterns models handle well.\n4. **Error message design**: how error messages affect model recovery. Structured errors vs string errors. Self-correction patterns.\n5. **Tool granularity**: focused vs composite tools, the \"action parameter\" anti-pattern, when to merge vs split.\n6. **MCP (Model Context Protocol)**: Anthropic's protocol for tool serving. Design patterns, adoption, practical considerations.\n7. **Tool composition**: pagination, prerequisite chains, output-as-input patterns. How to design tools that work well together.\n8. **Benchmarks**: ToolBench, API-Bank, Gorilla — what do they tell us about tool design?\n\n## Sources to find\n- Papers: ToolBench, Gorilla, API-Bank, tool-use benchmarks\n- Anthropic MCP documentation and blog posts\n- OpenAI function calling documentation and cookbook\n- Practitioner blog posts on tool design\n- Twitter/X threads from people building agent tool systems\n- Reddit/HN discussions on function calling gotchas\n\n## Output\nSave to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-tool-design.md\n\nStructure: Key Findings → Tool Selection Mechanics (with citations) → Description Best Practices → Parameter Design → Error Handling → Granularity Guidelines → MCP Patterns → Benchmarks → Notable Sources (with URLs)",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T21:37:41.616Z",
+      "completedAt": "2026-04-04T21:47:54.205Z",
+      "activeMs": 610110,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/reports/agent-005-final.md",
+          "summary": "Completed comprehensive research document on LLM tool design covering 8 key areas: selection mechanics, descriptions, parameters, error handling, granularity, MCP patterns, composition, and benchmarks with 27 cited sources.",
+          "timestamp": "2026-04-04T21:47:54.202Z"
+        }
+      ],
+      "paneId": "%241",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='agent-005' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/prompts/agent-005-plugin\" --agent 'sisyphus:research-lead' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Perseverance"
+    },
+    {
+      "id": "agent-006",
+      "name": "research-eval",
+      "agentType": "sisyphus:research-lead",
+      "provider": "anthropic",
+      "claudeSessionId": "ed02e758-82f3-479b-9ce6-62f850a77d72",
+      "color": "blue",
+      "instruction": "Research the topic: **Evaluation and Quality Gates for LLM Systems — Testing, Metrics, and Guardrails**\n\nThis research will be used to write an authoring skill (instructional reference material for prompt engineers building reliable LLM systems). Focus on practical, evidence-backed knowledge.\n\n## What to research\n\n1. **LLM-as-judge**: using models to evaluate model outputs. Calibration, bias, agreement with human evaluators. Papers and practical findings.\n2. **Evaluation frameworks**: promptfoo, RAGAS, DeepEval, Braintrust, LangSmith. What design decisions did they make? What metrics do they compute?\n3. **Quality gate patterns**: how to build automated quality gates in LLM pipelines — output validation, confidence thresholds, fallback strategies.\n4. **Prompt regression testing**: how to detect when prompt changes break existing behavior. Snapshot testing, eval suites, CI integration.\n5. **Metrics that matter**: accuracy, faithfulness, relevance, toxicity, format compliance. Which metrics are actually useful vs theater.\n6. **Human evaluation**: when LLM-as-judge fails and you need humans. Annotation guidelines, inter-rater reliability.\n7. **Production monitoring**: detecting drift, quality degradation over time, alerting on output quality.\n8. **Guardrails and safety**: constitutional AI, output filtering, content moderation as quality gates.\n\n## Sources to find\n- Papers: LLM-as-judge (Zheng et al.), RAGAS, evaluation benchmarks\n- Anthropic docs on evaluation, constitutional AI\n- OpenAI evals framework and documentation\n- Hamel Husain's blog posts on LLM evaluation\n- Eugene Yan's writing on evaluation\n- promptfoo documentation and blog\n- Twitter/X threads from ML engineers on eval practices\n- Reddit/HN discussions on LLM testing\n\n## Output\nSave to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/context/research-eval-quality-gates.md\n\nStructure: Key Findings → LLM-as-Judge (with citations) → Evaluation Frameworks → Quality Gate Patterns → Regression Testing → Metrics Guide → Production Monitoring → Notable Sources (with URLs) → Code Examples",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T21:37:50.525Z",
+      "completedAt": "2026-04-04T21:48:47.452Z",
+      "activeMs": 660119,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/reports/agent-006-final.md",
+          "summary": "Comprehensive research on LLM evaluation frameworks, quality gates, and monitoring produced 926-line document covering 8 topics with citations, code examples, and practical patterns.",
+          "timestamp": "2026-04-04T21:48:47.448Z"
+        }
+      ],
+      "paneId": "%242",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='agent-006' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43/prompts/agent-006-plugin\" --agent 'sisyphus:research-lead' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persistence"
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-04T21:31:50.324Z",
+      "activeMs": 385086,
+      "agentsSpawned": [
+        "agent-001",
+        "agent-002",
+        "agent-003",
+        "agent-004",
+        "agent-005",
+        "agent-006"
+      ],
+      "paneId": "%236",
+      "claudeSessionId": "047768bb-c14f-4de6-b7ba-b7e7607a529d",
+      "mode": "planning",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/c043ec2c-4be7-4442-a6c8-b0fe85884f43' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='c043ec2c'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-04T21:38:12.136Z",
+      "nextPrompt": "Research agents running. Review all 6 reports in context/research-*.md. Assess quality and citation depth. Then spawn writing agents to produce SKILL.md + reference.md for each skill. Format reference in context/format-reference.md. Existing output-variety and prompting-effectively skills in /Users/silasrhyneer/Code/crouton-kit/plugins/authoring/skills/ are the style targets."
+    }
+  ],
+  "messages": [],
+  "startHour": 14,
+  "startDayOfWeek": 6,
+  "launchConfig": {
+    "context": "Target directory: /Users/silasrhyneer/Code/crouton-kit/plugins/authoring/skills/. Format references: output-variety/SKILL.md + reference.md, prompting-effectively/SKILL.md, skills/SKILL.md (authoring guide). Each SKILL.md ~150-200 lines, each reference.md ~150-250 lines with code examples. Agents should do deep web research FIRST (papers, blogs, Twitter/X, Reddit, HN) before writing. Cite sources inline. Use research-lead agent type for each skill. All 6 skills are independent and can be built in parallel."
+  },
+  "tmuxSessionName": "ssyph_sisyphus_generate-authoring-skills",
+  "tmuxSessionId": "$61",
+  "tmuxWindowId": "@80",
+  "name": "generate-authoring-skills"
+}

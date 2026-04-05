@@ -1,0 +1,145 @@
+{
+  "id": "20a8fa3c-8efd-4f8e-808b-b4b918a657b3",
+  "task": "Comprehensive audit and improvement of metrics/analytics system. Three goals: (1) Architecture review — identify messy patterns, scattered tracking, missing abstractions, duplicated logic. Be critical. (2) Coverage gaps — we track locally only (no external telemetry), so we should capture everything useful: agent durations, cycle times, orchestrator think-time, frustration signals, retry counts, step counts, state snapshots, idle time, error rates. Identify what we're missing. (3) Implement improvements — fix architectural issues and add missing tracking.",
+  "context": "Metrics-related files: src/daemon/history.ts (history recording), src/shared/history-types.ts (history types), src/daemon/state.ts (state mutations where metrics should be captured), src/shared/types.ts (core types including session/agent state), src/daemon/session-manager.ts (session lifecycle), src/daemon/companion.ts (companion tracks some stats), src/cli/commands/history.ts (history CLI). Also check: src/daemon/pane-monitor.ts (polls agents — timing data), src/daemon/orchestrator.ts (orchestrator lifecycle), src/daemon/agent.ts (agent spawn/completion). All data is local-only, stored in session state files. No external telemetry. Track everything that helps improve the product.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "active",
+  "createdAt": "2026-04-05T01:53:17.838Z",
+  "activeMs": 0,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "audit-arch",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "718dc6d2-526c-424a-947f-514d34f2bccd",
+      "color": "cyan",
+      "instruction": "Audit the architecture of sisyphus's metrics/analytics system. Produce a critique document.\n\n## What to investigate\n\nTrace every point where metrics data is emitted, stored, or aggregated. The key files are:\n- src/daemon/history.ts — history event emission and session summary writes\n- src/shared/history-types.ts — history type definitions\n- src/daemon/state.ts — session state mutations (where timing data is persisted)\n- src/shared/types.ts — core types (Session, Agent, OrchestratorCycle)\n- src/daemon/session-manager.ts — session lifecycle (emits most history events)\n- src/daemon/pane-monitor.ts — active time tracking (in-memory timers, mood signals)\n- src/daemon/companion.ts — companion stats (strength, endurance, wisdom, patience, baselines)\n- src/daemon/agent.ts — agent spawn/completion/kill (emits agent events)\n- src/cli/commands/history.ts — history CLI (reads and displays metrics)\n\n## What to look for\n\n1. **Scattered tracking** — metrics emission is spread across 6+ files. Is there a pattern or is it ad-hoc? Are there inconsistencies in what's recorded where?\n\n2. **Duplicated data** — companion.ts tracks sessionsCompleted, totalActiveMs, lifetimeAgentsSpawned. Session summaries track similar data. History events have overlapping info. Where does duplication create inconsistency risk?\n\n3. **Missing abstractions** — Is there a need for a centralized metrics module? Currently emitHistoryEvent() is called inline throughout session-manager.ts and agent.ts. Should there be a higher-level API?\n\n4. **Data model issues** — history-types.ts defines SessionSummary as a denormalized snapshot. Types.ts defines Session with live state. Are these aligned? Are there fields that should exist on one but don't?\n\n5. **Consistency problems** — Are all state transitions covered by history events? Check: does every path that changes agent status emit an event? Does every session lifecycle change get recorded?\n\n6. **Active time accuracy** — pane-monitor.ts has complex timer logic. Are there edge cases where time is lost or double-counted?\n\n7. **wallClockMs handling** — it's computed at handleComplete but not handleKill. Is this intentional? What about paused sessions?\n\n## Output\n\nSave your findings to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/context/audit-architecture.md\n\nStructure as:\n1. **Architecture Overview** — How metrics flow through the system today\n2. **Issues Found** — Each with severity (critical/major/minor), specific file:line references, and description\n3. **Observations** — Patterns that work well and should be preserved\n\nBe thorough and specific. Reference actual code, not abstractions.",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T01:55:39.471Z",
+      "completedAt": "2026-04-05T01:57:40.890Z",
+      "activeMs": 120073,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/reports/agent-001-final.md",
+          "summary": "Audit identified 15 critical and major issues: killed/rolled-back agents emit no history events, lost session data, and cross-session event bleeding.",
+          "timestamp": "2026-04-05T01:57:40.885Z"
+        }
+      ],
+      "paneId": "%310",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export SISYPHUS_AGENT_ID='agent-001' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort low --model 'sonnet' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/prompts/agent-001-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persister"
+    },
+    {
+      "id": "agent-002",
+      "name": "audit-gaps",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "fb3a3be4-c345-44ac-ae61-22dc7b1135f8",
+      "color": "cyan",
+      "instruction": "Catalog the coverage gaps in sisyphus's metrics/analytics system. Identify what we SHOULD track but currently don't.\n\n## Current tracking landscape\n\nWhat IS currently tracked:\n- **Session level**: activeMs, wallClockMs (completion only), createdAt, completedAt, status, model, startHour, startDayOfWeek\n- **Agent level**: activeMs, spawnedAt, completedAt, status, agentType, reports\n- **Cycle level**: activeMs, timestamp, completedAt, mode, agentsSpawned (agent IDs)\n- **History events**: session-start, agent-spawned, agent-completed, agent-exited, cycle-boundary, signals-snapshot, session-end, message, session-named, agent-nicknamed\n- **Companion stats**: strength, endurance, wisdom, patience, XP, level, baselines (Welford running stats), achievement counters\n- **Session summary**: denormalized snapshot at completion — includes agents, cycles, messages, mood signals\n\n## What to investigate\n\nLook at these files to understand what data flows through the system that isn't being captured:\n\n1. **src/daemon/session-manager.ts** — Check handleRollback(), handleContinue(), handleRestartAgent(), handleKillAgent(), resumeSession(). Are these lifecycle events recorded in history? (Many are not.)\n\n2. **src/daemon/pane-monitor.ts** — The timer accumulation logic is rich but the derived metrics are thin. What could we derive?\n   - Inter-cycle gap time (time between orchestrator yield and next cycle start)\n   - Agent utilization (what fraction of session wall time are agents actually running?)\n   - Orchestrator think-time (cycle activeMs when orchestrator is running vs agents)\n\n3. **src/daemon/agent.ts** — Agent restarts aren't tracked. How many times was an agent restarted? What about the restart-agent command?\n\n4. **src/cli/commands/history.ts** — The stats subcommand is basic. What analyses would be valuable?\n   - Per-agent-type performance (which types are fastest, most reliable?)\n   - Duration distributions (median session time, p90, trends over time)\n   - Temporal patterns (sessions per day, busiest hours, day-of-week patterns)\n   - Error rates (crash rate per agent type, per project)\n   - Efficiency metrics (activeMs/wallClockMs ratio)\n\n5. **src/daemon/companion.ts** — The baselines system (Welford) tracks running stats. Could we expose this richer data to users?\n\n6. **src/shared/types.ts** — What fields are missing from Session, Agent, OrchestratorCycle that would enable better analytics?\n\n## Output\n\nSave your findings to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/context/audit-coverage-gaps.md\n\nStructure as:\n1. **Missing History Events** — lifecycle transitions that aren't recorded\n2. **Missing Metrics** — data points we could derive but don't\n3. **Missing Session/Agent Fields** — type-level additions needed\n4. **CLI Stats Improvements** — analyses the history command should support\n5. **Priority Assessment** — rank each gap as must-have, should-have, or nice-to-have based on how useful the data would be for improving the product\n\nBe exhaustive. Check every handler in session-manager.ts and agent.ts. Look at the actual history event types and compare against all the state transitions that happen.",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T01:56:00.949Z",
+      "completedAt": "2026-04-05T01:57:53.783Z",
+      "activeMs": 115072,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/reports/agent-002-final.md",
+          "summary": "Coverage gap audit identified missing events, metrics, and type fields needed to track agent restarts, session continuations, crashes, and performance efficiency.",
+          "timestamp": "2026-04-05T01:57:53.761Z"
+        }
+      ],
+      "paneId": "%311",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export SISYPHUS_AGENT_ID='agent-002' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort low --model 'sonnet' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/prompts/agent-002-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persevere"
+    },
+    {
+      "id": "agent-003",
+      "name": "plan-metrics",
+      "agentType": "sisyphus:plan",
+      "provider": "anthropic",
+      "claudeSessionId": "24c06d28-b98d-4d86-8dc2-119636032947",
+      "color": "yellow",
+      "instruction": "Create a phased implementation plan for the sisyphus metrics/analytics improvements.\n\n## Inputs\n\nRead these files for full context:\n- `.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/context/audit-architecture.md` — Architecture audit with 15 issues (3 critical, 6 major, 6 minor), specific file:line references\n- `.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/context/audit-coverage-gaps.md` — Coverage gap analysis with missing events, fields, and CLI stats\n- `.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/context/initial-context.md` — File inventory\n\n## Approved Scope\n\nEverything below is user-approved. The plan must cover ALL of it.\n\n### Must-fix bugs (data loss/corruption)\n1. `handleKillAgent()` — emit history event + call flushTimers() before marking killed (session-manager.ts:803-822)\n2. `handleRollback()` — emit rollback event + agent-exited for each killed agent (session-manager.ts:843-852)\n3. Lost agents on resume — emit agent-exited events when marking agents `lost` (session-manager.ts:329-341)\n4. `wallClockMs` computation on kill path — handleKill() must compute it like handleComplete() does (session-manager.ts:785)\n5. Wisdom double-credit — add `companionCreditedWisdom` sentinel field to Session, use delta pattern like other stats (companion.ts:660+)\n6. Signals-snapshot cross-session bleed — scope emit to only the session whose mood changed, not all tracked sessions (pane-monitor.ts:287-288)\n\n### Must-have new tracking\n- `agent-restarted` history event type + `Agent.restartCount` field (agent.ts restartAgent, shared/types.ts)\n- `agent-killed` distinct history event type (distinguish user-kill from crash)\n- `rollback` history event type\n- `SessionSummary.crashCount` field (already computed in generateSentiment but not stored)\n\n### Should-have\n- `session-resumed` history event (resumeSession path)\n- `session-continued` history event (handleContinue path)\n- `OrchestratorCycle.interCycleGapMs` field — computed as delta between previous cycle completedAt and current cycle timestamp\n- Per-agent-type performance table in `history --stats` (count, avg activeMs, crash rate per agent type)\n- Efficiency ratio in `history --stats` (`activeMs/wallClockMs`)\n- `Session.rollbackCount` / `resumeCount` / `continueCount` fields\n- `SessionSummary.lostCount` / `killedAgentCount` / `efficiency` fields\n\n### Nice-to-have (cherry-picked, DO include)\n- Duration distributions (p50/p90) in `history --stats`\n- Temporal pattern analysis in `history --stats` (startHour/startDayOfWeek already stored)\n- Pruning fix — sessions without session.json fall back to dir mtime which resets on event appends, preventing pruning (history.ts:156-162)\n- `Agent.originalSpawnedAt` field preserved across restarts\n\n### Out of scope (do NOT plan for)\n- planningMs/waitingMs on OrchestratorCycle\n- pendingDayCount flush fix in companion\n\n## Planning Requirements\n\n1. **Investigate the actual code** before planning. Read the files referenced in the audits. Understand the exact code paths, types, and dependencies.\n\n2. **Phase the work by dependency order.** Natural layers:\n   - Type changes (new fields, new event types) must come first — everything downstream depends on them\n   - Event emission fixes (the bug fixes and new events) depend on types\n   - Data quality fixes (wallClockMs, wisdom, signals, pruning) can parallel event fixes if they don't touch the same files\n   - CLI stats improvements depend on the new summary fields being populated\n   - writeSessionSummary changes to populate new fields depend on the new events existing\n\n3. **Analyze file conflicts.** For each phase, list exactly which files are modified. Within a phase, tasks that touch the same files MUST be serialized. Tasks touching different files CAN be parallelized. This is critical for multi-agent execution.\n\n4. **Each task must be agent-executable.** A single agent should be able to complete each task in one cycle. If a task is too large, break it down. Include enough context that an implementation agent can work without re-reading the audits.\n\n5. **Include verification notes per phase.** How do we know each phase worked? What can be checked after implementation (build passes, specific behavior changes, etc.)?\n\n## Output\n\nSave the implementation plan to:\n`.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/context/plan-implementation.md`\n\nStructure: phases with tasks, file lists, dependency notes, parallelism analysis, and verification criteria.",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T02:11:25.229Z",
+      "completedAt": "2026-04-05T02:26:30.561Z",
+      "activeMs": 905178,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/reports/agent-003-final.md",
+          "summary": "Implementation plan designed: 8-task parallel workflow to add agent restart/rollback/kill tracking and history reporting with verified coverage of 6 must-fix bugs and 15 tracking/reporting requirements.",
+          "timestamp": "2026-04-05T02:26:30.558Z"
+        }
+      ],
+      "paneId": "%317",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export SISYPHUS_AGENT_ID='agent-003' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort max --model 'opus' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3/prompts/agent-003-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persever"
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-05T01:53:18.204Z",
+      "activeMs": 165070,
+      "agentsSpawned": [
+        "agent-001",
+        "agent-002"
+      ],
+      "paneId": "%307",
+      "claudeSessionId": "9a98f3b8-e9e0-4554-b9ba-a395494da496",
+      "mode": "planning",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='20a8fa3c'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-05T01:56:05.430Z",
+      "nextPrompt": "Both explore agents should have produced audit documents in context/. Review audit-architecture.md and audit-coverage-gaps.md. Synthesize findings, present key issues to user for alignment, then plan implementation phases."
+    },
+    {
+      "cycle": 2,
+      "timestamp": "2026-04-05T01:57:54.193Z",
+      "activeMs": 805283,
+      "agentsSpawned": [
+        "agent-003"
+      ],
+      "paneId": "%312",
+      "claudeSessionId": "a578c174-082a-4f88-a363-c0a530b314cc",
+      "mode": "planning",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='comprehensive-metrics-audit'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-05T02:11:32.467Z",
+      "nextPrompt": "Plan agent (agent-003) should have produced context/plan-implementation.md. Review the plan for completeness against the approved scope in strategy.md. Check file conflict analysis, dependency ordering, and task granularity. If the plan is solid, transition to implementation mode. If gaps exist, spawn a fix agent or revise and re-plan."
+    },
+    {
+      "cycle": 3,
+      "timestamp": "2026-04-05T02:26:30.903Z",
+      "activeMs": 120049,
+      "agentsSpawned": [],
+      "paneId": "%321",
+      "claudeSessionId": "7c52cc08-7f00-4f50-973f-bc32ba49daa1",
+      "mode": "implementation",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/20a8fa3c-8efd-4f8e-808b-b4b918a657b3' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='comprehensive-metrics-audit'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-05T02:28:45.739Z",
+      "nextPrompt": "Begin implementation Phase 1: spawn agent for T1 (type foundation in types.ts + history-types.ts). After T1 completes, spawn 4 parallel agents for Phase 2 (T2-T5). See context/plan-implementation.md for full task specs."
+    }
+  ],
+  "messages": [],
+  "startHour": 18,
+  "startDayOfWeek": 6,
+  "launchConfig": {
+    "context": "Metrics-related files: src/daemon/history.ts (history recording), src/shared/history-types.ts (history types), src/daemon/state.ts (state mutations where metrics should be captured), src/shared/types.ts (core types including session/agent state), src/daemon/session-manager.ts (session lifecycle), src/daemon/companion.ts (companion tracks some stats), src/cli/commands/history.ts (history CLI). Also check: src/daemon/pane-monitor.ts (polls agents — timing data), src/daemon/orchestrator.ts (orchestrator lifecycle), src/daemon/agent.ts (agent spawn/completion). All data is local-only, stored in session state files. No external telemetry. Track everything that helps improve the product."
+  },
+  "tmuxSessionName": "ssyph_sisyphus_comprehensive-metrics-audit",
+  "tmuxSessionId": "$67",
+  "tmuxWindowId": "@100",
+  "name": "comprehensive-metrics-audit"
+}

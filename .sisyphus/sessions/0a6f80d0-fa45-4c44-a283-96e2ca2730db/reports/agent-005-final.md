@@ -1,0 +1,1 @@
+Written /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/onboarding-empty-states.md — 296 lines covering all 10 required sections. All citations link to real, verified sources: NNGroup, Apple HIG, Material Design, Hulick/UserOnboard, Appcues, Userpilot, Smashing Magazine, IBM Carbon, IxDF, UX Planet.

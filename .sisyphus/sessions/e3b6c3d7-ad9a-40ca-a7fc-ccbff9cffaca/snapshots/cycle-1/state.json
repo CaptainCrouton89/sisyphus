@@ -1,0 +1,112 @@
+{
+  "id": "e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca",
+  "task": "Create comprehensive integration test environment for sisyphus fresh installs",
+  "context": "Two-tier approach: (1) Docker containers for Linux permutation matrix - base (node 22 only), +tmux, +neovim/lazyvim, +claude CLI mock, +full. Dockerfiles in test/environments/. (2) GitHub Actions workflow for macOS-specific paths (launchd, Swift notifications). Test harness script that builds all images, runs npm install -g from local tarball (npm pack), runs sisyphus doctor, tests key functionality, reports pass/fail matrix. Key verifications: node-pty native compilation, doctor diagnostics, daemon socket creation, tmux pane creation where available, graceful degradation, postinstall without swiftc. Package is sisyphi, commands are sisyphus/sisyphusd. See the conversation plan in the task description for full details on the matrix and what to verify per environment.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "active",
+  "createdAt": "2026-04-02T07:06:43.251Z",
+  "activeMs": 0,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "explore-nodepty",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "9e86c08a-d1f3-4b2e-9cf8-264708dba143",
+      "color": "cyan",
+      "instruction": "Investigate node-pty compilation requirements in Docker containers for the sisyphus project.\n\n## Context\nsisyphus (`sisyphi` package) depends on node-pty as a native module. We're building Docker-based integration tests for fresh installs. Need to understand what's required for node-pty to work in containers.\n\n## Questions to Answer\n1. Does node-pty ship prebuilds for Linux x64? Check `node_modules/node-pty/prebuilds/` to see what platforms have prebuilds.\n2. What build tools does node-pty require if it needs to compile from source? (python, make, gcc, etc.)\n3. Will `npm install -g sisyphi-1.x.x.tgz` (from npm pack) trigger node-pty compilation, or does it use prebuilds?\n4. Does Alpine Linux (musl) work with node-pty, or do we need Debian/Ubuntu (glibc)? Check if there are musl prebuilds.\n5. What's the minimal set of apt packages needed on Debian for node-pty to install successfully?\n\n## How to Investigate\n- Look at `node_modules/node-pty/` — check prebuilds/, binding.gyp, package.json\n- Check if node-pty uses prebuild-install, node-pre-gyp, or similar\n- Look at the node-pty npm page / GitHub for platform support info\n- Check `package.json` postinstall script: `chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true`\n\n## Output\nSave findings to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/context/explore-nodepty-docker.md",
+      "status": "completed",
+      "spawnedAt": "2026-04-02T07:08:49.482Z",
+      "completedAt": "2026-04-02T07:09:39.824Z",
+      "activeMs": 50161,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/reports/agent-001-final.md",
+          "summary": "Node-pty lacks Linux prebuilds and requires compilation; use node:22 or install build tools for compatibility.",
+          "timestamp": "2026-04-02T07:09:39.820Z"
+        }
+      ],
+      "paneId": "%2388",
+      "repo": "."
+    },
+    {
+      "id": "agent-002",
+      "name": "explore-daemon",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "06f06e58-728a-4163-b1ba-856fde32d416",
+      "color": "cyan",
+      "instruction": "Investigate sisyphus daemon behavior in headless/minimal environments.\n\n## Context\nWe're building Docker-based integration tests. Need to know how the daemon behaves when tmux isn't installed, when it's installed but no server is running, and what the minimum viable daemon test looks like.\n\n## Questions to Answer\n1. Can `sisyphusd` (dist/daemon.js) start and create a socket without tmux being installed? Read src/daemon/index.ts to understand startup sequence.\n2. What happens when `sisyphus start \"test\"` is called without tmux? Does it error before contacting the daemon?\n3. Can the daemon process start in a Docker container (no TTY, no display)? What are the hard requirements?\n4. What's the simplest smoke test for daemon liveness? (e.g., connect to socket, send a status request)\n5. How does the CLI auto-start the daemon on Linux (no launchd)? Read src/cli/client.ts retry logic.\n6. What protocol messages can we send without needing tmux? (e.g., status requests vs start session)\n\n## Files to Read\n- src/daemon/index.ts (startup, PID lock, socket creation)\n- src/daemon/server.ts (what happens on protocol requests)\n- src/cli/client.ts (connection retry, daemon auto-start)\n- src/cli/commands/start.ts (tmux requirement check)\n- src/shared/paths.ts (socket path, PID path)\n\n## Output\nSave findings to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/context/explore-daemon-headless.md",
+      "status": "completed",
+      "spawnedAt": "2026-04-02T07:08:58.887Z",
+      "completedAt": "2026-04-02T07:10:19.014Z",
+      "activeMs": 80169,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/reports/agent-002-final.md",
+          "summary": "Daemon runs in Docker without tmux; CLI gates tmux checks before contact; manual daemon startup required.",
+          "timestamp": "2026-04-02T07:10:19.012Z"
+        }
+      ],
+      "paneId": "%2389",
+      "repo": "."
+    },
+    {
+      "id": "agent-003",
+      "name": "explore-doctor",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "d44d5f0a-1bd3-4c7d-9e90-e794afe85565",
+      "color": "cyan",
+      "instruction": "Map all sisyphus doctor checks to expected outcomes per Docker environment tier.\n\n## Context\nWe're building a Docker-based integration test matrix with these environment tiers:\n1. **base** — Node 22 only (no tmux, no claude, no nvim, no git maybe)\n2. **+tmux** — Node 22 + tmux + git\n3. **+nvim** — Node 22 + tmux + git + neovim\n4. **+claude-mock** — Node 22 + tmux + git + neovim + a fake \"claude\" binary on PATH\n5. **+full** — Everything above combined\n\nWe need to know exactly what `sisyphus doctor` will report in each tier.\n\n## What to Do\n1. Read src/cli/commands/doctor.ts thoroughly — map every check function\n2. For each check, determine: what external command/file/path it probes, what makes it ok/warn/fail\n3. Build a matrix: check × environment tier → expected status (ok/warn/fail)\n4. Identify which checks are macOS-only (skip on Linux Docker)\n5. Identify what a \"Claude CLI mock\" needs to be — is `which claude` enough or does it need to respond to commands?\n6. Note: the daemon won't be running when doctor first runs — understand what doctor reports about daemon state\n\nAlso check: Does doctor have an exit code that reflects pass/fail? (for CI assertions)\n\n## Files to Read\n- src/cli/commands/doctor.ts (primary — all check functions)\n- src/cli/onboard.ts (detectTerminal, checkItermOptionKey, isNvimAvailable, isBeginCommandInstalled)\n- src/cli/tmux-setup.ts (cycleScriptPath, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath)\n- src/cli/install.ts (isInstalled)\n\n## Output\nSave findings to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/context/explore-doctor-matrix.md\n\nFormat the matrix as a markdown table for easy consumption in the design phase.",
+      "status": "completed",
+      "spawnedAt": "2026-04-02T07:09:11.406Z",
+      "completedAt": "2026-04-02T07:10:26.639Z",
+      "activeMs": 80170,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/reports/agent-003-final.md",
+          "summary": "Completed doctor check matrix. 14 checks mapped across 5 Docker tiers. Key findings: (1) No exit code for CI - doctor always exits 0. (2) Claude mock only needs 'which claude' to succeed - no args che",
+          "timestamp": "2026-04-02T07:10:26.639Z"
+        }
+      ],
+      "paneId": "%2390",
+      "repo": "."
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-02T07:06:43.541Z",
+      "activeMs": 155191,
+      "agentsSpawned": [
+        "agent-001",
+        "agent-002",
+        "agent-003"
+      ],
+      "paneId": "%2387",
+      "claudeSessionId": "58a49d63-8cff-46e3-9756-74022c92a0c8",
+      "mode": "planning",
+      "completedAt": "2026-04-02T07:09:18.158Z",
+      "nextPrompt": "Three explore agents running: nodepty Docker compilation (agent-001), daemon headless behavior (agent-002), doctor check matrix (agent-003). Review their reports in context/, then design the test environment: Docker tiers, Dockerfiles, harness script, GHA workflow, Claude CLI mock. Transition to design once exploration findings are compiled."
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg-001",
+      "source": {
+        "type": "user"
+      },
+      "content": "the things we need to verify that work. One, we need to be able to like make sure that it correctly installs the right hooks properly. We need to check that installed the status line correctly. We need to make sure that the dashboard is opening correctly and it's opening up lazy them inside the dashboard. We need to make sure that the daemon starts correctly. We need to make sure that the updater, like the auto update works correctly. There are a lot of like pretty complicated edge cases. So it might be worth literally thinking about all the different components of this that are worth testing and testing them. This is not testing theater. This is like real tests that we need to pass.",
+      "summary": "the things we need to verify that work. One, we need to be able to like make sure that it correctly installs the right hooks properly. We need to check that installed the status line correctly. We nee...",
+      "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e3b6c3d7-ad9a-40ca-a7fc-ccbff9cffaca/messages/msg-001.md",
+      "timestamp": "2026-04-02T07:08:27.193Z"
+    }
+  ],
+  "tmuxSessionName": "ssyph_sisyphus_sisyphus-fresh-install-testing",
+  "tmuxWindowId": "@486",
+  "name": "sisyphus-fresh-install-testing"
+}

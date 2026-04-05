@@ -1,0 +1,1 @@
+Completed brainstorm for plugin resolution, agent types, and setup adversarial scenarios. 15 scenarios documented with 4 high-priority findings: path traversal in agent type names, inline YAML skills array silently dropped, no setup template upgrade path, no model name validation. File saved to context/brainstorm-plugins-adversarial.md

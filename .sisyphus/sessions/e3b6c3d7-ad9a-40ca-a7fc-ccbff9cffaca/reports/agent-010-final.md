@@ -1,0 +1,1 @@
+test/integration/suites/test-full.sh created with 8 assertions across 6 test functions. Source chain: test-full.sh → test-tmux.sh → test-base.sh → assert.sh. run_full_tests() defined. Direct execution calls run_base_tests + run_tmux_tests + run_full_tests + print_results. Each test that starts daemon/tmux cleans up after itself.

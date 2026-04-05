@@ -1,0 +1,1 @@
+test/integration/Dockerfile created with base/tmux/full stages per task prompt. context/plan-implementation.md referenced in task does not exist (only context/plan-companion.md present) — built from inline requirements only. If §3.1 has additional spec, a follow-up pass is needed.

@@ -1,0 +1,61 @@
+{
+  "id": "57a8d3c1-ac1e-4a61-ad82-c368ed14fc23",
+  "task": "It seems that most of my notifications for sisyphus aren't going through the swift app notificatino system. For example, I'm not seeing notification triggered when orchestrator or agents stop (waiting for input). It'd also be great to get notifications when the orchestrator starts in a new mode, for example.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "active",
+  "createdAt": "2026-04-05T04:14:18.337Z",
+  "activeMs": 0,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "impl-notifications",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "272c540d-a80e-41f5-b423-170e81dc48a5",
+      "color": "blue",
+      "instruction": "Add macOS desktop notifications at key lifecycle points in the Sisyphus daemon.\n\n## Context\n\nCurrently `sendTerminalNotification` from `src/daemon/notify.ts` is only called in 2 places in `src/daemon/session-manager.ts`:\n- Line ~921: Agent crashes (pane exit without submit)\n- Line ~950: Orchestrator crashes (pane exit without yield)\n\nThe user wants notifications for more events. The `sendTerminalNotification` function sends via the native Swift SisyphusNotify.app and has this signature:\n```ts\nsendTerminalNotification(title: string, message: string, tmuxSession?: string): void\n```\n\nIt's already imported in session-manager.ts. The `tmuxSession` param enables click-to-switch.\n\n## What to implement\n\nAdd `sendTerminalNotification` calls at these 4 points in `src/daemon/session-manager.ts`:\n\n### 1. Session completion — in `handleComplete()`\nAfter the completion state is written (after the `markSessionCompleted` call around line 639), add:\n```ts\nconst config = loadConfig(cwd);\nif (config.notifications?.enabled !== false) {\n  const sessionName = session.name ?? sessionId.slice(0, 8);\n  sendTerminalNotification('Sisyphus', `Session completed: ${sessionName}`, session.tmuxSessionName);\n}\n```\nNote: `loadConfig` is already imported. Use the session variable that's already in scope.\n\n### 2. Orchestrator cycle start (with mode) — in the `setImmediate` callback of `onAllAgentsDone()`\nAfter the orchestrator is successfully respawned (the `respawnOrchestrator` call succeeds, around line 530+), add a notification. You'll need to read the session state to get the new cycle's mode. Look at the cycle that was just started:\n```ts\nconst config = loadConfig(cwd);\nif (config.notifications?.enabled !== false) {\n  const updatedSession = state.getSession(cwd, sessionId);\n  const newCycle = updatedSession.orchestratorCycles[updatedSession.orchestratorCycles.length - 1];\n  const modeLabel = newCycle?.mode ? ` (${newCycle.mode})` : '';\n  const sessionName = updatedSession.name ?? sessionId.slice(0, 8);\n  sendTerminalNotification('Sisyphus', `Cycle ${newCycle?.cycle ?? '?'}${modeLabel}: ${sessionName}`, updatedSession.tmuxSessionName);\n}\n```\n\n### 3. All agents done — in `handleSubmit()`\nWhen the last agent submits and `allDone` is true (around line 586-589), add a notification before calling `onAllAgentsDone`:\n```ts\nif (allDone) {\n  const config = loadConfig(cwd);\n  if (config.notifications?.enabled !== false) {\n    const session = state.getSession(cwd, sessionId);\n    const sessionName = session.name ?? sessionId.slice(0, 8);\n    sendTerminalNotification('Sisyphus', `All agents complete: ${sessionName}`, session.tmuxSessionName);\n  }\n  onAllAgentsDone(sessionId, cwd, windowId);\n}\n```\n\n### 4. Session paused (no agents, orchestrator waiting) — Optional\nIn `handlePaneExited` when the orchestrator exits with no agents (the path that pauses the session, around line 974-980), add notification since this means the session is stuck:\n```ts  \nconst config = loadConfig(cwd);\nif (config.notifications?.enabled !== false) {\n  sendTerminalNotification('Sisyphus', `Session paused (no agents): ${sessionName}`, session.tmuxSessionName);\n}\n```\n\n## Important constraints\n- `loadConfig` is already imported — use it to check `config.notifications?.enabled !== false`\n- `sendTerminalNotification` is already imported\n- Do NOT modify `notify.ts` — only add calls in `session-manager.ts`\n- Do NOT remove or modify the existing crash notifications (lines 921 and 950)\n- Keep messages concise — they appear as macOS notification text\n- Always pass `session.tmuxSessionName` as the third arg for click-to-switch\n- After making changes, run `npm run build` to verify compilation succeeds",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T04:20:19.736Z",
+      "completedAt": "2026-04-05T04:21:30.982Z",
+      "activeMs": 70013,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/57a8d3c1-ac1e-4a61-ad82-c368ed14fc23/reports/agent-001-final.md",
+          "summary": "Added sendTerminalNotification calls at 4 lifecycle points in src/daemon/session-manager.ts:\n\n1. **Session completion** (handleComplete, after markSessionCompleted ~line 640): 'Session completed: {nam",
+          "timestamp": "2026-04-05T04:21:30.980Z"
+        }
+      ],
+      "paneId": "%379",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='57a8d3c1-ac1e-4a61-ad82-c368ed14fc23' && export SISYPHUS_AGENT_ID='agent-001' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/57a8d3c1-ac1e-4a61-ad82-c368ed14fc23' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/57a8d3c1-ac1e-4a61-ad82-c368ed14fc23/prompts/agent-001-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persister"
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-05T04:14:18.700Z",
+      "activeMs": 370089,
+      "agentsSpawned": [
+        "agent-001"
+      ],
+      "paneId": "%378",
+      "claudeSessionId": "7e433f8b-b011-4385-98ba-a75ad96cf748",
+      "mode": "implementation",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='57a8d3c1-ac1e-4a61-ad82-c368ed14fc23' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/57a8d3c1-ac1e-4a61-ad82-c368ed14fc23' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='57a8d3c1'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-05T04:20:24.570Z",
+      "nextPrompt": "Review agent-001 report on notification implementation. Verify the changes look correct: all 4 notification points added, config gated, build passes. If clean, transition to validation."
+    }
+  ],
+  "messages": [],
+  "startHour": 21,
+  "startDayOfWeek": 6,
+  "launchConfig": {},
+  "tmuxSessionName": "ssyph_sisyphus_sisyphus-notification-system-f",
+  "tmuxSessionId": "$75",
+  "tmuxWindowId": "@115",
+  "name": "sisyphus-notification-system-f"
+}

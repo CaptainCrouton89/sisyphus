@@ -1,0 +1,1 @@
+test/integration/suites/test-base.sh — assert_contains pattern was '✓' (matches any ok symbol), corrected to '✓.*Node' per spec. File was pre-existing with correct structure; daemon-socket-response assertion present (not in 10-count spec but consistent with plan §3.3 socket comm section). 12 total assertions.

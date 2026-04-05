@@ -1,0 +1,1 @@
+Fixed dawn-patrol achievement checker in src/daemon/companion.ts (lines 284-297) and added midnight-spanning test in src/__tests__/companion.test.ts. All 237 tests pass.

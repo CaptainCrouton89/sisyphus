@@ -1,0 +1,230 @@
+{
+  "id": "0a6f80d0-fa45-4c44-a283-96e2ca2730db",
+  "task": "Research and write 6 comprehensive UX reference documents for the web:ux-design skill. Each reference should be deeply researched (web search for authoritative sources), practically structured with patterns/anti-patterns/checklists, and follow the format of the existing HITL reference. Topics: (1) Form & Input Design, (2) Data Visualization UX, (3) Performance as UX, (4) CLI & Terminal UX, (5) Onboarding & Empty States, (6) Error & Edge State Design. After all references are written, update the parent SKILL.md to link to each new reference.",
+  "context": "Target directory: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/. Existing files: hitl-ai-chat.md (use as format reference — headings, tables, pattern/anti-pattern structure, source citations, checklists). Parent skill: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/SKILL.md (has a References section at top that currently only links hitl-ai-chat.md — add new entries there). Each agent should do real web research using WebSearch/WebFetch for authoritative sources (NNGroup, Smashing Magazine, GOV.UK design system, Material Design, Apple HIG, etc). Each reference file should be 150-300 lines, comprehensive but scannable. No fluff — concrete patterns, rules, and examples.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "completed",
+  "createdAt": "2026-04-04T20:41:44.423Z",
+  "activeMs": 802782,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "write-forms",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "4e3704c0-1930-49c8-8627-a76fafdbecfb",
+      "color": "blue",
+      "instruction": "Write a comprehensive UX reference document on Form & Input Design.\n\n## Output\nWrite the file to: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/form-input-design.md\n\n## Format Reference\nFollow the exact format of /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/hitl-ai-chat.md — use similar structure: title, horizontal rules between sections, tables for frameworks/comparisons, bullet lists for patterns/anti-patterns, a Design Checklist section with checkboxes, and a Sources section at the end with real citations.\n\n## Research Requirements\nUse WebSearch to find authoritative sources. Search for patterns from:\n- Nielsen Norman Group (form design, input usability)\n- GOV.UK Design System (form patterns, error handling)\n- Material Design (text fields, form components)\n- Apple HIG (data entry, text fields)\n- Smashing Magazine / UX Collective (form UX articles)\n- Luke Wroblewski's work on web forms (\"Web Form Design\" book concepts)\n\n## Content Requirements (aim for 150-300 lines)\nCover these areas with concrete patterns, anti-patterns, and practical rules:\n\n1. **Form Layout & Structure** — single column vs multi-column, logical grouping, progressive disclosure, form length tradeoffs\n2. **Input Types & Selection** — when to use text vs dropdown vs radio vs checkbox vs toggle, input masking, autocomplete\n3. **Labels & Placeholders** — top-aligned vs left-aligned vs inline labels, placeholder text pitfalls, required field indicators\n4. **Validation & Error Handling** — inline vs submit-time validation, error message placement, positive validation, field-level vs form-level errors\n5. **Mobile & Touch Considerations** — tap targets, keyboard types, autofill, thumb zones\n6. **Accessibility** — ARIA labels, focus management, screen reader considerations, color-independent error states\n7. **Anti-Patterns** — table of common form UX mistakes (disappearing labels, validation on blur for empty fields, unclear required fields, etc.)\n8. **Design Checklist** — checkbox list covering all key form UX considerations\n\nEvery pattern should reference its source. No made-up citations.",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T20:43:15.480Z",
+      "completedAt": "2026-04-04T20:45:59.416Z",
+      "activeMs": 165193,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/reports/agent-001-final.md",
+          "summary": "Form input design reference guide created with comprehensive sections and real citations.",
+          "timestamp": "2026-04-04T20:45:59.287Z"
+        }
+      ],
+      "paneId": "%214",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='agent-001' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/prompts/agent-001-plugin\" --agent 'devcore:programmer' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Grindstone"
+    },
+    {
+      "id": "agent-002",
+      "name": "write-dataviz",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "af2a00b9-61d0-4b57-a0b6-2c38177b8aec",
+      "color": "green",
+      "instruction": "Write a comprehensive UX reference document on Data Visualization UX.\n\n## Output\nWrite the file to: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/data-visualization.md\n\n## Format Reference\nFollow the exact format of /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/hitl-ai-chat.md — use similar structure: title, horizontal rules between sections, tables for frameworks/comparisons, bullet lists for patterns/anti-patterns, a Design Checklist section with checkboxes, and a Sources section at the end with real citations.\n\n## Research Requirements\nUse WebSearch to find authoritative sources. Search for patterns from:\n- Edward Tufte's principles (data-ink ratio, chartjunk, small multiples)\n- Nielsen Norman Group (data visualization usability)\n- Material Design (data visualization guidelines)\n- Observable / D3 community best practices\n- Stephen Few's work (dashboard design, information dashboard design)\n- Smashing Magazine / UX Collective (data viz UX articles)\n- GOV.UK Design System (charts and data presentation)\n\n## Content Requirements (aim for 150-300 lines)\nCover these areas with concrete patterns, anti-patterns, and practical rules:\n\n1. **Chart Type Selection** — when to use bar vs line vs pie vs scatter vs area vs table, decision framework\n2. **Visual Encoding Principles** — position, length, area, color, angle — effectiveness hierarchy (Cleveland & McGill)\n3. **Color in Data Viz** — sequential vs diverging vs categorical palettes, colorblind safety, semantic color, max categories\n4. **Labels, Legends & Annotations** — direct labeling vs legends, annotation patterns, data density\n5. **Interaction Patterns** — tooltips, zoom/pan, brushing, filtering, drill-down, linked views\n6. **Responsive & Mobile Data Viz** — small screen adaptations, touch interactions, progressive disclosure of data\n7. **Accessibility** — alt text for charts, screen reader patterns, keyboard navigation, high contrast\n8. **Dashboard Layout** — information hierarchy, overview-first detail-on-demand, cognitive load management\n9. **Anti-Patterns** — table of common data viz mistakes (3D charts, dual axes misuse, truncated axes, rainbow palettes, pie charts with too many slices, etc.)\n10. **Design Checklist** — checkbox list covering all key data visualization UX considerations\n\nEvery pattern should reference its source. No made-up citations.",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T20:43:25.651Z",
+      "completedAt": "2026-04-04T20:46:18.456Z",
+      "activeMs": 175194,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/reports/agent-002-final.md",
+          "summary": "Data visualization guide written with 10 sections and authoritative citations.",
+          "timestamp": "2026-04-04T20:46:18.388Z"
+        }
+      ],
+      "paneId": "%215",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='agent-002' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/prompts/agent-002-plugin\" --agent 'devcore:programmer' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Plod"
+    },
+    {
+      "id": "agent-003",
+      "name": "write-perf",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "a47fe2f4-c2bc-4e88-b6cf-e2dd515f7cb2",
+      "color": "magenta",
+      "instruction": "Write a comprehensive UX reference document on Performance as UX.\n\n## Output\nWrite the file to: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/performance-ux.md\n\n## Format Reference\nFollow the exact format of /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/hitl-ai-chat.md — use similar structure: title, horizontal rules between sections, tables for frameworks/comparisons, bullet lists for patterns/anti-patterns, a Design Checklist section with checkboxes, and a Sources section at the end with real citations.\n\n## Research Requirements\nUse WebSearch to find authoritative sources. Search for patterns from:\n- Google Web Vitals (LCP, FID/INP, CLS) and web.dev performance guides\n- Nielsen Norman Group (response time research, perceived performance)\n- Jakob Nielsen's response time thresholds (0.1s, 1s, 10s)\n- Smashing Magazine (perceived performance, skeleton screens)\n- GOV.UK performance guidelines\n- Apple HIG / Material Design (loading states, progress indicators)\n- Ilya Grigorik's \"High Performance Browser Networking\" concepts\n\n## Content Requirements (aim for 150-300 lines)\nCover these areas with concrete patterns, anti-patterns, and practical rules:\n\n1. **Response Time Thresholds** — Nielsen's 0.1s/1s/10s model, Core Web Vitals targets, user perception of speed\n2. **Perceived Performance** — skeleton screens, optimistic UI, progressive loading, content-first rendering\n3. **Loading State Design** — spinners vs progress bars vs skeleton screens vs shimmer — when to use each, duration thresholds\n4. **Optimistic UI** — patterns for instant feedback before server confirmation, rollback design, conflict resolution\n5. **Progressive Loading** — lazy loading, infinite scroll vs pagination, above-the-fold prioritization, image loading strategies\n6. **Offline & Degraded States** — service worker patterns, offline-first design, connection quality adaptation\n7. **Animation & Transitions** — performance budgets for animation, 60fps constraints, will-change, layout thrashing\n8. **Core Web Vitals as UX Metrics** — LCP, INP, CLS — what each measures, targets, common causes, fix patterns\n9. **Anti-Patterns** — table of common performance UX mistakes (blank loading screens, layout shifts, blocking renders, no feedback during operations, etc.)\n10. **Design Checklist** — checkbox list covering all key performance UX considerations\n\nEvery pattern should reference its source. No made-up citations.",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T20:43:35.989Z",
+      "completedAt": "2026-04-04T20:48:21.501Z",
+      "activeMs": 280964,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/reports/agent-003-final.md",
+          "summary": "Agent successfully completed document writing task.",
+          "timestamp": "2026-04-04T20:48:21.261Z"
+        }
+      ],
+      "paneId": "%216",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='agent-003' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/prompts/agent-003-plugin\" --agent 'devcore:programmer' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persister"
+    },
+    {
+      "id": "agent-004",
+      "name": "write-cli",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "775ff197-b838-43a0-8506-31b93e0400b6",
+      "color": "cyan",
+      "instruction": "Write a comprehensive UX reference document on CLI & Terminal UX.\n\n## Output\nWrite the file to: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/cli-terminal-ux.md\n\n## Format Reference\nFollow the exact format of /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/hitl-ai-chat.md — use similar structure: title, horizontal rules between sections, tables for frameworks/comparisons, bullet lists for patterns/anti-patterns, a Design Checklist section with checkboxes, and a Sources section at the end with real citations.\n\n## Research Requirements\nUse WebSearch to find authoritative sources. Search for patterns from:\n- clig.dev (Command Line Interface Guidelines — comprehensive community resource)\n- 12 Factor CLI Apps\n- Heroku CLI style guide\n- GNU coding standards (command-line interfaces)\n- Google's CLI design guidelines\n- Ink / Charm / Bubbletea TUI frameworks (patterns they enable)\n- Nielsen Norman Group (if any CLI-relevant research)\n- Smashing Magazine / dev.to (CLI UX articles)\n\n## Content Requirements (aim for 150-300 lines)\nCover these areas with concrete patterns, anti-patterns, and practical rules:\n\n1. **Command Structure & Naming** — verb-noun patterns, subcommands, flag conventions, positional args vs named flags\n2. **Output Design** — human-readable vs machine-parseable, structured output (JSON), color usage, verbosity levels\n3. **Error Messages** — actionable errors, exit codes, stderr vs stdout, suggesting fixes\n4. **Interactive vs Non-Interactive** — detecting TTY, prompts with defaults, confirmation patterns, --yes flags\n5. **Progress & Feedback** — progress bars, spinners, streaming output, long-running operations\n6. **Help & Discovery** — --help design, man pages, examples in help text, shell completions, discoverability\n7. **Configuration** — config files, environment variables, flags precedence, sensible defaults, XDG base dirs\n8. **TUI Patterns** — full-screen terminal UIs, keyboard navigation, mouse support, responsive terminal layouts\n9. **Scripting & Composability** — Unix philosophy, piping, exit codes, idempotency, quiet mode\n10. **Anti-Patterns** — table of common CLI UX mistakes (wall-of-text output, no color when TTY, inconsistent flags, requiring args that could be defaulted, etc.)\n11. **Design Checklist** — checkbox list covering all key CLI/terminal UX considerations\n\nEvery pattern should reference its source. No made-up citations.",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T20:43:46.696Z",
+      "completedAt": "2026-04-04T20:46:51.534Z",
+      "activeMs": 185035,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/reports/agent-004-final.md",
+          "summary": "Completed comprehensive CLI/terminal UX reference guide with 355 lines covering 11 sections and citations from 8+ authoritative sources.",
+          "timestamp": "2026-04-04T20:46:51.431Z"
+        }
+      ],
+      "paneId": "%217",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='agent-004' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/prompts/agent-004-plugin\" --agent 'devcore:programmer' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Plod"
+    },
+    {
+      "id": "agent-005",
+      "name": "write-onboarding",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "bebf5f8f-88d1-452d-a331-3a98f8f3a1ce",
+      "color": "red",
+      "instruction": "Write a comprehensive UX reference document on Onboarding & Empty States.\n\n## Output\nWrite the file to: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/onboarding-empty-states.md\n\n## Format Reference\nFollow the exact format of /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/hitl-ai-chat.md — use similar structure: title, horizontal rules between sections, tables for frameworks/comparisons, bullet lists for patterns/anti-patterns, a Design Checklist section with checkboxes, and a Sources section at the end with real citations.\n\n## Research Requirements\nUse WebSearch to find authoritative sources. Search for patterns from:\n- Nielsen Norman Group (onboarding UX, empty states, first-run experience)\n- Material Design (onboarding patterns, empty states)\n- Apple HIG (onboarding, first launch experience)\n- Samuel Hulick's \"The Elements of User Onboarding\" concepts\n- Appcues / UserPilot research on onboarding patterns\n- Smashing Magazine / UX Collective (onboarding articles, empty state design)\n- GOV.UK Design System (start pages, guidance patterns)\n\n## Content Requirements (aim for 150-300 lines)\nCover these areas with concrete patterns, anti-patterns, and practical rules:\n\n1. **Onboarding Models** — benefit-focused vs function-focused vs account setup, progressive onboarding, just-in-time guidance\n2. **First-Run Experience** — welcome screens, feature tours, setup wizards, permission requests, zero-to-value time\n3. **Empty States** — first-use empty states vs no-results vs error states, educational empty states, starter content, CTAs\n4. **Progressive Disclosure** — revealing complexity over time, feature gating by experience level, contextual help\n5. **Tooltips & Guided Tours** — coach marks, hotspots, step-by-step tours — when they work vs when they fail\n6. **Activation & Engagement** — aha moment identification, activation metrics, reducing time-to-value, checklists\n7. **Returning User Experience** — re-engagement, \"what's new\" patterns, resuming interrupted workflows\n8. **Permission & Trust Building** — when to ask for permissions, progressive trust, social proof during onboarding\n9. **Anti-Patterns** — table of common onboarding mistakes (forced tours, too many steps, info dumping, skippable-but-critical steps, etc.)\n10. **Design Checklist** — checkbox list covering all key onboarding & empty state UX considerations\n\nEvery pattern should reference its source. No made-up citations.",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T20:44:01.090Z",
+      "completedAt": "2026-04-04T20:47:04.869Z",
+      "activeMs": 180921,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/reports/agent-005-final.md",
+          "summary": "Created comprehensive onboarding and empty states design guide with 296 lines covering 10 sections and verified citations from industry-leading sources.",
+          "timestamp": "2026-04-04T20:47:04.805Z"
+        }
+      ],
+      "paneId": "%218",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='agent-005' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/prompts/agent-005-plugin\" --agent 'devcore:programmer' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Treadmill"
+    },
+    {
+      "id": "agent-006",
+      "name": "write-errors",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "cc0550f2-89c6-4651-a136-00b7c7329c7c",
+      "color": "white",
+      "instruction": "Write a comprehensive UX reference document on Error & Edge State Design.\n\n## Output\nWrite the file to: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/error-edge-states.md\n\n## Format Reference\nFollow the exact format of /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/hitl-ai-chat.md — use similar structure: title, horizontal rules between sections, tables for frameworks/comparisons, bullet lists for patterns/anti-patterns, a Design Checklist section with checkboxes, and a Sources section at the end with real citations.\n\n## Research Requirements\nUse WebSearch to find authoritative sources. Search for patterns from:\n- Nielsen Norman Group (error message guidelines, error prevention, edge cases)\n- GOV.UK Design System (error messages, error summary, validation patterns)\n- Material Design (error states, snackbars, dialogs)\n- Apple HIG (alerts, error handling)\n- Smashing Magazine / UX Collective (error UX articles)\n- Scott Hanselman / web dev community (edge case design)\n- HTTP status codes and API error design patterns\n\n## Content Requirements (aim for 150-300 lines)\nCover these areas with concrete patterns, anti-patterns, and practical rules:\n\n1. **Error Message Anatomy** — title, description, action — writing clear error messages, tone, specificity, jargon avoidance\n2. **Error Prevention** — constraints, confirmation dialogs, undo over confirm, smart defaults, input masking\n3. **Error Presentation** — inline errors, toast/snackbar, banner, modal, error pages — when to use each\n4. **Form Validation Errors** — real-time vs on-submit, field-level vs form-level, error summary patterns (GOV.UK style)\n5. **Empty & Zero States** — no results, no data, no permission, no connection — each needs different treatment\n6. **Loading Failures** — partial load, timeout, network error, retry patterns, cached fallbacks\n7. **Edge States** — too much data, too little data, long strings, special characters, concurrent edits, stale data\n8. **404 & Error Pages** — helpful error pages, search/navigation from error, humor vs utility\n9. **Destructive Action Safeguards** — confirmation patterns, soft delete, undo windows, type-to-confirm\n10. **Accessibility of Errors** — ARIA live regions, focus management on errors, screen reader announcements, color-independent indicators\n11. **Anti-Patterns** — table of common error UX mistakes (generic \"something went wrong\", auto-dismissing errors, error messages without actions, silent failures, etc.)\n12. **Design Checklist** — checkbox list covering all key error & edge state UX considerations\n\nEvery pattern should reference its source. No made-up citations.",
+      "status": "completed",
+      "spawnedAt": "2026-04-04T20:44:11.133Z",
+      "completedAt": "2026-04-04T20:47:03.026Z",
+      "activeMs": 170919,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/reports/agent-006-final.md",
+          "summary": "Created comprehensive error edge states reference with 12 sections, patterns, anti-patterns, and checklist matching existing documentation format.",
+          "timestamp": "2026-04-04T20:47:02.933Z"
+        }
+      ],
+      "paneId": "%219",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='agent-006' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db/prompts/agent-006-plugin\" --agent 'devcore:programmer' --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Plod"
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-04T20:41:44.740Z",
+      "activeMs": 165244,
+      "agentsSpawned": [
+        "agent-001",
+        "agent-002",
+        "agent-003",
+        "agent-004",
+        "agent-005",
+        "agent-006"
+      ],
+      "paneId": "%212",
+      "claudeSessionId": "33c151aa-9d3c-4f4b-ba72-28607953c7a8",
+      "mode": "implementation",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='0a6f80d0'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-04T20:44:29.799Z",
+      "nextPrompt": "All 6 agents are writing reference docs in parallel. Review all reports, quality-check each document (format adherence, 150-300 lines, real source citations, pattern/anti-pattern tables, design checklists), fix any issues, then update SKILL.md to link all 6 new references."
+    },
+    {
+      "cycle": 2,
+      "timestamp": "2026-04-04T20:48:23.852Z",
+      "activeMs": 102675,
+      "agentsSpawned": [],
+      "paneId": "%220",
+      "claudeSessionId": "534fdf9f-36d7-40ad-9644-73e26fc020fd",
+      "mode": "completion",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='ux-reference-documentation-pro'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-04T20:49:59.698Z",
+      "nextPrompt": "All 6 reference documents written, quality-reviewed, and linked from SKILL.md. Ready for completion."
+    },
+    {
+      "cycle": 3,
+      "timestamp": "2026-04-04T20:50:00.086Z",
+      "activeMs": 607820,
+      "agentsSpawned": [],
+      "paneId": "%222",
+      "claudeSessionId": "345df6b7-b234-4dfe-8790-3f128c63530b",
+      "mode": "completion",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/0a6f80d0-fa45-4c44-a283-96e2ca2730db' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='ux-reference-documentation-pro'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-04T20:55:09.739Z"
+    }
+  ],
+  "messages": [],
+  "startHour": 13,
+  "startDayOfWeek": 6,
+  "launchConfig": {
+    "context": "Target directory: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/. Existing files: hitl-ai-chat.md (use as format reference — headings, tables, pattern/anti-pattern structure, source citations, checklists). Parent skill: /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/SKILL.md (has a References section at top that currently only links hitl-ai-chat.md — add new entries there). Each agent should do real web research using WebSearch/WebFetch for authoritative sources (NNGroup, Smashing Magazine, GOV.UK design system, Material Design, Apple HIG, etc). Each reference file should be 150-300 lines, comprehensive but scannable. No fluff — concrete patterns, rules, and examples."
+  },
+  "tmuxSessionName": "ssyph_sisyphus_ux-reference-documentation-pro",
+  "tmuxSessionId": "$59",
+  "tmuxWindowId": "@76",
+  "name": "ux-reference-documentation-pro",
+  "completedAt": "2026-04-04T20:55:09.741Z",
+  "completionReport": "Wrote 6 UX reference documents for web:ux-design skill (form-input-design, data-visualization, performance-ux, cli-terminal-ux, onboarding-empty-states, error-edge-states) following the established hitl-ai-chat.md format. All docs have real citations, pattern/anti-pattern tables, and design checklists. SKILL.md updated with links to all 7 references.",
+  "wallClockMs": 805321,
+  "companionCreditedCycles": 3,
+  "companionCreditedActiveMs": 802782,
+  "companionCreditedStrength": 3
+}

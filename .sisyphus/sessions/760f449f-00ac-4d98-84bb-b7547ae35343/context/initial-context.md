@@ -1,0 +1,1 @@
+This is a tutorial demo session. Be extra verbose in your planning and reports so the user watching can understand what's happening. Keep the scope small — 2-3 agents max, 1-2 cycles.

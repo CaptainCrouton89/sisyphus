@@ -1,0 +1,91 @@
+{
+  "id": "e1e1bf38-c6d1-486f-a666-f94619411c29",
+  "task": "Design and implement session branching/forking for sisyphus — ability to temporarily fork off from a running session to handle an unrelated concern, then return to the main thread. Multiple forks should be possible concurrently.",
+  "context": "Problem: during a sisyphus session, unrelated issues arise that need attention but shouldn't pollute the current session's context/roadmap. Need a mechanism to 'branch' — pause or snapshot the current session, spin up a focused sub-session for the tangent, then resume the original. Think git branch semantics but for orchestration sessions. Key files: src/daemon/session-manager.ts (lifecycle), src/shared/protocol.ts (commands), src/cli/commands/ (CLI surface), src/daemon/state.ts (state mutations). START WITH A PROBLEM AGENT — explore the problem space, user needs, and possible approaches before any implementation.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "active",
+  "createdAt": "2026-04-05T03:37:20.703Z",
+  "activeMs": 0,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "problem-branching",
+      "agentType": "sisyphus:problem",
+      "provider": "anthropic",
+      "claudeSessionId": "79bc982f-4977-4e54-9f50-4b59fa415166",
+      "color": "cyan",
+      "instruction": "Explore the problem space for session branching/forking in sisyphus.\n\n## Context\nSisyphus is a tmux-integrated daemon that orchestrates Claude Code multi-agent workflows. Sessions have a lifecycle: start → orchestrator cycles (spawning agents, yielding, respawning) → complete. During a session, unrelated issues often arise that need attention but shouldn't pollute the current session's context/roadmap. We need a mechanism to \"branch\" — spin up a focused sub-session for the tangent, then return to the original.\n\n## What Exists\n- `Session.parentSessionId` field exists in `src/shared/types.ts` but is never populated\n- The `comeback-kid` achievement in `src/daemon/companion.ts` checks `session.parentSessionId != null` but is unearnable\n- Sessions are fully isolated: own UUID, session dir, tmux session, state.json, context/, roadmap\n- Session lifecycle is managed by `src/daemon/session-manager.ts`\n\n## Questions to Explore\n\n### User Workflow\n1. What triggers the need to branch? (Bug found during feature work, urgent fix needed, exploratory tangent)\n2. What does \"return to parent\" mean concretely? (Switch tmux session? Auto-resume parent?)\n3. Should the parent session pause while a fork runs, or continue concurrently?\n4. Can a fork itself be forked? (Tree of sessions vs flat parent-child)\n5. What happens when a fork completes? Does anything flow back to the parent? (Context? Summary?)\n\n### Interaction Model Options\nEvaluate these models against the workflows above:\n- **Git-like**: fork creates a snapshot, runs independently, parent continues. No merge.\n- **Process-like**: fork pauses parent, runs to completion, parent resumes with fork's summary injected as a message.\n- **Concurrent**: parent and fork run simultaneously on the same codebase. Fork is just a linked session.\n- **Hybrid**: user chooses pause/continue at fork time.\n\n### CLI Surface\n- What command creates a fork? (`sisyphus fork \"task\"`, `sisyphus branch \"task\"`)\n- Can an orchestrator fork programmatically? (During a cycle, spawn a sub-session instead of an agent)\n- How does the user navigate between parent and forks? (tmux, sisyphus CLI, TUI)\n\n### Edge Cases\n- What if the parent is killed while a fork is running?\n- What if a fork runs longer than expected?\n- Multiple forks from the same parent — how does the user track them?\n- Fork from a paused session — is that meaningful?\n\nSave your thinking document to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/problem-session-branching.md",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T03:39:18.593Z",
+      "completedAt": "2026-04-05T03:47:12.891Z",
+      "activeMs": 475266,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/reports/agent-001-final.md",
+          "summary": "Session branching problem exploration complete. Document saved to context/problem-session-branching.md.\n\n## Key Finding\n\nSession branching is a re-orientation and handoff problem, not a hierarchy prob",
+          "timestamp": "2026-04-05T03:47:12.887Z"
+        }
+      ],
+      "paneId": "%348",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='agent-001' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort max --model 'opus' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/prompts/agent-001-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persister"
+    },
+    {
+      "id": "agent-002",
+      "name": "explore-integration",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "94523483-89fc-480b-b5c2-98ec322c5670",
+      "color": "cyan",
+      "instruction": "Map all technical integration points in the sisyphus codebase that session branching/forking would need to touch.\n\n## Goal\nProduce a comprehensive map of every module, function, and data structure that would need modification to support session branching — where one session can spawn child sessions (forks) with a parent-child relationship.\n\n## Key Areas to Investigate\n\n### 1. State Model (src/shared/types.ts, src/daemon/state.ts)\n- `Session.parentSessionId` — already exists but unused. What other fields are needed?\n- How does `state.createSession()` work? What would change for a forked session?\n- Snapshot system — does forking interact with rollback/snapshots?\n\n### 2. Session Lifecycle (src/daemon/session-manager.ts)\n- `startSession()` — how would `forkSession()` differ?\n- `handleComplete()` — what happens when a fork completes? Parent notification?\n- `handleKill()` — killing a parent with active forks?\n- `resumeSession()` — resuming a parent after fork completion?\n- `pruneOldSessions()` — should forks be pruned differently?\n\n### 3. Protocol (src/shared/protocol.ts)\n- What new request types are needed? (`fork`, `list-forks`, `fork-status`)\n- How does `status` response change to show fork relationships?\n\n### 4. CLI (src/cli/commands/)\n- Which existing commands need fork-awareness? (status, list, kill)\n- What new commands are needed?\n\n### 5. Pane Monitor (src/daemon/pane-monitor.ts)\n- How does tracking change when parent/fork sessions exist?\n- Does fork completion trigger anything in the parent?\n\n### 6. Orchestrator (src/daemon/orchestrator.ts)\n- Should the orchestrator know about forks? Can it initiate them?\n- How is fork state shown in the orchestrator prompt?\n\n### 7. TUI (src/tui/)\n- Session list — how to display parent/fork hierarchy?\n- Dashboard dots — fork indicators?\n\n### 8. Companion (src/daemon/companion.ts)\n- `comeback-kid` achievement already checks `parentSessionId`\n- Should forks contribute to companion stats independently?\n\n### 9. History (src/daemon/history.ts)\n- Fork events in the event log\n- Session summary for forked sessions\n\nSave your findings to: /Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/explore-integration-points.md",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T03:39:31.606Z",
+      "completedAt": "2026-04-05T03:42:12.669Z",
+      "activeMs": 160067,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/reports/agent-002-final.md",
+          "summary": "Mapped 9 required modules for session branching: core fork logic, protocol routes, and history events identified.",
+          "timestamp": "2026-04-05T03:42:12.666Z"
+        }
+      ],
+      "paneId": "%349",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='agent-002' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort low --model 'sonnet' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/prompts/agent-002-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persevere"
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-05T03:37:21.057Z",
+      "activeMs": 140033,
+      "agentsSpawned": [
+        "agent-001",
+        "agent-002"
+      ],
+      "paneId": "%347",
+      "claudeSessionId": "48a799df-e37d-430d-8df6-f66a872eba66",
+      "mode": "planning",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='e1e1bf38'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "completedAt": "2026-04-05T03:39:44.319Z",
+      "nextPrompt": "Problem and explore agents are running. Review their reports in context/problem-session-branching.md and context/explore-integration-points.md. Synthesize findings, identify the interaction model, and seek user alignment on key decisions before drafting requirements. Key questions: (1) should parent pause or continue during fork? (2) does fork completion inject a summary back? (3) can orchestrators fork programmatically?"
+    }
+  ],
+  "messages": [],
+  "startHour": 20,
+  "startDayOfWeek": 6,
+  "launchConfig": {
+    "context": "Problem: during a sisyphus session, unrelated issues arise that need attention but shouldn't pollute the current session's context/roadmap. Need a mechanism to 'branch' — pause or snapshot the current session, spin up a focused sub-session for the tangent, then resume the original. Think git branch semantics but for orchestration sessions. Key files: src/daemon/session-manager.ts (lifecycle), src/shared/protocol.ts (commands), src/cli/commands/ (CLI surface), src/daemon/state.ts (state mutations). START WITH A PROBLEM AGENT — explore the problem space, user needs, and possible approaches before any implementation."
+  },
+  "tmuxSessionName": "ssyph_sisyphus_session-fork-management",
+  "tmuxSessionId": "$72",
+  "tmuxWindowId": "@111",
+  "name": "session-fork-management"
+}

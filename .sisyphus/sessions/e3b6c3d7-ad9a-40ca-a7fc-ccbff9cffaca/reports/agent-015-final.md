@@ -1,0 +1,1 @@
+Added test_session_complete_lifecycle and test_update_task to test/integration/suites/test-full.sh with proper cleanup and early-exit guards on dependency failures.

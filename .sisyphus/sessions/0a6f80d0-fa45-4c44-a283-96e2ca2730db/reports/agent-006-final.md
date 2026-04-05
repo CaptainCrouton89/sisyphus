@@ -1,0 +1,1 @@
+Written /Users/silasrhyneer/Code/crouton-kit/plugins/web/skills/ux-design/references/error-edge-states.md — 347 lines covering all 12 required sections with sourced patterns, anti-pattern table, and checklist. Format matches hitl-ai-chat.md exactly.

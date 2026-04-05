@@ -1,0 +1,6 @@
+{
+  "recentWork": "Session initialized, awaiting goal definition from user",
+  "unusualEvents": ["Session started with no goal — user prompt was just 'Hi'"],
+  "currentActivity": "Idle — waiting for user to define what they want to work on",
+  "whatsNext": "User provides a goal, then strategy and planning begin"
+}

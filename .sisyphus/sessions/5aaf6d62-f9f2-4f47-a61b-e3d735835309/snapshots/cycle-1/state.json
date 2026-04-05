@@ -1,0 +1,77 @@
+{
+  "id": "5aaf6d62-f9f2-4f47-a61b-e3d735835309",
+  "name": "companion",
+  "task": "Implement the Companion system for sisyphus as specified in .claude/specs/companion.spec.md. This is a persistent ASCII character that lives inside sisyphus — it has stats derived from real usage, a mood system, Haiku-generated commentary, agent nicknames, repo memory, achievements, and visual evolution. Key implementation areas: 1) Core companion module (src/daemon/companion.ts): CompanionState type, read/write ~/.sisyphus/companion.json (atomic writes), stat accumulation from session data, XP/leveling calculation, mood computation (error rates, time of day, idle duration, streaks), achievement checking (35 achievements across 4 categories). 2) Rendering function (src/shared/companion-render.ts): Single renderCompanion(state, fields, opts) function that accepts a field mask and returns an inline ASCII string. Shared by CLI, daemon, and TUI. 3) Commentary generation (src/daemon/companion-commentary.ts): Per-event-type context builders using Haiku via @r-cli/sdk (same fire-and-forget pattern as summarize.ts). 4) Agent naming: Mood+stat-dependent nickname generation via Haiku. 5) Daemon integration hooks in session-manager, pane-monitor, status-bar. 6) tmux status bar: Append companion to @sisyphus_status with 5-second flash on events. 7) TUI: Companion pinned to bottom of tree panel, leader key c for overlay. 8) CLI: sisyphus companion command. 9) Tests: Solid coverage for stat accumulation, XP/leveling, mood computation, all 35 achievements, visual evolution, rendering with field masks, cosmetic stacking. Use node native test runner.",
+  "context": "Full spec: .claude/specs/companion.spec.md. Key patterns to follow: src/daemon/summarize.ts (Haiku SDK usage), src/daemon/state.ts (atomic writes), src/shared/types.ts (existing types), src/daemon/status-bar.ts and src/daemon/status-dots.ts (tmux rendering). The rendering function should be in src/shared/ so CLI, daemon, and TUI can all import it. All ASCII art is single-line (no vertical elements). No emojis — use ASCII characters only. Achievement badges are inline ASCII markers. Boulder sizes: . o O @. This needs solid test coverage since there are many stat/mood/achievement variations.",
+  "cwd": "/Users/silasrhyneer/Code/claude-tools/sisyphus",
+  "status": "active",
+  "createdAt": "2026-04-02T06:21:57.383Z",
+  "activeMs": 0,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "explore-integration",
+      "agentType": "sisyphus:explore",
+      "provider": "anthropic",
+      "claudeSessionId": "b8dd1c59-c82d-46c4-984b-bcd40eca25dd",
+      "color": "cyan",
+      "instruction": "Explore all integration surfaces for the Companion system. Save findings to context/explore-companion-integration.md.\n\nThe Companion is a persistent ASCII character that will be integrated into sisyphus. I need you to explore and document the EXACT integration points — function signatures, call sites, data available at each hook — for these areas:\n\n1. **session-manager.ts hooks**: Find the exact locations in startSession(), handleComplete(), handleSpawn(), handlePaneExited() where companion hooks should be inserted. Document what data is available at each point (session object, agent info, etc.).\n\n2. **pane-monitor.ts poll cycle**: Find where mood recompute and flash expiry would fit in the poll loop. Document the poll interval, what data is available, how writeStatusBar() is called.\n\n3. **status-bar.ts**: Find exactly where companion rendering would be appended to the status bar output. Document the rendering pipeline and how to add a companion section.\n\n4. **TUI tree panel** (src/tui/panels/tree.ts): Find where the companion would be pinned to the bottom of the tree. Document the rendering pattern, available width, how content is positioned.\n\n5. **TUI overlays** (src/tui/panels/overlays.ts): Find how the help overlay works so we can add a companion overlay triggered by leader key 'c'. Document the overlay pattern.\n\n6. **TUI input** (src/tui/input.ts): Find where leader key options are registered so we can add 'c' for companion.\n\n7. **Agent type** (shared/types.ts): Confirm there's no nickname field on Agent yet — we need to add one.\n\n8. **Existing companion infra**: Document what companion-context.ts and openCompanionPane() already do.\n\nFor each integration point, provide:\n- File path and line numbers\n- Function signature\n- What data is available\n- Where exactly the new code should be inserted\n- Any constraints or patterns to follow",
+      "status": "completed",
+      "spawnedAt": "2026-04-02T06:24:11.408Z",
+      "completedAt": "2026-04-02T06:26:20.641Z",
+      "activeMs": 130025,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/5aaf6d62-f9f2-4f47-a61b-e3d735835309/reports/agent-001-final.md",
+          "summary": "Documented 13 integration points across 8 files for implementing companion feature with existing hooks and infrastructure.",
+          "timestamp": "2026-04-02T06:26:20.639Z"
+        }
+      ],
+      "paneId": "%2372",
+      "repo": "."
+    },
+    {
+      "id": "agent-002",
+      "name": "plan-companion",
+      "agentType": "sisyphus:plan",
+      "provider": "anthropic",
+      "claudeSessionId": "0a7c6b68-b9af-4b83-a71c-6c3ff936ef8a",
+      "color": "yellow",
+      "instruction": "Create a detailed implementation plan for the Companion system. Save to context/plan-companion.md.\n\n## Source Material\nRead the full spec: .claude/specs/companion.spec.md (550 lines, very detailed)\nRead the existing patterns: src/daemon/summarize.ts (Haiku SDK), src/daemon/state.ts (atomic writes), src/shared/types.ts (existing types)\n\n## What to Produce\n\nA phased implementation plan with:\n\n### 1. Type Definitions\nDefine the complete CompanionState type with all fields from the spec:\n- Stats (strength, endurance, wisdom, luck, patience)\n- XP, level, title\n- Mood and mood timestamps\n- Achievements array\n- Repo memory\n- Last commentary\n- Lifetime counters\n- Version field\n\nAlso define: CompanionField type, Mood type, Achievement type, RepoMemory type, idle state types.\n\n### 2. Module Interface Definitions\n\n**companion.ts** (src/daemon/companion.ts):\n- loadCompanion(): reads or creates companion.json\n- saveCompanion(): atomic write\n- updateStatsFromSession(session): stat accumulation\n- computeXP(stats): weighted sum formula\n- computeLevel(xp): exponential thresholds\n- getTitle(level): level-to-title mapping\n- computeMood(companion, session?, signals?): mood calculation\n- checkAchievements(companion, session): returns newly unlocked achievements\n- updateRepoMemory(companion, cwd, session): repo visit tracking\n- getIdleState(companion): current idle animation frame\n- All 35 achievements defined as data (id, name, condition checker, badge)\n\n**companion-render.ts** (src/shared/companion-render.ts):\n- renderCompanion(state, fields, opts): the universal renderer\n- getBaseForm(level): body by level\n- getMoodFace(mood): face override\n- getStatCosmetics(stats): inline decorations\n- getAchievementBadges(achievements): inline badges\n- getBoulderSize(agentCount?, repoVisits?): boulder character\n\n**companion-commentary.ts** (src/daemon/companion-commentary.ts):\n- generateCommentary(companion, event, context): Haiku call\n- generateAgentNickname(companion, agentType): Haiku call\n- buildPrompt(companion, event, context): prompt construction\n- Event type enum and per-event context builders\n\n### 3. Work Packages (Parallel-Safe)\nBreak into work packages where each agent touches DIFFERENT files:\n\nPackage A: Core companion module (companion.ts) + companion types\nPackage B: Renderer (companion-render.ts)\nPackage C: Commentary + agent naming (companion-commentary.ts)\nPackage D: Tests (companion.test.ts)\nPackage E: Integration (session-manager hooks, pane-monitor, status-bar)\nPackage F: CLI command (companion.ts in cli/commands/)\nPackage G: TUI integration (tree panel, overlay, leader key)\n\n### 4. Dependency Graph\nWhich packages can run in parallel, which must be sequential.\n\n### 5. XP Formula and Level Thresholds\nCompute exact level thresholds from the spec's '~1.5x' exponential rule.\n\n### 6. Achievement Definitions\nList all 35 achievements with exact condition checker logic.\n\n### 7. Mood Weights\nDefine the mood scoring system — which signals feed which moods, reasonable weights.",
+      "status": "completed",
+      "spawnedAt": "2026-04-02T06:24:30.418Z",
+      "completedAt": "2026-04-02T06:33:15.283Z",
+      "activeMs": 525247,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/5aaf6d62-f9f2-4f47-a61b-e3d735835309/reports/agent-002-final.md",
+          "summary": "Companion implementation plan written to context/plan-companion.md. Covers all 7 sections: type definitions, module interfaces, work packages, dependency graph, XP formula + level thresholds, 35 achie",
+          "timestamp": "2026-04-02T06:33:15.279Z"
+        }
+      ],
+      "paneId": "%2373",
+      "repo": "."
+    }
+  ],
+  "orchestratorCycles": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-04-02T06:21:57.648Z",
+      "activeMs": 155094,
+      "agentsSpawned": [
+        "agent-001",
+        "agent-002"
+      ],
+      "paneId": "%2370",
+      "claudeSessionId": "634c8091-02f5-4c0f-8334-ed31b5e6341a",
+      "mode": "planning",
+      "completedAt": "2026-04-02T06:24:33.931Z",
+      "nextPrompt": "Strategy set. Two agents exploring integration surfaces and drafting implementation plan. Next cycle: review agent reports, refine the plan, finalize type definitions and work packages, then begin spawning implementation agents."
+    }
+  ],
+  "messages": [],
+  "tmuxSessionName": "ssyph_sisyphus_companion",
+  "tmuxWindowId": "@482"
+}
