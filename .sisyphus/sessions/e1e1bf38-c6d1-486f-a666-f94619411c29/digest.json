@@ -1,6 +1,6 @@
 {
-  "recentWork": "Ran full E2E validation — all 12 recipe steps pass with evidence",
-  "unusualEvents": ["Accidental clone created during testing due to env var leak — cleaned up"],
-  "currentActivity": "Validation complete, transitioning to completion",
-  "whatsNext": "User sign-off in completion mode"
+  "recentWork": "Restructured CLI references across orchestrator templates, hid internal commands, added --list-types, dynamic command table in getting-started",
+  "unusualEvents": ["--list-types was documented in CLAUDE.md but never implemented — now it exists"],
+  "currentActivity": "User review of all changes in completion mode",
+  "whatsNext": "User confirmation to finalize session"
 }
