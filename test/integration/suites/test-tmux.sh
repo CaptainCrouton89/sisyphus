@@ -626,6 +626,92 @@ process.stdin.on('end', () => {
   cleanup_test_project
 }
 
+test_plugin_auto_install() {
+  local test_cwd="/tmp/sisyphus-plugin-test"
+  rm -rf "$test_cwd"
+  mkdir -p "$test_cwd"
+
+  tmux kill-server 2>/dev/null || true
+  tmux new-session -d -s plugin-auto-install-test
+
+  # Ensure the plugin is NOT installed before the test
+  claude plugin uninstall learn@crouton-kit >/dev/null 2>&1 || true
+
+  # Verify it's actually gone
+  local pre_check
+  pre_check=$(claude plugin list --json 2>/dev/null || echo "[]")
+  if echo "$pre_check" | node -e "
+    const d = []; process.stdin.on('data',c=>d.push(c)); process.stdin.on('end',()=>{
+      const plugins = JSON.parse(d.join(''));
+      process.exit(plugins.some(p => p.name === 'learn' || p.key === 'learn@crouton-kit') ? 1 : 0);
+    });" 2>/dev/null; then
+    assert_pass "plugin-auto-install-pre-clean"
+  else
+    assert_fail "plugin-auto-install-pre-clean" "learn@crouton-kit still installed after uninstall"
+    tmux kill-server 2>/dev/null || true
+    rm -rf "$test_cwd"
+    return
+  fi
+
+  # Configure project to require learn@crouton-kit
+  mkdir -p "$test_cwd/.sisyphus"
+  printf '{"requiredPlugins":[{"name":"learn","marketplace":"crouton-kit"}]}' \
+    > "$test_cwd/.sisyphus/config.json"
+
+  if ! start_daemon; then
+    assert_fail "plugin-auto-install-daemon-start" "start_daemon timed out"
+    tmux kill-server 2>/dev/null || true
+    rm -rf "$test_cwd"
+    return
+  fi
+
+  # Starting a session triggers orchestrator spawn → resolveRequiredPluginDirs → ensurePluginInstalled
+  local create_resp
+  create_resp=$(send_request "{\"type\":\"start\",\"task\":\"plugin auto-install test\",\"cwd\":\"$test_cwd\"}")
+  assert_json_ok "plugin-auto-install-session-created" "$create_resp"
+
+  sleep 3
+
+  # Verify the plugin was auto-installed by real Claude Code
+  local registry="$HOME/.claude/plugins/installed_plugins.json"
+  if [ -f "$registry" ]; then
+    assert_pass "plugin-auto-install-registry-exists"
+  else
+    assert_fail "plugin-auto-install-registry-exists" "registry file not created at $registry"
+    assert_fail "plugin-auto-install-plugin-present" "skipped (no registry)"
+    stop_daemon
+    tmux kill-server 2>/dev/null || true
+    rm -rf "$test_cwd"
+    return
+  fi
+
+  # Check the registry has learn@crouton-kit with an installPath
+  local install_path
+  install_path=$(node -e "
+    const fs = require('fs');
+    try {
+      const reg = JSON.parse(fs.readFileSync('$registry', 'utf8'));
+      const entries = reg.plugins?.['learn@crouton-kit'] || [];
+      const e = entries[0];
+      if (e && e.installPath) process.stdout.write(e.installPath);
+    } catch {}
+  ")
+  if [ -n "$install_path" ] && [ -d "$install_path" ]; then
+    assert_pass "plugin-auto-install-plugin-present"
+  else
+    assert_fail "plugin-auto-install-plugin-present" "learn@crouton-kit not found in registry or dir missing (path='$install_path')"
+  fi
+
+  assert_daemon_alive "plugin-auto-install-daemon-survives"
+
+  # Clean up: uninstall the test plugin
+  claude plugin uninstall learn@crouton-kit >/dev/null 2>&1 || true
+
+  stop_daemon
+  tmux kill-server 2>/dev/null || true
+  rm -rf "$test_cwd"
+}
+
 test_subdirectory_cwd_isolation() {
   local project_root="/tmp/sisyphus-subdir-test-root"
   local subdir="$project_root/subdir"
@@ -692,6 +778,7 @@ run_tmux_tests() {
   test_external_pane_kill
   test_daemon_restart_recovery
   test_concurrent_messages
+  test_plugin_auto_install
   test_subdirectory_cwd_isolation
 
   tmux kill-server 2>/dev/null || true

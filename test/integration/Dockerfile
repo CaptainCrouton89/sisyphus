@@ -14,16 +14,22 @@ COPY lib/ /tests/lib/
 COPY suites/ /tests/suites/
 RUN chmod +x /tests/lib/* /tests/suites/*
 
-# Stage 2: tmux — base + tmux + claude mock (session tests need claude)
+# Stage 2: tmux — base + tmux + real Claude Code + claude wrapper
 FROM base AS tmux
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tmux && \
+    apt-get install -y --no-install-recommends tmux git && \
     rm -rf /var/lib/apt/lists/*
 
-# Claude mock: stays alive like a real Claude session (reads stdin until killed)
-RUN printf '#!/bin/sh\nexec sleep 300\n' > /usr/local/bin/claude && \
-    chmod +x /usr/local/bin/claude
+# Install real Claude Code (for plugin/marketplace commands)
+RUN npm install -g @anthropic-ai/claude-code
+
+# Add crouton-kit marketplace at build time (needs git + network)
+RUN node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js plugin marketplace add CaptainCrouton89/crouton-kit
+
+# Wrapper: routes `plugin` subcommands to real Claude Code, everything else to sleep
+COPY lib/claude-mock.sh /usr/local/bin/claude
+RUN chmod +x /usr/local/bin/claude
 
 # Stage 3: full — tmux + neovim + verdaccio (for auto-updater integration tests)
 FROM tmux AS full
