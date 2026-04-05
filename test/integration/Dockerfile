@@ -24,8 +24,12 @@ RUN apt-get update && \
 # Install real Claude Code (for plugin/marketplace commands)
 RUN npm install -g @anthropic-ai/claude-code
 
+# Preserve the real binary before installing the wrapper
+RUN cp -L /usr/local/bin/claude /usr/local/bin/claude-real && \
+    chmod +x /usr/local/bin/claude-real
+
 # Add crouton-kit marketplace at build time (needs git + network)
-RUN node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js plugin marketplace add CaptainCrouton89/crouton-kit
+RUN claude-real plugin marketplace add CaptainCrouton89/crouton-kit
 
 # Wrapper: routes `plugin` subcommands to real Claude Code, everything else to sleep
 COPY lib/claude-mock.sh /usr/local/bin/claude

@@ -37,14 +37,14 @@ test_full_setup() {
 test_status_bar() {
   tmux new-session -d -s status-test 2>/dev/null || true
   start_daemon
-  # Status bar writes on startup and every poll cycle (5s) — wait for at least one cycle
+  # Compositor writes status-right directly on each poll cycle (5s) — wait for at least one
   sleep 8
   local status_val
-  status_val=$(tmux show-option -gv @sisyphus_status 2>/dev/null || echo "")
+  status_val=$(tmux show-option -gv status-right 2>/dev/null || echo "")
   if [ -n "$status_val" ]; then
     assert_pass "status-bar-write"
   else
-    assert_fail "status-bar-write" "tmux @sisyphus_status is empty"
+    assert_fail "status-bar-write" "tmux status-right is empty after daemon poll cycle"
   fi
   stop_daemon
   tmux kill-server 2>/dev/null || true
