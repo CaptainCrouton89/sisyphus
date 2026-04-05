@@ -3,7 +3,7 @@ import { existsSync, statSync } from 'node:fs';
 import type { Command } from 'commander';
 import { daemonLogPath, daemonPidPath, globalDir, socketPath } from '../../shared/paths.js';
 import { isInstalled } from '../install.js';
-import { detectTerminal, checkItermOptionKey, isNvimAvailable, isBeginCommandInstalled } from '../onboard.js';
+import { detectTerminal, checkItermOptionKey, isNvimAvailable, isBeginCommandInstalled, isTermrenderAvailable } from '../onboard.js';
 import { cycleScriptPath, DEFAULT_CYCLE_KEY, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath } from '../tmux-setup.js';
 
 interface Check {
@@ -235,6 +235,23 @@ function checkBeginCommand(): Check {
   };
 }
 
+function checkTermrender(): Check {
+  if (isTermrenderAvailable()) {
+    try {
+      const version = execSync('termrender --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+      return { name: 'termrender', status: 'ok', detail: version };
+    } catch {
+      return { name: 'termrender', status: 'ok', detail: 'installed' };
+    }
+  }
+  return {
+    name: 'termrender',
+    status: 'warn',
+    detail: 'Not installed (rich markdown rendering unavailable)',
+    fix: 'pipx install termrender (or: pip install termrender)',
+  };
+}
+
 function checkNvim(): Check {
   if (!isNvimAvailable()) {
     const fix = process.platform === 'darwin' ? 'brew install neovim' : 'Install neovim from https://neovim.io';
@@ -271,6 +288,7 @@ export function registerDoctor(program: Command): void {
         checkTmuxKeybind(),
         checkBeginCommand(),
         checkNvim(),
+        checkTermrender(),
       ];
 
       let hasIssues = false;
