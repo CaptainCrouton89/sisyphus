@@ -8,6 +8,14 @@ import { join } from 'node:path';
 import { shellQuote } from '../../shared/shell.js';
 import { exec } from '../../shared/exec.js';
 
+const BALEIA_INIT = `vim.defer_fn(function()
+  local ok, baleia = pcall(require, "baleia")
+  if ok then
+    baleia.setup({ async = false }).once(vim.api.nvim_get_current_buf())
+  end
+end, 50)
+`;
+
 export function registerPresent(program: Command): void {
   program
     .command('present')
@@ -53,14 +61,16 @@ export function registerPresent(program: Command): void {
         process.exit(1);
       }
 
-      // Write ANSI-rendered output to temp file — nvim ANSI plugin handles the colors
+      // Write ANSI-rendered output and baleia init script to temp files
       const tempId = randomBytes(6).toString('hex');
       const tempPath = join(tmpdir(), `sisyphus-present-${tempId}.ansi`);
+      const initPath = join(tmpdir(), `sisyphus-present-${tempId}-init.lua`);
       writeFileSync(tempPath, rendered, 'utf-8');
+      writeFileSync(initPath, BALEIA_INIT, 'utf-8');
 
-      // Open nvim in a split pane to the right of the agent
+      // Open nvim with baleia init script in a split pane to the right
       const channel = `present-${randomBytes(4).toString('hex')}`;
-      const nvimCmd = `nvim ${shellQuote(tempPath)}; tmux wait-for -S ${shellQuote(channel)}`;
+      const nvimCmd = `nvim -S ${initPath} ${shellQuote(tempPath)}; tmux wait-for -S ${shellQuote(channel)}`;
       exec(`tmux split-window -h -l 50% ${shellQuote(nvimCmd)}`);
 
       if (opts.wait === false) {
@@ -77,6 +87,7 @@ export function registerPresent(program: Command): void {
       // Clean up
       try {
         if (existsSync(tempPath)) unlinkSync(tempPath);
+        if (existsSync(initPath)) unlinkSync(initPath);
       } catch {
         // Best-effort
       }
