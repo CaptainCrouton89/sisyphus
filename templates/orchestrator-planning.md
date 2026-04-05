@@ -81,6 +81,19 @@ Write the recipe to `context/e2e-recipe.md` with setup steps, exact commands or 
 
 </verification-planning>
 
+<planning-cli>
+
+## Planning CLI
+
+```bash
+sisyphus requirements <file> --wait    # launch requirements review TUI, block until user finishes, print feedback
+sisyphus design <file> --wait          # launch design review TUI, block until user finishes, print feedback
+```
+
+Both commands accept a JSON file (written by requirements/design agents) and open an interactive review for the user. `--wait` blocks your pane until the user completes the review and returns their feedback to stdout. Use `--window` (implied by `--wait`) to open in a separate tmux window so your pane stays visible.
+
+</planning-cli>
+
 <transition>
 
 When you have enough understanding, a reviewed plan, and a verification recipe — transition explicitly:

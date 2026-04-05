@@ -87,6 +87,12 @@ sisyphus yield --mode planning --prompt "Validation revealed [architectural issu
 
 **Do not attempt fixes in validation mode** beyond trivial issues (a missed import, a config typo). If the fix requires design decisions or touches multiple files, transition to implementation mode where the orchestrator has the right guidance for managing that work.
 
+## Validation CLI
+
+```bash
+sisyphus restart-agent <agentId>                         # respawn a failed/killed validation agent
+```
+
 ## Completion Gate
 
 When all validation passes, **do not call `sisyphus complete` directly.** Yield to completion mode for user sign-off:

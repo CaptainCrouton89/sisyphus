@@ -160,3 +160,15 @@ Concrete triggers:
 Document what you found in the cycle log before yielding. Update roadmap.md to reflect you're back in an earlier phase.
 
 </returning-to-planning>
+
+<impl-cli>
+
+## Implementation CLI
+
+```bash
+sisyphus update-task "revised goal"                      # update the session goal mid-flight
+sisyphus restart-agent <agentId>                         # respawn a failed/killed agent in a new pane
+sisyphus rollback <sessionId> <cycle>                    # rewind state to a prior cycle boundary
+```
+
+</impl-cli>

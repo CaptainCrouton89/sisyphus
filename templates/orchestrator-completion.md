@@ -100,3 +100,10 @@ sisyphus complete --report "summary of what was accomplished"
 ```
 
 The report should be a concise summary suitable for session history. Reference the full completion report you presented if needed.
+
+## Completion CLI
+
+```bash
+sisyphus complete --report "summary of what was accomplished"  # finalize session (only after user confirms)
+sisyphus continue "new instructions"                           # reactivate a completed session
+```

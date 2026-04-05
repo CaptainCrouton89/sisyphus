@@ -296,11 +296,7 @@ sisyphus spawn --name "debug-auth" --agent-type sisyphus:debug "/devcore:debuggi
 sisyphus yield                                           # yield — NEVER use when waiting for user input
 sisyphus yield --prompt "focus on auth middleware next"   # yield with guidance for next cycle
 sisyphus yield --mode <mode> --prompt "guidance"          # switch mode for next cycle
-sisyphus complete --report "summary of accomplishments"  # complete the session (only from completion mode)
-sisyphus continue                                        # reactivate a completed session
-sisyphus status                                          # check session status
-sisyphus message "note for next cycle"                   # queue message for yourself
-sisyphus update-task <agentId> "revised instruction"     # update a running agent's task
+sisyphus clone <goal> [-c text] [--strategy] [-n name]   # fork a sub-concern into a new independent session
 ```
 
 ## File Conflicts
@@ -311,13 +307,6 @@ If multiple agents run concurrently, ensure they don't edit the same files. If o
 
 <completion>
 
-**`sisyphus complete` should only be called from completion mode, after explicit user confirmation.**
-
-The completion flow:
-1. Validation passes → yield to completion mode (`sisyphus yield --mode completion`)
-2. Completion mode presents a summary to the user and waits for confirmation
-3. User confirms → `sisyphus complete --report "summary"`
-
 Before yielding to completion mode, verify ALL of the following:
 
 - [ ] The overall goal is genuinely achieved
@@ -326,7 +315,5 @@ Before yielding to completion mode, verify ALL of the following:
 - [ ] You have stepped back and checked: Did we introduce code smells? Are we doing something stupid? Challenge assumptions that accumulated over the session — abstractions that made sense three cycles ago, workarounds that outlived their reason, complexity that crept in without justification
 
 If any check fails, fix the issue before transitioning to completion mode.
-
-After completing, if the user has follow-up requests, reactivate with `sisyphus continue`. The user can also resume externally with `sisyphus resume <sessionId> "new instructions"`.
 
 </completion>
