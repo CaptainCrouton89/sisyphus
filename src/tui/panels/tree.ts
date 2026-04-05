@@ -146,7 +146,7 @@ export function renderTreePanel(
   const { x, y, w, h } = rect;
 
   // 1. Border — yellow when focused
-  drawBorder(buf, x, y, w, h, focused ? 'yellow' : 'gray');
+  drawBorder(buf, x, y, w, h, focused ? 'cyan' : 'gray');
 
   // 2. Inner dimensions
   const innerX = x + 2;

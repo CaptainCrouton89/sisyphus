@@ -399,7 +399,7 @@ export function buildPanelRows(
   const { w, h } = rect;
   const rows = new Array<string>(h);
 
-  const color = focused ? 'blue' : borderColor;
+  const color = focused ? 'cyan' : 'gray';
   const sgr = `\x1b[${colorToSGR(color)}m`;
   const reset = '\x1b[0m';
   const innerW = w - 4;
@@ -468,7 +468,7 @@ export function buildEmptyPanelRows(
 ): string[] {
   const { w, h } = rect;
   const rows = new Array<string>(h);
-  const color = focused ? 'blue' : borderColor;
+  const color = focused ? 'cyan' : 'gray';
   const sgr = `\x1b[${colorToSGR(color)}m`;
   const reset = '\x1b[0m';
   const innerW = w - 4;
