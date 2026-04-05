@@ -199,6 +199,158 @@ export async function startSession(task: string, cwd: string, context?: string, 
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
 }
 
+export async function cloneSession(
+  sourceId: string,
+  cwd: string,
+  goal: string,
+  context?: string,
+  name?: string,
+  strategy?: boolean,
+): Promise<Session> {
+  // 1. Validate source
+  const sourceSession = state.getSession(cwd, sourceId);
+  if (sourceSession.status === 'completed') {
+    throw new Error('Cannot clone completed session. Use `sisyphus continue` to resume it first.');
+  }
+
+  // 2. Generate clone identity
+  const cloneId = uuidv4();
+
+  if (name && !NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid session name "${name}": only alphanumeric, hyphens, and underscores allowed`);
+  }
+
+  const tmuxName = tmuxSessionName(cwd, name ?? cloneId.slice(0, 8));
+
+  if (tmux.sessionNameTaken(tmuxName)) {
+    throw new Error(`Tmux session "${tmuxName}" already exists. Choose a different name.`);
+  }
+
+  // 3. Filesystem: clone session directory and state
+  state.cloneSessionDir(cwd, sourceId, cloneId, goal, context, strategy);
+  const cloneState = await state.createCloneState(cwd, sourceId, cloneId, goal, context);
+
+  // 4. Model config
+  const config = loadConfig(cwd);
+  const model = sourceSession.model ?? config.model;
+  await state.updateSession(cwd, cloneId, {
+    model,
+    launchConfig: sourceSession.launchConfig ?? {
+      model,
+      context,
+      orchestratorPrompt: config.orchestratorPrompt,
+    },
+  });
+
+  // 5. Tmux session
+  const { windowId, initialPaneId, sessionId: tmuxSessId } = tmux.createSession(tmuxName, cwd);
+  tmux.initSessionMeta(tmuxSessId, cwd, cloneId);
+  await state.updateSessionTmux(cwd, cloneId, tmuxName, windowId, tmuxSessId);
+
+  // 6. Track & spawn
+  trackSession(cloneId, cwd, tmuxSessId, tmuxName);
+  resetAgentCounterFromState(cloneId, cloneState.agents);
+
+  const sourceGoal = readGoal(cwd, sourceId, sourceSession.task);
+  let orientationMessage = `This is a **cloned session**, forked from an existing session.
+
+Source session: ${sourceId}
+Previous goal: ${sourceGoal}
+
+You have full access to the previous session's context/, reports/,
+and cycle history. Use them as background for your work.
+
+Your new goal is: ${goal}`;
+
+  if (context) {
+    orientationMessage += `\n\n### Additional Context\n${context}`;
+  }
+
+  orientationMessage += `\n\n**Important**: The source session continues independently.
+It is the other session's responsibility. You do not need to monitor it.
+
+### Next Steps
+1. Review inherited context/ and reports/
+2. Write strategy.md for your approach
+3. Update roadmap.md with your work plan
+4. Begin delegating work to agents`;
+
+  await orchestrator.spawnOrchestrator(cloneId, cwd, windowId, orientationMessage, 'strategy');
+  updateTrackedWindow(cloneId, windowId);
+  tmux.killPane(initialPaneId);
+
+  // 7. History events
+  emitHistoryEvent(sourceId, 'session-cloned', { cloneSessionId: cloneId, cloneGoal: goal });
+  emitHistoryEvent(cloneId, 'cloned-from', { sourceSessionId: sourceId, sourceGoal: sourceSession.task });
+
+  // 8. Haiku naming (fire-and-forget)
+  if (!name) {
+    generateSessionName(goal).then(async (generatedName) => {
+      if (!generatedName) return;
+      let finalName = generatedName;
+      let candidate = tmuxSessionName(cwd, finalName);
+      let attempt = 0;
+      while (tmux.sessionNameTaken(candidate) && attempt < 5) {
+        attempt++;
+        finalName = `${generatedName}-${attempt}`;
+        candidate = tmuxSessionName(cwd, finalName);
+      }
+      if (tmux.sessionNameTaken(candidate)) return;
+
+      const currentSession = state.getSession(cwd, cloneId);
+      const currentTmuxSessId = currentSession.tmuxSessionId;
+      const renameTarget = currentTmuxSessId ?? tmuxName;
+
+      try {
+        tmux.renameSession(renameTarget, candidate);
+      } catch { return; }
+
+      await state.updateSessionName(cwd, cloneId, finalName);
+      const wId = state.getSession(cwd, cloneId).tmuxWindowId!;
+      await state.updateSessionTmux(cwd, cloneId, candidate, wId, currentTmuxSessId);
+      trackSession(cloneId, cwd, currentTmuxSessId, candidate);
+      registerSessionTmux(cloneId, candidate, wId, currentTmuxSessId);
+
+      for (const pane of getSessionPanes(cloneId)) {
+        tmux.updatePaneMeta(pane.paneId, { session: finalName });
+        if (pane.role === 'orchestrator') {
+          const s = state.getSession(cwd, cloneId);
+          tmux.setPaneTitle(pane.paneId, `ssph:orch ${finalName} c${s.orchestratorCycles.length}`);
+        } else if (pane.role === 'agent' && pane.agentId) {
+          const s = state.getSession(cwd, cloneId);
+          const agent = s.agents.find(a => a.id === pane.agentId);
+          if (agent) {
+            const shortType = agent.agentType && agent.agentType !== 'worker'
+              ? agent.agentType.replace(/^sisyphus:/, '')
+              : '';
+            const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
+            tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} c${s.orchestratorCycles.length}`);
+          }
+        }
+      }
+      emitHistoryEvent(cloneId, 'session-named', { name: finalName });
+      console.log(`[sisyphus] Clone session ${cloneId} named: ${finalName}`);
+    }).catch((err) => {
+      console.error(`[sisyphus] Name generation failed for clone ${cloneId}:`, err);
+    });
+  }
+
+  // 9. Housekeeping
+  pruneOldSessions(cwd);
+  pruneHistory();
+  try { recomputeDots(); } catch { /* best-effort */ }
+
+  try {
+    const companion = loadCompanion();
+    onSessionStart(companion, cwd);
+    saveCompanion(companion);
+    fireCommentary('session-start', companion, goal);
+  } catch { /* companion errors are non-fatal */ }
+
+  // 10. Return
+  return { ...state.getSession(cwd, cloneId), tmuxSessionName: tmuxName };
+}
+
 const PRUNE_KEEP_COUNT = 10;
 const PRUNE_KEEP_DAYS = 7;
 

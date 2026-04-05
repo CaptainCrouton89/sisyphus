@@ -306,7 +306,7 @@ ${digestRef}
 `;
 }
 
-export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string): Promise<void> {
+export async function spawnOrchestrator(sessionId: string, cwd: string, windowId: string, message?: string, forceMode?: string): Promise<void> {
   // Verify claude CLI is available before spawning
   try {
     execSync('which claude', { stdio: 'pipe', env: tmux.EXEC_ENV });
@@ -318,7 +318,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   // Read mode and nextPrompt from last completed cycle
   const lastCycle = [...session.orchestratorCycles].reverse().find(c => c.completedAt);
-  const mode = lastCycle?.mode ?? 'strategy';
+  const mode = forceMode ?? (lastCycle?.mode ?? 'strategy');
 
   const basePrompt = loadOrchestratorPrompt(cwd, sessionId, mode);
   const formattedState = formatStateForOrchestrator(session, mode);

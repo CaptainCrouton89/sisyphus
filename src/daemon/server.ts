@@ -180,6 +180,23 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { sessionId: session.id, tmuxSessionName: session.tmuxSessionName } };
       }
 
+      case 'clone': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const result = await sessionManager.cloneSession(
+          req.sessionId, tracking.cwd, req.goal, req.context, req.name, req.strategy
+        );
+        sessionTrackingMap.set(result.id, {
+          cwd: tracking.cwd,
+          tmuxSession: result.tmuxSessionName,
+          windowId: result.tmuxWindowId,
+          tmuxSessionId: result.tmuxSessionId,
+          messageCounter: 0,
+        });
+        persistSessionRegistry();
+        return { ok: true, data: { sessionId: result.id, tmuxSessionName: result.tmuxSessionName } };
+      }
+
       case 'spawn': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);

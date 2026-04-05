@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
+import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, reportsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath, strategyPath } from '../shared/paths.js';
+import { ensureSisyphusGitignore } from '../shared/gitignore.js';
 import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const ROADMAP_SEED = `---
@@ -39,6 +40,8 @@ function atomicWrite(filePath: string, data: string): void {
 }
 
 export function createSession(id: string, task: string, cwd: string, context?: string, name?: string): Session {
+  ensureSisyphusGitignore(cwd);
+
   const dir = sessionDir(cwd, id);
   mkdirSync(dir, { recursive: true });
   mkdirSync(contextDir(cwd, id), { recursive: true });
@@ -358,4 +361,125 @@ export function deleteSnapshotsAfter(cwd: string, sessionId: string, afterCycle:
       rmSync(join(dir, entry.name), { recursive: true, force: true });
     }
   }
+}
+
+// --- Session cloning ---
+
+function replaceIdInDir(dir: string, sourceId: string, cloneId: string): void {
+  if (!existsSync(dir)) return;
+  const entries = readdirSync(dir, { recursive: true }) as string[];
+  for (const rel of entries) {
+    const fullPath = join(dir, rel);
+    if (!statSync(fullPath).isFile()) continue;
+    const buf = readFileSync(fullPath);
+    // Skip binary files (null byte in first 8KB)
+    const sample = buf.subarray(0, 8192);
+    if (sample.includes(0)) continue;
+    const text = buf.toString('utf-8');
+    if (text.includes(sourceId)) {
+      writeFileSync(fullPath, text.replaceAll(sourceId, cloneId), 'utf-8');
+    }
+  }
+}
+
+export function cloneSessionDir(
+  sourceCwd: string,
+  sourceId: string,
+  cloneId: string,
+  goal: string,
+  context?: string,
+  strategy?: boolean,
+): void {
+  const srcDir = sessionDir(sourceCwd, sourceId);
+  const dstDir = sessionDir(sourceCwd, cloneId);
+  mkdirSync(dstDir, { recursive: true });
+
+  // Deep-copy directories
+  const dirsToCopy = ['context', 'prompts', 'reports', 'snapshots'] as const;
+  for (const sub of dirsToCopy) {
+    const src = join(srcDir, sub);
+    const dst = join(dstDir, sub);
+    if (existsSync(src)) {
+      cpSync(src, dst, { recursive: true });
+    } else {
+      mkdirSync(dst, { recursive: true });
+    }
+  }
+
+  // Conditionally copy strategy.md
+  if (strategy) {
+    const srcStrategy = strategyPath(sourceCwd, sourceId);
+    if (existsSync(srcStrategy)) {
+      copyFileSync(srcStrategy, strategyPath(sourceCwd, cloneId));
+    }
+  }
+
+  // Replace source ID with clone ID in copied directories
+  for (const sub of dirsToCopy) {
+    replaceIdInDir(join(dstDir, sub), sourceId, cloneId);
+  }
+
+  // Write fresh files
+  writeFileSync(goalPath(sourceCwd, cloneId), goal, 'utf-8');
+  writeFileSync(initialPromptPath(sourceCwd, cloneId), goal, 'utf-8');
+  writeFileSync(roadmapPath(sourceCwd, cloneId), ROADMAP_SEED, 'utf-8');
+  mkdirSync(logsDir(sourceCwd, cloneId), { recursive: true });
+
+  // Write context/CLAUDE.md
+  writeFileSync(join(contextDir(sourceCwd, cloneId), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
+
+  // Write initial-context.md if context provided
+  if (context) {
+    writeFileSync(join(contextDir(sourceCwd, cloneId), 'initial-context.md'), context, 'utf-8');
+  }
+}
+
+export async function createCloneState(
+  sourceCwd: string,
+  sourceId: string,
+  cloneId: string,
+  goal: string,
+  context?: string,
+): Promise<Session> {
+  return withSessionLock(cloneId, () => {
+    const source = getSession(sourceCwd, sourceId);
+
+    const createdAt = new Date().toISOString();
+    const created = new Date(createdAt);
+
+    // Deep-copy preserved fields
+    const agents = structuredClone(source.agents);
+    const orchestratorCycles = structuredClone(source.orchestratorCycles);
+    const messages = structuredClone(source.messages);
+
+    // Normalize running agents to killed
+    const now = new Date().toISOString();
+    for (const agent of agents) {
+      if (agent.status === 'running') {
+        agent.status = 'killed';
+        agent.completedAt = now;
+        agent.killedReason = 'inherited from source session';
+      }
+    }
+
+    const clone: Session = {
+      id: cloneId,
+      task: goal,
+      ...(context ? { context } : {}),
+      cwd: sourceCwd,
+      status: 'active',
+      createdAt,
+      activeMs: 0,
+      agents,
+      orchestratorCycles,
+      messages,
+      startHour: created.getHours(),
+      startDayOfWeek: created.getDay(),
+      ...(source.model ? { model: source.model } : {}),
+      ...(source.launchConfig ? { launchConfig: structuredClone(source.launchConfig) } : {}),
+    };
+
+    atomicWrite(statePath(sourceCwd, cloneId), JSON.stringify(clone, null, 2));
+    return clone;
+  });
 }

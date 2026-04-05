@@ -17,7 +17,9 @@ export type HistoryEventType =
   | 'agent-restarted'
   | 'rollback'
   | 'session-resumed'
-  | 'session-continued';
+  | 'session-continued'
+  | 'session-cloned'
+  | 'cloned-from';
 
 export interface HistoryEvent {
   ts: string;

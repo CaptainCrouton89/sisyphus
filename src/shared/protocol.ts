@@ -7,6 +7,7 @@ export type Request =
   | { type: 'report'; sessionId: string; agentId: string; content: string }
   | { type: 'yield'; sessionId: string; agentId: string; nextPrompt?: string; mode?: string }
   | { type: 'complete'; sessionId: string; report: string }
+  | { type: 'clone'; sessionId: string; goal: string; context?: string; name?: string; strategy?: boolean }
   | { type: 'continue'; sessionId: string }
   | { type: 'status'; sessionId?: string; cwd?: string }
   | { type: 'list'; cwd: string; all?: boolean }
