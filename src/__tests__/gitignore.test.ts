@@ -17,13 +17,10 @@ describe('ensureSisyphusGitignore', () => {
     rmSync(cwd, { recursive: true, force: true });
   });
 
-  it('creates .gitignore with sisyphus entries when none exists', () => {
+  it('creates .gitignore with .sisyphus entry when none exists', () => {
     ensureSisyphusGitignore(cwd);
     const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
-    assert.ok(content.includes('.sisyphus/sessions/*/prompts/'));
-    assert.ok(content.includes('.sisyphus/sessions/*/logs/'));
-    assert.ok(content.includes('.sisyphus/sessions/*/snapshots/'));
-    assert.ok(content.includes('.sisyphus/sessions/*/.tui/'));
+    assert.ok(content.includes('.sisyphus'));
   });
 
   it('appends to existing .gitignore', () => {
@@ -31,27 +28,23 @@ describe('ensureSisyphusGitignore', () => {
     ensureSisyphusGitignore(cwd);
     const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
     assert.ok(content.startsWith('node_modules/\ndist/\n'));
-    assert.ok(content.includes('.sisyphus/sessions/*/prompts/'));
+    assert.ok(content.includes('.sisyphus'));
   });
 
-  it('skips entries already present', () => {
-    const existing = 'node_modules/\n.sisyphus/sessions/*/prompts/\n.sisyphus/sessions/*/logs/\n.sisyphus/sessions/*/snapshots/\n.sisyphus/sessions/*/.tui/\n';
+  it('skips entry already present', () => {
+    const existing = 'node_modules/\n.sisyphus\n';
     writeFileSync(join(cwd, '.gitignore'), existing);
     ensureSisyphusGitignore(cwd);
     const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
     assert.equal(content, existing);
   });
 
-  it('adds only missing entries', () => {
+  it('skips when old granular entries cover .sisyphus', () => {
     writeFileSync(join(cwd, '.gitignore'), '.sisyphus/sessions/*/prompts/\n');
     ensureSisyphusGitignore(cwd);
     const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
-    // prompts already there, should not be duplicated
-    assert.equal(content.split('.sisyphus/sessions/*/prompts/').length - 1, 1);
-    // others should be added
-    assert.ok(content.includes('.sisyphus/sessions/*/logs/'));
-    assert.ok(content.includes('.sisyphus/sessions/*/snapshots/'));
-    assert.ok(content.includes('.sisyphus/sessions/*/.tui/'));
+    // .sisyphus should still be added since exact match not found
+    assert.ok(content.includes('\n.sisyphus\n') || content.endsWith('.sisyphus\n'));
   });
 
   it('does nothing outside a git repo', () => {

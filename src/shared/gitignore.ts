@@ -1,14 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SISYPHUS_ENTRIES = [
-  '.sisyphus/sessions/*/prompts/',
-  '.sisyphus/sessions/*/logs/',
-  '.sisyphus/sessions/*/snapshots/',
-  '.sisyphus/sessions/*/.tui/',
-];
+const SISYPHUS_ENTRIES = ['.sisyphus'];
 
-const SISYPHUS_HEADER = '# Sisyphus (generated session artifacts)';
+const SISYPHUS_HEADER = '# Sisyphus';
 
 /**
  * Ensures the project .gitignore includes entries for sisyphus generated artifacts.
