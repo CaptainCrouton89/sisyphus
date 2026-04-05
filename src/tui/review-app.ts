@@ -921,6 +921,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       } else if (key.return) {
         if (phase.selectedAction === 0) {
           req.reviewAction = 'approve';
+          req.status = 'approved';
           stampCompleted(req);
           state.dirty = true;
           saveData(state);
@@ -938,6 +939,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       } else if (input === '1') {
         // Approve and next
         req.reviewAction = 'approve';
+        req.status = 'approved';
         stampCompleted(req);
         state.dirty = true;
         saveData(state);

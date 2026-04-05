@@ -968,6 +968,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
           if (phase.selectedAction === 0) {
             // Agree
             item.reviewAction = 'agree';
+            item.status = 'approved';
             stampCompleted(item);
             state.dirty = true;
             saveData(state);
@@ -1010,6 +1011,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
         advanceItem(state, phase.sectionIndex, phase.itemIndex);
       } else if (input === 'a' && item.decision) {
         item.reviewAction = 'agree';
+        item.status = 'approved';
         stampCompleted(item);
         state.dirty = true;
         saveData(state);
