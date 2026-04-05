@@ -119,15 +119,93 @@
       "claudeSessionId": "5ac46714-e458-43d8-9f3d-f247b94a7c63",
       "color": "yellow",
       "instruction": "Create an implementation plan for the `sisyphus clone` feature.\n\n## Inputs (read all before planning)\n- `context/requirements-clone.md` — 20 approved EARS requirements (authoritative)\n- `context/design-clone.md` — approved technical design with data flow, algorithms, file manifest\n- `context/explore-integration-points.md` — codebase map of relevant files and patterns\n\n## What to produce\nA concrete implementation plan saved to `context/plan-clone.md` with:\n\n1. **Task breakdown** — each task scoped to a single file or tightly coupled pair. For each task:\n   - Which file(s) to modify/create\n   - What to add/change (reference design sections, not re-describe)\n   - Which requirements it satisfies\n   - Dependencies on other tasks (if any)\n\n2. **Parallelization map** — which tasks can run concurrently vs which must be sequential. The design touches 8 files; maximize parallel execution.\n\n3. **Implementation order** — considering dependencies:\n   - Types/protocol first (no deps)\n   - State layer (depends on types)\n   - Session manager (depends on state)\n   - Orchestrator (independent, can parallel with session-manager)\n   - Server routing (depends on session-manager)\n   - CLI command (depends on protocol types)\n   - CLI registration (depends on CLI command)\n\n4. **Companion hooks** — the design mentions companion hooks in step 9 but doesn't detail which ones fire. Investigate `startSession()` companion hooks and specify which should fire for clone (likely `onSessionStart` at minimum). Document in the plan.\n\n5. **Test considerations** — what unit tests should cover the new code (state cloning, agent normalization, CLI guards). Reference existing test patterns in `src/__tests__/`.\n\n## Constraints\n- Scope is small (~275 lines across 8 files) — this should be a single implementation phase, not multi-phase\n- Follow existing patterns exactly (the design already specifies this — validate against actual code)\n- Plan should be implementable by 2-3 parallel agents in one cycle",
-      "status": "running",
+      "status": "completed",
       "spawnedAt": "2026-04-05T07:00:39.825Z",
-      "completedAt": null,
-      "activeMs": 0,
-      "reports": [],
+      "completedAt": "2026-04-05T07:10:14.670Z",
+      "activeMs": 575126,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/reports/agent-005-final.md",
+          "summary": "Implemented clone session protocol across 8 files in 2 parallel agents, resolving all companion hooks to match startSession() behavior and covering all 20 requirements.",
+          "timestamp": "2026-04-05T07:10:14.665Z"
+        }
+      ],
       "paneId": "%449",
       "repo": ".",
       "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='agent-005' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
       "resumeArgs": "--dangerously-skip-permissions --effort max --model 'opus' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/prompts/agent-005-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persister"
+    },
+    {
+      "id": "agent-006",
+      "name": "impl-protocol-cli",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "940f8f11-1bb0-4052-b2c8-51d8f391518b",
+      "color": "blue",
+      "instruction": "Implement session clone Protocol + CLI layer (Tasks T1, T6, T7 from the plan).\n\n## Context Files (read these first)\n- `.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/plan-clone.md` — Full implementation plan (you are Agent A)\n- `.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/design-clone.md` — Design reference\n\n## Your Tasks (sequential)\n\n### T1: Protocol types\n- `src/shared/protocol.ts` — Add clone request to the `Request` union:\n  `| { type: 'clone'; sessionId: string; goal: string; context?: string; name?: string; strategy?: boolean }`\n- `src/shared/history-types.ts` — Add `'session-cloned'` and `'cloned-from'` to the `HistoryEventType` union.\n\n### T6: CLI command (`src/cli/commands/clone.ts` — new file, ~65 lines)\n- Follow `src/cli/commands/continue.ts` as your pattern (imports, structure, sendRequest usage).\n- Arguments: `<goal>` positional, `-c, --context <text>`, `--strategy`, `-n, --name <name>`.\n- Guards:\n  1. `SISYPHUS_SESSION_ID` must be set → error + exit 1\n  2. `SISYPHUS_AGENT_ID` must equal `'orchestrator'` → error: \"clone can only be called by the orchestrator. Use sisyphus message to ask the orchestrator to clone.\" + exit 1\n- Send `{ type: 'clone', sessionId, goal, context, name, strategy }` via `sendRequest()`.\n- Output on success (see design §6 for exact text): \"Session cloned successfully.\" with clone ID and tmux name, \"The cloned session now owns: \\\"{goal}\\\"\", scope update instructions.\n- Export `registerClone(program: Command)`.\n\n### T7: CLI registration (`src/cli/index.ts` — 2 lines)\n- Add `import { registerClone } from './commands/clone.js';` in the import block.\n- Add `registerClone(program);` after `registerContinue` in the registration block.\n\n## Important\n- Read `src/cli/commands/continue.ts` first to match the exact patterns (assertTmux, sendRequest, output formatting).\n- Read `src/cli/index.ts` to see where imports and registrations go.\n- Your files DO NOT overlap with the other implementation agent. No coordination needed.",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T07:11:51.533Z",
+      "completedAt": "2026-04-05T07:12:49.028Z",
+      "activeMs": 60027,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/reports/agent-006-final.md",
+          "summary": "Sessions can now be cloned via CLI with protocol support and proper build validation.",
+          "timestamp": "2026-04-05T07:12:49.025Z"
+        }
+      ],
+      "paneId": "%451",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='agent-006' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/prompts/agent-006-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Sisyphus"
+    },
+    {
+      "id": "agent-007",
+      "name": "impl-daemon",
+      "agentType": "devcore:programmer",
+      "provider": "anthropic",
+      "claudeSessionId": "32bd4102-eb3c-4a35-9899-3d7aeed6c02b",
+      "color": "green",
+      "instruction": "Implement session clone Daemon layer (Tasks T2, T3, T4, T5 from the plan).\n\n## Context Files (read these first)\n- `.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/plan-clone.md` — Full implementation plan (you are Agent B)\n- `.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/design-clone.md` — Design reference\n- `.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/context/explore-integration-points.md` — Codebase reference\n\n## Your Tasks (sequential, T2+T3 can be done in either order)\n\n### T2: State cloning functions (`src/daemon/state.ts` — ~100 lines)\nThree new functions. Follow `createSession()` as the pattern.\n\nNOTE: state.ts has a recent uncommitted change adding `import { ensureSisyphusGitignore } from '../shared/gitignore.js';` on line 4 and calling it in createSession(). Be aware of this when editing.\n\n1. **`replaceIdInDir(dir, sourceId, cloneId)`** (private) — Recursive walk of a directory. Read each file as Buffer. Skip binary files (contain null bytes in first 8KB). If text contains sourceId, `replaceAll` with cloneId, write back.\n\n2. **`cloneSessionDir(sourceCwd, sourceId, cloneId, goal, context?, strategy?)`** (exported):\n   - `cpSync` directories: context/, prompts/, reports/, snapshots/ (recursive)\n   - Conditionally copy strategy.md if strategy flag is true\n   - Call `replaceIdInDir()` on each copied directory\n   - Write fresh: goal.md (new goal), initial-prompt.md (new goal), roadmap.md (ROADMAP_SEED), empty logs/\n   - Write context/CLAUDE.md (CONTEXT_CLAUDE_MD constant)\n   - If context provided, write context/initial-context.md\n\n3. **`createCloneState(sourceCwd, sourceId, cloneId, goal, context?)`** (exported):\n   - Read source state, construct clone state per design §3\n   - New: id, task, status:'active', createdAt, activeMs:0, startHour, startDayOfWeek\n   - Preserved (structuredClone): agents, orchestratorCycles, messages, model, launchConfig\n   - Omitted/reset: completedAt, completionReport, tmuxSession*, wallClockMs, parentSessionId, companionCredited*, rollbackCount, resumeCount, continueCount\n   - Agent normalization: running → killed with reason 'inherited from source session'\n   - Write via atomicWrite(), wrap in withSessionLock()\n\n### T3: Orchestrator forceMode (`src/daemon/orchestrator.ts` — 2 lines)\n- Add `forceMode?: string` as 5th param to `spawnOrchestrator()`.\n- Change mode resolution: `const mode = forceMode ?? (lastCycle?.mode ?? 'strategy');`\n\n### T4: Session manager cloneSession (`src/daemon/session-manager.ts` — ~90 lines)\nNew exported function following `startSession()` pattern. Read `startSession()` carefully first.\n\nSteps:\n1. Validate source — exists, not completed (REQ-019)\n2. Generate clone UUID, validate name, check tmux collision\n3. Filesystem: cloneSessionDir() + createCloneState()\n4. Model config: updateSession({ model, launchConfig })\n5. Tmux: createSession(), initSessionMeta(), updateSessionTmux()\n6. Track & spawn: trackSession(), resetAgentCounterFromState(), build orientation message, spawnOrchestrator(cloneId, cwd, windowId, orientationMessage, 'strategy'), updateTrackedWindow(), killPane(initialPaneId)\n7. History events: emitHistoryEvent on both source and clone\n8. Haiku naming: fire-and-forget (same pattern as startSession)\n9. Housekeeping: pruneOldSessions, pruneHistory, recomputeDots, companion hooks (onSessionStart, saveCompanion, fireCommentary)\n10. Return session + tmuxSessionName\n\nSee plan for the full orientation message text.\n\n### T5: Server routing (`src/daemon/server.ts` — ~15 lines)\nAdd `case 'clone'` in `handleRequest()`. Follow `case 'start'` pattern. Look up source cwd from sessionTrackingMap. Register clone in tracking map. Call persistSessionRegistry().\n\n## Important\n- Read `startSession()` in session-manager.ts thoroughly — cloneSession follows its exact pattern.\n- Read `createSession()` in state.ts — cloneSessionDir and createCloneState follow its patterns.\n- Your files DO NOT overlap with the other implementation agent. No coordination needed.\n- For the cloneSessionDir function, use `cpSync` with `{ recursive: true }` — it handles empty dirs correctly.\n- For replaceIdInDir, use `readdirSync` with `{ recursive: true }` for flat file listing, then filter with `statSync`.",
+      "status": "completed",
+      "spawnedAt": "2026-04-05T07:12:19.909Z",
+      "completedAt": "2026-04-05T07:16:10.537Z",
+      "activeMs": 230063,
+      "reports": [
+        {
+          "type": "final",
+          "filePath": "/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/reports/agent-007-final.md",
+          "summary": "Session clone daemon layer implemented end-to-end: state cloning, orchestrator fork mode, session manager clone flow, and server routing—all tests pass.",
+          "timestamp": "2026-04-05T07:16:10.534Z"
+        }
+      ],
+      "paneId": "%452",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='agent-007' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort medium --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/prompts/agent-007-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "nickname": "Persevere"
+    },
+    {
+      "id": "agent-008",
+      "name": "review-clone",
+      "agentType": "sisyphus:review",
+      "provider": "anthropic",
+      "claudeSessionId": "fe5e0dd4-7a45-46f3-8cbf-617573b5ad81",
+      "color": "colour208",
+      "instruction": "Review the session clone feature implementation. The feature adds `sisyphus clone \"goal\"` — duplicates a running session's accumulated knowledge into a new independent session.\n\n## What to review\n\nAll changes from two implementation agents:\n\n### Protocol + CLI (agent-006):\n- `src/shared/protocol.ts` — clone request type added to Request union\n- `src/shared/history-types.ts` — 'session-cloned' and 'cloned-from' event types\n- `src/cli/commands/clone.ts` — new file, CLI command\n- `src/cli/index.ts` — registration\n\n### Daemon layer (agent-007):\n- `src/daemon/state.ts` — `replaceIdInDir()`, `cloneSessionDir()`, `createCloneState()`\n- `src/daemon/orchestrator.ts` — `forceMode` param on `spawnOrchestrator()`\n- `src/daemon/session-manager.ts` — `cloneSession()` function (~130 lines)\n- `src/daemon/server.ts` — clone request routing\n\n## Context\n- Requirements: context/requirements-clone.md (20 EARS-format requirements)\n- Design: context/design-clone.md (approved technical design)\n- Plan: context/plan-clone.md (implementation plan with task breakdown)\n\n## Focus areas\n1. Requirements coverage — do all 20 requirements have corresponding implementation?\n2. Edge cases in state cloning (binary file detection, ID replacement completeness)\n3. Error handling (completed session rejection, missing session, tmux collisions)\n4. Pattern consistency with existing `startSession()` and related code\n5. Security: any way clone could corrupt source session state?\n6. Memory safety: deep copies vs reference sharing between source and clone",
+      "status": "running",
+      "spawnedAt": "2026-04-05T07:17:13.904Z",
+      "completedAt": null,
+      "activeMs": 0,
+      "reports": [],
+      "paneId": "%454",
+      "repo": ".",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='agent-008' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\"",
+      "resumeArgs": "--dangerously-skip-permissions --effort high --model 'opus' --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29/prompts/agent-008-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
       "nickname": "Persister"
     }
   ],
@@ -194,6 +272,39 @@
       "interCycleGapMs": 1859649,
       "completedAt": "2026-04-05T07:00:44.293Z",
       "nextPrompt": "Review plan agent output for completeness against design. If solid, transition to implementation mode and spawn implementation agents based on the parallelization map."
+    },
+    {
+      "cycle": 5,
+      "timestamp": "2026-04-05T07:10:15.143Z",
+      "activeMs": 115040,
+      "agentsSpawned": [
+        "agent-006",
+        "agent-007"
+      ],
+      "paneId": "%450",
+      "claudeSessionId": "25957cec-1b3d-4a3b-b453-5cf5f898928c",
+      "mode": "implementation",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='session-fork-management'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "interCycleGapMs": 570850,
+      "completedAt": "2026-04-05T07:12:26.552Z",
+      "nextPrompt": "Both implementation agents running in parallel. Review their reports: agent-006 (Protocol+CLI: T1,T6,T7) and agent-007 (Daemon: T2,T3,T4,T5). Then run npm run build && npm test. If both pass, spawn a code review agent before validation."
+    },
+    {
+      "cycle": 6,
+      "timestamp": "2026-04-05T07:16:11.038Z",
+      "activeMs": 75013,
+      "agentsSpawned": [
+        "agent-008"
+      ],
+      "paneId": "%453",
+      "claudeSessionId": "b4335f4c-0985-460a-ae26-2f397f5f353e",
+      "mode": "implementation",
+      "resumeEnv": "export SISYPHUS_SESSION_ID='e1e1bf38-c6d1-486f-a666-f94619411c29' && export SISYPHUS_AGENT_ID='orchestrator' && export SISYPHUS_CWD='/Users/silasrhyneer/Code/claude-tools/sisyphus' && export SISYPHUS_SESSION_DIR='/Users/silasrhyneer/Code/claude-tools/sisyphus/.sisyphus/sessions/e1e1bf38-c6d1-486f-a666-f94619411c29' && export PATH=\"/Users/silasrhyneer/Code/claude-tools/.bin:$PATH\" && export SISYPHUS_NOTIFY_ENABLED='1' && export SISYPHUS_NOTIFY_SOUND='/System/Library/Sounds/Hero.aiff' && export SISYPHUS_SESSION_NAME='session-fork-management'",
+      "resumeArgs": "--dangerously-skip-permissions --disallowed-tools \"Task,Agent\" --effort high --settings \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-settings.json\" --plugin-dir \"/Users/silasrhyneer/Code/claude-tools/sisyphus/templates/orchestrator-plugin\" --plugin-dir \"/Users/silasrhyneer/.claude/plugins/marketplaces/crouton-kit/plugins/devcore\"",
+      "interCycleGapMs": 224486,
+      "completedAt": "2026-04-05T07:17:36.206Z",
+      "nextPrompt": "Review agent (agent-008) should be done. Read its report, fix any issues found, then transition to validation mode."
     }
   ],
   "messages": [],

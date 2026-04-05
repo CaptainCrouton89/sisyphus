@@ -1,16 +1,18 @@
 ## Completed
 - problem-exploration: Clone-and-diverge model (no hierarchy, no cross-session communication)
 - requirements: 20 EARS-format requirements, all approved via TUI review
-- design: Technical architecture covering all 20 requirements. ~275 lines across 8 files (1 new, 7 modified). Key decisions: orchestrator-only CLI enforcement, true duplication with recursive ID replacement, agent normalization for inherited running agents, forceMode on spawnOrchestrator, orientation via existing message mechanism.
+- design: ~275 lines across 8 files. Key decisions: orchestrator-only CLI, true duplication with ID replacement, agent normalization, forceMode on spawnOrchestrator, orientation via message mechanism.
+- planning: 7 tasks, 2 parallel agents (Protocol+CLI and Daemon layer), single implementation phase. All 20 requirements covered.
 
-## Current Stage: planning
-Create implementation plan from approved requirements + design.
+## Current Stage: implementation
+Build clone feature from approved plan.
 
 Exit criteria:
-- Plan covers all 8 files from design manifest
-- Plan reviewed for completeness against design
-- Implementation tasks are parallelizable where possible
+- All 7 tasks implemented across 8 files
+- `npm run build` succeeds
+- `npm test` passes (existing + new state tests)
+- Code reviewed for quality
 
 ## Ahead
-- implementation — Build it (likely single-phase given small scope)
-- validation — E2E verification that cloning works
+- validation — E2E verification via context/e2e-recipe.md
+- completion — Present results to user
