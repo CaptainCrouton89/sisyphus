@@ -10,7 +10,9 @@ export type HistoryEventType =
   | 'session-end'
   | 'message'
   | 'session-named'
-  | 'agent-nicknamed';
+  | 'agent-nicknamed'
+  | 'review-started'
+  | 'review-completed';
 
 export interface HistoryEvent {
   ts: string;
@@ -46,6 +48,15 @@ export interface SessionSummaryCycle {
   completedAt: string | null;
 }
 
+export interface ReviewTiming {
+  type: 'requirements' | 'design';
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  itemsReviewed: number;
+  itemsTotal: number;
+}
+
 export interface SessionSummary {
   sessionId: string;
   name: string | null;
@@ -68,4 +79,5 @@ export interface SessionSummary {
   achievements: string[];
   xpGained: number;
   sentiment: string | null;
+  reviews?: ReviewTiming[];
 }

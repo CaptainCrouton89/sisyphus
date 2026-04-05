@@ -255,6 +255,21 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
     console.log('');
   }
 
+  // Reviews (from event timeline)
+  const events = loadEvents(id);
+  const reviewEvents = events.filter(e => e.event === 'review-completed');
+  if (reviewEvents.length > 0) {
+    console.log(`${BOLD}Reviews${RESET}`);
+    for (const e of reviewEvents) {
+      const rd = e.data;
+      const durMs = typeof rd.durationMs === 'number' ? rd.durationMs : null;
+      const durStr = durMs != null ? formatDuration(durMs) : '—';
+      const type = c('cyan', rd.type as string);
+      console.log(`  ${type}  ${durStr}  ${rd.itemsReviewed}/${rd.itemsTotal} items reviewed  ${c('gray', fmtDate(e.ts))}`);
+    }
+    console.log('');
+  }
+
   // Completion report
   if (s.completionReport) {
     console.log(`${BOLD}Completion Report${RESET}`);
@@ -306,6 +321,15 @@ function formatEventData(e: HistoryEvent): string {
     }
     case 'message':
       return `${c('gray', d.source as string)}  ${(d.content as string).slice(0, 80)}`;
+    case 'review-started': {
+      const fileParts = typeof d.filePath === 'string' ? d.filePath.split('/').slice(-2).join('/') : '';
+      return `${c('cyan', d.type as string)}  ${c('gray', fileParts)}`;
+    }
+    case 'review-completed': {
+      const durMs = typeof d.durationMs === 'number' ? d.durationMs : null;
+      const durStr = durMs != null ? formatDuration(durMs) : '—';
+      return `${c('cyan', d.type as string)}  ${durStr}  ${d.itemsReviewed}/${d.itemsTotal} reviewed`;
+    }
     case 'session-end':
       return `${fmtStatus(d.status as string)}  ${formatDuration(d.activeMs as number)}  ${d.agentCount} agents  ${d.cycleCount} cycles`;
     default:

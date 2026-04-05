@@ -1,9 +1,10 @@
 import type { Command } from 'commander';
 import { join, resolve, dirname } from 'node:path';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { shellQuote } from '../../shared/shell.js';
+import { historyEventsPath, historySessionDir } from '../../shared/paths.js';
 
 export function registerReview(program: Command): void {
   program
@@ -130,11 +131,48 @@ async function runReviewTui(
     execSync(`tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`);
 
     if (opts.wait) {
+      const sessionId = opts.sessionId || process.env.SISYPHUS_SESSION_ID;
+      // Emit review-started event before waiting
+      if (sessionId) {
+        emitReviewEvent(sessionId, 'review-started', {
+          type: config.filename === 'requirements.json' ? 'requirements' : 'design',
+          filePath: targetPath,
+        });
+      }
+
       execSync(`tmux wait-for ${shellQuote(channel)}`);
 
       if (existsSync(feedbackPath)) {
         process.stdout.write(readFileSync(feedbackPath, 'utf-8'));
         unlinkSync(feedbackPath);
+      }
+
+      // Emit review-completed event with timing data from the JSON
+      if (sessionId) {
+        try {
+          const jsonData = JSON.parse(readFileSync(targetPath, 'utf-8'));
+          const meta = jsonData.meta;
+          const reviewType = config.filename === 'requirements.json' ? 'requirements' : 'design';
+          const items = reviewType === 'requirements'
+            ? (jsonData.groups ?? []).flatMap((g: { requirements?: unknown[] }) => g.requirements ?? [])
+            : (jsonData.sections ?? []).flatMap((s: { items?: unknown[] }) => s.items ?? []);
+          const reviewed = items.filter((i: { reviewAction?: string; status?: string }) =>
+            i.reviewAction || i.status === 'approved').length;
+
+          emitReviewEvent(sessionId, 'review-completed', {
+            type: reviewType,
+            filePath: targetPath,
+            startedAt: meta?.reviewStartedAt ?? null,
+            completedAt: meta?.reviewCompletedAt ?? null,
+            durationMs: meta?.reviewStartedAt && meta?.reviewCompletedAt
+              ? new Date(meta.reviewCompletedAt).getTime() - new Date(meta.reviewStartedAt).getTime()
+              : null,
+            itemsReviewed: reviewed,
+            itemsTotal: items.length,
+          });
+        } catch {
+          // Best-effort — don't fail the review on history write error
+        }
       }
     } else {
       console.log(`Review opened in tmux window ${windowId}`);
@@ -143,5 +181,16 @@ async function runReviewTui(
     execSync(`node ${shellQuote(binaryPath)} ${shellQuote(targetPath)}`, {
       stdio: 'inherit',
     });
+  }
+}
+
+function emitReviewEvent(sessionId: string, event: 'review-started' | 'review-completed', data: Record<string, unknown>): void {
+  try {
+    const dir = historySessionDir(sessionId);
+    mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({ ts: new Date().toISOString(), event, sessionId, data }) + '\n';
+    appendFileSync(historyEventsPath(sessionId), line, 'utf-8');
+  } catch {
+    // Fire-and-forget
   }
 }
