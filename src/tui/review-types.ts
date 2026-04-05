@@ -75,7 +75,7 @@ export interface RequirementsData {
 export type Phase =
   | { kind: 'overview' }
   | { kind: 'group-intro'; groupIndex: number }
-  | { kind: 'item-review'; groupIndex: number; reqIndex: number; expanded: boolean }
+  | { kind: 'item-review'; groupIndex: number; reqIndex: number; expanded: boolean; selectedAction: number }
   | { kind: 'group-questions'; groupIndex: number; questionIndex: number; selectedOption: number }
   | { kind: 'final' };
 

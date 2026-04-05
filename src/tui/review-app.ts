@@ -1,4 +1,5 @@
 import { writeFileSync, renameSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import stringWidth from 'string-width';
 import type { Key } from './terminal.js';
 import { setupTerminal, startKeypressListener, onResize, writeToStdout } from './terminal.js';
@@ -163,6 +164,49 @@ function saveData(state: ReviewState): void {
   state.dirty = false;
 }
 
+function buildReviewFeedback(state: ReviewState): string {
+  const { data } = state;
+  const lines: string[] = [];
+
+  lines.push(`# Review Feedback — ${data.meta.title} (draft ${data.meta.draft})`);
+  lines.push('');
+
+  for (const g of data.groups) {
+    lines.push(`## ${g.name}`);
+    lines.push('');
+
+    for (const r of g.requirements) {
+      if (!r.reviewAction && r.status !== 'approved') continue;
+      const action = r.reviewAction === 'approve' ? '✓ approved'
+        : r.reviewAction === 'comment' ? '◆ commented'
+        : r.status === 'approved' ? '✓ previously approved'
+        : '—';
+      lines.push(`- **${r.id}** ${r.title} — ${action}`);
+      if (r.userComment) {
+        lines.push(`  > ${r.userComment}`);
+      }
+    }
+
+    const skipped = g.requirements.filter(r => !r.reviewAction && r.status !== 'approved');
+    for (const r of skipped) {
+      lines.push(`- **${r.id}** ${r.title} — skipped (no action taken)`);
+    }
+
+    if (g.openQuestions) {
+      for (const q of g.openQuestions) {
+        if (q.response) {
+          lines.push(`- **Q:** ${q.question}`);
+          lines.push(`  **A:** ${q.response}`);
+        }
+      }
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
 // ─── Render Engine ───────────────────────────────────────────────────────────
 
 let prevFrame: string[] = [];
@@ -317,7 +361,7 @@ function renderGroupIntro(state: ReviewState, groupIndex: number): string[] {
   return lines;
 }
 
-function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: number, expanded: boolean): string[] {
+function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: number, expanded: boolean, selectedAction: number): string[] {
   const { data, cols } = state;
   const group = data.groups[groupIndex]!;
   const pending = pendingRequirements(group);
@@ -416,11 +460,41 @@ function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: numb
     }
   }
 
+  // Existing user comment
+  if (req.userComment) {
+    const commentWrapped = wrapText(req.userComment, cw - 8);
+    lines.push(`${m}  ${FG_CYAN}${ICON.comment}  Your comment:${RESET}`);
+    for (const cl of commentWrapped) {
+      lines.push(`${m}     ${FG_WHITE}${cl}${RESET}`);
+    }
+    lines.push('');
+  }
+
+  // Review status if already acted on
+  if (req.reviewAction) {
+    const actionLabel = req.reviewAction === 'approve'
+      ? `${FG_GREEN}${ICON.approved} Approved${RESET}`
+      : `${FG_YELLOW}${ICON.comment} Commented${RESET}`;
+    lines.push(`${m}  ${actionLabel}  ${DIM}(2/3 to change)${RESET}`);
+    lines.push('');
+  }
+
   // Action bar
   lines.push(`${m}  ${hr(boxW)}`);
   lines.push('');
-  lines.push(`${m}   ${FG_GREEN}${BOLD}1${RESET}  ${FG_GREEN}${ICON.approved} Approve & next${RESET}      ${FG_CYAN}${BOLD}2${RESET}  ${FG_CYAN}${ICON.approved}+ Approve with comment${RESET}`);
-  lines.push(`${m}   ${FG_YELLOW}${BOLD}3${RESET}  ${FG_YELLOW}${ICON.comment} Comment${RESET}`);
+  const actions = [
+    { label: `${ICON.approved} Approve & next`, color: FG_GREEN },
+    { label: `${ICON.approved}+ Approve with comment`, color: FG_CYAN },
+    { label: `${ICON.comment} Comment`, color: FG_YELLOW },
+  ];
+  for (let i = 0; i < actions.length; i++) {
+    const act = actions[i]!;
+    const isSelected = i === selectedAction;
+    const bullet = isSelected ? `${FG_CYAN}${ICON.bullet}${RESET}` : ` `;
+    const numColor = isSelected ? `${FG_CYAN}${BOLD}` : FG_GRAY;
+    const titleColor = isSelected ? `${FG_CYAN}${BOLD}` : act.color;
+    lines.push(`${m}  ${bullet} ${numColor}${i + 1}${RESET}  ${titleColor}${act.label}${RESET}`);
+  }
   lines.push('');
 
   return lines;
@@ -459,17 +533,15 @@ function renderGroupQuestions(state: ReviewState, groupIndex: number, questionIn
   for (let i = 0; i < optionCount; i++) {
     const opt = q.options[i]!;
     const isSelected = i === selectedOption;
-    const bullet = isSelected ? `${FG_CYAN}${BOLD}${ICON.bullet}${RESET}` : ` `;
+    const bullet = isSelected ? `${FG_CYAN}${ICON.bullet}${RESET}` : ` `;
     const numColor = isSelected ? `${FG_CYAN}${BOLD}` : FG_GRAY;
-    const titleColor = isSelected ? `${FG_WHITE}${BOLD}` : FG_WHITE;
-    const bg = isSelected ? BG_SELECTED : '';
-    const bgReset = isSelected ? RESET : '';
+    const titleColor = isSelected ? `${FG_CYAN}${BOLD}` : FG_WHITE;
 
-    lines.push(`${m}  ${bg}${bullet} ${numColor}${i + 1}${RESET}${bg}  ${titleColor}${opt.title}${RESET}${bgReset}`);
+    lines.push(`${m}  ${bullet} ${numColor}${i + 1}${RESET}  ${titleColor}${opt.title}${RESET}`);
     if (opt.description) {
       const descWrapped = wrapText(opt.description, cw - 12);
       for (const dl of descWrapped) {
-        lines.push(`${m}  ${bg}      ${DIM}${dl}${RESET}${bgReset}`);
+        lines.push(`${m}        ${DIM}${dl}${RESET}`);
       }
     }
     lines.push('');
@@ -478,11 +550,10 @@ function renderGroupQuestions(state: ReviewState, groupIndex: number, questionIn
   // Custom answer option
   const customIdx = optionCount;
   const isCustomSelected = selectedOption === customIdx;
-  const customBullet = isCustomSelected ? `${FG_CYAN}${BOLD}${ICON.bullet}${RESET}` : ` `;
+  const customBullet = isCustomSelected ? `${FG_CYAN}${ICON.bullet}${RESET}` : ` `;
   const customNumColor = isCustomSelected ? `${FG_CYAN}${BOLD}` : FG_GRAY;
-  const customBg = isCustomSelected ? BG_SELECTED : '';
-  const customBgReset = isCustomSelected ? RESET : '';
-  lines.push(`${m}  ${customBg}${customBullet} ${customNumColor}${customIdx + 1}${RESET}${customBg}  ${FG_YELLOW}Type a custom answer...${RESET}${customBgReset}`);
+  const customTitleColor = isCustomSelected ? `${FG_CYAN}${BOLD}` : FG_YELLOW;
+  lines.push(`${m}  ${customBullet} ${customNumColor}${customIdx + 1}${RESET}  ${customTitleColor}Type a custom answer...${RESET}`);
   lines.push('');
 
   // Instructions
@@ -568,7 +639,7 @@ function renderFooter(state: ReviewState): string[] {
       hints = `${DIM}n${RESET} start review  ${DIM}p${RESET} back  ${DIM}q${RESET} quit`;
       break;
     case 'item-review':
-      hints = `${DIM}1${RESET} approve  ${DIM}2${RESET} approve+comment  ${DIM}3${RESET} comment  ${DIM}space${RESET} expand  ${DIM}q${RESET} quit`;
+      hints = `${DIM}j/k${RESET} select  ${DIM}enter${RESET} confirm  ${DIM}space${RESET} expand  ${DIM}q${RESET} quit`;
       break;
     case 'group-questions':
       hints = `${DIM}j/k${RESET} select  ${DIM}enter${RESET} confirm  ${DIM}q${RESET} quit`;
@@ -580,11 +651,17 @@ function renderFooter(state: ReviewState): string[] {
 
   const progressText = `${FG_GRAY}${totalReviewed(data)}/${totalR} reviewed${RESET}`;
 
-  // Input mode: show input bar instead of hints
+  // Input mode: show wrapped text input area
   if (state.inputMode) {
     const label = state.inputMode.kind === 'comment' ? 'Comment' : 'Answer';
-    const bufDisplay = state.inputBuffer;
-    lines.push(`${m}  ${FG_CYAN}${label}:${RESET} ${bufDisplay}█`);
+    const inputW = cw - 6; // margin inside the input area
+    const textWithCursor = state.inputBuffer + '█';
+    const wrapped = wrapText(textWithCursor, inputW);
+
+    lines.push(`${m}  ${FG_CYAN}${label}:${RESET}`);
+    for (const wl of wrapped) {
+      lines.push(`${m}    ${FG_WHITE}${wl}${RESET}`);
+    }
     lines.push(`${m}  ${DIM}enter${RESET} submit  ${DIM}esc${RESET} cancel  ${progressText}`);
   } else {
     lines.push(`${m}  ${hints}  ${progressText}`);
@@ -607,7 +684,7 @@ function render(state: ReviewState): void {
       content = renderGroupIntro(state, phase.groupIndex);
       break;
     case 'item-review':
-      content = renderItemReview(state, phase.groupIndex, phase.reqIndex, phase.expanded);
+      content = renderItemReview(state, phase.groupIndex, phase.reqIndex, phase.expanded, phase.selectedAction);
       break;
     case 'group-questions':
       content = renderGroupQuestions(state, phase.groupIndex, phase.questionIndex, phase.selectedOption);
@@ -656,7 +733,7 @@ function startGroupReview(state: ReviewState, groupIndex: number): void {
   const group = state.data.groups[groupIndex]!;
   const pending = pendingRequirements(group);
   if (pending.length > 0) {
-    state.phase = { kind: 'item-review', groupIndex, reqIndex: 0, expanded: false };
+    state.phase = { kind: 'item-review', groupIndex, reqIndex: 0, expanded: false, selectedAction: 0 };
   } else {
     // No pending items, go to questions or next group
     startGroupQuestions(state, groupIndex);
@@ -668,7 +745,7 @@ function advanceItem(state: ReviewState, groupIndex: number, reqIndex: number): 
   const group = state.data.groups[groupIndex]!;
   const pending = pendingRequirements(group);
   if (reqIndex + 1 < pending.length) {
-    state.phase = { kind: 'item-review', groupIndex, reqIndex: reqIndex + 1, expanded: false };
+    state.phase = { kind: 'item-review', groupIndex, reqIndex: reqIndex + 1, expanded: false, selectedAction: 0 };
   } else {
     startGroupQuestions(state, groupIndex);
   }
@@ -752,11 +829,11 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
   }
 
   // Scroll
-  if (key.downArrow || (input === 'j' && phase.kind !== 'group-questions')) {
+  if ((key.downArrow && phase.kind !== 'group-questions' && phase.kind !== 'item-review') || (input === 'j' && phase.kind !== 'group-questions' && phase.kind !== 'item-review')) {
     state.scroll++;
     return false;
   }
-  if (key.upArrow || (input === 'k' && phase.kind !== 'group-questions')) {
+  if ((key.upArrow && phase.kind !== 'group-questions' && phase.kind !== 'item-review') || (input === 'k' && phase.kind !== 'group-questions' && phase.kind !== 'item-review')) {
     state.scroll = Math.max(0, state.scroll - 1);
     return false;
   }
@@ -800,7 +877,28 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       const req = pending[phase.reqIndex];
       if (!req) break;
 
-      if (input === ' ') {
+      const actionCount = 3;
+
+      if (input === 'j' || key.downArrow) {
+        const next = Math.min(phase.selectedAction + 1, actionCount - 1);
+        state.phase = { ...phase, selectedAction: next };
+      } else if (input === 'k' || key.upArrow) {
+        const prev = Math.max(0, phase.selectedAction - 1);
+        state.phase = { ...phase, selectedAction: prev };
+      } else if (key.return) {
+        if (phase.selectedAction === 0) {
+          req.reviewAction = 'approve';
+          state.dirty = true;
+          saveData(state);
+          advanceItem(state, phase.groupIndex, phase.reqIndex);
+        } else if (phase.selectedAction === 1) {
+          state.inputMode = { kind: 'comment', action: 'approve' };
+          state.inputBuffer = req.userComment || '';
+        } else if (phase.selectedAction === 2) {
+          state.inputMode = { kind: 'comment', action: 'comment' };
+          state.inputBuffer = req.userComment || '';
+        }
+      } else if (input === ' ') {
         // Toggle acceptance criteria
         state.phase = { ...phase, expanded: !phase.expanded };
       } else if (input === '1') {
@@ -810,16 +908,16 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         saveData(state);
         advanceItem(state, phase.groupIndex, phase.reqIndex);
       } else if (input === '2') {
-        // Approve with comment — enter inline input mode
+        // Approve with comment — enter inline input mode, pre-fill existing comment
         state.inputMode = { kind: 'comment', action: 'approve' };
-        state.inputBuffer = '';
+        state.inputBuffer = req.userComment || '';
       } else if (input === '3') {
-        // Comment only — enter inline input mode
+        // Comment only — enter inline input mode, pre-fill existing comment
         state.inputMode = { kind: 'comment', action: 'comment' };
-        state.inputBuffer = '';
+        state.inputBuffer = req.userComment || '';
       } else if (input === 'p') {
         if (phase.reqIndex > 0) {
-          state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex - 1, expanded: false };
+          state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex - 1, expanded: false, selectedAction: 0 };
           state.scroll = 0;
         } else {
           state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
@@ -847,7 +945,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           // Back to last item in this group (or group intro if no pending items)
           const pending = pendingRequirements(group);
           if (pending.length > 0) {
-            state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: pending.length - 1, expanded: false };
+            state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: pending.length - 1, expanded: false, selectedAction: 0 };
           } else {
             state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
           }
@@ -948,6 +1046,15 @@ export function startReviewApp(data: RequirementsData, filePath: string): void {
       removeKeypress();
       removeResize();
       cleanup();
+
+      // Print review feedback to stdout so the calling agent can read it
+      const feedback = buildReviewFeedback(state);
+      console.log(feedback);
+
+      // Also write feedback to a file so --wait mode can retrieve it
+      const feedbackPath = join(dirname(state.filePath), 'review-feedback.md');
+      writeFileSync(feedbackPath, feedback, 'utf-8');
+
       process.exit(0);
     }
     doRender();
