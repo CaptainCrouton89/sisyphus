@@ -433,7 +433,8 @@ export function startApp(state: AppState, cleanup: () => void): void {
         })
       : state.sessions;
 
-    const cacheKey = `${state.expanded.size}:${filteredSessions.length}:${state.selectedSession?.id}:${state.contextFiles.length}:${state.searchFilter}`;
+    const statusFP = filteredSessions.map(s => `${s.status}:${s.windowAlive}:${s.runningAgentCount}`).join(',');
+    const cacheKey = `${state.expanded.size}:${filteredSessions.length}:${state.selectedSession?.id}:${state.contextFiles.length}:${state.searchFilter}:${statusFP}`;
     let nodes: TreeNode[];
     if (cacheKey === state.treeCacheKey && state.cachedTreeNodes !== null) {
       nodes = state.cachedTreeNodes;
