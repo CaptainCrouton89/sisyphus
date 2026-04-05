@@ -82,6 +82,9 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
     if (result.nvim.lazyVimInstalled) {
       console.log('  \u2713 LazyVim: Starter config installed to ~/.config/nvim/');
     }
+    if (result.nvim.baleiaInstalled) {
+      console.log('  \u2713 ANSI colors: baleia.nvim plugin configured (auto-detects escape codes)');
+    }
   } else {
     console.log('  \u26a0 Editor: nvim not installed');
     if (process.platform === 'darwin') {

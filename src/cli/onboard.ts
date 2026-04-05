@@ -20,6 +20,7 @@ export interface NvimInfo {
   autoInstalled: boolean;
   version: string;
   lazyVimInstalled: boolean;
+  baleiaInstalled: boolean;
 }
 
 export interface CommandInfo {
@@ -203,21 +204,45 @@ function hasLazyVimConfig(): boolean {
   return existsSync(join(homedir(), '.config', 'nvim', 'lazy-lock.json'));
 }
 
+function bundledBaleiaPluginPath(): string {
+  const distDir = dirname(fileURLToPath(import.meta.url));
+  return join(distDir, 'templates', 'baleia.lua');
+}
+
+function installBaleiaPlugin(): boolean {
+  const pluginsDir = join(homedir(), '.config', 'nvim', 'lua', 'plugins');
+  if (!existsSync(pluginsDir)) return false;
+
+  const dest = join(pluginsDir, 'sisyphus-baleia.lua');
+  if (existsSync(dest)) return true; // already installed
+
+  const src = bundledBaleiaPluginPath();
+  if (!existsSync(src)) return false;
+
+  try {
+    writeFileSync(dest, readFileSync(src, 'utf-8'), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function tryAutoInstallNvim(): NvimInfo {
   if (isNvimAvailable()) {
-    return { installed: true, autoInstalled: false, version: getNvimVersion(), lazyVimInstalled: hasLazyVimConfig() };
+    const baleiaInstalled = installBaleiaPlugin();
+    return { installed: true, autoInstalled: false, version: getNvimVersion(), lazyVimInstalled: hasLazyVimConfig(), baleiaInstalled };
   }
   if (!isBrewAvailable()) {
-    return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false };
+    return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false, baleiaInstalled: false };
   }
   try {
     console.log('  Installing neovim via Homebrew...');
     execSync('brew install neovim', { stdio: 'inherit' });
   } catch {
-    return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false };
+    return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false, baleiaInstalled: false };
   }
   if (!isNvimAvailable()) {
-    return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false };
+    return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false, baleiaInstalled: false };
   }
   // Clone LazyVim starter config if no nvim config exists
   const nvimConfigDir = join(homedir(), '.config', 'nvim');
@@ -236,7 +261,8 @@ export function tryAutoInstallNvim(): NvimInfo {
       // Non-fatal — nvim is installed, just no starter config
     }
   }
-  return { installed: true, autoInstalled: true, version: getNvimVersion(), lazyVimInstalled };
+  const baleiaInstalled = installBaleiaPlugin();
+  return { installed: true, autoInstalled: true, version: getNvimVersion(), lazyVimInstalled, baleiaInstalled };
 }
 
 function beginCommandPath(): string {
