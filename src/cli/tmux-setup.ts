@@ -42,6 +42,27 @@ export function killSessionScriptPath(): string {
   return scriptPath('sisyphus-kill-session');
 }
 
+export function helpScriptPath(): string {
+  return scriptPath('sisyphus-help');
+}
+
+export function statusPopupScriptPath(): string {
+  return scriptPath('sisyphus-status-popup');
+}
+
+export function pickSessionScriptPath(): string {
+  return scriptPath('sisyphus-pick-session');
+}
+
+export function continueSessionScriptPath(): string {
+  return scriptPath('sisyphus-continue-session');
+}
+
+export function restartAgentScriptPath(): string {
+  return scriptPath('sisyphus-restart-agent-popup');
+}
+
+
 export function sisyphusTmuxConfPath(): string {
   return join(globalDir(), 'tmux.conf');
 }
@@ -254,6 +275,143 @@ sisyphus delete "$session_id" --cwd "$cwd" >/dev/null 2>&1
 ${GO_HOME_AFTER}
 `;
 
+const HELP_SCRIPT = `#!/bin/bash
+cat <<'EOF'
+
+  Sisyphus Keybindings  (Ctrl-s + key)
+
+  --- Navigation --------------------
+    s   Cycle between sessions
+    h   Go to dashboard
+    l   Session picker
+    z   Zoom/focus toggle
+
+  --- Actions -----------------------
+    n   New session
+    m   Message orchestrator
+    c   Continue session
+    r   Restart agent
+    t   Session status
+
+  --- Management --------------------
+    k   Kill session
+    d   Delete session
+    x   Kill current pane
+
+    ?   This help
+
+EOF
+read -n 1 -s -r -p "  Press any key to close"
+`;
+
+const STATUS_POPUP_SCRIPT = `#!/bin/bash
+# Show session status — falls back to session list
+session_name=$(tmux display-message -p '#{session_name}')
+session_id=$(tmux show-options -t "$session_name" -v @sisyphus_session_id 2>/dev/null)
+
+if [ -z "$session_id" ]; then
+  MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+  if [ -f "$MANIFEST" ]; then
+    cwd=""
+    while IFS=$'\\t' read -r type name scwd phase dwid; do
+      [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
+    done < "$MANIFEST"
+    if [ -n "$cwd" ]; then
+      while IFS=$'\\t' read -r type name scwd phase dwid; do
+        if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
+          session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
+          [ -n "$session_id" ] && break
+        fi
+      done < "$MANIFEST"
+    fi
+  fi
+fi
+
+if [ -n "$session_id" ]; then
+  sisyphus status "$session_id" 2>&1 | less -R
+else
+  sisyphus list 2>&1 | less -R
+fi
+`;
+
+const PICK_SESSION_SCRIPT = `#!/bin/bash
+# Session picker — switch to a sisyphus session
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+[ ! -f "$MANIFEST" ] && { echo "No sessions found"; sleep 1; exit 0; }
+
+current=$(tmux display-message -p '#{session_name}')
+cwd=""
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
+done < "$MANIFEST"
+
+declare -a entries=()
+declare -a targets=()
+while IFS=$'\\t' read -r type name scwd phase dwid; do
+  [[ "$type" == "#"* ]] && continue
+  [ -n "$cwd" ] && [ "$scwd" != "$cwd" ] && continue
+  display="$name"
+  if [[ "$name" == ssyph_* ]]; then
+    display="\${name#ssyph_}"
+    display="\${display#*_}"
+  fi
+  [ "$type" = "H" ] && display="~ home"
+  marker=""
+  [ "$name" = "$current" ] && marker=" *"
+  phase_label="\${phase:-—}"
+  entries+=("\${display} [\${phase_label}]\${marker}")
+  targets+=("$name")
+done < "$MANIFEST"
+
+(( \${#entries[@]} == 0 )) && { echo "No sessions found"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done | \\
+    fzf --height=100% --reverse --with-nth=2.. --prompt="Switch to: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+  tmux switch-client -t "\${targets[$idx]}"
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick session: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+  tmux switch-client -t "\${targets[$idx]}"
+fi
+`;
+
+const CONTINUE_SESSION_SCRIPT = `#!/bin/bash
+# Continue a completed session
+${SESSION_RESOLVE}
+
+short_id="\${session_id:0:8}"
+printf "\\033[33mContinue session %s...?\\033[0m (y/n) " "$short_id"
+read -r answer
+[ "$answer" = "y" ] || [ "$answer" = "yes" ] || exit 0
+sisyphus continue --session "$session_id"
+sleep 1
+`;
+
+const RESTART_AGENT_SCRIPT = `#!/bin/bash
+# Restart a failed/lost agent
+${SESSION_RESOLVE}
+
+echo "Session agents:"
+echo ""
+sisyphus status "$session_id" 2>&1 | grep -E '(agent-[0-9]+|Active agents|Agents:)' | head -20
+echo ""
+printf "Agent ID to restart (e.g. agent-001): "
+read -r agent_id
+[ -z "$agent_id" ] && exit 0
+echo ""
+sisyphus restart-agent "$agent_id" --session "$session_id"
+echo ""
+echo "Press any key to close."
+read -n 1 -s -r
+`;
+
 function installScript(name: string, content: string): void {
   mkdirSync(join(globalDir(), 'bin'), { recursive: true });
   const path = scriptPath(name);
@@ -269,6 +427,11 @@ function installAllScripts(): void {
   installScript('sisyphus-msg', MESSAGE_SCRIPT);
   installScript('sisyphus-kill-session', KILL_SESSION_SCRIPT);
   installScript('sisyphus-delete-session', DELETE_SESSION_SCRIPT);
+  installScript('sisyphus-help', HELP_SCRIPT);
+  installScript('sisyphus-status-popup', STATUS_POPUP_SCRIPT);
+  installScript('sisyphus-pick-session', PICK_SESSION_SCRIPT);
+  installScript('sisyphus-continue-session', CONTINUE_SESSION_SCRIPT);
+  installScript('sisyphus-restart-agent-popup', RESTART_AGENT_SCRIPT);
 }
 
 export function getExistingBinding(key: string, table: string = 'root'): string | null {
@@ -327,6 +490,14 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     `bind-key -T ${KEY_TABLE} m display-popup ${popupOpts} -d "#{pane_current_path}" ${messageScriptPath()}`,
     `bind-key -T ${KEY_TABLE} k display-popup -E -w 40 -h 5 -S 'fg=red' -T ' Kill Session ' -d "#{pane_current_path}" ${killSessionScriptPath()}`,
     `bind-key -T ${KEY_TABLE} d display-popup -E -w 40 -h 5 -S 'fg=red' -T ' Delete Session ' -d "#{pane_current_path}" ${deleteSessionScriptPath()}`,
+    // Info & navigation
+    `bind-key -T ${KEY_TABLE} ? display-popup -E -w 44 -h 26 -T ' Keybindings ' ${helpScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} t display-popup -E -w 90% -h 90% -d "#{pane_current_path}" ${statusPopupScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} l display-popup -E -w 60% -h 60% -d "#{pane_current_path}" ${pickSessionScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} z resize-pane -Z`,
+    // Session actions
+    `bind-key -T ${KEY_TABLE} c display-popup -E -w 50 -h 5 -S 'fg=yellow' -T ' Continue Session ' -d "#{pane_current_path}" ${continueSessionScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} r display-popup -E -w 70% -h 50% -d "#{pane_current_path}" ${restartAgentScriptPath()}`,
     // prefix-x smart kill
     `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`,
   ];
@@ -360,7 +531,7 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
   if (getExistingBinding(cycleKey) !== null && isSisyphusBinding(getExistingBinding(cycleKey)!)) {
     return {
       status: 'already-installed',
-      message: `Tmux keybindings already configured: ${cycleKey} (cycle), ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill-pane, k=kill-session, d=delete).`,
+      message: `Tmux keybindings already configured: ${cycleKey} (cycle), ${prefixKey}+key (?=help for full list).`,
     };
   }
 
@@ -369,7 +540,7 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     : `\nNote: No tmux.conf found. Add this to your tmux config for persistence:\n  source-file ${confPath}`;
   return {
     status: 'installed',
-    message: `Tmux keybindings set: ${cycleKey} cycles, ${prefixKey}+key (s=cycle, h=dashboard, n=new, m=message, x=kill-pane, k=kill-session, d=delete)${persistNote}`,
+    message: `Tmux keybindings set: ${cycleKey} cycles, ${prefixKey}+key (?=help for full list)${persistNote}`,
   };
 }
 
@@ -409,7 +580,11 @@ export function removeTmuxKeybind(): void {
   }
 
   // Remove scripts
-  const scripts = ['sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg', 'sisyphus-kill-session', 'sisyphus-delete-session'];
+  const scripts = [
+    'sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg',
+    'sisyphus-kill-session', 'sisyphus-delete-session', 'sisyphus-help', 'sisyphus-status-popup',
+    'sisyphus-pick-session', 'sisyphus-continue-session', 'sisyphus-restart-agent-popup',
+  ];
   for (const name of scripts) {
     const path = scriptPath(name);
     if (existsSync(path)) unlinkSync(path);

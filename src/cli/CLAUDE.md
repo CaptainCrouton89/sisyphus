@@ -21,7 +21,26 @@ Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 
 Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.conf` then sourced into user config (prefers XDG `~/.config/tmux/tmux.conf` over `~/.tmux.conf`). If no user config exists, source line is omitted and a manual instruction is printed.
 
-**Key table architecture**: `M-s` binds cycle in root table. `C-s` enters `sisyphus` key table: `s`=cycle, `h`=home/dashboard, `x`=kill-pane, `n`=new-prompt popup, `m`=message popup, `k`=kill-session popup, `d`=delete-session popup. All popups use `-d "#{pane_current_path}"`. `n`/`m` are `80% × 60%`; `k`/`d` are fixed `40 × 5` with `-S 'fg=red'` and a titled border — intentionally distinct from editor popups.
+**Key table architecture**: `M-s` binds cycle in root table. `C-s` enters `sisyphus` key table:
+
+| Key | Action | Popup size |
+|-----|---------|------------|
+| `s` | cycle sessions | — |
+| `h` | home/dashboard | — |
+| `x` | kill-pane (smart) | — |
+| `a` | jump to agent pane (`tmux display-menu` built from pane `@pane_role`/`@pane_cycle` options) | — |
+| `z` | zoom toggle (`resize-pane -Z`) | — |
+| `n` | new-prompt (nvim tmpfile → `sisyphus start`) | `80% × 60%` |
+| `m` | message orchestrator | `80% × 60%` |
+| `l` | session picker — fzf if available, numbered list fallback; filters to current cwd | `60% × 60%` |
+| `c` | continue session (`y` or `yes` accepted) | `50 × 5`, yellow border |
+| `r` | restart agent popup | `70% × 50%` |
+| `t` | session status (`sisyphus status` or `sisyphus list`) | `90% × 90%` |
+| `k` | kill session | `40 × 5`, red border |
+| `d` | delete session (requires `yes`) | `40 × 5`, red border |
+| `?` | keybinding cheatsheet | `44 × 27` |
+
+All popups use `-d "#{pane_current_path}"`. `k`/`d` use `-S 'fg=red'` — intentionally distinct from editor popups. `sisyphus-pick-agent` exits silently when there is only one pane (`${#args[@]} <= 5`).
 
 **Session grouping**: `~/.sisyphus/sessions-manifest.tsv` columns: `type\tname\tcwd\tphase\tdwid`. `type=H` = home session; `type=S` = sisyphus session. Scripts group by matching `cwd`. Daemon is solely responsible for keeping manifest current.
 
@@ -31,11 +50,11 @@ Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.con
 
 **Home script two-phase lookup**: checks `@sisyphus_dashboard` tmux option on current session first (set by daemon on home sessions) — selects that window in place. Falls back to manifest: find current session's cwd, then find `type=H` row with same cwd.
 
-**`SESSION_RESOLVE` pattern** (kill-session, delete-session, msg scripts): reads `@sisyphus_session_id` + `@sisyphus_cwd` from current session tmux options first, then falls back to manifest scan for `type=S` row with matching cwd. Errors `sleep 1` before exit so popup doesn't flash. After kill/delete, navigates to home via `go_home` helper. `sisyphus-delete-session` requires `yes` (not `y`) at prompt; passes `--cwd "$cwd"` to `sisyphus delete` for daemon cleanup when called from a non-sisyphus session.
+**`SESSION_RESOLVE` pattern** (kill-session, delete-session, continue-session, restart-agent, msg, status-popup scripts): reads `@sisyphus_session_id` + `@sisyphus_cwd` from current session tmux options first, then falls back to manifest scan for `type=S` row with matching cwd. Errors `sleep 1` before exit so popup doesn't flash. After kill/delete, navigates to home via `go_home` helper. `sisyphus-delete-session` requires `yes` (not `y`) at prompt; passes `--cwd "$cwd"` to `sisyphus delete` for daemon cleanup when called from a non-sisyphus session.
 
 **`sisyphus-new`/`sisyphus-msg`**: Both open nvim on a tmpfile; no-op if file is empty/whitespace after exit.
 
-**`setupTmuxKeybind`**: always reinstalls all seven scripts first. On conflict with a non-sisyphus binding, returns early — conf and source line are **not** written (scripts already installed). `installed` vs `already-installed` depends on whether tmux is running, not freshness: conf/source writes happen before the final binding check, so a running tmux server means live-apply succeeds → `isSisyphusBinding` matches → always `already-installed`; `installed` is only returned when tmux is down (live apply silently fails, post-apply check returns null). **Conflict detection also requires a running tmux server** — if tmux is down, `getExistingBinding` returns null and all bindings are written without conflict checking.
+**`setupTmuxKeybind`**: always reinstalls all thirteen scripts first. On conflict with a non-sisyphus binding, returns early — conf and source line are **not** written (scripts already installed). `installed` vs `already-installed` depends on whether tmux is running, not freshness: conf/source writes happen before the final binding check, so a running tmux server means live-apply succeeds → `isSisyphusBinding` matches → always `already-installed`; `installed` is only returned when tmux is down (live apply silently fails, post-apply check returns null). **Conflict detection also requires a running tmux server** — if tmux is down, `getExistingBinding` returns null and all bindings are written without conflict checking.
 
 **`removeTmuxKeybind`**: scans *both* `~/.tmux.conf` and `~/.config/tmux/tmux.conf` for the source line — handles config moves since install. Restores default `prefix-x` live if tmux is running.
 
