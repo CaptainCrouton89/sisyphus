@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.map
 
+# Sisyphus (generated session artifacts)
+.sisyphus/sessions/*/prompts/
+.sisyphus/sessions/*/logs/
+.sisyphus/sessions/*/snapshots/
+.sisyphus/sessions/*/.tui/
