@@ -27,7 +27,7 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 - **`AgentStatus` terminal states**: `killed` = explicit kill; `crashed` = pane exited unexpectedly; `lost` = pane gone with no exit event. `Agent.killedReason` only populated for `killed`.
 - **`claudeSessionId`** — pre-generated UUID passed as `--session-id`. Not set for OpenAI agents. Both `Agent.claudeSessionId` and `OrchestratorCycle.claudeSessionId` exist; TUI uses whichever is set to build `claude --resume` for the respective pane.
 - **`Session.tmuxSessionId`** (`$N` format) is stable across renames; `tmuxSessionName` can be renamed and breaks if the `ssyph_` prefix is lost. When both are present, use `tmuxSessionId` for exact-match targeting.
-- **`companionCredited*`** (`companionCreditedCycles`, `companionCreditedActiveMs`, `companionCreditedStrength`) — sentinels tracking stats already awarded to the companion. On `continue` → re-complete, companion logic awards only the delta (current total − credited). Without them every re-completion double-counts all three stats.
+- **`companionCredited*`** (`companionCreditedCycles`, `companionCreditedActiveMs`, `companionCreditedStrength`, `companionCreditedWisdom`) — sentinels tracking stats already awarded to the companion. On `continue` → re-complete, companion logic awards only the delta (current total − credited). Without them every re-completion double-counts all four stats. Adding a new companion stat requires a matching credited sentinel or it double-counts on re-complete.
 - **`resumeEnv`/`resumeArgs`** on both `Agent` and `OrchestratorCycle` — carry the env vars and CLI args needed for `--resume` re-attachment. Written by daemon on spawn; read by `agent.ts` and `orchestrator.ts` on restart. Absent on pre-resume agents.
 
 ## companion-types.ts
@@ -65,6 +65,11 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 ## history-types.ts
 
 - **`wallClockMs` vs `activeMs`**: `wallClockMs` is start→end wall time (null on sessions predating the field); `activeMs` is cumulative agent active time. They diverge heavily during idle/paused periods.
+- **`activeMs` at three levels**: `SessionSummary.activeMs` = sum of agent `activeMs` values. `SessionSummaryCycle.activeMs` = sum of agents active during that cycle. Summing cycle-level values to reconstruct session totals double-counts agents active across multiple cycles.
+- **`reviews?: ReviewTiming[]`** is optional (not `[]`) — absent on sessions predating the field. Use `summary.reviews ?? []` when iterating; direct iteration throws on old sessions.
+- **`SessionSummary.efficiency`** — `activeMs / wallClockMs` ratio (0.0–1.0). Null when `wallClockMs` is null. Old summaries may have `null` in the field even though `wallClockMs` exists (written before the field was added); `history.ts` CLI recomputes it inline for those cases — don't assume `null` means data is unavailable.
+- **`SessionSummary.sentiment`** — one-sentence Haiku read of the session, written async (fire-and-forget) after session end via a second `writeSessionSummary` call. May be null on recent sessions if Haiku was rate-limited or failed. `getRecentSentiments()` in `history.ts` feeds it to companion commentary for emotional-arc context.
+- **`HistoryEvent.data`** is `Record<string, unknown>` — event-specific field shapes are enforced only at write sites, not by the type. Mismatched reads silently return `undefined`.
 
 ## exec.ts
 

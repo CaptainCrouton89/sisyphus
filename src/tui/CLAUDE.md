@@ -51,6 +51,18 @@ Raw ANSI terminal UI. No frameworks — frame-buffer with panel dirty-tracking a
 - **`notify` 30s timer**: Each call cancels the previous timer — only the most recent notification persists.
 - **`overlayDirty` gates bottom row**: OR'd with `bottomDirty` to decide whether to re-render or copy the bottom status row. Overlays always overwrite buffer lines unconditionally after concatenation.
 
+## Design App (`design-app.ts` + `design-types.ts`)
+
+- **`selectedAction` indexing shifts with `item.decision`**: `getDesignActions` returns `[comment, next]` for items without a decision, and `[agree, alt-1…alt-N, comment, next]` for items with one. `phase.selectedAction` is an index into this dynamic list — hardcoding `=== 1` or `=== 2` breaks silently on items with 0 or 2+ alternatives.
+- **`pick-alt` always opens a comment prompt**: Selecting an alternative (via `enter` on the action row or a digit shortcut) enters `inputMode: { kind: 'comment', pendingAlt: N }`, never advances directly. `agree` advances immediately. The `a` shortcut is silently ignored on items without `decision`.
+- **`itemIndex` is a raw index into `section.items`** (not filtered). Contrast with review-app's `reqIndex`, which indexes `pendingRequirements(group)` — pre-approved items excluded. Design walks every item regardless of `status`.
+- **`p` from `section-questions` index 0**: Routes to the last item in `section.items` (not section-intro) — falls back to section-intro only if the section has no items at all.
+- **`o` key exits to overview** from `section-intro`, `item-walkthrough`, and `section-questions`. review-app has no `o` key.
+- **Phase transitions silently chain**: `startSectionReview` → `startSectionQuestions` if section has no items; `startSectionQuestions` → `advanceToNextSection` if all questions already answered. A section with no items and pre-answered questions is traversed in a single `n`.
+- **`custom-answer` empty submit stays put**: Unlike preset-option confirm (which always advances), submitting an empty custom answer does nothing — user stays on the same question. Same guard `if (q && text)` as review-app's `custom-answer`.
+- **Exit always writes feedback**: `buildDesignFeedback` goes to stdout and `{dir}/design-feedback.md` on all exit paths (both `q` and final-enter). `saveData` fires unconditionally at exit before feedback generation. A `.pre-review.json` snapshot is created once on startup if absent — never overwritten.
+- **Helpers in `design-types.ts`**: `totalItems`, `totalReviewed`, `sectionProgress` — design-app.ts has only call sites.
+
 ## Review App (`review-app.ts` + `review-types.ts`)
 
 - **`reqIndex` indexes `pendingRequirements(group)`, not `group.requirements`**: Requirements with `status: 'approved'` (pre-approved in the JSON) are excluded from navigation. Phase state `{ kind: 'item-review', reqIndex: N }` refers to the Nth pending item, not the Nth group requirement. Off-by-one bugs appear here when correlating by index.
@@ -64,7 +76,7 @@ Raw ANSI terminal UI. No frameworks — frame-buffer with panel dirty-tracking a
 - **`selectedAction` in `item-review` is a real selection cursor**: `j`/`k` navigate it (0–2); `enter` confirms — action 0 approves immediately, actions 1–2 open `inputMode`. Direct `1`/`2`/`3` bypass `selectedAction` and act immediately without confirmation. Unlike `group-questions` number keys which are select-only.
 - **`inputMode.action` determines final `reviewAction`**: `{ kind: 'comment', action: 'approve' }` = approve-with-comment; `{ kind: 'comment', action: 'comment' }` = comment-only. Both look identical in the UI; the distinction is which value gets written to `req.reviewAction` on submit.
 - **Number keys in `group-questions` are select-only**: `1`–N update `selectedOption` but do not confirm or advance — `enter` is required.
-- **Exit writes feedback to both stdout and file on every exit path**: `buildReviewFeedback` goes to `console.log` (calling agent stdout capture) **and** to `{requirementsDir}/review-feedback.md` (for `--wait` mode). This runs on `q` (unsaved) exit too — `review-feedback.md` is always written regardless of `saveData`.
+- **Exit writes feedback to both stdout and file on every exit path**: `buildReviewFeedback` goes to `console.log` (calling agent stdout capture) **and** to `{requirementsDir}/review-feedback.md` (for `--wait` mode). `saveData` fires unconditionally at exit — including `q`. `review-feedback.md` is always written on every exit path.
 - **`inputBuffer` pre-fills with existing comment in `comment` mode**: Pressing `2` or `3` restores any existing `userComment` — not blank. Pressing enter on an empty buffer still sets `reviewAction` but skips the `userComment` assignment (`if (text)` guard). In `custom-answer` mode, empty submit clears `inputMode` but does NOT advance — user stays on the same question.
 - **`p` back-nav from `group-questions` index 0**: Routes to the last pending item in the current group (`pending.length - 1`) rather than group-intro — only falls back to group-intro if the group has no pending items at all.
 - **Helpers live in `review-types.ts`**: `pendingRequirements`, `totalReviewed`, `totalPending`, `resolveEarsKeyword`, `getEarsCondition` are exported from `review-types.ts`, not `review-app.ts`. Searching `review-app.ts` finds only call sites.
