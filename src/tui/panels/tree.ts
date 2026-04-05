@@ -279,9 +279,6 @@ export function renderTreePanel(
   if (companion) {
     const commentaryCount = _companionCommentaryLines.length;
     const faceRow = y + h - 2 - commentaryCount;
-    const totalAgents = nodes
-      .filter((n): n is import('../types/tree.js').SessionTreeNode => n.type === 'session' && n.status === 'active')
-      .reduce((sum, n) => sum + n.agentCount, 0);
     const hasActive = nodes.some((n) => n.type === 'session' && n.status === 'active');
     const fields: CompanionField[] = hasActive
       ? ['face', 'boulder', 'verb']
@@ -290,7 +287,7 @@ export function renderTreePanel(
     // breaks when maxWidth truncates the result. Apply mood color externally.
     const faceLine = renderCompanion(companion, fields, {
       maxWidth: innerW,
-      agentCount: totalAgents,
+      agentCount: companion.totalActiveAgents ?? 0,
       verbIndex: companion.spinnerVerbIndex,
     });
     const moodCode = getMoodAnsiCode(companion.mood);

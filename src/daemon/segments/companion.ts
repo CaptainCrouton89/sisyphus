@@ -1,5 +1,4 @@
 import { renderCompanion } from '../../shared/companion-render.js';
-import { getTotalActiveSessionAgents } from '../status-dots.js';
 import type { Segment, SegmentOutput, RenderContext } from './types.js';
 
 const DEFAULT_BG = '#4a4d55';
@@ -22,7 +21,7 @@ export function createCompanionSegment(): Segment {
         companionStr = renderCompanion(companion, fields, {
           maxWidth: 38,
           tmuxFormat: true,
-          agentCount: getTotalActiveSessionAgents(),
+          agentCount: ctx.companion.totalActiveAgents ?? 0,
           verbIndex: companion.spinnerVerbIndex,
         });
       } catch {

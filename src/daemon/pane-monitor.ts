@@ -9,6 +9,7 @@ import { generateCommentary } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
 import type { MoodSignals } from '../shared/companion-types.js';
 import { emitHistoryEvent } from './history.js';
+import { getTotalActiveSessionAgents } from './status-dots.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
 type DotsCallback = () => void;
@@ -277,17 +278,25 @@ async function pollAllSessions(): Promise<void> {
       sessionsCompletedToday: companion.recentCompletions.filter(t => t.startsWith(new Date().toISOString().slice(0, 10))).length,
     };
 
+    // Sync global agent count from status-dots (single source of truth for boulder size)
+    const globalAgents = getTotalActiveSessionAgents();
+    const agentsChanged = companion.totalActiveAgents !== globalAgents;
+    if (agentsChanged) companion.totalActiveAgents = globalAgents;
+
     const newMood = computeMood(companion, undefined, signals);
-    if (newMood !== companion.mood) {
+    const moodChanged = newMood !== companion.mood;
+    if (moodChanged) {
       const oldMood = companion.mood;
       companion.mood = newMood;
       companion.moodUpdatedAt = new Date().toISOString();
-      // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
       saveCompanion(companion);
       const firstSessionId = trackedSessions.keys().next().value;
       if (firstSessionId) {
         emitHistoryEvent(firstSessionId, 'signals-snapshot', { from: oldMood, to: newMood, signals });
       }
+    } else if (agentsChanged) {
+      // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
+      saveCompanion(companion);
     }
     // Late-night commentary (2-6am, throttled to once per 30min)
     const hour = new Date().getHours();
