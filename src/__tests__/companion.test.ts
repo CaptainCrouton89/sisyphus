@@ -1317,15 +1317,62 @@ describe('computeMood z-score integration', () => {
     assert.notEqual(mood, 'frustrated', 'A normal session should not be frustrated');
   });
 
-  it('extreme cycles trigger frustrated (z > 2)', () => {
+  it('extreme cycles without negative events does NOT trigger frustrated', () => {
     const c = companionWithBaselines({ cycleCountMean: 5 });
     const mood = computeMood(c, undefined, makeSignals({
       sessionLengthMs: 10_000_000,
-      cycleCount: 30,  // way above mean of 5
+      cycleCount: 30,  // way above mean of 5 — but no crashes/rollbacks
       totalAgentCount: 15,
       hourOfDay: 14,
     }));
+    assert.notEqual(mood, 'frustrated', 'High cycles alone should not cause frustration');
+  });
+
+  it('rollbacks trigger frustrated', () => {
+    const c = companionWithBaselines();
+    const mood = computeMood(c, undefined, makeSignals({
+      rollbackCount: 2,
+      hourOfDay: 14,
+    }));
     assert.equal(mood, 'frustrated');
+  });
+
+  it('multiple rollbacks trigger intense frustrated', () => {
+    const c = companionWithBaselines();
+    const mood = computeMood(c, undefined, makeSignals({
+      rollbackCount: 4,
+      hourOfDay: 14,
+    }));
+    assert.equal(mood, 'frustrated');
+  });
+
+  it('restarted agents trigger frustrated', () => {
+    const c = companionWithBaselines();
+    const mood = computeMood(c, undefined, makeSignals({
+      restartedAgentCount: 3,
+      hourOfDay: 14,
+    }));
+    assert.equal(mood, 'frustrated');
+  });
+
+  it('lost agents trigger frustrated', () => {
+    const c = companionWithBaselines();
+    const mood = computeMood(c, undefined, makeSignals({
+      lostAgentCount: 3,
+      hourOfDay: 14,
+    }));
+    assert.equal(mood, 'frustrated');
+  });
+
+  it('long clean session is grinding, not frustrated', () => {
+    const c = companionWithBaselines({ sessionMsMean: 3_600_000 });
+    const mood = computeMood(c, undefined, makeSignals({
+      sessionLengthMs: 50_000_000,  // ~14 hours, massive outlier
+      cycleCount: 14,
+      totalAgentCount: 21,
+      hourOfDay: 23,
+    }));
+    assert.notEqual(mood, 'frustrated', 'Long clean session should not be frustrated');
   });
 
   it('session longer than usual triggers grinding', () => {

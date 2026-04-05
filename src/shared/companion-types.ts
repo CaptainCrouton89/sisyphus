@@ -211,9 +211,13 @@ export interface MoodSignals {
   hourOfDay: number;          // 0-23
   activeAgentCount?: number;  // agents currently with status === 'running'
   totalAgentCount?: number;   // max total agents (agents.length) across tracked active sessions (for z-score baselines)
-  // NEW fields for richer mood scoring
   cycleCount?: number;              // current session orchestrator cycle count
   sessionsCompletedToday?: number;  // sessions completed today
+  // Frustration signals — actual negative events
+  rollbackCount?: number;           // max rollbacks across tracked active sessions
+  restartedAgentCount?: number;     // total agents restarted across tracked active sessions
+  lostAgentCount?: number;          // total agents with status 'lost' across tracked active sessions
+  killedAgentCount?: number;        // total agents explicitly killed across tracked active sessions
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [

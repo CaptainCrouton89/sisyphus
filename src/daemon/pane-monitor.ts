@@ -217,6 +217,10 @@ async function pollAllSessions(): Promise<void> {
     let activeAgentCount = 0;
     let totalAgentCount = 0;
     let maxCycleCount = 0;
+    let maxRollbackCount = 0;
+    let totalRestartedAgents = 0;
+    let totalLostAgents = 0;
+    let totalKilledAgents = 0;
     const cutoff = nowMs - 30 * 60 * 1000;
 
     for (const { id: sessionId, cwd } of trackedSessions.values()) {
@@ -226,12 +230,22 @@ async function pollAllSessions(): Promise<void> {
           sessionLengthMs = Math.max(sessionLengthMs, s.activeMs);
           totalAgentCount = Math.max(totalAgentCount, s.agents.length);
           maxCycleCount = Math.max(maxCycleCount, s.orchestratorCycles?.length ?? 0);
+          maxRollbackCount = Math.max(maxRollbackCount, s.rollbackCount ?? 0);
           for (const agent of s.agents) {
             if (agent.status === 'crashed' && agent.completedAt && new Date(agent.completedAt).getTime() > cutoff) {
               recentCrashes++;
             }
             if (agent.status === 'running') {
               activeAgentCount++;
+            }
+            if (agent.status === 'lost') {
+              totalLostAgents++;
+            }
+            if (agent.status === 'killed') {
+              totalKilledAgents++;
+            }
+            if ((agent.restartCount ?? 0) > 0) {
+              totalRestartedAgents++;
             }
           }
         }
@@ -276,6 +290,10 @@ async function pollAllSessions(): Promise<void> {
       totalAgentCount,
       cycleCount: maxCycleCount,
       sessionsCompletedToday: companion.recentCompletions.filter(t => t.startsWith(new Date().toISOString().slice(0, 10))).length,
+      rollbackCount: maxRollbackCount,
+      restartedAgentCount: totalRestartedAgents,
+      lostAgentCount: totalLostAgents,
+      killedAgentCount: totalKilledAgents,
     };
 
     // Sync global agent count from status-dots (single source of truth for boulder size)

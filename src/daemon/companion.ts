@@ -304,15 +304,23 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   if (agentZ > 0.5) scores.grinding += 10;   // more agents than usual
   if (cycleZ > 0.5) scores.grinding += 8;    // more cycles than usual
 
-  // Frustrated — deviation-based churning
-  if (cycleZ > 1.0) scores.frustrated += 15;  // significantly more cycles than usual
-  if (cycleZ > 2.0) scores.frustrated += 15;  // way more cycles
-  if (cycleZ > 3.0) scores.frustrated += 10;  // extreme cycle count
-  if (sessionZ > 1.5) scores.frustrated += 12; // session running much longer than usual
-  if (sessionZ > 2.5) scores.frustrated += 15; // extremely long
-  if (sessionZ > 1.0 && cycleZ > 1.0) scores.frustrated += 10; // both high = stuck
-  if (signals.justCrashed) scores.frustrated += 30; // crashes are always frustrating
-  if (signals.recentCrashes >= 2) scores.frustrated += 20; // multiple crashes
+  // Frustrated — actual negative events (crashes, rollbacks, restarts, lost agents)
+  const rollbacks = signals.rollbackCount ?? 0;
+  const restartedAgents = signals.restartedAgentCount ?? 0;
+  const lostAgents = signals.lostAgentCount ?? 0;
+  const killedAgents = signals.killedAgentCount ?? 0;
+  if (signals.justCrashed) scores.frustrated += 30;
+  if (signals.recentCrashes >= 2) scores.frustrated += 20;
+  if (signals.recentCrashes >= 4) scores.frustrated += 15;
+  if (rollbacks >= 1) scores.frustrated += 25;  // rolling back = something went wrong
+  if (rollbacks >= 3) scores.frustrated += 25;  // repeated rollbacks = real pain
+  if (restartedAgents >= 1) scores.frustrated += 15;
+  if (restartedAgents >= 3) scores.frustrated += 15;
+  if (lostAgents >= 1) scores.frustrated += 15;
+  if (lostAgents >= 3) scores.frustrated += 10;
+  if (killedAgents >= 2) scores.frustrated += 10;
+  // Long session WITH negative events = stuck (but long session alone is just grinding)
+  if (sessionZ > 1.5 && (signals.recentCrashes > 0 || rollbacks > 0)) scores.frustrated += 12;
 
   // Zen — deviation-based "normal" + absolute calm
   if (companion.stats.patience > 30) scores.zen += 15;
@@ -337,7 +345,7 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   if (agentZ > 2.0) scores.excited += 15; // massive swarm for this user
   if (signals.justCompleted && sessionZ < -1.0) scores.excited += 20; // way faster than usual
 
-  // Existential — absolute (late night + experience)
+  // Existential — absolute (late night + experience + sustained commitment)
   if (signals.hourOfDay >= 2 && signals.hourOfDay < 6) scores.existential += 25;
   if (signals.hourOfDay >= 0 && signals.hourOfDay < 2) scores.existential += 10;
   const enduranceHours = companion.stats.endurance / 3_600_000;
@@ -345,8 +353,20 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   if (signals.hourOfDay >= 2 && signals.hourOfDay < 6 && enduranceHours > 40) {
     scores.existential += 25;
   }
-  if (companion.sessionsCompleted > 15) scores.existential += 8;
-  if (dailyZ > 1.5) scores.existential += 5; // heavy use day
+  // Weekly activity z-score — sustained above-average use, not a static lifetime counter
+  const now = Date.now();
+  const weekAgo = now - 7 * 24 * 3_600_000;
+  const weeklyCompletions = companion.recentCompletions.filter(
+    ts => new Date(ts).getTime() > weekAgo
+  ).length;
+  const weeklyAvgDaily = weeklyCompletions / 7;
+  const weeklyZ = zScore(weeklyAvgDaily, baselines.sessionsPerDay, 'sessionsPerDay');
+  if (weeklyZ > 0.5) scores.existential += 8;
+  if (weeklyZ > 1.0) scores.existential += 7;
+  if (weeklyZ > 1.5) scores.existential += 5;
+  // Consecutive days — grows slowly from day 3, caps at +20 around day 9
+  const consecutiveDays = companion.consecutiveDaysActive ?? 0;
+  if (consecutiveDays >= 3) scores.existential += Math.min(20, (consecutiveDays - 2) * 3);
 
   const moodOrder: Mood[] = ['happy', 'grinding', 'frustrated', 'zen', 'sleepy', 'excited', 'existential'];
   let best: Mood = 'grinding';
@@ -714,10 +734,10 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
     companion.consecutiveCleanSessions++;
   }
 
-  // Recent completions for momentum/overdrive achievements (keep last 10)
+  // Recent completions for achievements + weekly existential z-score (keep last 30)
   companion.recentCompletions.push(new Date().toISOString());
-  if (companion.recentCompletions.length > 10) {
-    companion.recentCompletions = companion.recentCompletions.slice(-10);
+  if (companion.recentCompletions.length > 30) {
+    companion.recentCompletions = companion.recentCompletions.slice(-30);
   }
 
   // Task history tracking (normalize task string to simple hash)
