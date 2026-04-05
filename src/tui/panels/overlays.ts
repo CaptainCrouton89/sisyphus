@@ -97,7 +97,7 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
     helpRow('  n  new session', '  m  message orch.', innerWidth),
     helpRow('  R  resume session', '  C  continue session', innerWidth),
     helpRow('  b  rollback cycle', '  x  restart agent', innerWidth),
-    helpRow('  r  re-run agent', '  g  edit prompt', innerWidth),
+    helpRow('  r  re-run agent', '  g  edit goal', innerWidth),
     helpRow('  p  open roadmap', '  s  toggle strategy', innerWidth),
     helpRow('  S  edit strategy', '  w  go to window', innerWidth),
     helpRow('  o  resume claude session', '  c  claude companion', innerWidth),

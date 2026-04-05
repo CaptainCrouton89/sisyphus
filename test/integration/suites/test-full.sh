@@ -131,11 +131,11 @@ test_update_task() {
   update_resp=$(send_request "{\"type\":\"update-task\",\"sessionId\":\"$sid\",\"task\":\"updated task description\"}")
   assert_json_ok "update-task-ok" "$update_resp"
 
-  local prompt_file="$TEST_CWD/.sisyphus/sessions/$sid/initial-prompt.md"
-  if grep -q "updated task description" "$prompt_file" 2>/dev/null; then
-    assert_pass "update-task-prompt-file-updated"
+  local goal_file="$TEST_CWD/.sisyphus/sessions/$sid/goal.md"
+  if grep -q "updated task description" "$goal_file" 2>/dev/null; then
+    assert_pass "update-task-goal-file-updated"
   else
-    assert_fail "update-task-prompt-file-updated" "initial-prompt.md does not contain updated task description (path: $prompt_file)"
+    assert_fail "update-task-goal-file-updated" "goal.md does not contain updated task description (path: $goal_file)"
   fi
 
   stop_daemon

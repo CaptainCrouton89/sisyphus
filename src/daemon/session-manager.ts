@@ -7,7 +7,7 @@ import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter
 import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, flushAgentTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { loadConfig } from '../shared/config.js';
-import { initialPromptPath, cycleLogPath, sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
+import { goalPath, cycleLogPath, sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
 import { unregisterSessionPanes, unregisterAgentPane, getSessionPanes } from './pane-registry.js';
 import type { Session } from '../shared/types.js';
 import { sendTerminalNotification } from './notify.js';
@@ -30,9 +30,9 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max) + '...';
 }
 
-function readInitialPrompt(cwd: string, sessionId: string, fallback: string): string {
+function readGoal(cwd: string, sessionId: string, fallback: string): string {
   try {
-    const p = initialPromptPath(cwd, sessionId);
+    const p = goalPath(cwd, sessionId);
     if (existsSync(p)) return readFileSync(p, 'utf-8').trim();
   } catch { /* fall through */ }
   return fallback;
@@ -451,7 +451,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     companion.spinnerVerbIndex = (companion.spinnerVerbIndex + 1) % SPINNER_VERBS.length;
     saveCompanion(companion);
 
-    const goal = readInitialPrompt(cwd, sessionId, session.task);
+    const goal = readGoal(cwd, sessionId, session.task);
     const modeLabel = lastCycle?.mode ? ` (${lastCycle.mode})` : '';
     const agentMap = new Map(session.agents.map(a => [a.id, a]));
     const spawnedThisCycle = (lastCycle?.agentsSpawned ?? [])
@@ -705,7 +705,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     markEventCompletion();
     const leveledUp = companion.level > prevLevel;
 
-    const goal = readInitialPrompt(cwd, sessionId, completedSession.task);
+    const goal = readGoal(cwd, sessionId, completedSession.task);
     const completeCtx = [
       `Goal: ${truncate(goal, 150)}`,
       `Result: ${truncate(report, 200)}`,

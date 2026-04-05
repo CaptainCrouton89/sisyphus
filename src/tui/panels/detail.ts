@@ -165,7 +165,7 @@ function buildPlanLines(content: string, maxLines: number, width: number): PlanL
 function buildSessionLines(
   session: Session,
   planContent: string,
-  initialPromptContent: string | undefined,
+  goalContent: string | undefined,
   width: number,
   paneAlive: boolean,
   strategyContent: string = '',
@@ -177,10 +177,10 @@ function buildSessionLines(
   const cycles = session.orchestratorCycles;
   const isDead = session.status === 'active' && !paneAlive;
   // Goal text
-  const initialPromptText = initialPromptContent
-    ? cleanMarkdown(stripFrontmatter(initialPromptContent).trim())
+  const goalText = goalContent
+    ? cleanMarkdown(stripFrontmatter(goalContent).trim())
     : session.task;
-  initialPromptText
+  goalText
     .split('\n')
     .flatMap((l) => wrapText(l, contentWidth - 2))
     .forEach((line, i) => {
@@ -570,7 +570,7 @@ export function renderDetailRows(
     lastCycle?.completedAt ?? '',
     lastCycle?.agentsSpawned.length ?? 0,
     state.planContent.length,
-    state.initialPromptContent.length,
+    state.goalContent.length,
     state.strategyContent.length,
     state.paneAlive,
     detailReportBlocks.length,
@@ -588,7 +588,7 @@ export function renderDetailRows(
   } else {
     switch (cursorNode.type) {
       case 'session': {
-        lines = buildSessionLines(session, state.planContent, state.initialPromptContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         break;
       }
 
@@ -596,7 +596,7 @@ export function renderDetailRows(
         const cycleNode = cursorNode as CycleTreeNode;
         const cycle = session.orchestratorCycles.find((c) => c.cycle === cycleNode.cycleNumber);
         if (!cycle) {
-          lines = buildSessionLines(session, state.planContent, state.initialPromptContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         } else {
           lines = buildCycleLines(cycle, session.agents, rect.w);
         }
@@ -607,7 +607,7 @@ export function renderDetailRows(
         const agentNode = cursorNode as AgentTreeNode;
         const agent = agents.find((a) => a.id === agentNode.agentId);
         if (!agent) {
-          lines = buildSessionLines(session, state.planContent, state.initialPromptContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         } else {
           lines = buildAgentLines(agent, detailReportBlocks, rect.w);
         }
@@ -618,7 +618,7 @@ export function renderDetailRows(
         const reportNode = cursorNode as ReportTreeNode;
         const agent = agents.find((a) => a.id === reportNode.agentId);
         if (!agent) {
-          lines = buildSessionLines(session, state.planContent, state.initialPromptContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
+          lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
           break;
         }
         const reportIdx = reportNode.reportIndex;
@@ -715,7 +715,7 @@ export function renderDetailRows(
       }
 
       default: {
-        lines = buildSessionLines(session, state.planContent, state.initialPromptContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
+        lines = buildSessionLines(session, state.planContent, state.goalContent, rect.w, state.paneAlive, state.strategyContent, state.flowExpanded);
         break;
       }
     }

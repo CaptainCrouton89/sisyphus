@@ -860,7 +860,8 @@ Every session creates a directory at \`.sisyphus/sessions/<id>/\` with:
 .sisyphus/sessions/<id>/
 ├── state.json          # Session state (agents, cycles, status)
 ├── roadmap.md          # Strategic plan (updated by orchestrator each cycle)
-├── initial-prompt.md   # Original task description
+├── goal.md             # Original task description
+├── initial-prompt.md   # Immutable record of the initial user prompt
 ├── strategy.md         # High-level strategy notes
 ├── logs/
 │   ├── cycle-000.md    # What the orchestrator did in cycle 0

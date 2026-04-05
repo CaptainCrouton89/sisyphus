@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { initialPromptPath, roadmapPath, sessionsDir, statePath } from '../../shared/paths.js';
+import { goalPath, roadmapPath, sessionsDir, statePath } from '../../shared/paths.js';
 import { resolveReports } from './reports.js';
 import type { Session, AgentStatus } from '../../shared/types.js';
 
@@ -70,10 +70,10 @@ export function buildCompanionContext(cwd: string): string {
         lines.push(`    <agents>${escapeXml(summary)}</agents>`);
       }
 
-      // Prompt: first meaningful line
-      const promptContent = readFileSafe(initialPromptPath(cwd, session.id));
-      if (promptContent) {
-        const firstLine = promptContent.split('\n').map(l => l.trim()).find(l => l.length > 0 && !l.startsWith('#'));
+      // Goal: first meaningful line
+      const goalContent = readFileSafe(goalPath(cwd, session.id));
+      if (goalContent) {
+        const firstLine = goalContent.split('\n').map(l => l.trim()).find(l => l.length > 0 && !l.startsWith('#'));
         if (firstLine) lines.push(`    <goal>${escapeXml(firstLine)}</goal>`);
       }
 
@@ -105,7 +105,7 @@ export function buildCompanionContext(cwd: string): string {
 }
 
 export function buildSessionContext(session: Session, cwd: string): string {
-  const initialPrompt = readFileSafe(initialPromptPath(cwd, session.id));
+  const goal = readFileSafe(goalPath(cwd, session.id));
   const roadmap = readFileSafe(roadmapPath(cwd, session.id));
 
   const agentsXml = session.agents.map((agent) => {
@@ -136,7 +136,7 @@ export function buildSessionContext(session: Session, cwd: string): string {
     `  <cwd>${escapeXml(session.cwd)}</cwd>`,
   ];
 
-  if (initialPrompt) lines.push(`  <goal>${escapeXml(initialPrompt)}</goal>`);
+  if (goal) lines.push(`  <goal>${escapeXml(goal)}</goal>`);
   if (roadmap) lines.push(`  <roadmap>${escapeXml(roadmap)}</roadmap>`);
 
   if (session.agents.length > 0) {

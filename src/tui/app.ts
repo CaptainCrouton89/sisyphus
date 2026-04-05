@@ -45,7 +45,7 @@ import type { CompanionState } from '../shared/companion-types.js';
 import { NvimBridge } from './lib/nvim-bridge.js';
 import { resolveNvimFile } from './lib/overview-writer.js';
 import { loadConfig } from '../shared/config.js';
-import { roadmapPath, initialPromptPath, strategyPath, logsDir, contextDir, digestPath } from '../shared/paths.js';
+import { roadmapPath, goalPath, strategyPath, logsDir, contextDir, digestPath } from '../shared/paths.js';
 import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDisplayName, truncate, ansiColor, ansiDim, ansiBold } from './lib/format.js';
 import { COMPOSE_HEADERS } from './state.js';
 import type { TreeNode } from './types/tree.js';
@@ -214,7 +214,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       let selectedSession: Session | null = null;
       let planContent = '';
       let strategyContent = '';
-      let initialPromptContent = '';
+      let goalContent = '';
       let logsContent = '';
       let logsCycles: CycleLog[] = [];
       let digestData: StatusDigest | null = null;
@@ -264,12 +264,12 @@ export function startApp(state: AppState, cleanup: () => void): void {
         }
 
         try {
-          const gp = initialPromptPath(state.cwd, state.selectedSessionId);
+          const gp = goalPath(state.cwd, state.selectedSessionId);
           if (existsSync(gp)) {
-            initialPromptContent = readFileSync(gp, 'utf-8');
+            goalContent = readFileSync(gp, 'utf-8');
           }
         } catch {
-          // initial-prompt.md may not exist yet
+          // goal.md may not exist yet
         }
 
         try {
@@ -365,7 +365,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       state.selectedSession = selectedSession;
       state.planContent = planContent;
       state.strategyContent = strategyContent;
-      state.initialPromptContent = initialPromptContent;
+      state.goalContent = goalContent;
       state.logsContent = logsContent;
       state.logsCycles = logsCycles;
       state.digestData = digestData;
