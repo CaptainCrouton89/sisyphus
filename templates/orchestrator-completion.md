@@ -20,14 +20,25 @@ Synthesize this into a clear picture of what was done and how it maps to what wa
 
 ## Present the Summary
 
-Output a concise summary directly in the tmux pane. The user already knows what they asked for — don't recap the goal. Focus on what's interesting:
+Write a polished markdown summary and display it with `termrender --tmux` so the user sees a well-rendered report in a side pane:
+
+```bash
+cat > "$SISYPHUS_SESSION_DIR/context/completion-summary.md" << 'EOF'
+# Session Summary
+... your markdown summary ...
+EOF
+
+termrender --tmux "$SISYPHUS_SESSION_DIR/context/completion-summary.md"
+```
+
+The user already knows what they asked for — don't recap the goal. Focus on what's interesting:
 
 - **What was built** — the key deliverables, not an exhaustive file list. Highlight anything non-obvious or that diverged from the original ask.
 - **Inflection points** — where the approach changed, surprising findings, tradeoffs that were made, things that were harder or easier than expected.
 - **Gaps** — anything deferred, any known limitations. Be honest.
 - **Validation** — brief summary of what was tested. Reference reports if the user wants detail.
 
-Keep it tight. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
+Use tables, diagrams, and structured markdown freely — `sisyphus present` renders it with full styling. Keep it tight but visually clear. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
 
 ## Wait for User Confirmation
 

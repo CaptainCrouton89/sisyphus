@@ -19,6 +19,14 @@ System prompt templates for orchestrator and agent initialization.
 - **orchestrator-impl.md** — Implementation-phase orchestrator guidance. Context propagation from planning, code smell escalation, and verification patterns. Appended when `--mode implementation`.
 - **orchestrator-validation.md** — Validation-phase orchestrator guidance. Emphasis on proving features work end-to-end via e2e recipes and operator agents for UI features.
 - **orchestrator-completion.md** — Completion-phase orchestrator guidance. Appended when `--mode completion`.
+  - **NEVER yield while waiting for user input** — yield kills the process and respawns a fresh instance with no memory of the conversation. Ask, then stop and wait.
+  - **NEVER call `sisyphus complete` until the user explicitly confirms** — "looks good", "ship it", "approved", or equivalent.
+  - **Feedback triage determines re-entry path:**
+    - Minor (typo, rename, cosmetic) → fix in place, re-present, ask again. Stay in the conversation.
+    - Moderate (bug, edge case, incomplete feature) → accumulate all items first, then yield once to `--mode implementation`. Don't yield per item.
+    - Major (scope change, new feature, approach rethink) → update goal.md + strategy.md, yield to `--mode strategy`.
+  - **Context refresh:** if minor-fix rounds run long, yield back to `--mode completion` with a progress summary — the fresh instance reads the summary to reconstruct state.
+  - **Summary presentation:** write to `$SISYPHUS_SESSION_DIR/context/completion-summary.md`, display via `termrender --tmux`. Skip goal recap — focus on inflection points, divergences from plan, deferred gaps, and validation evidence.
 - **agent-suffix.md** — Agent system prompt suffix. Contains `{{SESSION_ID}}` and `{{INSTRUCTION}}` placeholders. Rendered once per agent spawn.
 - **dashboard-claude.md** — Dashboard companion prompt. Guides a Claude instance embedded in the TUI to help users manage sessions. Contains `{{CWD}}` and `{{SESSIONS_CONTEXT}}` placeholders.
 

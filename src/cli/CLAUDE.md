@@ -48,11 +48,11 @@ Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.con
 
 ## Present Command (`commands/present.ts`)
 
-`sisyphus present <file>` renders a termrender markdown file via the `termrender` CLI, then opens it in nvim in a tmux window for user review.
+`sisyphus present <file>` renders a markdown file via `termrender` and displays it in a tmux split pane.
 
-- **Outside tmux**: prints ANSI-rendered output straight to stdout and exits — no temp file, no nvim.
-- **Default (`--wait`)**: writes rendered ANSI to a tmp file, opens nvim on it, blocks until nvim closes, then LCS-diffs the ANSI-stripped original vs edited. Lines the user added or changed are wrapped in `<!-- user: --> / <!-- /user -->` HTML comment tags; result goes to stdout. Temp file cleaned up after.
-- **`--no-wait`**: opens nvim and returns immediately — temp file is **intentionally not deleted** (nvim still has it open).
+- **Outside tmux**: prints ANSI-rendered output straight to stdout and exits — no temp file, no pane.
+- **Default (non-interactive)**: delegates to `termrender --tmux` — opens `less -R` in a split pane with auto-detected width and self-cleaning temp file. This is the mode agents use to show visual output to the user.
+- **`--interactive`**: renders to temp file, opens editable nvim with baleia ANSI plugin, blocks until nvim closes, reads back the file and writes to stdout, then cleans up.
 
 ## Requirements / Design Review Commands (`commands/review.ts`)
 
