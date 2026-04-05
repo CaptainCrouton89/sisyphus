@@ -410,7 +410,8 @@ export function cloneSessionDir(
   if (strategy) {
     const srcStrategy = strategyPath(sourceCwd, sourceId);
     if (existsSync(srcStrategy)) {
-      copyFileSync(srcStrategy, strategyPath(sourceCwd, cloneId));
+      const text = readFileSync(srcStrategy, 'utf-8');
+      writeFileSync(strategyPath(sourceCwd, cloneId), text.replaceAll(sourceId, cloneId), 'utf-8');
     }
   }
 
@@ -440,6 +441,8 @@ export async function createCloneState(
   cloneId: string,
   goal: string,
   context?: string,
+  configModel?: string,
+  configOrchestratorPrompt?: string,
 ): Promise<Session> {
   return withSessionLock(cloneId, () => {
     const source = getSession(sourceCwd, sourceId);
@@ -462,6 +465,16 @@ export async function createCloneState(
       }
     }
 
+    // Resolve model and launchConfig with fallback to config
+    const model = source.model ?? configModel;
+    const launchConfig = source.launchConfig
+      ? structuredClone(source.launchConfig)
+      : {
+          model,
+          context,
+          orchestratorPrompt: configOrchestratorPrompt,
+        };
+
     const clone: Session = {
       id: cloneId,
       task: goal,
@@ -475,8 +488,8 @@ export async function createCloneState(
       messages,
       startHour: created.getHours(),
       startDayOfWeek: created.getDay(),
-      ...(source.model ? { model: source.model } : {}),
-      ...(source.launchConfig ? { launchConfig: structuredClone(source.launchConfig) } : {}),
+      ...(model ? { model } : {}),
+      launchConfig,
     };
 
     atomicWrite(statePath(sourceCwd, cloneId), JSON.stringify(clone, null, 2));

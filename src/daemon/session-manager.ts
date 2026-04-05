@@ -38,6 +38,64 @@ function readGoal(cwd: string, sessionId: string, fallback: string): string {
   return fallback;
 }
 
+function fireHaikuNaming(
+  sessionId: string,
+  cwd: string,
+  fallbackTmuxName: string,
+  task: string,
+): void {
+  generateSessionName(task).then(async (generatedName) => {
+    if (!generatedName) {
+      console.log(`[sisyphus] Name generation returned null for session ${sessionId}`);
+      return;
+    }
+    let finalName = generatedName;
+    let candidate = tmuxSessionName(cwd, finalName);
+    let attempt = 0;
+    while (tmux.sessionNameTaken(candidate) && attempt < 5) {
+      attempt++;
+      finalName = `${generatedName}-${attempt}`;
+      candidate = tmuxSessionName(cwd, finalName);
+    }
+    if (tmux.sessionNameTaken(candidate)) return;
+
+    const currentSession = state.getSession(cwd, sessionId);
+    const currentTmuxSessId = currentSession.tmuxSessionId;
+    const renameTarget = currentTmuxSessId ?? fallbackTmuxName;
+
+    try {
+      tmux.renameSession(renameTarget, candidate);
+    } catch { return; }
+
+    await state.updateSessionName(cwd, sessionId, finalName);
+    const windowId = currentSession.tmuxWindowId!;
+    await state.updateSessionTmux(cwd, sessionId, candidate, windowId, currentTmuxSessId);
+    trackSession(sessionId, cwd, currentTmuxSessId, candidate);
+    registerSessionTmux(sessionId, candidate, windowId, currentTmuxSessId);
+
+    const session = state.getSession(cwd, sessionId);
+    for (const pane of getSessionPanes(sessionId)) {
+      tmux.updatePaneMeta(pane.paneId, { session: finalName });
+      if (pane.role === 'orchestrator') {
+        tmux.setPaneTitle(pane.paneId, `ssph:orch ${finalName} c${session.orchestratorCycles.length}`);
+      } else if (pane.role === 'agent' && pane.agentId) {
+        const agent = session.agents.find(a => a.id === pane.agentId);
+        if (agent) {
+          const shortType = agent.agentType && agent.agentType !== 'worker'
+            ? agent.agentType.replace(/^sisyphus:/, '')
+            : '';
+          const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
+          tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} c${session.orchestratorCycles.length}`);
+        }
+      }
+    }
+    emitHistoryEvent(sessionId, 'session-named', { name: finalName });
+    console.log(`[sisyphus] Session ${sessionId} named: ${finalName}`);
+  }).catch((err) => {
+    console.error(`[sisyphus] Name generation failed for session ${sessionId}:`, err);
+  });
+}
+
 function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false): void {
   generateCommentary(event, companion, context).then(text => {
     if (text) {
@@ -131,59 +189,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
 
   // Fire-and-forget: auto-generate a descriptive session name via Haiku
   if (!name) {
-    generateSessionName(task).then(async (generatedName) => {
-      if (!generatedName) {
-        console.log(`[sisyphus] Name generation returned null for session ${sessionId}`);
-        return;
-      }
-      let finalName = generatedName;
-      let candidate = tmuxSessionName(cwd, finalName);
-      let attempt = 0;
-      while (tmux.sessionNameTaken(candidate) && attempt < 5) {
-        attempt++;
-        finalName = `${generatedName}-${attempt}`;
-        candidate = tmuxSessionName(cwd, finalName);
-      }
-      if (tmux.sessionNameTaken(candidate)) return;
-
-      const currentSession = state.getSession(cwd, sessionId);
-      const currentTmuxSessId = currentSession.tmuxSessionId;
-      const renameTarget = currentTmuxSessId ?? tmuxName;
-
-      try {
-        tmux.renameSession(renameTarget, candidate);
-      } catch { return; }
-
-      await state.updateSessionName(cwd, sessionId, finalName);
-      const windowId = state.getSession(cwd, sessionId).tmuxWindowId!;
-      await state.updateSessionTmux(cwd, sessionId, candidate, windowId, currentTmuxSessId);
-      trackSession(sessionId, cwd, currentTmuxSessId, candidate);
-      registerSessionTmux(sessionId, candidate, windowId, currentTmuxSessId);
-
-      // Update pane labels for all live panes in this session
-      const session = state.getSession(cwd, sessionId);
-      for (const pane of getSessionPanes(sessionId)) {
-        // Update the structured session variable (border format resolves it per-pane)
-        tmux.updatePaneMeta(pane.paneId, { session: finalName });
-        // Keep underlying pane title in sync for tmux list-panes / debugging
-        if (pane.role === 'orchestrator') {
-          tmux.setPaneTitle(pane.paneId, `ssph:orch ${finalName} c${session.orchestratorCycles.length}`);
-        } else if (pane.role === 'agent' && pane.agentId) {
-          const agent = session.agents.find(a => a.id === pane.agentId);
-          if (agent) {
-            const shortType = agent.agentType && agent.agentType !== 'worker'
-              ? agent.agentType.replace(/^sisyphus:/, '')
-              : '';
-            const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
-            tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} c${session.orchestratorCycles.length}`);
-          }
-        }
-      }
-      emitHistoryEvent(sessionId, 'session-named', { name: finalName });
-      console.log(`[sisyphus] Session ${sessionId} named: ${finalName}`);
-    }).catch((err) => {
-      console.error(`[sisyphus] Name generation failed for session ${sessionId}:`, err);
-    });
+    fireHaikuNaming(sessionId, cwd, tmuxName, task);
   }
 
   try { recomputeDots(); } catch { /* best-effort */ }
@@ -228,19 +234,8 @@ export async function cloneSession(
 
   // 3. Filesystem: clone session directory and state
   state.cloneSessionDir(cwd, sourceId, cloneId, goal, context, strategy);
-  const cloneState = await state.createCloneState(cwd, sourceId, cloneId, goal, context);
-
-  // 4. Model config
   const config = loadConfig(cwd);
-  const model = sourceSession.model ?? config.model;
-  await state.updateSession(cwd, cloneId, {
-    model,
-    launchConfig: sourceSession.launchConfig ?? {
-      model,
-      context,
-      orchestratorPrompt: config.orchestratorPrompt,
-    },
-  });
+  const cloneState = await state.createCloneState(cwd, sourceId, cloneId, goal, context, config.model, config.orchestratorPrompt);
 
   // 5. Tmux session
   const { windowId, initialPaneId, sessionId: tmuxSessId } = tmux.createSession(tmuxName, cwd);
@@ -285,54 +280,7 @@ It is the other session's responsibility. You do not need to monitor it.
 
   // 8. Haiku naming (fire-and-forget)
   if (!name) {
-    generateSessionName(goal).then(async (generatedName) => {
-      if (!generatedName) return;
-      let finalName = generatedName;
-      let candidate = tmuxSessionName(cwd, finalName);
-      let attempt = 0;
-      while (tmux.sessionNameTaken(candidate) && attempt < 5) {
-        attempt++;
-        finalName = `${generatedName}-${attempt}`;
-        candidate = tmuxSessionName(cwd, finalName);
-      }
-      if (tmux.sessionNameTaken(candidate)) return;
-
-      const currentSession = state.getSession(cwd, cloneId);
-      const currentTmuxSessId = currentSession.tmuxSessionId;
-      const renameTarget = currentTmuxSessId ?? tmuxName;
-
-      try {
-        tmux.renameSession(renameTarget, candidate);
-      } catch { return; }
-
-      await state.updateSessionName(cwd, cloneId, finalName);
-      const wId = state.getSession(cwd, cloneId).tmuxWindowId!;
-      await state.updateSessionTmux(cwd, cloneId, candidate, wId, currentTmuxSessId);
-      trackSession(cloneId, cwd, currentTmuxSessId, candidate);
-      registerSessionTmux(cloneId, candidate, wId, currentTmuxSessId);
-
-      for (const pane of getSessionPanes(cloneId)) {
-        tmux.updatePaneMeta(pane.paneId, { session: finalName });
-        if (pane.role === 'orchestrator') {
-          const s = state.getSession(cwd, cloneId);
-          tmux.setPaneTitle(pane.paneId, `ssph:orch ${finalName} c${s.orchestratorCycles.length}`);
-        } else if (pane.role === 'agent' && pane.agentId) {
-          const s = state.getSession(cwd, cloneId);
-          const agent = s.agents.find(a => a.id === pane.agentId);
-          if (agent) {
-            const shortType = agent.agentType && agent.agentType !== 'worker'
-              ? agent.agentType.replace(/^sisyphus:/, '')
-              : '';
-            const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
-            tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} c${s.orchestratorCycles.length}`);
-          }
-        }
-      }
-      emitHistoryEvent(cloneId, 'session-named', { name: finalName });
-      console.log(`[sisyphus] Clone session ${cloneId} named: ${finalName}`);
-    }).catch((err) => {
-      console.error(`[sisyphus] Name generation failed for clone ${cloneId}:`, err);
-    });
+    fireHaikuNaming(cloneId, cwd, tmuxName, goal);
   }
 
   // 9. Housekeeping
