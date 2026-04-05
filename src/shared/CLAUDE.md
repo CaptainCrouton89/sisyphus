@@ -42,6 +42,7 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 - **`taskHistory`** keys are normalized task hashes, not raw strings. Powers sisyphean/stubborn/one-must-imagine achievements.
 - **`dailyRepos`** keys on ISO date strings (`YYYY-MM-DD`), values are arrays of cwd paths. **`repos`** keys on absolute cwd paths, values are `RepoMemory`. Different key formats — don't join or compare them directly.
 - **`spinnerVerbIndex`** — persists verb spinner position across daemon restarts; load from state, don't reset to 0 on read.
+- **Achievement counter semantics** (misleading names): `consecutiveEfficientSessions` tracks `speed-demon` (≤3 cycles per session, 10-streak); `consecutiveHighCycleSessions` tracks `iron-will` (8+ cycles per session, 5-streak). Both reset to 0 on a non-qualifying session. Adding a session-completion path requires updating both counters or the corresponding achievement silently never unlocks.
 
 ## companion-badges.ts
 
@@ -56,6 +57,7 @@ Protocol contract, types, and utilities shared by CLI and Daemon layers.
 - **`'verb'` field**: `opts.verbIndex` overrides `companion.spinnerVerbIndex` — lets callers advance the spinner frame independently without mutating companion state.
 - **Mood intensity requires `debugMood`**: without it, intensity is always 0 → always mild-tier face (normal runtime).
 - **`getBoulderForm` with `repoNickname`**: when `opts.repoPath` resolves a nickname, return value is a display string (`o "reponame"`), not a bare boulder char.
+- **Boulder thresholds**: ≤2→`o`, ≤6→`O`, ≤15→`◉`, ≤35→`@`, else `@@`. Thresholds were bumped ~2× in a refactor to reflect typical multi-agent session sizes — old thresholds (≤1/≤4/≤9/≤20) appear in git history but are no longer active.
 - **Color drops silently on narrow `maxWidth`**: `applyColor` does `result.replace(facePart, coloredFace)`. If `maxWidth` truncates `facePart` out of the string, the replace finds no match and returns uncolored output. Color also requires `'face'` in fields — `color: true` with only `['mood', 'commentary']` is a no-op.
 - **`maxWidth` truncates commentary first**: shortens `lastCommentary.text` progressively before hard-truncating with `…`; uses `stringWidth` (display columns) not `.length` — wide chars like ಠ益ಠ have `.length < displayWidth`.
 - **`zen-prefix` vs `wisps`/`trail` asymmetry**: `zen-prefix` (☯ prefix) applies even when boulder is empty; `wisps` and `trail` are no-ops without a boulder.

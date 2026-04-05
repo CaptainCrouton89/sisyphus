@@ -27,7 +27,7 @@ TUI (src/tui/)  ←→  Shared (src/shared/)
 
 - **CLI** (`src/cli/`): Commander.js, `client.ts` handles socket (10s timeout), each command maps to a protocol request
 - **Daemon** (`src/daemon/`): `server.ts` routes; `session-manager.ts` lifecycle; `orchestrator.ts`/`agent.ts` spawn tmux panes; `pane-monitor.ts` polls; `state.ts` atomic writes; `summarize.ts` / `companion-commentary.ts` call Haiku via `haiku.ts` (`callHaiku` for text, `callHaikuStructured<T>(prompt, jsonSchema, zodSchema)` for typed JSON via `@r-cli/sdk` `query()`) — fire-and-forget, silently skips on auth failure (5 min cooldown)
-- **TUI** (`src/tui/`): raw ANSI cursor rendering with frame-buffer diffing (no React/Ink); embeds a live neovim instance via `node-pty` + `@xterm/headless` (`NvimBridge`) for in-dashboard file editing. `review.ts` is a separate standalone entry (`dist/review.js`) — interactive EARS requirements reviewer invoked as `sisyphus-review <requirements.json>`, not connected to the daemon
+- **TUI** (`src/tui/`): raw ANSI cursor rendering with frame-buffer diffing (no React/Ink); embeds a live neovim instance via `node-pty` + `@xterm/headless` (`NvimBridge`) for in-dashboard file editing. Two standalone entries not connected to the daemon: `review.ts` (`sisyphus-review <requirements.json>`) — interactive EARS requirements reviewer; `design.ts` (`sisyphus-design <design.json>`) — interactive terminal walkthrough for technical designs
 - **Shared** (`src/shared/`): protocol types, path helpers, layered config resolution
 
 Each layer has its own `CLAUDE.md` — read before touching that layer.
@@ -107,7 +107,7 @@ Options: `model`, `orchestratorPrompt` (file path), `pollIntervalMs`
 - When fixing a bug, write a test that reproduces the failure first, then fix the code. Keep the test — it's a regression guard.
 
 ### TypeScript
-- Strict ESM, Node 22, tsup bundles four entry points (`daemon`, `cli`, `tui`, `review`)
+- Strict ESM, Node 22, tsup bundles five entry points (`daemon`, `cli`, `tui`, `review`, `design`)
 - **Zod v4** (`^4.3.6`) — breaks v3 patterns: `.nonempty()` → `.min(1)`, `.nativeEnum()` → `.enum()`, error map API changed
 - Adding a command: `src/cli/commands/{cmd}.ts` → register in `src/cli/index.ts` → protocol types in `src/shared/protocol.ts` → handle in `src/daemon/server.ts`
 
