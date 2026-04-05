@@ -186,13 +186,13 @@ Write `design.json` as a single JSON object:
       "id": "kebab-case-section-id",
       "name": "Section Display Name",
       "goal": "What the user should understand after this section",
-      "context": "Rich content — ASCII diagrams, narrative. This IS the presentation.\n\n  Client ──► API ──► Database\n                       │\n                 ┌─────┴─────┐\n                 ▼           ▼\n              Cache       Event bus",
+      "context": "Rich markdown content — the TUI renders full markdown: **bold**, *italic*, `code`, tables, headers, lists, blockquotes, fenced code blocks. This IS the presentation.\n\n## Architecture\n\n  Client ──► API ──► Database\n                       │\n                 ┌─────┴─────┐\n                 ▼           ▼\n              Cache       Event bus\n\n| Component | Role | Protocol |\n|-----------|------|-----------|\n| API | Request routing | HTTP/REST |\n| Cache | Hot-path reads | In-memory |",
       "items": [
         {
           "id": "DES-001",
           "title": "Short design point title",
           "description": "What this design point covers",
-          "content": "Detailed content — diagrams, interface sketches, schema outlines.",
+          "content": "Detailed markdown content — diagrams, interface sketches, schema outlines. Supports full markdown: **bold**, *italic*, `code`, tables, headers, lists, blockquotes, fenced code blocks.",
           "decision": {
             "proposal": {
               "title": "Recommended approach",
@@ -238,8 +238,8 @@ Write `design.json` as a single JSON object:
 
 - **`sections`** — Presentation sections, ordered narratively. Not review categories.
 - **`section.goal`** — Shown at section header. "After this section you should understand X."
-- **`section.context`** — Big diagram/narrative that orients before item-level detail. Include ASCII diagrams.
-- **`item.content`** — The presentation content. Diagrams, tables, interface sketches. Rendered as the main body.
+- **`section.context`** — Big diagram/narrative that orients before item-level detail. Rendered as full markdown in the TUI (**bold**, *italic*, `code`, tables, headers, lists, blockquotes, fenced code blocks).
+- **`item.content`** — The presentation content. Diagrams, tables, interface sketches. Rendered as full markdown in the TUI — use rich formatting freely.
 - **`item.decision`** — Optional. Only present when there's a trade-off needing alignment.
 - **`decision.lenses`** — Named evaluation dimensions. Each lens gets a short assessment of the proposal.
 - **`decision.alternatives`** — Other options considered. Each has `title` + `description`.

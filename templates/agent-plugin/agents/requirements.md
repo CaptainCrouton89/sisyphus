@@ -164,7 +164,7 @@ Write `requirements.json` as a single JSON object:
       "id": "kebab-case-group-id",
       "name": "Group Display Name",
       "description": "What this group covers",
-      "context": "Rich context paragraph for this group. Include ASCII diagrams to show flows, state transitions, or architecture. This is shown in the TUI as a group introduction before the user reviews individual items.\n\n  User ──► Action ──► System Response\n                           │\n                     ┌─────┴─────┐\n                     ▼           ▼\n                  Success     Failure",
+      "context": "Rich markdown content for the group intro. The TUI renders full markdown: **bold**, *italic*, `code`, tables, headers, lists, blockquotes, and fenced code blocks. Use these freely.\n\n## User Journey\n\n  User ──► Action ──► System Response\n                           │\n                     ┌─────┴─────┐\n                     ▼           ▼\n                  Success     Failure\n\n| Step | Actor | Outcome |\n|------|-------|---------|\n| 1 | User | Triggers action |\n| 2 | System | Validates and responds |",
       "requirements": [
         {
           "id": "REQ-001",
@@ -220,7 +220,7 @@ Write `requirements.json` as a single JSON object:
 - **`questions`**: Each has an `id`, your `question`, and a `response` field (empty — user fills it in).
 - **`criteria.checked`**: Leave `false` — user checks off criteria they agree with.
 - **`draft`**: Increment on each revision cycle (draft 1, 2, 3...).
-- **`context`**: Rich text for the group introduction. Include ASCII diagrams showing user journeys, system flows, or state transitions. This text is displayed before the user reviews individual items for the group. Make it visual and scannable.
+- **`context`**: Rich markdown for the group introduction — rendered with full formatting in the TUI (**bold**, *italic*, `code`, tables, headers, lists, blockquotes, fenced code blocks). Include diagrams, tables, and structured content. Displayed before the user reviews individual items. Make it visual and scannable.
 - **`openQuestions`**: Per-group questions with prefilled answer options. Each option has a `title` (the choice) and `description` (your reasoning for why this option makes sense). Include 2-3 options plus the TUI adds a "custom answer" option automatically.
 - **`reviewAction`**: Set by the TUI when the user reviews an item. Values: `"approve"` (user approved), `"comment"` (user commented without approving). **Read this on continuation** — if `reviewAction === "approve"`, set `status` to `"approved"`. If `"comment"`, read `userComment` and decide next steps.
 - **`userComment`**: Free-form comment from the user's review session. Read this alongside `reviewAction`.
