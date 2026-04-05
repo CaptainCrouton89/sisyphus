@@ -488,6 +488,7 @@ export async function createCloneState(
       messages,
       startHour: created.getHours(),
       startDayOfWeek: created.getDay(),
+      parentSessionId: sourceId,
       ...(model ? { model } : {}),
       launchConfig,
     };

@@ -585,20 +585,32 @@ export function checkAchievements(companion: CompanionState, session?: Session):
 // Repo Memory
 // ---------------------------------------------------------------------------
 
+const MOOD_SENTIMENT: Record<Mood, number> = {
+  happy:       0.85,
+  excited:     0.90,
+  zen:         0.70,
+  grinding:    0.45,
+  sleepy:      0.40,
+  frustrated:  0.15,
+  existential: 0.25,
+};
+
 export function updateRepoMemory(
   companion: CompanionState,
   repoPath: string,
   event: 'visit' | 'completion' | 'crash',
+  activeMs?: number,
 ): CompanionState {
   const now = new Date().toISOString();
+  const moodScore = MOOD_SENTIMENT[companion.mood] ?? 0.5;
   const existing = companion.repos[repoPath];
   if (!existing) {
     companion.repos[repoPath] = {
       visits: event === 'visit' ? 1 : 0,
       completions: event === 'completion' ? 1 : 0,
       crashes: event === 'crash' ? 1 : 0,
-      totalActiveMs: 0,
-      moodAvg: 0,
+      totalActiveMs: activeMs ?? 0,
+      moodAvg: moodScore,
       nickname: null,
       firstSeen: now,
       lastSeen: now,
@@ -607,7 +619,11 @@ export function updateRepoMemory(
     if (event === 'visit') existing.visits++;
     if (event === 'completion') existing.completions++;
     if (event === 'crash') existing.crashes++;
+    if (activeMs != null) existing.totalActiveMs += activeMs;
     existing.lastSeen = now;
+    // Running average weighted by total event count across visits/completions/crashes
+    const n = existing.visits + existing.completions + existing.crashes;
+    existing.moodAvg = existing.moodAvg + (moodScore - existing.moodAvg) / n;
   }
   return companion;
 }
@@ -716,7 +732,7 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   companion.stats.wisdom += Math.max(0, totalWisdom - creditedWisdom);
 
   // Repo memory
-  updateRepoMemory(companion, session.cwd, 'completion');
+  updateRepoMemory(companion, session.cwd, 'completion', deltaActiveMs);
 
   // Track consecutive efficient sessions (for speed-demon)
   if (totalCycles <= 3) {
