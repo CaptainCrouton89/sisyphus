@@ -27,7 +27,9 @@
   ],
   "bin": {
     "sisyphus": "dist/cli.js",
-    "sisyphusd": "dist/daemon.js"
+    "sisyphusd": "dist/daemon.js",
+    "sisyphus-review": "dist/review.js",
+    "sisyphus-design": "dist/design.js"
   },
   "scripts": {
     "build": "tsup",

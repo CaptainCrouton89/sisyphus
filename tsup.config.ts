@@ -7,6 +7,7 @@ export default defineConfig({
     cli: 'src/cli/index.ts',
     tui: 'src/tui/index.ts',
     review: 'src/tui/review.ts',
+    design: 'src/tui/design.ts',
   },
   format: ['esm'],
   target: 'node22',
