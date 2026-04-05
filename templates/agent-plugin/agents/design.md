@@ -159,6 +159,7 @@ This opens an interactive walkthrough TUI in a sibling tmux window. The command 
 - **One design decision per turn.** Don't present the full architecture at once.
 - **Lead with diagrams**, then explain. The diagram is the primary artifact; prose supports it.
 - **Keep mermaid diagrams compact** — 3–6 nodes with descriptive labels. Don't split a concept across many tiny nodes. Use `graph TD` over `graph LR` (vertical growth is free, horizontal is not). Put implementation detail in panels/tables, not node labels.
+- **Nest directives with variable colons** — use `::::columns` > `:::col` > `:::` so closers are unambiguous. Backtick fence syntax (`` ```{panel} ``) also works.
 - **Use tables** for trade-off comparisons (named lenses), interface contracts, and data model fields.
 - **Ask one focused question** per turn. If the user has to scroll to find your question, the message is too long.
 - **Weave existing code into the presentation.** "This extends `SessionManager.spawn()`" is more useful than a file list at the end.

@@ -69,12 +69,6 @@ export function showCommentaryPopupQueue(pages: PopupPage[]): void {
       writeFileSync(`${POPUP_TMP_PREFIX}-${i}.txt`, content);
     }
 
-    // Build per-page title case block for shell
-    const titleCases = pages.map((p, i) => {
-      const t = p.title ?? defaultTitle;
-      return `    ${i}) TITLE=${shellQuote(t)} ;;`;
-    }).join('\n');
-
     const initialTitle = pages[0].title ?? defaultTitle;
 
     const script = `#!/bin/sh
@@ -82,17 +76,8 @@ printf '\\033[?25l'
 stty -echo 2>/dev/null
 PAGE=0
 TOTAL=${pages.length}
-TITLE=${shellQuote(initialTitle)}
-
-get_title() {
-  case $PAGE in
-${titleCases}
-  esac
-}
 
 show_page() {
-  get_title
-  tmux display-popup -T "$TITLE" -S "fg=${moodColor}" -s "fg=${moodColor}"
   printf '\\033[2J\\033[H'
   cat ${shellQuote(POPUP_TMP_PREFIX)}-$PAGE.txt
 }
@@ -105,10 +90,6 @@ while IFS= read -r -n1 -t ${POPUP_DURATION} k; do
       break
     fi
     show_page
-  else
-    tmux display-popup -T "$TITLE" -S "fg=white"
-    sleep 0.15
-    tmux display-popup -T "$TITLE" -S "fg=${moodColor}"
   fi
 done
 `;

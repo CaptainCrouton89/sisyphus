@@ -103,6 +103,8 @@ This renders the markdown with full styling (headers, tables, code blocks, merma
 
 Don't overuse it — inline ASCII diagrams are fine for quick sketches. Reserve `termrender --tmux` for moments where the visual density justifies a dedicated pane.
 
+**Directive nesting**: When nesting directives (e.g. panels inside columns), use more colons on the outer directive so closers are unambiguous: `::::columns` > `:::col` > `:::`. Backtick fence syntax also works: `` ```{panel} ``.
+
 **Mermaid diagram guidelines**: Keep diagrams to 3–6 nodes with descriptive labels. Use `graph TD` (not LR). Don't split a concept across many tiny nodes — group related steps into one node and use panels for detail. Mermaid renders as ASCII box art; every extra node widens the output and can overflow the terminal.
 
 Example of a good opening turn:
