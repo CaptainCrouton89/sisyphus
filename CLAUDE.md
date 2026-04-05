@@ -57,7 +57,6 @@ Orchestrator and agents receive `SISYPHUS_SESSION_ID` / `SISYPHUS_AGENT_ID` env 
 - `sisyphus update-task "..."` — update the session goal mid-flight
 - `sisyphus restart-agent <agentId>` — respawn a failed/killed/lost agent in a new pane without resetting the session
 - `sisyphus rollback <sessionId> <cycle>` — rewind state to a prior cycle boundary (use `sisyphus status` to find cycle numbers)
-- `sisyphus getting-started` — interactive tutorial covering tmux basics, neovim essentials, sisyphus concepts
 
 ## Prompt Delivery
 
@@ -113,9 +112,8 @@ Defaults → `~/.sisyphus/config.json` → `.sisyphus/config.json`
 | `notifications.sound` | Path to `.aiff` sound file |
 | `requiredPlugins` | Claude Code plugins auto-installed for agents (e.g. `["devcore"]`) |
 
-### IDs & Colors
+### IDs
 - Sessions: UUIDs; Agents: `agent-001`, `agent-002` (zero-padded)
-- Orchestrator pane: yellow; agents rotate `[blue, green, magenta, cyan, red, white]`
 
 ### Bug Fixes
 - When fixing a bug, write a test that reproduces the failure first, then fix the code. Keep the test — it's a regression guard.
@@ -144,14 +142,10 @@ GHA workflow (`.github/workflows/integration-tests.yml`) covers macOS-specific p
 
 ## Companion
 
-Persistent per-user state tracking mood, achievements, and session history (`~/.sisyphus/companion.json`). Updated automatically at session end.
+Persistent per-user state (`~/.sisyphus/companion.json`) tracking mood, achievements, and session history. Updated automatically at session end.
 
-- `sisyphus companion` — show profile, mood, and stats
-- `sisyphus companion --name <name>` — rename companion
-- `sisyphus companion --badges` — badge gallery
-- `sisyphus companion-context` — inject companion context into current session (for orchestrators)
-- Commentary generated via `callHaikuStructured` (Zod schema → typed JSON) — silently skips if Haiku auth fails
-- Companion state lives in `src/daemon/companion.ts`; rendering in `src/shared/companion-render.ts` / `companion-badges.ts`
+- Commentary via `callHaikuStructured` (Zod schema → typed JSON) — silently skips if Haiku auth fails
+- State: `src/daemon/companion.ts`; rendering: `src/shared/companion-render.ts` / `companion-badges.ts`
 
 ## Debugging
 

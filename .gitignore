@@ -7,3 +7,4 @@ dist/
 .sisyphus/sessions/*/logs/
 .sisyphus/sessions/*/snapshots/
 .sisyphus/sessions/*/.tui/
+.DS_Store
