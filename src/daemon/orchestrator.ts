@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, join, relative } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
+import { contextDir, initialPromptPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -277,16 +277,16 @@ function formatStateForOrchestrator(session: Session, mode: string): string {
     }
   }
 
-  // Goal section: read from goal.md, fall back to session.task
-  const goalFile = goalPath(session.cwd, session.id);
-  const goalContent = existsSync(goalFile) ? readFileSync(goalFile, 'utf-8').trim() : session.task;
+  // Goal section: read from initial-prompt.md, fall back to session.task
+  const promptFile = initialPromptPath(session.cwd, session.id);
+  const promptContent = existsSync(promptFile) ? readFileSync(promptFile, 'utf-8').trim() : session.task;
 
   // Mode-specific content
   const modeContent = modeContentBuilders[mode]?.(session) ?? '';
 
   return `## Goal
 
-${goalContent}
+${promptContent}
 ${contextSection}${messagesSection}
 ### Cycle Log
 

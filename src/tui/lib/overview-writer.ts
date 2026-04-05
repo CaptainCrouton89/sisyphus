@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { tuiScratchDir, goalPath, roadmapPath, strategyPath } from '../../shared/paths.js';
+import { tuiScratchDir, initialPromptPath, roadmapPath, strategyPath } from '../../shared/paths.js';
 import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
 import type { TreeNode } from '../types/tree.js';
 import type { DetailContext } from '../panels/detail.js';
@@ -236,7 +236,7 @@ function composeMessages(session: Session): string {
  * Determine which file(s) neovim should display based on the current cursor node.
  * Returns a NvimFileResult with file paths and editability, or null.
  *
- * For session nodes, opens the real files (goal.md, roadmap.md, strategy.md) in splits.
+ * For session nodes, opens the real files (initial-prompt.md, roadmap.md, strategy.md) in splits.
  * For other node types, composes a markdown file in the .tui/ scratch directory.
  */
 export function resolveNvimFile(
@@ -254,7 +254,7 @@ export function resolveNvimFile(
     case 'session': {
       if (!session) return null;
       const files: { path: string; readonly: boolean }[] = [];
-      const gp = goalPath(cwd, sessionId);
+      const gp = initialPromptPath(cwd, sessionId);
       if (existsSync(gp)) files.push({ path: gp, readonly: false });
       const rp = roadmapPath(cwd, sessionId);
       if (existsSync(rp)) files.push({ path: rp, readonly: false });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { contextDir, goalPath, legacyLogsPath, logsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
+import { contextDir, initialPromptPath, legacyLogsPath, logsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath } from '../shared/paths.js';
 import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const ROADMAP_SEED = `---
@@ -46,7 +46,7 @@ export function createSession(id: string, task: string, cwd: string, context?: s
 
   writeFileSync(roadmapPath(cwd, id), ROADMAP_SEED, 'utf-8');
   mkdirSync(logsDir(cwd, id), { recursive: true });
-  writeFileSync(goalPath(cwd, id), task, 'utf-8');
+  writeFileSync(initialPromptPath(cwd, id), task, 'utf-8');
   writeFileSync(join(contextDir(cwd, id), 'CLAUDE.md'), CONTEXT_CLAUDE_MD, 'utf-8');
   if (context) {
     writeFileSync(join(contextDir(cwd, id), 'initial-context.md'), context, 'utf-8');
@@ -246,7 +246,7 @@ export async function updateTask(cwd: string, sessionId: string, task: string): 
     const session = getSession(cwd, sessionId);
     session.task = task;
     saveSession(session);
-    writeFileSync(goalPath(cwd, sessionId), task, 'utf-8');
+    writeFileSync(initialPromptPath(cwd, sessionId), task, 'utf-8');
   });
 }
 

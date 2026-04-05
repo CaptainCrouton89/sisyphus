@@ -54,7 +54,7 @@ Orchestrator and agents receive `SISYPHUS_SESSION_ID` / `SISYPHUS_AGENT_ID` env 
 
 - `sisyphus message "..."` — queue a message the orchestrator sees on its next cycle (works from agent panes too)
 - `sisyphus continue "instruction"` — resume a paused/completed session with new direction
-- `sisyphus update-task "..."` — update the session goal mid-flight
+- `sisyphus update-task "..."` — update the session initial prompt mid-flight
 - `sisyphus restart-agent <agentId>` — respawn a failed/killed/lost agent in a new pane without resetting the session
 - `sisyphus rollback <sessionId> <cycle>` — rewind state to a prior cycle boundary (use `sisyphus status` to find cycle numbers)
 - `sisyphus getting-started` — interactive tutorial covering tmux basics, neovim essentials, sisyphus concepts

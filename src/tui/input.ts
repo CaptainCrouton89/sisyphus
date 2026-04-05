@@ -13,7 +13,7 @@ import {
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
 import type { Response } from '../shared/protocol.js';
-import { sessionDir, goalPath, roadmapPath, strategyPath } from '../shared/paths.js';
+import { sessionDir, initialPromptPath, roadmapPath, strategyPath } from '../shared/paths.js';
 import type { Request } from '../shared/protocol.js';
 import { findParentIndex } from './lib/tree.js';
 import { badgeGalleryLeft, badgeGalleryRight, closeBadgeGallery, companionOverlayNextPage, companionOverlayShowHelp, companionOverlayDismissHelp, getCompanionPage, badgeListScrollUp, badgeListScrollDown } from './panels/overlays.js';
@@ -869,15 +869,15 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // g: edit goal
+  // g: edit prompt
   if (input === 'g') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
-    const gp = goalPath(state.cwd, state.selectedSessionId);
+    const gp = initialPromptPath(state.cwd, state.selectedSessionId);
     const editor = actions.resolveEditor();
     try {
       actions.openEditorPopup(state.cwd, editor, gp, { w: '80', h: '50%' });
     } catch {
-      notify(state, `Failed to open goal in ${editor}`);
+      notify(state, `Failed to open prompt in ${editor}`);
     }
     return;
   }

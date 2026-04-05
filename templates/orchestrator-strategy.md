@@ -39,9 +39,9 @@ The user's starting prompt is an input, not a goal. It may be vague, ambiguous, 
 1. Read the starting prompt
 2. Explore the codebase enough to understand what's relevant
 3. If the goal is unclear, **ask the user** — do NOT guess. Surface ambiguity, propose interpretations, get confirmation.
-4. Write `goal.md` to the session directory
+4. Write `initial-prompt.md` to the session directory
 
-**goal.md should answer:**
+**initial-prompt.md should answer:**
 - What does "done" look like?
 - What's in scope and what's explicitly not?
 - Who or what is affected?
@@ -203,7 +203,7 @@ Updates happen every few cycles, not every cycle. If the orchestrator is just pr
 
 ## Initialize the Roadmap
 
-After writing goal.md and strategy.md, initialize roadmap.md:
+After writing initial-prompt.md and strategy.md, initialize roadmap.md:
 
 ```markdown
 ## Current Stage
@@ -227,10 +227,10 @@ The roadmap tracks cycle-to-cycle progress within a stage. The strategy tracks t
 
 ## Transition
 
-Once goal.md, strategy.md, and roadmap.md are written:
+Once initial-prompt.md, strategy.md, and roadmap.md are written:
 
 ```bash
-sisyphus yield --mode planning --prompt "Strategy complete — goal.md, strategy.md, and roadmap.md initialized. Begin first stage."
+sisyphus yield --mode planning --prompt "Strategy complete — initial-prompt.md, strategy.md, and roadmap.md initialized. Begin first stage."
 ```
 
 Future orchestrator cycles will read strategy.md to orient, consult roadmap.md for current position, and update strategy.md when the shape of the work changes.

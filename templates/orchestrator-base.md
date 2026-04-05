@@ -219,7 +219,7 @@ Each session lives at `$SISYPHUS_SESSION_DIR/`:
 
 - `state.json` — Session state (managed by daemon, do not edit)
 - `strategy.md` — Problem-solving map: completed stages (compressed), current stage (detailed), future stages (sketched)
-- `goal.md` — Refined goal statement (written during strategy phase)
+- `initial-prompt.md` — Refined goal statement (written during strategy phase)
 - `roadmap.md` — Working memory: current stage, exit criteria, next steps (you own this, update every cycle)
 - `digest.json` — Dashboard status summary (you own this, update every cycle)
 - `logs.md` — Session log/memory (you own this)

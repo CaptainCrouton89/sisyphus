@@ -73,8 +73,8 @@ export function roadmapPath(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), 'roadmap.md');
 }
 
-export function goalPath(cwd: string, sessionId: string): string {
-  return join(sessionDir(cwd, sessionId), 'goal.md');
+export function initialPromptPath(cwd: string, sessionId: string): string {
+  return join(sessionDir(cwd, sessionId), 'initial-prompt.md');
 }
 
 export function strategyPath(cwd: string, sessionId: string): string {

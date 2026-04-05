@@ -60,5 +60,5 @@
 - **Companion pane** auto-reuses if alive; killing the pane externally requires resetting module-level `companionPaneId = null` — there's no auto-detection of external kills
 - **`openClaudeResumeSession`** must stay in sync with `configureSessionDefaults` in daemon's `tmux.ts` — if daemon session defaults change, update both
 - **Context XML** must escape all user-provided content via `escapeXml()` before embedding
-- **File reads** via `readFileSafe()` must handle missing files (`goal.md`, `roadmap.md` may not exist)
+- **File reads** via `readFileSafe()` must handle missing files (`initial-prompt.md`, `roadmap.md` may not exist)
 - **Neovim PTY**: `destroy()` must clean up all `/tmp/sisyphus-nvim/` files (cmd, merge status, snapshots). Compose mode signals submit/cancel via BufWritePost/QuitPre autocmds writing a temp file — not stdin. Escape Lua strings via `.replace(/\\/g, '\\\\').replace(/'/g, "\\'")`. Merge status from the previous cycle is consumed once per `mergeCheckOrReload()` call.

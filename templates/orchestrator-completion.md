@@ -14,7 +14,7 @@ Before presenting anything, read thoroughly:
 1. **strategy.md** — the stages, the approach, how it evolved
 2. **roadmap.md** — final state of the work
 3. **Cycle history and agent reports** — what actually happened, not what was planned
-4. **goal.md** — the original goal and any refinements
+4. **initial-prompt.md** — the original goal and any refinements
 
 Synthesize this into a clear picture of what was done and how it maps to what was asked for.
 
@@ -64,7 +64,7 @@ Don't yield after each individual item — collect them, then yield once.
 ### Major (new feature request, fundamental approach change, scope expansion)
 These change the goal itself:
 
-1. Update goal.md with the revised scope
+1. Update initial-prompt.md with the revised scope
 2. Update strategy.md with the new direction
 3. Yield to strategy mode:
 

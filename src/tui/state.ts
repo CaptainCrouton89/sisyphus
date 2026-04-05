@@ -176,7 +176,7 @@ export interface AppState {
   selectedSession: Session | null;
   planContent: string;
   strategyContent: string;
-  goalContent: string;
+  initialPromptContent: string;
   logsContent: string;
   logsCycles: CycleLog[];
   digestData: import('../shared/types.js').StatusDigest | null;
@@ -254,7 +254,7 @@ export function createAppState(cwd: string): AppState {
     selectedSession: null,
     planContent: '',
     strategyContent: '',
-    goalContent: '',
+    initialPromptContent: '',
     logsContent: '',
     logsCycles: [],
     digestData: null,
