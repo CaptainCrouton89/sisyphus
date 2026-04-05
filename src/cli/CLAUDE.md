@@ -66,6 +66,16 @@ Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.con
 
 `--schema` / `--annotated` print the JSON schema or an annotated writing guide without launching the TUI — designed for agents generating these files.
 
+## Onboarding (`onboard.ts`)
+
+Called by `sisyphus setup` (`commands/setup.ts`) and selectively by `doctor` and `getting-started`.
+
+- **`runOnboarding()`** — auto-installs tmux + nvim via Homebrew on macOS only; Linux never auto-installs tmux. tmux defaults (`~/.tmux.conf`) are written only when tmux was just auto-installed AND no config existed beforehand — won't touch an existing config and always writes to `~/.tmux.conf`, not the XDG path (even though `hasExistingTmuxConf` checks both).
+- **`tryAutoInstallNvim()`** — calls `installBaleiaPlugin()` on **every invocation**, including when nvim was already installed. So `sisyphus setup` re-attempts baleia install idempotently each run. LazyVim starter config is only cloned if `~/.config/nvim/` doesn't exist at all; `.git` is stripped post-clone so the user owns the config.
+- **`installBaleiaPlugin()`** — copies `dist/templates/baleia.lua` → `~/.config/nvim/lua/plugins/sisyphus-baleia.lua`. Silently skips if `plugins/` dir doesn't exist (requires existing LazyVim-style nvim config). Never overwrites.
+- **`installBeginCommand()`** — copies `dist/templates/begin.md` → `~/.claude/commands/sisyphus/begin.md`, which surfaces as the `/sisyphus:begin` Claude Code slash command. Never overwrites; updating the template requires deleting the installed file.
+- **iTerm option key check**: reads `~/Library/Preferences/com.googlecode.iterm2.plist` via `plutil`; filters to only the profile named in `ITERM_PROFILE` env if set. `checked:false, allCorrect:false` means the plist was missing (not "all profiles correct") — distinct from `checked:false, allCorrect:true` which means not running iTerm at all.
+
 ## Status Bar Segments (`commands/register-segment.ts`, `commands/unregister-segment.ts`)
 
 `sisyphus register-segment --id <id> --side left|right --priority <n> --bg <hex> --content <tmux-format>` — registers an external segment with the daemon via socket; content is a tmux format string (`#{...}` variables). Lower priority = further from center on that side. Daemon merges external segments into `@sisyphus_status` at the next poll cycle. `sisyphus unregister-segment --id <id>` removes it.
