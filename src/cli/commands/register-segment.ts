@@ -4,7 +4,7 @@ import type { Request } from '../../shared/protocol.js';
 
 export function registerRegisterSegment(program: Command): void {
   program
-    .command('register-segment')
+    .command('register-segment', { hidden: true })
     .description('Register or update an external status bar segment')
     .requiredOption('--id <id>', 'Segment identifier')
     .requiredOption('--side <side>', 'Side to render on: left or right')

@@ -3,7 +3,7 @@ import type { Command } from 'commander';
 
 export function registerTmuxStatus(program: Command): void {
   program
-    .command('tmux-status')
+    .command('tmux-status', { hidden: true })
     .description('Output session status dots for tmux status bar')
     .action(() => {
       try {

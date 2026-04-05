@@ -4,7 +4,7 @@ import type { Request } from '../../shared/protocol.js';
 
 export function registerUnregisterSegment(program: Command): void {
   program
-    .command('unregister-segment')
+    .command('unregister-segment', { hidden: true })
     .description('Remove an external status bar segment')
     .requiredOption('--id <id>', 'Segment identifier to remove')
     .action(async (opts: { id: string }) => {

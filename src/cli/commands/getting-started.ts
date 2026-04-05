@@ -600,7 +600,23 @@ thing — answer what they're curious about, using the reference as your source 
 `);
 }
 
-function printExplain(): void {
+function buildCommandTable(program: Command): string {
+  const lines: string[] = [];
+  lines.push('| Command | Purpose |');
+  lines.push('|---------|---------|');
+  for (const cmd of program.commands) {
+    if ((cmd as unknown as { _hidden: boolean })._hidden) continue;
+    if (cmd.name() === 'help') continue;
+    const name = cmd.name();
+    const desc = cmd.description();
+    const args = cmd.registeredArguments?.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ') ?? '';
+    const usage = args ? `sisyphus ${name} ${args}` : `sisyphus ${name}`;
+    lines.push(`| \`${usage}\` | ${desc} |`);
+  }
+  return lines.join('\n');
+}
+
+function printExplain(program: Command): void {
   console.log(`
 <claude-instructions>
 # Sisyphus — Comprehensive Reference
@@ -909,18 +925,7 @@ Use it for constraints: \`-c "Don't modify the auth module, use the existing API
 
 ## CLI Command Reference
 
-| Command | Purpose |
-|---------|---------|
-| \`sisyphus start "task"\` | Start a new session |
-| \`sisyphus status [id]\` | Check session status |
-| \`sisyphus status -v [id]\` | Detailed status with pane output |
-| \`sisyphus list\` | List all sessions |
-| \`sisyphus dashboard\` | Open the TUI dashboard |
-| \`sisyphus resume <id> "msg"\` | Resume with new instructions |
-| \`sisyphus kill <id>\` | Stop a session |
-| \`sisyphus doctor\` | Check installation health |
-| \`sisyphus setup\` | Run setup/onboarding |
-| \`sisyphus setup-keybind\` | Install tmux keybinds |
+${buildCommandTable(program)}
 
 ## Troubleshooting
 
@@ -953,7 +958,7 @@ export function registerGettingStarted(program: Command): void {
     .option('--explain', 'Comprehensive reference for how sisyphus works')
     .action((opts) => {
       if (opts.explain) {
-        printExplain();
+        printExplain(program);
         return;
       }
       if (opts.tutorial !== undefined) {

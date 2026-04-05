@@ -4,7 +4,7 @@ import type { Request } from '../../shared/protocol.js';
 
 export function registerNotify(program: Command): void {
   const notify = program
-    .command('notify')
+    .command('notify', { hidden: true })
     .description('Internal notifications (fire-and-forget)');
 
   notify
