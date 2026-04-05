@@ -239,6 +239,22 @@ function nicknameStyleGuide(companion: CompanionState): string {
   return 'short punchy names fitting the creature\'s current state';
 }
 
+function buildMoodBreakdown(companion: CompanionState): string {
+  const debug = companion.debugMood;
+  if (!debug?.scores) return '';
+
+  const maxScore = Math.max(...Object.values(debug.scores), 1);
+  const lines = Object.entries(debug.scores)
+    .map(([mood, score]) => {
+      const normalized = Math.round((score / maxScore) * 10 * 10) / 10;
+      const marker = mood === debug.winner ? ' ← current' : '';
+      return `  <${mood}>${normalized}/10${marker}</${mood}>`;
+    })
+    .join('\n');
+
+  return `\n<mood_breakdown>\n${lines}\n</mood_breakdown>`;
+}
+
 function buildSentimentContext(): string {
   const sentiments = getRecentSentiments(3);
   if (sentiments.length === 0) return '';
@@ -256,6 +272,7 @@ export async function generateCommentary(
   const { mood, level, title, stats } = companion;
   const timeModifier = timeOfDayModifier();
   const sentimentCtx = buildSentimentContext();
+  const moodBreakdown = buildMoodBreakdown(companion);
   const historyCtx = buildHistoryContext(companion.commentaryHistory ?? []);
   const voiceConstraint = pickVoiceConstraint();
   const seedThought = pickSeedThought();
@@ -313,6 +330,7 @@ Level: ${level} (${title})
 Tone: ${timeModifier}
 ${sentimentCtx}
 </state>
+${moodBreakdown}
 
 Event: ${event}${context ? `\nContext: ${context}` : ''}
 
