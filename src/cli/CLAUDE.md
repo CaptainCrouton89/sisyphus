@@ -45,3 +45,27 @@ Scripts installed to `~/.sisyphus/bin/`; config written to `~/.sisyphus/tmux.con
 
 - `sisyphus companion-context` — **machine-readable only**: outputs `{"additionalContext":"<string>"}` with no trailing newline. Designed as a Claude Code hook (`userPromptSubmit`). Calls `buildCompanionContext` in `src/tui/lib/context.ts` — does **not** contact the daemon, exits synchronously.
 - `sisyphus companion --name <name>` — renames companion via daemon request, not a local write.
+
+## Present Command (`commands/present.ts`)
+
+`sisyphus present <file>` renders a termrender markdown file via the `termrender` CLI, then opens it in nvim in a tmux window for user review.
+
+- **Outside tmux**: prints ANSI-rendered output straight to stdout and exits — no temp file, no nvim.
+- **Default (`--wait`)**: writes rendered ANSI to a tmp file, opens nvim on it, blocks until nvim closes, then LCS-diffs the ANSI-stripped original vs edited. Lines the user added or changed are wrapped in `<!-- user: --> / <!-- /user -->` HTML comment tags; result goes to stdout. Temp file cleaned up after.
+- **`--no-wait`**: opens nvim and returns immediately — temp file is **intentionally not deleted** (nvim still has it open).
+
+## Requirements / Design Review Commands (`commands/review.ts`)
+
+`registerReview` registers **two** commands — `sisyphus requirements` and `sisyphus design` — not a `review` command.
+
+**File resolution (first match wins):** positional arg → `--session-id` / `SISYPHUS_SESSION_ID` env → most recent session dir under `.sisyphus/sessions/` that contains the target file.
+
+**`--wait`** implies `--window`; blocks until the TUI window closes, reads `review-feedback.md` from the same dir as the JSON file, prints it to stdout, then deletes it. Without `--wait`/`--window`, the TUI binary runs inline via `execSync` (no new window). The feedback file is what the TUI writes on completion — agents call with `--wait` to receive structured feedback.
+
+**History events**: when `--wait` is used with a session ID, emits `review-started` and `review-completed` events to the session's history log with timing and item counts sourced from the JSON `meta` field.
+
+`--schema` / `--annotated` print the JSON schema or an annotated writing guide without launching the TUI — designed for agents generating these files.
+
+## Status Bar Segments (`commands/register-segment.ts`, `commands/unregister-segment.ts`)
+
+`sisyphus register-segment --id <id> --side left|right --priority <n> --bg <hex> --content <tmux-format>` — registers an external segment with the daemon via socket; content is a tmux format string (`#{...}` variables). Lower priority = further from center on that side. Daemon merges external segments into `@sisyphus_status` at the next poll cycle. `sisyphus unregister-segment --id <id>` removes it.
