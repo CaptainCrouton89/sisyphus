@@ -53,8 +53,11 @@ Each layer has its own `CLAUDE.md` — read before touching that layer.
 Orchestrator and agents receive `SISYPHUS_SESSION_ID` / `SISYPHUS_AGENT_ID` env vars.
 
 - `sisyphus message "..."` — queue a message the orchestrator sees on its next cycle (works from agent panes too)
+- `sisyphus continue "instruction"` — resume a paused/completed session with new direction
+- `sisyphus update-task "..."` — update the session goal mid-flight
 - `sisyphus restart-agent <agentId>` — respawn a failed/killed/lost agent in a new pane without resetting the session
 - `sisyphus rollback <sessionId> <cycle>` — rewind state to a prior cycle boundary (use `sisyphus status` to find cycle numbers)
+- `sisyphus getting-started` — interactive tutorial covering tmux basics, neovim essentials, sisyphus concepts
 
 ## Prompt Delivery
 
@@ -97,7 +100,18 @@ Agent instruction body here...
 
 ### Config (layered, last wins)
 Defaults → `~/.sisyphus/config.json` → `.sisyphus/config.json`
-Options: `model`, `orchestratorPrompt` (file path), `pollIntervalMs`
+
+| Option | Notes |
+|--------|-------|
+| `model` | LLM model for orchestrator + agents |
+| `orchestratorEffort` | `low`/`medium`/`high`/`max` |
+| `agentEffort` | `low`/`medium`/`high`/`max` |
+| `orchestratorPrompt` | File path to custom orchestrator system prompt |
+| `pollIntervalMs` | Daemon poll interval (default `5000`) |
+| `autoUpdate` | npm auto-update on new releases — **skipped for `npm link`** |
+| `notifications.enabled` | Desktop notifications on lifecycle events |
+| `notifications.sound` | Path to `.aiff` sound file |
+| `requiredPlugins` | Claude Code plugins auto-installed for agents (e.g. `["devcore"]`) |
 
 ### IDs & Colors
 - Sessions: UUIDs; Agents: `agent-001`, `agent-002` (zero-padded)
