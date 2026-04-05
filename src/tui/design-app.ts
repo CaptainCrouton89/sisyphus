@@ -7,6 +7,7 @@ import type {
   DesignData, DesignState, DesignPhase, DesignSection, DesignItem,
 } from './design-types.js';
 import { totalItems, totalReviewed, sectionProgress } from './design-types.js';
+import { renderMarkdownLines, clearMarkdownCache } from './lib/md-render.js';
 
 // ─── ANSI Helpers ────────────────────────────────────────────────────────────
 
@@ -135,30 +136,8 @@ function sectionDots(current: number, total: number): string {
   return s;
 }
 
-// ─── Diagram Detection ───────────────────────────────────────────────────────
-
-function isDiagramLine(cl: string): boolean {
-  return /[─│┌┐└┘├┤┬┴┼╭╮╯╰▸▹►▲▼◄═║╔╗╚╝]/.test(cl) ||
-         /^\s{4,}\S/.test(cl) ||
-         /[│|+\-]{2,}/.test(cl);
-}
-
 function renderContent(text: string, cw: number, m: string): string[] {
-  const lines: string[] = [];
-  const contentLines = text.split('\n');
-  for (const cl of contentLines) {
-    if (cl.trim() === '') {
-      lines.push('');
-    } else if (isDiagramLine(cl)) {
-      lines.push(`${m}  ${FG_CYAN}${cl}${RESET}`);
-    } else {
-      const wrapped = wrapText(cl, cw - 4);
-      for (const wl of wrapped) {
-        lines.push(`${m}  ${FG_WHITE}${wl}${RESET}`);
-      }
-    }
-  }
-  return lines;
+  return renderMarkdownLines(text, cw, { margin: m });
 }
 
 // ─── Status Badge ────────────────────────────────────────────────────────────
@@ -1140,6 +1119,7 @@ export function startDesignApp(data: DesignData, filePath: string): void {
   const removeResize = onResize(() => {
     state.rows = process.stdout.rows || 24;
     state.cols = process.stdout.columns || 80;
+    clearMarkdownCache();
     prevFrame = [];
     doRender();
   });

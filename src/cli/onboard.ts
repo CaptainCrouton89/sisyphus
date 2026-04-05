@@ -29,6 +29,11 @@ export interface CommandInfo {
   path: string;
 }
 
+export interface TermrenderInfo {
+  installed: boolean;
+  autoInstalled: boolean;
+}
+
 export interface OnboardResult {
   tmuxInstalled: boolean;
   tmuxAutoInstalled: boolean;
@@ -37,6 +42,7 @@ export interface OnboardResult {
   tmuxDefaultsWritten: boolean;
   nvim: NvimInfo;
   command: CommandInfo;
+  termrender: TermrenderInfo;
 }
 
 export function detectTerminal(): TerminalInfo {
@@ -296,6 +302,61 @@ export function installBeginCommand(): CommandInfo {
   }
 }
 
+export function isTermrenderAvailable(): boolean {
+  try {
+    execSync('which termrender', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPipxAvailable(): boolean {
+  try {
+    execSync('which pipx', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPipAvailable(): boolean {
+  try {
+    execSync('which pip3', { stdio: 'pipe' });
+    return true;
+  } catch {
+    try {
+      execSync('which pip', { stdio: 'pipe' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function tryAutoInstallTermrender(): TermrenderInfo {
+  if (isTermrenderAvailable()) {
+    return { installed: true, autoInstalled: false };
+  }
+  // Prefer pipx (isolated install), fall back to pip
+  if (isPipxAvailable()) {
+    try {
+      console.log('  Installing termrender via pipx...');
+      execSync('pipx install termrender', { stdio: 'inherit' });
+      if (isTermrenderAvailable()) return { installed: true, autoInstalled: true };
+    } catch { /* fall through */ }
+  }
+  if (isPipAvailable()) {
+    try {
+      console.log('  Installing termrender via pip...');
+      const pip = (() => { try { execSync('which pip3', { stdio: 'pipe' }); return 'pip3'; } catch { return 'pip'; } })();
+      execSync(`${pip} install termrender`, { stdio: 'inherit' });
+      if (isTermrenderAvailable()) return { installed: true, autoInstalled: true };
+    } catch { /* fall through */ }
+  }
+  return { installed: false, autoInstalled: false };
+}
+
 export function runOnboarding(): OnboardResult {
   const terminal = detectTerminal();
   const tmuxAlreadyInstalled = isTmuxAvailable();
@@ -328,7 +389,10 @@ export function runOnboarding(): OnboardResult {
   // /begin command
   const command = installBeginCommand();
 
-  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command };
+  // termrender (markdown rendering for TUI)
+  const termrender = tryAutoInstallTermrender();
+
+  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command, termrender };
 }
 
 export function formatOnboardingMessages(result: OnboardResult): string[] {
@@ -358,6 +422,17 @@ export function formatOnboardingMessages(result: OnboardResult): string[] {
     lines.push(
       '  \u2717 tmux is required but could not be installed automatically.',
       installHint,
+      '',
+    );
+  }
+
+  // termrender
+  if (result.termrender.autoInstalled) {
+    lines.push('  \u2713 termrender installed (markdown rendering for TUI).', '');
+  } else if (!result.termrender.installed) {
+    lines.push(
+      '  \u26a0  termrender not installed (rich markdown rendering unavailable).',
+      '    Install: pipx install termrender (or: pip install termrender)',
       '',
     );
   }

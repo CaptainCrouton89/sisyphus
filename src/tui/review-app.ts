@@ -11,6 +11,7 @@ import {
   resolveEarsKeyword, getEarsCondition, pendingRequirements,
   totalRequirements, totalReviewed, EARS_KEYWORDS,
 } from './review-types.js';
+import { renderMarkdownLines, clearMarkdownCache } from './lib/md-render.js';
 
 // ─── ANSI Helpers ────────────────────────────────────────────────────────────
 
@@ -349,28 +350,10 @@ function renderGroupIntro(state: ReviewState, groupIndex: number): string[] {
   lines.push(`${m}  ${hr(cw - 4)}`);
   lines.push('');
 
-  // Context (rich text with potential diagrams)
+  // Context (rich text — rendered as markdown via termrender)
   const context = group.context || group.description || '';
   if (context) {
-    const contextLines = context.split('\n');
-    for (const cl of contextLines) {
-      if (cl.trim() === '') {
-        lines.push('');
-      } else {
-        // Detect diagram lines (contain box drawing or multiple spaces)
-        const isDiagram = /[─│┌┐└┘├┤┬┴┼╭╮╯╰▸▹►▲▼◄═║╔╗╚╝]/.test(cl) ||
-                          /^\s{4,}\S/.test(cl) ||
-                          /[│|+\-]{2,}/.test(cl);
-        if (isDiagram) {
-          lines.push(`${m}  ${FG_CYAN}${cl}${RESET}`);
-        } else {
-          const wrapped = wrapText(cl, cw - 4);
-          for (const wl of wrapped) {
-            lines.push(`${m}  ${FG_WHITE}${wl}${RESET}`);
-          }
-        }
-      }
-    }
+    lines.push(...renderMarkdownLines(context, cw, { margin: m }));
     lines.push('');
   }
 
@@ -1085,6 +1068,7 @@ export function startReviewApp(data: RequirementsData, filePath: string): void {
   const removeResize = onResize(() => {
     state.rows = process.stdout.rows || 24;
     state.cols = process.stdout.columns || 80;
+    clearMarkdownCache();
     prevFrame = []; // force full redraw
     doRender();
   });
