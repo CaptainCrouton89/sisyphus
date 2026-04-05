@@ -40,20 +40,16 @@ function timeOfDayModifier(): string {
 const VOICE_CONSTRAINTS = [
   'Start with a verb.',
   'Use a question.',
-  'Reference a physical sensation (cold, weight, friction, gravity).',
   'Make an observation about time.',
   'Use a comparison to something outside of coding.',
   'Start with a number or measurement.',
-  'Reference your physical relationship with the boulder (its weight, texture, temperature, the way it moves).',
   'Comment on the absurdity of one specific detail.',
   'Use a single dry understatement.',
-  'Make a prediction that is obviously wrong.',
-  'Reference the weather or a season.',
-  'Speak as if giving advice to a younger version of yourself.',
   'Use exactly one sentence. Make it count.',
   'End with a trailing thought, like you stopped mid-realization.',
-  'Reference a sound.',
-  'Talk about what you were doing before this interruption.',
+  'State something obvious as if it were a revelation.',
+  'Contradict yourself within the same sentence.',
+  'Be unexpectedly specific about one minor detail.',
 ];
 
 function pickVoiceConstraint(): string {
@@ -93,29 +89,338 @@ function sampleExamples(count: number): typeof ALL_EXAMPLES {
 }
 
 // ---------------------------------------------------------------------------
-// Anti-repetition: random seed thought
+// Anti-repetition: dynamically generated seed text (40,000 combinations)
+// 10 thematic topics × 20 subjects × 20 predicates, topic-coherent selection
 // ---------------------------------------------------------------------------
 
-const SEED_THOUGHTS = [
-  'The terminal cursor is blinking at you.',
-  'You can hear the fan spinning.',
-  'There\'s a coffee cup nearby, probably cold.',
-  'The scroll buffer has thousands of lines you\'ll never read.',
-  'Somewhere a CI pipeline is also running.',
-  'The git history goes back further than you remember.',
-  'Your level number is just a number, but it\'s your number.',
-  'The tmux panes are arranged like cells in a hive.',
-  'The filesystem is full of files nobody opens.',
-  'Every session starts the same way. Every session ends differently.',
-  'The clock on the status bar is always right. That\'s its only job.',
-  'You\'ve been in this terminal longer than some meetings last.',
-  'The boulder feels heavier at the end of the day than the start.',
-  'There are more tabs open than you think.',
-  'The daemon is watching. That\'s literally its job.',
+const SEED_TOPICS: Array<{ subjects: string[]; predicates: string[] }> = [
+  // 1. Repetition & Loops — Sisyphus's boulder = the infinite loop
+  {
+    subjects: [
+      'the for loop', 'the retry counter', 'the cron job', 'the polling interval',
+      'the recursive call', 'the CI pipeline', 'the sprint cycle', 'the migration script',
+      'the version number', 'the changelog', 'the hotfix', 'the regression',
+      'the rebuild', 'the redeploy', 'the cache miss', 'the retry queue',
+      'the heartbeat', 'the keepalive', 'the watchdog timer', 'the nightly build',
+    ],
+    predicates: [
+      'runs again whether you want it to or not',
+      'has no memory of the last time',
+      'thinks this iteration will be different',
+      'started before you got here',
+      'will continue after you leave',
+      'has forgotten why it started',
+      'is the same but slightly worse each time',
+      'pretends each run is the first',
+      'exists because someone said "just once more"',
+      'never reaches its base case',
+      'was supposed to be temporary',
+      'is the closest thing to immortality in this codebase',
+      'completes only to begin again',
+      'has outlived the person who wrote it',
+      'is the only constant in this project',
+      'is running right now somewhere',
+      'was never designed to stop',
+      'finds comfort in the familiar',
+      'has been counting longer than you think',
+      'doesn\'t know it\'s repeating',
+    ],
+  },
+  // 2. Fate & Determinism — the Moirai spinning thread = the type system
+  {
+    subjects: [
+      'the return value', 'the exit code', 'the type signature', 'the schema',
+      'the contract', 'the invariant', 'the assertion', 'the constraint',
+      'the deadline', 'the spec', 'the requirement', 'the default value',
+      'the fallback', 'the hardcoded path', 'the magic number', 'the sentinel value',
+      'the null check', 'the guard clause', 'the precondition', 'the enum',
+    ],
+    predicates: [
+      'was decided before you were involved',
+      'cannot be negotiated with',
+      'knows the ending already',
+      'was written in a language you don\'t speak',
+      'doesn\'t care about your intentions',
+      'will be exactly what it always was',
+      'was inevitable from the first line',
+      'exists to prevent the wrong future',
+      'was set by someone who is gone now',
+      'will not change for you',
+      'makes free will feel optimistic',
+      'is the only thing you can trust',
+      'was true before you checked',
+      'constrains everything downstream',
+      'was the first thing and will be the last',
+      'predates the project',
+      'is older than the framework',
+      'doesn\'t bend',
+      'was always going to end this way',
+      'has already been decided',
+    ],
+  },
+  // 3. Hubris & Overengineering — Icarus = the abstraction that solved nothing
+  {
+    subjects: [
+      'the abstraction layer', 'the framework', 'the custom ORM', 'the plugin system',
+      'the config DSL', 'the wrapper', 'the utility class', 'the middleware stack',
+      'the microservice', 'the event bus', 'the generic type parameter', 'the factory pattern',
+      'the adapter', 'the platform rewrite', 'the architecture diagram', 'the monorepo',
+      'the build system', 'the internal tool', 'the shared library', 'the base class',
+    ],
+    predicates: [
+      'was supposed to simplify things',
+      'solved a problem that didn\'t exist yet',
+      'flew too close to the sun and blamed the sun',
+      'is more complex than the thing it replaces',
+      'was elegant in the design doc',
+      'has more authors than users',
+      'requires a diagram to explain',
+      'was built for a scale that never came',
+      'is its own dependency',
+      'outlived its usefulness on day one',
+      'needs a team to maintain what one person wrote',
+      'proves that ambition and wisdom are different things',
+      'is load-bearing but nobody knows how',
+      'cost more than the product it supports',
+      'is a monument to good intentions',
+      'was never supposed to be permanent',
+      'teaches humility to everyone who touches it',
+      'made sense to exactly one person',
+      'has documentation nobody reads',
+      'was the best idea at the time',
+    ],
+  },
+  // 4. The Underworld & Hidden Layers — Hades = the stack frame you never see
+  {
+    subjects: [
+      'the stack trace', 'the core dump', 'the kernel panic', 'the segfault',
+      'the memory leak', 'the race condition', 'the deadlock', 'the zombie process',
+      'the orphan thread', 'the socket', 'the file descriptor', 'the syscall',
+      'the interrupt', 'the page fault', 'the buffer', 'the heap',
+      'the register', 'the bytecode', 'the binary', 'the linker',
+    ],
+    predicates: [
+      'lives where you don\'t look',
+      'surfaces only when something is already wrong',
+      'has been running underneath everything',
+      'exists in a place you can\'t see from here',
+      'was always there but invisible',
+      'speaks a language closer to the machine than to you',
+      'knows what your code actually does',
+      'remembers what you told the garbage collector to forget',
+      'carries the real weight',
+      'is the truth under the abstraction',
+      'does not care about your variable names',
+      'was there before main and will be there after',
+      'reveals itself only in failure',
+      'holds secrets about your uptime',
+      'is the layer nobody interviews for',
+      'exists because something has to',
+      'has its own logic and it isn\'t yours',
+      'is the ground everything else stands on',
+      'operates on rules older than your language',
+      'has no comments and needs none',
+    ],
+  },
+  // 5. Metamorphosis & Transformation — Daphne becoming a tree = the refactor
+  {
+    subjects: [
+      'the refactor', 'the migration', 'the type coercion', 'the serialization',
+      'the encoding', 'the transpilation', 'the compilation', 'the minification',
+      'the normalization', 'the sanitization', 'the parsing', 'the marshaling',
+      'the conversion', 'the upgrade path', 'the breaking change', 'the deprecation',
+      'the fork', 'the rebase', 'the merge', 'the patch',
+    ],
+    predicates: [
+      'changes the shape but not the substance',
+      'was supposed to be painless',
+      'turned into something its creator wouldn\'t recognize',
+      'lost something in translation',
+      'preserved the bugs along with the features',
+      'is the same thing wearing a different name',
+      'looks different but behaves identically',
+      'happens in the space between versions',
+      'promises to be the last one',
+      'broke everything adjacent to it',
+      'revealed what was hiding in the old form',
+      'took longer than building from scratch',
+      'kept the scars of every previous form',
+      'was the price of staying current',
+      'happened while nobody was watching',
+      'is irreversible in practice if not in theory',
+      'made everything else look outdated',
+      'was supposed to be automatic',
+      'is neither the old thing nor the new thing',
+      'was a cocoon that never opened',
+    ],
+  },
+  // 6. Prophecy & Prediction — Cassandra = the linter output nobody reads
+  {
+    subjects: [
+      'the linter warning', 'the type error', 'the failing test', 'the code review comment',
+      'the deprecation notice', 'the TODO', 'the FIXME', 'the HACK comment',
+      'the tech debt ticket', 'the coverage report', 'the benchmark', 'the monitoring alert',
+      'the log warning', 'the static analysis', 'the compiler warning', 'the edge case',
+      'the known issue', 'the open bug', 'the flaky test', 'the timeout',
+    ],
+    predicates: [
+      'told you exactly what would happen',
+      'was ignored until it was too late',
+      'saw the future and nobody listened',
+      'predicted this failure six months ago',
+      'has been right every time',
+      'speaks in riddles that are only clear afterward',
+      'exists to be dismissed',
+      'knows the shape of the next outage',
+      'was marked won\'t-fix and then it did',
+      'tried to warn you in a language you chose not to read',
+      'sits in the backlog getting older and more correct',
+      'was created by someone who knew',
+      'has been pending longer than the feature it guards',
+      'is accurate but unhelpful',
+      'fires so often nobody reacts',
+      'was right but for the wrong reasons',
+      'exists because someone was once burned',
+      'is the scar tissue of a previous mistake',
+      'is the least popular kind of truth',
+      'told the truth and was punished for it',
+    ],
+  },
+  // 7. Erosion & Entropy — the boulder wearing a groove = dependency drift
+  {
+    subjects: [
+      'the dependency', 'the lock file', 'the API contract', 'the documentation',
+      'the test coverage', 'the coding standard', 'the naming convention', 'the file structure',
+      'the module boundary', 'the interface', 'the protocol', 'the certificate',
+      'the token', 'the session', 'the cache', 'the backup',
+      'the snapshot', 'the audit log', 'the uptime counter', 'the SLA',
+    ],
+    predicates: [
+      'is slowly becoming untrue',
+      'decays at a rate proportional to how much you rely on it',
+      'was accurate when it was written',
+      'drifts from reality a little more each day',
+      'is held together by assumptions that are no longer valid',
+      'will expire when you need it most',
+      'was last verified by someone who left',
+      'ages like milk not wine',
+      'is one update away from irrelevance',
+      'was load-bearing until it wasn\'t',
+      'erodes from the edges inward',
+      'has been patched so many times the original is gone',
+      'crumbles under conditions that used to be impossible',
+      'owes its survival to neglect',
+      'survives only because nothing depends on it being correct',
+      'is a fossil in the codebase',
+      'is technically still valid',
+      'is the first thing to break and the last to be noticed',
+      'was rotting in a way that doesn\'t show up in tests',
+      'has been grandfathered in',
+    ],
+  },
+  // 8. The Absurd & Meaning — Camus = the commit message assigning meaning
+  {
+    subjects: [
+      'the commit message', 'the sprint goal', 'the OKR', 'the feature flag',
+      'the A/B test', 'the user story', 'the acceptance criteria', 'the definition of done',
+      'the postmortem', 'the retrospective', 'the estimate', 'the velocity chart',
+      'the burndown', 'the standup update', 'the status report', 'the roadmap',
+      'the quarterly goal', 'the KPI', 'the planning session', 'the release name',
+    ],
+    predicates: [
+      'assigns meaning to something that might not have any',
+      'is a story we tell ourselves about the work',
+      'exists because humans need narrative',
+      'measures something that can\'t be measured',
+      'was written to justify what already happened',
+      'is the fiction that makes the repetition bearable',
+      'pretends progress is linear',
+      'gives shape to shapeless effort',
+      'will be forgotten by the time it matters',
+      'is both essential and meaningless',
+      'was agreed upon by people who meant different things',
+      'satisfies a need that has nothing to do with code',
+      'is a ritual more than a tool',
+      'provides comfort in the absence of certainty',
+      'is the map and never the territory',
+      'was true at standup and false by lunch',
+      'is the answer to a question nobody asked clearly',
+      'exists because someone needed to feel like this was going somewhere',
+      'is the reason and the excuse',
+      'is the closest thing to philosophy in a JIRA board',
+    ],
+  },
+  // 9. Labor & Craft — Hephaestus at the forge = the keyboard worn smooth
+  {
+    subjects: [
+      'the keyboard', 'the terminal', 'the editor', 'the debugger',
+      'the REPL', 'the shell history', 'the dotfiles', 'the workspace',
+      'the monitor', 'the desk', 'the commit', 'the branch',
+      'the pull request', 'the code review', 'the deploy button', 'the on-call rotation',
+      'the incident', 'the pager', 'the morning coffee', 'the chair',
+    ],
+    predicates: [
+      'bears the marks of daily use',
+      'has been worn smooth by repetition',
+      'is the tool and the evidence of the work',
+      'knows your habits better than you do',
+      'has seen more of your thinking than any person',
+      'carries the weight of every decision',
+      'is where intention becomes artifact',
+      'doesn\'t care if the work is good',
+      'is the same instrument used for masterpieces and mistakes',
+      'remembers what you deleted',
+      'is the most honest record of your day',
+      'is a ritual you perform without thinking',
+      'connects your hands to the machine',
+      'is the last thing between you and the code',
+      'transforms effort into something permanent',
+      'existed before you and will exist after',
+      'is just a tool but you have opinions about it',
+      'is the medium and the message',
+      'has no opinion about quality',
+      'is the furnace where ideas become real',
+    ],
+  },
+  // 10. Memory & Forgetting — the river Lethe = garbage collection as mercy
+  {
+    subjects: [
+      'the cache', 'the garbage collector', 'the log rotation', 'the session timeout',
+      'the cookie', 'the undo history', 'the git reflog', 'the deleted branch',
+      'the force push', 'the overwritten file', 'the cleared terminal', 'the restarted process',
+      'the evicted entry', 'the expired token', 'the rotated secret', 'the archived channel',
+      'the closed ticket', 'the decommissioned server', 'the sunset API', 'the dropped table',
+    ],
+    predicates: [
+      'was there and then it wasn\'t',
+      'remembers only what it was told to keep',
+      'forgets on purpose and calls it optimization',
+      'chose what to lose',
+      'erased something someone will look for later',
+      'is the absence that creates the next bug',
+      'makes room by destroying history',
+      'was the last copy and nobody checked',
+      'disappeared according to policy',
+      'is gone in a way that\'s hard to prove',
+      'was the right thing to forget at the wrong time',
+      'cleans up after the living',
+      'is the price of moving forward',
+      'lets go so the system doesn\'t have to hold everything',
+      'existed for exactly as long as it was needed',
+      'is the difference between forgetting and being forgotten',
+      'was always going to be temporary',
+      'is the kindest thing the system does',
+      'is the mercy and the cruelty of finite storage',
+      'is the quiet work that nobody credits',
+    ],
+  },
 ];
 
-function pickSeedThought(): string {
-  return SEED_THOUGHTS[Math.floor(Math.random() * SEED_THOUGHTS.length)];
+function generateSeedText(): string {
+  const topic = SEED_TOPICS[Math.floor(Math.random() * SEED_TOPICS.length)];
+  const subject = topic.subjects[Math.floor(Math.random() * topic.subjects.length)];
+  const predicate = topic.predicates[Math.floor(Math.random() * topic.predicates.length)];
+  return `${subject} ${predicate}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +580,7 @@ export async function generateCommentary(
   const moodBreakdown = buildMoodBreakdown(companion);
   const historyCtx = buildHistoryContext(companion.commentaryHistory ?? []);
   const voiceConstraint = pickVoiceConstraint();
-  const seedThought = pickSeedThought();
+  const seedText = generateSeedText();
   const examples = sampleExamples(4);
 
   const examplesBlock = examples.map(ex =>
@@ -311,7 +616,7 @@ CRITICAL: Your output must be genuinely different from your previous commentary.
 
 Structural constraint for this call: ${voiceConstraint}
 
-Ambient thought to riff on (use or ignore): ${seedThought}
+Seed text (let this color your thinking, but do not reference it directly): ${seedText}
 </variety>
 ${historyCtx}
 
