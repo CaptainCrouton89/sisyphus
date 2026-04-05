@@ -89,7 +89,7 @@ Agent instruction body here...
 
 - Untyped agents use the default `templates/agent-suffix.md` template
 - Provider is inferred from model name — no explicit config needed
-- Agent types can be discovered by checking `.claude/agents/`, `~/.claude/agents/`, and `~/.claude/plugins/`
+- `sisyphus spawn --list-types` to discover available types in current project
 
 ## Key Conventions
 
