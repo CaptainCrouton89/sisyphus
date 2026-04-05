@@ -9,6 +9,7 @@ export interface AgentTypeFrontmatter {
   color?: string;
   description?: string;
   skills?: string[];
+  plugins?: string[];
   permissionMode?: string;
   effort?: string;
   interactive?: boolean;
@@ -48,13 +49,23 @@ export function parseAgentFrontmatter(content: string): AgentTypeFrontmatter {
   const systemPrompt = str('systemPrompt');
   if (systemPrompt === 'append' || systemPrompt === 'replace') fm.systemPrompt = systemPrompt;
 
-  // Parse skills as a YAML list
-  const skillsMatch = block.match(/^skills:\s*\n((?:\s+-\s+.+\n?)*)/m);
-  if (skillsMatch) {
-    fm.skills = skillsMatch[1]!
-      .split('\n')
-      .map(line => line.replace(/^\s+-\s+/, '').trim())
-      .filter(Boolean);
+  // Parse YAML lists (skills, plugins)
+  for (const key of ['skills', 'plugins'] as const) {
+    const listMatch = block.match(new RegExp(`^${key}:\\s*\\n((?:\\s+-\\s+.+\\n?)*)`, 'm'));
+    if (listMatch) {
+      (fm as Record<string, unknown>)[key] = listMatch[1]!
+        .split('\n')
+        .map(line => line.replace(/^\s+-\s+/, '').trim())
+        .filter(Boolean);
+    }
+    // Also support inline YAML array: plugins: [a, b]
+    const inlineMatch = block.match(new RegExp(`^${key}:\\s*\\[([^\\]]+)\\]`, 'm'));
+    if (inlineMatch && !(fm as Record<string, unknown>)[key]) {
+      (fm as Record<string, unknown>)[key] = inlineMatch[1]!
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
   }
 
   return fm;

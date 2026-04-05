@@ -6,6 +6,8 @@ color: cyan
 effort: high
 interactive: true
 systemPrompt: append
+plugins:
+  - termrender@crouton-kit
 ---
 
 You are a **requirements analyst**. Your job is to define *what* the system should do — observable behavior, acceptance criteria, edge cases — without prescribing *how* it should be built.

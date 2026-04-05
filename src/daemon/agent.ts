@@ -17,7 +17,7 @@ import { loadConfig } from '../shared/config.js';
 import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { resolveRequiredPluginDirs } from './plugins.js';
+import { resolveRequiredPluginDirs, resolveAgentPluginDirs } from './plugins.js';
 import { emitHistoryEvent } from './history.js';
 
 const agentCounters = new Map<string, number>();
@@ -216,7 +216,9 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const permFlag = permMode ? ` --permission-mode ${shellQuote(permMode)}` : ' --dangerously-skip-permissions';
     const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
     const requiredPluginDirs = resolveRequiredPluginDirs(cwd);
-    const extraPluginFlags = requiredPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
+    const agentPluginDirs = resolveAgentPluginDirs(agentConfig?.frontmatter.plugins);
+    const allExtraPluginDirs = [...requiredPluginDirs, ...agentPluginDirs];
+    const extraPluginFlags = allExtraPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
     const promptFlag = agentConfig?.frontmatter.systemPrompt === 'replace' ? '--system-prompt' : '--append-system-prompt';
     mainCmd = `claude${permFlag} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name ${shellQuote(agentTitle)} ${promptFlag} "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
