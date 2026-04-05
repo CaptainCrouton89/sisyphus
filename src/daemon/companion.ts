@@ -25,20 +25,22 @@ export { ACHIEVEMENTS } from '../shared/companion-types.js';
 const MIN_SAMPLES = 5;
 const MIN_STDDEV_RATIO = 0.20;
 
-type BaselineMetric = 'sessionMs' | 'cycleCount' | 'agentCount' | 'sessionsPerDay';
+type BaselineMetric = 'sessionMs' | 'cycleCount' | 'agentCount' | 'sessionsPerDay' | 'recentAgentThroughput';
 
 const ABSOLUTE_STDDEV_FLOORS: Record<BaselineMetric, number> = {
   sessionMs: 300_000,     // 5 minutes
   cycleCount: 1.0,
   agentCount: 1.0,
   sessionsPerDay: 0.5,
+  recentAgentThroughput: 2.0,
 };
 
 const COLD_START_DEFAULTS: Record<BaselineMetric, { mean: number; stddev: number }> = {
-  sessionMs:      { mean: 3_600_000, stddev: 2_400_000 },
-  cycleCount:     { mean: 5,         stddev: 3 },
-  agentCount:     { mean: 5,         stddev: 4 },
-  sessionsPerDay: { mean: 3,         stddev: 2 },
+  sessionMs:              { mean: 3_600_000, stddev: 2_400_000 },
+  cycleCount:             { mean: 5,         stddev: 3 },
+  agentCount:             { mean: 5,         stddev: 4 },
+  sessionsPerDay:         { mean: 3,         stddev: 2 },
+  recentAgentThroughput:  { mean: 8,         stddev: 6 },
 };
 
 export function emptyStats(): RunningStats {
@@ -51,6 +53,7 @@ export function defaultBaselines(): CompanionBaselines {
     cycleCount: emptyStats(),
     agentCount: emptyStats(),
     sessionsPerDay: emptyStats(),
+    recentAgentThroughput: emptyStats(),
     lastCountedDay: null,
     pendingDayCount: 0,
   };
@@ -108,6 +111,7 @@ export function loadCompanion(): CompanionState {
   if (state.consecutiveHighCycleSessions == null) state.consecutiveHighCycleSessions = 0;
   if (state.spinnerVerbIndex == null) state.spinnerVerbIndex = 0;
   if (state.baselines == null) state.baselines = defaultBaselines();
+  if (state.baselines.recentAgentThroughput == null) state.baselines.recentAgentThroughput = emptyStats();
   if (state.commentaryHistory == null) state.commentaryHistory = [];
   return state;
 }
@@ -282,6 +286,7 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   const cycleZ = zScore(cycleCount, baselines.cycleCount, 'cycleCount');
   const agentZ = zScore(signals.totalAgentCount ?? 0, baselines.agentCount, 'agentCount');
   const dailyZ = zScore(sessionsCompletedToday, baselines.sessionsPerDay, 'sessionsPerDay');
+  const recentAgentZ = zScore(signals.recentAgentCount ?? 0, baselines.recentAgentThroughput, 'recentAgentThroughput');
 
   // Happy — event-driven + deviation-based quick wins
   if (signals.justCompleted) scores.happy += 50;
@@ -301,7 +306,9 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   if (sessionZ > 0.5) scores.grinding += 15; // longer than usual
   if (sessionZ > 1.0) scores.grinding += 10; // significantly longer
   if (sessionZ > 1.5) scores.grinding += 8;  // very long for this user
-  if (agentZ > 0.5) scores.grinding += 10;   // more agents than usual
+  if (recentAgentZ > 0.5) scores.grinding += 12;  // more agents active (2h window) than usual
+  if (recentAgentZ > 1.0) scores.grinding += 10;  // significantly more cross-session agents
+  if (recentAgentZ > 1.5) scores.grinding += 8;   // massive cross-session throughput
   if (cycleZ > 0.5) scores.grinding += 8;    // more cycles than usual
 
   // Frustrated — actual negative events (crashes, rollbacks, restarts, lost agents)
@@ -749,6 +756,7 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   welfordUpdate(baselines.sessionMs, session.activeMs);
   welfordUpdate(baselines.cycleCount, totalCycles);
   welfordUpdate(baselines.agentCount, session.agents.length);
+  welfordUpdate(baselines.recentAgentThroughput, companion.lastRecentAgentCount ?? 0);
 
   // Daily session count tracking with day-boundary handling
   const today = todayIso();

@@ -1288,6 +1288,7 @@ describe('computeMood z-score integration', () => {
     sessionMsMean?: number;
     cycleCountMean?: number;
     agentCountMean?: number;
+    recentAgentThroughputMean?: number;
   } = {}): CompanionState {
     const c = makeCompanion();
     const b = defaultBaselines();
@@ -1296,11 +1297,13 @@ describe('computeMood z-score integration', () => {
     const sessionMs = overrides.sessionMsMean ?? 7_200_000; // default 2h
     const cycles = overrides.cycleCountMean ?? 10;
     const agents = overrides.agentCountMean ?? 15;
+    const recentAgents = overrides.recentAgentThroughputMean ?? 10;
     for (let i = 0; i < 10; i++) {
       // Add slight variance so stddev is nonzero
       welfordUpdate(b.sessionMs, sessionMs + (i - 5) * 100_000);
       welfordUpdate(b.cycleCount, cycles + (i % 3 - 1));
       welfordUpdate(b.agentCount, agents + (i % 5 - 2));
+      welfordUpdate(b.recentAgentThroughput, recentAgents + (i % 5 - 2));
     }
     c.baselines = b;
     return c;
@@ -1386,6 +1389,16 @@ describe('computeMood z-score integration', () => {
     assert.equal(mood, 'grinding');
   });
 
+  it('high recent agent throughput triggers grinding', () => {
+    const c = companionWithBaselines({ recentAgentThroughputMean: 5 });
+    const mood = computeMood(c, undefined, makeSignals({
+      sessionLengthMs: 5_000_000,  // moderately long
+      recentAgentCount: 25,        // 5x the baseline mean — high cross-session throughput
+      hourOfDay: 14,
+    }));
+    assert.equal(mood, 'grinding');
+  });
+
   it('quick completion triggers happy', () => {
     const c = companionWithBaselines({ sessionMsMean: 7_200_000 });
     const mood = computeMood(c, undefined, makeSignals({
@@ -1404,6 +1417,7 @@ describe('computeMood z-score integration', () => {
 describe('onSessionComplete baselines', () => {
   it('updates session-scale baselines on completion', () => {
     const c = makeCompanion();
+    c.lastRecentAgentCount = 12;
     const session = makeSession({
       activeMs: 5_000_000,
       agents: [makeAgent(), makeAgent({ id: 'agent-002' }), makeAgent({ id: 'agent-003' })],
@@ -1421,6 +1435,8 @@ describe('onSessionComplete baselines', () => {
     assert.equal(b.cycleCount.mean, 2);
     assert.equal(b.agentCount.count, 1);
     assert.equal(b.agentCount.mean, 3);
+    assert.equal(b.recentAgentThroughput.count, 1);
+    assert.equal(b.recentAgentThroughput.mean, 12);
   });
 
   it('accumulates baselines across multiple completions', () => {

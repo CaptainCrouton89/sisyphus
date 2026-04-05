@@ -114,12 +114,13 @@ export interface RunningStats {
 }
 
 export interface CompanionBaselines {
-  sessionMs: RunningStats;       // active time per completed session
-  cycleCount: RunningStats;      // cycles per completed session
-  agentCount: RunningStats;      // total agents per completed session
-  sessionsPerDay: RunningStats;  // sessions completed per active day
-  lastCountedDay: string | null; // YYYY-MM-DD for day-boundary tracking
-  pendingDayCount: number;       // current day's running total (finalized tomorrow)
+  sessionMs: RunningStats;                // active time per completed session
+  cycleCount: RunningStats;               // cycles per completed session
+  agentCount: RunningStats;               // total agents per completed session
+  sessionsPerDay: RunningStats;           // sessions completed per active day
+  recentAgentThroughput: RunningStats;    // agents active in last 2h across all sessions at completion time
+  lastCountedDay: string | null;          // YYYY-MM-DD for day-boundary tracking
+  pendingDayCount: number;                // current day's running total (finalized tomorrow)
 }
 
 export interface UnlockedAchievement {
@@ -177,6 +178,8 @@ export interface CompanionState {
   baselines?: CompanionBaselines;
   // Live agent count across all active sessions (written by pane-monitor, read by TUI + status bar)
   totalActiveAgents?: number;
+  // Agents active in last 2h across all sessions/dirs (written by pane-monitor, read at session completion for baseline)
+  lastRecentAgentCount?: number;
   // Debug: last mood signals and scores (written by pane-monitor, read by TUI debug overlay)
   debugMood?: {
     signals: MoodSignals;
@@ -211,6 +214,7 @@ export interface MoodSignals {
   hourOfDay: number;          // 0-23
   activeAgentCount?: number;  // agents currently with status === 'running'
   totalAgentCount?: number;   // max total agents (agents.length) across tracked active sessions (for z-score baselines)
+  recentAgentCount?: number;  // agents active in last 2h across all sessions/dirs (for grind z-score)
   cycleCount?: number;              // current session orchestrator cycle count
   sessionsCompletedToday?: number;  // sessions completed today
   // Frustration signals — actual negative events

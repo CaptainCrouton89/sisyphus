@@ -216,12 +216,14 @@ async function pollAllSessions(): Promise<void> {
     let idleDurationMs = 0;
     let activeAgentCount = 0;
     let totalAgentCount = 0;
+    let recentAgentCount = 0;
     let maxCycleCount = 0;
     let maxRollbackCount = 0;
     let totalRestartedAgents = 0;
     let totalLostAgents = 0;
     let totalKilledAgents = 0;
     const cutoff = nowMs - 30 * 60 * 1000;
+    const recentCutoff = nowMs - 2 * 60 * 60 * 1000; // 2 hours
 
     for (const { id: sessionId, cwd } of trackedSessions.values()) {
       try {
@@ -246,6 +248,12 @@ async function pollAllSessions(): Promise<void> {
             }
             if ((agent.restartCount ?? 0) > 0) {
               totalRestartedAgents++;
+            }
+            // Count agents with activity in the last 2 hours (running, recently spawned, or recently completed)
+            const spawnedMs = agent.spawnedAt ? new Date(agent.spawnedAt).getTime() : 0;
+            const completedMs = agent.completedAt ? new Date(agent.completedAt).getTime() : 0;
+            if (agent.status === 'running' || spawnedMs > recentCutoff || completedMs > recentCutoff) {
+              recentAgentCount++;
             }
           }
         }
@@ -288,6 +296,7 @@ async function pollAllSessions(): Promise<void> {
       hourOfDay: new Date().getHours(),
       activeAgentCount,
       totalAgentCount,
+      recentAgentCount,
       cycleCount: maxCycleCount,
       sessionsCompletedToday: companion.recentCompletions.filter(t => t.startsWith(new Date().toISOString().slice(0, 10))).length,
       rollbackCount: maxRollbackCount,
@@ -300,6 +309,8 @@ async function pollAllSessions(): Promise<void> {
     const globalAgents = getTotalActiveSessionAgents();
     const agentsChanged = companion.totalActiveAgents !== globalAgents;
     if (agentsChanged) companion.totalActiveAgents = globalAgents;
+    const recentAgentsChanged = companion.lastRecentAgentCount !== recentAgentCount;
+    if (recentAgentsChanged) companion.lastRecentAgentCount = recentAgentCount;
 
     const newMood = computeMood(companion, undefined, signals);
     const moodChanged = newMood !== companion.mood;
