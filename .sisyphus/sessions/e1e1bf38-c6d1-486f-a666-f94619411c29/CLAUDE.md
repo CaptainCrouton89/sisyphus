@@ -14,11 +14,13 @@ The original task was "session branching/forking" (git-branch semantics, parent-
 
 The `context/explore-integration-points.md` and `context/problem-session-branching.md` were produced under the rejected parent-child model — partially useful for codebase orientation, ignore any parent-child lifecycle hooks they describe.
 
-## Where things stand (cycle 5)
+## Where things stand
 
-Cycle 5 is active with no agents spawned — implementation is next. The plan calls for 2-3 parallel agents covering:
-- **Group A** (parallel): `src/shared/types.ts`, `src/shared/protocol.ts`, `src/daemon/state.ts`, `src/daemon/orchestrator.ts`
-- **Group B** (after A): `src/daemon/session-manager.ts`, `src/daemon/server.ts`, `src/cli/commands/clone.ts`, `src/cli/index.ts`
+**Done.** All 7 implementation tasks complete, build + 357/357 tests pass, review produced 4 findings (3 fixed), all 12 E2E recipe steps in `context/e2e-recipe.md` pass. Session is in completion mode awaiting user sign-off.
+
+## Env var leak: accidental clones during E2E testing
+
+Running `sisyphus clone` from a shell that already has `SISYPHUS_SESSION_ID` set (e.g., running validation steps from within a sisyphus orchestrator pane) passes the CLI guard and creates a real clone against the active session. This happened during E2E validation — the clone was cleaned up manually. When testing `clone` end-to-end, either unset `SISYPHUS_SESSION_ID` first or run from a shell outside any sisyphus pane.
 
 ## Clone behavior constraints
 

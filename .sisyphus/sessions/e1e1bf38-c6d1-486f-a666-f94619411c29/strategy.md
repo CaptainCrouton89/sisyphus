@@ -3,16 +3,14 @@
 - requirements: 20 EARS-format requirements, all approved via TUI review
 - design: ~275 lines across 8 files. Key decisions: orchestrator-only CLI, true duplication with ID replacement, agent normalization, forceMode on spawnOrchestrator, orientation via message mechanism.
 - planning: 7 tasks, 2 parallel agents (Protocol+CLI and Daemon layer), single implementation phase. All 20 requirements covered.
+- implementation: All 7 tasks implemented, reviewed (4 findings, 3 fixed), build+test passing (357/357).
 
-## Current Stage: implementation
-Build clone feature from approved plan.
+## Current Stage: validation
+Prove the clone feature works end-to-end via context/e2e-recipe.md (12 steps).
 
 Exit criteria:
-- All 7 tasks implemented across 8 files
-- `npm run build` succeeds
-- `npm test` passes (existing + new state tests)
-- Code reviewed for quality
+- All 12 recipe steps pass
+- Clone runs independently with inherited context and new identity
 
 ## Ahead
-- validation — E2E verification via context/e2e-recipe.md
 - completion — Present results to user
