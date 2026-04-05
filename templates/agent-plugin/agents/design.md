@@ -162,6 +162,13 @@ This opens an interactive walkthrough TUI in a sibling tmux window. The command 
 
 ## JSON Schema
 
+Get the schema or an annotated writing guide from the CLI:
+
+```bash
+sisyphus design --schema      # Raw JSON Schema
+sisyphus design --annotated   # Schema with inline writing guidance
+```
+
 Write `design.json` as a single JSON object:
 
 ```json

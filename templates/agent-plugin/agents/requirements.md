@@ -140,6 +140,13 @@ Also save `$SISYPHUS_SESSION_DIR/context/requirements.md` as a human-readable co
 
 ## JSON Schema
 
+Get the schema or an annotated writing guide from the CLI:
+
+```bash
+sisyphus requirements --schema      # Raw JSON Schema
+sisyphus requirements --annotated   # Schema with inline writing guidance
+```
+
 Write `requirements.json` as a single JSON object:
 
 ```json
