@@ -7,6 +7,8 @@ export interface DesignMeta {
   version: number;
   lastModified: string;
   draft: number;
+  reviewStartedAt?: string;
+  reviewCompletedAt?: string;
 }
 
 export interface QuestionOption {
@@ -20,6 +22,8 @@ export interface OpenQuestion {
   options: QuestionOption[];
   response: string;
   selectedOption?: number;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface DesignDecision {
@@ -46,6 +50,8 @@ export interface DesignItem {
   reviewAction?: 'agree' | 'pick-alt' | 'comment';
   selectedAlternative?: number;
   userComment?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface DesignSection {

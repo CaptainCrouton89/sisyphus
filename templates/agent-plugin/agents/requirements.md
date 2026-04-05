@@ -217,6 +217,9 @@ Write `requirements.json` as a single JSON object:
 - **`openQuestions`**: Per-group questions with prefilled answer options. Each option has a `title` (the choice) and `description` (your reasoning for why this option makes sense). Include 2-3 options plus the TUI adds a "custom answer" option automatically.
 - **`reviewAction`**: Set by the TUI when the user reviews an item. Values: `"approve"` (user approved), `"comment"` (user commented without approving). **Read this on continuation** — if `reviewAction === "approve"`, set `status` to `"approved"`. If `"comment"`, read `userComment` and decide next steps.
 - **`userComment`**: Free-form comment from the user's review session. Read this alongside `reviewAction`.
+- **`startedAt`**: ISO timestamp set by the TUI when the user first views this item. **Read-only** — do not write.
+- **`completedAt`**: ISO timestamp set by the TUI when the user takes an action on this item. **Read-only** — do not write.
+- **`meta.reviewStartedAt`** / **`meta.reviewCompletedAt`**: ISO timestamps for the overall review session. **Read-only** — do not write.
 
 ### Reading user feedback from a previous draft
 

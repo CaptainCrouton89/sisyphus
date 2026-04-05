@@ -1,4 +1,4 @@
-import { writeFileSync, renameSync } from 'node:fs';
+import { writeFileSync, renameSync, existsSync, copyFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import stringWidth from 'string-width';
 import type { Key } from './terminal.js';
@@ -164,12 +164,36 @@ function saveData(state: ReviewState): void {
   state.dirty = false;
 }
 
+function stampStarted(item: { startedAt?: string }): void {
+  if (!item.startedAt) item.startedAt = new Date().toISOString();
+}
+
+function stampCompleted(item: { completedAt?: string }): void {
+  item.completedAt = new Date().toISOString();
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  return rs > 0 ? `${m}m ${rs}s` : `${m}m`;
+}
+
 function buildReviewFeedback(state: ReviewState): string {
   const { data } = state;
   const lines: string[] = [];
 
   lines.push(`# Review Feedback — ${data.meta.title} (draft ${data.meta.draft})`);
   lines.push('');
+
+  // Timing summary
+  if (data.meta.reviewStartedAt && data.meta.reviewCompletedAt) {
+    const durationMs = new Date(data.meta.reviewCompletedAt).getTime() - new Date(data.meta.reviewStartedAt).getTime();
+    lines.push(`**Review duration:** ${formatDurationMs(durationMs)} (${data.meta.reviewStartedAt} → ${data.meta.reviewCompletedAt})`);
+    lines.push('');
+  }
 
   for (const g of data.groups) {
     lines.push(`## ${g.name}`);
@@ -181,7 +205,10 @@ function buildReviewFeedback(state: ReviewState): string {
         : r.reviewAction === 'comment' ? '◆ commented'
         : r.status === 'approved' ? '✓ previously approved'
         : '—';
-      lines.push(`- **${r.id}** ${r.title} — ${action}`);
+      const dur = r.startedAt && r.completedAt
+        ? ` (${formatDurationMs(new Date(r.completedAt).getTime() - new Date(r.startedAt).getTime())})`
+        : '';
+      lines.push(`- **${r.id}** ${r.title} — ${action}${dur}`);
       if (r.userComment) {
         lines.push(`  > ${r.userComment}`);
       }
@@ -733,6 +760,7 @@ function startGroupReview(state: ReviewState, groupIndex: number): void {
   const group = state.data.groups[groupIndex]!;
   const pending = pendingRequirements(group);
   if (pending.length > 0) {
+    stampStarted(pending[0]!);
     state.phase = { kind: 'item-review', groupIndex, reqIndex: 0, expanded: false, selectedAction: 0 };
   } else {
     // No pending items, go to questions or next group
@@ -745,6 +773,7 @@ function advanceItem(state: ReviewState, groupIndex: number, reqIndex: number): 
   const group = state.data.groups[groupIndex]!;
   const pending = pendingRequirements(group);
   if (reqIndex + 1 < pending.length) {
+    stampStarted(pending[reqIndex + 1]!);
     state.phase = { kind: 'item-review', groupIndex, reqIndex: reqIndex + 1, expanded: false, selectedAction: 0 };
   } else {
     startGroupQuestions(state, groupIndex);
@@ -756,6 +785,7 @@ function startGroupQuestions(state: ReviewState, groupIndex: number): void {
   const group = state.data.groups[groupIndex]!;
   const unanswered = (group.openQuestions || []).filter(q => !q.response);
   if (unanswered.length > 0) {
+    stampStarted(unanswered[0]!);
     state.phase = { kind: 'group-questions', groupIndex, questionIndex: 0, selectedOption: 0 };
   } else {
     advanceToNextGroup(state, groupIndex);
@@ -785,6 +815,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         if (req) {
           req.reviewAction = state.inputMode.action;
           if (text) req.userComment = text;
+          stampCompleted(req);
           state.dirty = true;
           saveData(state);
           advanceItem(state, phase.groupIndex, phase.reqIndex);
@@ -795,9 +826,11 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         const q = unanswered[phase.questionIndex];
         if (q && text) {
           q.response = text;
+          stampCompleted(q);
           state.dirty = true;
           saveData(state);
           if (phase.questionIndex + 1 < unanswered.length) {
+            stampStarted(unanswered[phase.questionIndex + 1]!);
             state.phase = { kind: 'group-questions', groupIndex: phase.groupIndex, questionIndex: phase.questionIndex + 1, selectedOption: 0 };
           } else {
             advanceToNextGroup(state, phase.groupIndex);
@@ -888,6 +921,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       } else if (key.return) {
         if (phase.selectedAction === 0) {
           req.reviewAction = 'approve';
+          stampCompleted(req);
           state.dirty = true;
           saveData(state);
           advanceItem(state, phase.groupIndex, phase.reqIndex);
@@ -904,6 +938,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       } else if (input === '1') {
         // Approve and next
         req.reviewAction = 'approve';
+        stampCompleted(req);
         state.dirty = true;
         saveData(state);
         advanceItem(state, phase.groupIndex, phase.reqIndex);
@@ -917,6 +952,8 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         state.inputBuffer = req.userComment || '';
       } else if (input === 'p') {
         if (phase.reqIndex > 0) {
+          const prevReq = pendingRequirements(state.data.groups[phase.groupIndex]!)[phase.reqIndex - 1];
+          if (prevReq) stampStarted(prevReq);
           state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex - 1, expanded: false, selectedAction: 0 };
           state.scroll = 0;
         } else {
@@ -963,6 +1000,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           // Prefilled answer
           q.response = q.options[phase.selectedOption]!.title;
           q.selectedOption = phase.selectedOption;
+          stampCompleted(q);
           state.dirty = true;
           saveData(state);
         } else {
@@ -974,6 +1012,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
 
         // Next question or next group
         if (phase.questionIndex + 1 < unanswered.length) {
+          stampStarted(unanswered[phase.questionIndex + 1]!);
           state.phase = { kind: 'group-questions', groupIndex: phase.groupIndex, questionIndex: phase.questionIndex + 1, selectedOption: 0 };
         } else {
           advanceToNextGroup(state, phase.groupIndex);
@@ -1011,6 +1050,15 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
 export function startReviewApp(data: RequirementsData, filePath: string): void {
+  // Snapshot original JSON before any modifications
+  const snapshotPath = filePath.replace(/\.json$/, '.pre-review.json');
+  if (!existsSync(snapshotPath)) {
+    copyFileSync(filePath, snapshotPath);
+  }
+
+  // Stamp session-level review start
+  data.meta.reviewStartedAt = new Date().toISOString();
+
   const cleanup = setupTerminal();
 
   const state: ReviewState = {
@@ -1046,6 +1094,10 @@ export function startReviewApp(data: RequirementsData, filePath: string): void {
       removeKeypress();
       removeResize();
       cleanup();
+
+      // Stamp session-level review completion and persist
+      state.data.meta.reviewCompletedAt = new Date().toISOString();
+      saveData(state);
 
       // Print review feedback to stdout so the calling agent can read it
       const feedback = buildReviewFeedback(state);

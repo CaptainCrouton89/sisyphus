@@ -1,4 +1,4 @@
-import { writeFileSync, renameSync } from 'node:fs';
+import { writeFileSync, renameSync, existsSync, copyFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import stringWidth from 'string-width';
 import type { Key } from './terminal.js';
@@ -183,12 +183,36 @@ function saveData(state: DesignState): void {
   state.dirty = false;
 }
 
+function stampStarted(item: { startedAt?: string }): void {
+  if (!item.startedAt) item.startedAt = new Date().toISOString();
+}
+
+function stampCompleted(item: { completedAt?: string }): void {
+  item.completedAt = new Date().toISOString();
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  return rs > 0 ? `${m}m ${rs}s` : `${m}m`;
+}
+
 function buildDesignFeedback(state: DesignState): string {
   const { data } = state;
   const lines: string[] = [];
 
   lines.push(`# Design Review Feedback — ${data.meta.title} (draft ${data.meta.draft})`);
   lines.push('');
+
+  // Timing summary
+  if (data.meta.reviewStartedAt && data.meta.reviewCompletedAt) {
+    const durationMs = new Date(data.meta.reviewCompletedAt).getTime() - new Date(data.meta.reviewStartedAt).getTime();
+    lines.push(`**Review duration:** ${formatDurationMs(durationMs)} (${data.meta.reviewStartedAt} → ${data.meta.reviewCompletedAt})`);
+    lines.push('');
+  }
 
   for (const section of data.sections) {
     lines.push(`## ${section.name}`);
@@ -208,7 +232,10 @@ function buildDesignFeedback(state: DesignState): string {
         actionLabel = '✓ previously approved';
       }
 
-      lines.push(`- **${item.id}** ${item.title} — ${actionLabel}`);
+      const dur = item.startedAt && item.completedAt
+        ? ` (${formatDurationMs(new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime())})`
+        : '';
+      lines.push(`- **${item.id}** ${item.title} — ${actionLabel}${dur}`);
       if (item.userComment) {
         lines.push(`  > ${item.userComment}`);
       }
@@ -764,6 +791,7 @@ function advanceToNextSection(state: DesignState, currentSectionIndex: number): 
 function startSectionReview(state: DesignState, sectionIndex: number): void {
   const section = state.data.sections[sectionIndex]!;
   if (section.items.length > 0) {
+    stampStarted(section.items[0]!);
     state.phase = { kind: 'item-walkthrough', sectionIndex, itemIndex: 0, selectedAction: 0 };
   } else {
     startSectionQuestions(state, sectionIndex);
@@ -774,6 +802,7 @@ function startSectionReview(state: DesignState, sectionIndex: number): void {
 function advanceItem(state: DesignState, sectionIndex: number, itemIndex: number): void {
   const section = state.data.sections[sectionIndex]!;
   if (itemIndex + 1 < section.items.length) {
+    stampStarted(section.items[itemIndex + 1]!);
     state.phase = { kind: 'item-walkthrough', sectionIndex, itemIndex: itemIndex + 1, selectedAction: 0 };
   } else {
     startSectionQuestions(state, sectionIndex);
@@ -785,6 +814,7 @@ function startSectionQuestions(state: DesignState, sectionIndex: number): void {
   const section = state.data.sections[sectionIndex]!;
   const unanswered = (section.openQuestions || []).filter(q => !q.response);
   if (unanswered.length > 0) {
+    stampStarted(unanswered[0]!);
     state.phase = { kind: 'section-questions', sectionIndex, questionIndex: 0, selectedOption: 0 };
   } else {
     advanceToNextSection(state, sectionIndex);
@@ -818,6 +848,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
             item.reviewAction = 'comment';
           }
           if (text) item.userComment = text;
+          stampCompleted(item);
           state.dirty = true;
           saveData(state);
           advanceItem(state, phase.sectionIndex, phase.itemIndex);
@@ -828,9 +859,11 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
         const q = unanswered[phase.questionIndex];
         if (q && text) {
           q.response = text;
+          stampCompleted(q);
           state.dirty = true;
           saveData(state);
           if (phase.questionIndex + 1 < unanswered.length) {
+            stampStarted(unanswered[phase.questionIndex + 1]!);
             state.phase = { kind: 'section-questions', sectionIndex: phase.sectionIndex, questionIndex: phase.questionIndex + 1, selectedOption: 0 };
           } else {
             advanceToNextSection(state, phase.sectionIndex);
@@ -935,6 +968,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
           if (phase.selectedAction === 0) {
             // Agree
             item.reviewAction = 'agree';
+            stampCompleted(item);
             state.dirty = true;
             saveData(state);
             advanceItem(state, phase.sectionIndex, phase.itemIndex);
@@ -965,6 +999,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
         state.scroll = 0;
       } else if (input === 'p') {
         if (phase.itemIndex > 0) {
+          stampStarted(state.data.sections[phase.sectionIndex]!.items[phase.itemIndex - 1]!);
           state.phase = { kind: 'item-walkthrough', sectionIndex: phase.sectionIndex, itemIndex: phase.itemIndex - 1, selectedAction: 0 };
           state.scroll = 0;
         } else {
@@ -975,6 +1010,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
         advanceItem(state, phase.sectionIndex, phase.itemIndex);
       } else if (input === 'a' && item.decision) {
         item.reviewAction = 'agree';
+        stampCompleted(item);
         state.dirty = true;
         saveData(state);
         advanceItem(state, phase.sectionIndex, phase.itemIndex);
@@ -1026,6 +1062,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
         if (phase.selectedOption < q.options.length) {
           q.response = q.options[phase.selectedOption]!.title;
           q.selectedOption = phase.selectedOption;
+          stampCompleted(q);
           state.dirty = true;
           saveData(state);
         } else {
@@ -1035,6 +1072,7 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
         }
 
         if (phase.questionIndex + 1 < unanswered.length) {
+          stampStarted(unanswered[phase.questionIndex + 1]!);
           state.phase = { kind: 'section-questions', sectionIndex: phase.sectionIndex, questionIndex: phase.questionIndex + 1, selectedOption: 0 };
         } else {
           advanceToNextSection(state, phase.sectionIndex);
@@ -1070,6 +1108,15 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
 export function startDesignApp(data: DesignData, filePath: string): void {
+  // Snapshot original JSON before any modifications
+  const snapshotPath = filePath.replace(/\.json$/, '.pre-review.json');
+  if (!existsSync(snapshotPath)) {
+    copyFileSync(filePath, snapshotPath);
+  }
+
+  // Stamp session-level review start
+  data.meta.reviewStartedAt = new Date().toISOString();
+
   const cleanup = setupTerminal();
 
   const state: DesignState = {
@@ -1101,6 +1148,10 @@ export function startDesignApp(data: DesignData, filePath: string): void {
       removeKeypress();
       removeResize();
       cleanup();
+
+      // Stamp session-level review completion and persist
+      state.data.meta.reviewCompletedAt = new Date().toISOString();
+      saveData(state);
 
       const feedback = buildDesignFeedback(state);
       console.log(feedback);

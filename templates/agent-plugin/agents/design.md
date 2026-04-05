@@ -241,6 +241,9 @@ Write `design.json` as a single JSON object:
 - **`status`** — Set to `draft` for new items. You control this field.
 - **`reviewAction`** — Set by TUI: `"agree"` (accepted proposal), `"pick-alt"` (chose alternative — check `selectedAlternative`), `"comment"` (feedback without deciding). Read on continuation.
 - **`userComment`** — Free-form from user's review session.
+- **`startedAt`** — ISO timestamp set by the TUI when the user first views this item. **Read-only** — do not write.
+- **`completedAt`** — ISO timestamp set by the TUI when the user takes an action on this item. **Read-only** — do not write.
+- **`meta.reviewStartedAt`** / **`meta.reviewCompletedAt`** — ISO timestamps for the overall review session. **Read-only** — do not write.
 - **`draft`** — Increment on each revision cycle.
 - **`openQuestions`** — Per-section questions with prefilled options. Same structure as requirements.
 

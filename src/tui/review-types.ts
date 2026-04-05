@@ -7,6 +7,8 @@ export interface RequirementsMeta {
   version: number;
   lastModified: string;
   draft: number;
+  reviewStartedAt?: string;
+  reviewCompletedAt?: string;
 }
 
 export interface QuestionOption {
@@ -20,6 +22,8 @@ export interface OpenQuestion {
   options: QuestionOption[];
   response: string;
   selectedOption?: number;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface RequirementQuestion {
@@ -54,6 +58,8 @@ export interface Requirement {
   questions: RequirementQuestion[];
   reviewAction?: 'approve' | 'comment';
   userComment?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface RequirementsGroup {
