@@ -303,6 +303,80 @@ Monitoring: `status` (`--verbose`), `list` (`--all`), `dashboard`
 
 Setup: `setup`, `init`, `doctor`, `getting-started`, `companion`, `uninstall`
 
+### history
+
+Browse session history and metrics.
+
+```bash
+sisyphus history                        # List recent sessions
+sisyphus history <session-id>           # Inspect a specific session
+sisyphus history --stats                # Aggregate statistics
+sisyphus history --events               # Raw event timeline
+```
+
+| Option | Description |
+|--------|-------------|
+| `--cwd <path>` | Filter by project directory |
+| `--status <status>` | Filter by status (`completed`, `killed`) |
+| `--since <duration>` | Filter by recency (e.g. `7d`, `24h`, `2w`) |
+| `--search <query>` | Search task text and messages |
+| `--events` | Show raw event timeline |
+| `--stats` | Show aggregate statistics |
+| `--json` | Output as JSON |
+| `-n, --limit <n>` | Max sessions to show (default: 20) |
+
+### clone
+
+Clone a session into a new independent session with a different goal.
+
+```bash
+sisyphus clone "new goal"
+sisyphus clone "new goal" --strategy    # carry over strategy.md from source
+sisyphus clone "new goal" --name my-clone --context "extra context"
+```
+
+Useful for branching off a variant approach without starting from scratch.
+
+### present
+
+Render a markdown file via termrender in a tmux split pane — agent-to-user visual feedback.
+
+```bash
+sisyphus present report.md
+sisyphus present report.md --interactive    # open in nvim, block until closed
+sisyphus present report.md --width 120
+```
+
+### reconnect
+
+Reconnect the daemon to an orphaned tmux session (e.g. after a daemon restart). Makes no state changes and does not spawn the orchestrator.
+
+```bash
+sisyphus reconnect <session-id>
+```
+
+### delete
+
+Delete a session and all its data.
+
+```bash
+sisyphus delete <session-id>
+sisyphus delete <session-id> --cwd /path/to/project
+```
+
+### requirements / design (standalone TUI tools)
+
+Interactive terminal tools for reviewing requirements and designs. These are standalone entry points, not daemon-connected.
+
+```bash
+sisyphus-review <requirements.json>   # Interactive EARS requirements reviewer
+sisyphus-design <design.json>         # Interactive technical design walkthrough
+```
+
+These correspond to the `sisyphus:requirements` and `sisyphus:design` agent types — useful for human review of artifacts those agents produce.
+
+---
+
 `sisyphus --help` or `sisyphus <command> --help` for full usage.
 
 ## License
