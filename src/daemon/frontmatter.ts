@@ -12,6 +12,7 @@ export interface AgentTypeFrontmatter {
   permissionMode?: string;
   effort?: string;
   interactive?: boolean;
+  systemPrompt?: 'append' | 'replace';
 }
 
 export { type Provider } from '../shared/types.js';
@@ -43,6 +44,9 @@ export function parseAgentFrontmatter(content: string): AgentTypeFrontmatter {
 
   const interactive = str('interactive');
   if (interactive === 'true') fm.interactive = true;
+
+  const systemPrompt = str('systemPrompt');
+  if (systemPrompt === 'append' || systemPrompt === 'replace') fm.systemPrompt = systemPrompt;
 
   // Parse skills as a YAML list
   const skillsMatch = block.match(/^skills:\s*\n((?:\s+-\s+.+\n?)*)/m);

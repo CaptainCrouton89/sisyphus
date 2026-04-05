@@ -307,6 +307,7 @@ ${buildPersonality(stats)}
 </personality>
 
 <state>
+Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 Mood: ${mood}
 Level: ${level} (${title})
 Tone: ${timeModifier}

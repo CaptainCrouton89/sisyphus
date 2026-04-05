@@ -170,8 +170,15 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   tmux.setPaneStyle(paneId, color, { role: paneLabel, session: sessionLabel, cycle: `c${cycleNum}` });
 
   const suffix = renderAgentSuffix(sessionId, instruction);
+  // For typed agents, prepend the agent type body to the system prompt.
+  // --agent doesn't resolve from --plugin-dir, so we deliver it via --append-system-prompt.
+  const systemParts: string[] = [];
+  if (agentConfig?.body && agentType && agentType !== 'worker') {
+    systemParts.push(agentConfig.body);
+  }
+  systemParts.push(suffix);
   const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
-  writeFileSync(suffixFilePath, suffix, 'utf-8');
+  writeFileSync(suffixFilePath, systemParts.join('\n\n'), 'utf-8');
 
   const bannerCmd = resolveBannerCmd();
   const npmBinDir = resolveNpmBinDir();
@@ -200,15 +207,19 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const model = agentConfig?.frontmatter.model ?? 'codex-mini';
     mainCmd = `codex -m ${shellQuote(model)} --dangerously-bypass-approvals-and-sandbox "$(cat '${codexPromptPath}')"`;
   } else {
-    const agentFlag = agentType && agentType !== 'worker' ? ` --agent ${shellQuote(agentType)}` : '';
     const config = loadConfig(cwd);
     const effort = agentConfig?.frontmatter.effort ?? config.agentEffort ?? 'medium';
+    const model = agentConfig?.frontmatter.model;
+    const modelFlag = model ? ` --model ${shellQuote(model)}` : '';
+    const permMode = agentConfig?.frontmatter.permissionMode;
+    const permFlag = permMode ? ` --permission-mode ${shellQuote(permMode)}` : ' --dangerously-skip-permissions';
     const pluginPath = createAgentPlugin(cwd, sessionId, agentId, agentType, agentConfig);
     const requiredPluginDirs = resolveRequiredPluginDirs(cwd);
     const extraPluginFlags = requiredPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
-    mainCmd = `claude --dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name ${shellQuote(agentTitle)} --append-system-prompt "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-    resumeArgs = `--dangerously-skip-permissions --effort ${effort} --plugin-dir "${pluginPath}"${agentFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
+    const promptFlag = agentConfig?.frontmatter.systemPrompt === 'replace' ? '--system-prompt' : '--append-system-prompt';
+    mainCmd = `claude${permFlag} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name ${shellQuote(agentTitle)} ${promptFlag} "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    resumeArgs = `${permFlag.trimStart()} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
   }
 
   const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [
