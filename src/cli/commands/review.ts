@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { join, resolve, dirname } from 'node:path';
 import { existsSync, readFileSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { shellQuote } from '../../shared/shell.js';
 import { historyEventsPath, historySessionDir } from '../../shared/paths.js';
+import { openTmuxWindow, waitForTmuxWindow } from '../../shared/tmux.js';
 
 export function registerReview(program: Command): void {
   program
@@ -144,15 +144,12 @@ async function runReviewTui(
   const useWindow = opts.window || opts.wait;
 
   if (useWindow) {
-    const channel = `review-${randomBytes(4).toString('hex')}`;
     const feedbackPath = join(dirname(targetPath), config.feedbackFilename);
 
-    const cmd = `node ${shellQuote(binaryPath)} ${shellQuote(targetPath)}; tmux wait-for -S ${shellQuote(channel)}; exit`;
-    const windowId = execSync(
-      `tmux new-window -n ${shellQuote(config.windowName)} -P -F "#{window_id}"`,
-      { encoding: 'utf-8' },
-    ).trim();
-    execSync(`tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(cmd)} Enter`);
+    const { windowId, channel } = openTmuxWindow(
+      config.windowName,
+      `node ${shellQuote(binaryPath)} ${shellQuote(targetPath)}`,
+    );
 
     if (opts.wait) {
       const sessionId = opts.sessionId || process.env.SISYPHUS_SESSION_ID;
@@ -164,7 +161,7 @@ async function runReviewTui(
         });
       }
 
-      execSync(`tmux wait-for ${shellQuote(channel)}`);
+      waitForTmuxWindow(channel);
 
       if (existsSync(feedbackPath)) {
         process.stdout.write(readFileSync(feedbackPath, 'utf-8'));
