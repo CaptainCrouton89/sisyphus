@@ -521,6 +521,15 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       }
       tmux.selectLayout(activeWindowId);
       try { recomputeDots(); } catch { /* best-effort */ }
+
+      const config = loadConfig(cwd);
+      if (config.notifications?.enabled !== false) {
+        const updatedSession = state.getSession(cwd, sessionId);
+        const newCycle = updatedSession.orchestratorCycles[updatedSession.orchestratorCycles.length - 1];
+        const modeLabel = newCycle?.mode ? ` (${newCycle.mode})` : '';
+        const sessionName = updatedSession.name ?? sessionId.slice(0, 8);
+        sendTerminalNotification('Sisyphus', `Cycle ${newCycle?.cycle ?? '?'}${modeLabel}: ${sessionName}`, updatedSession.tmuxSessionName);
+      }
     } catch (err) {
       console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err);
     } finally {
@@ -586,6 +595,12 @@ export async function handleSubmit(cwd: string, sessionId: string, agentId: stri
   const allDone = await handleAgentSubmit(cwd, sessionId, agentId, report);
   try { recomputeDots(); } catch { /* best-effort */ }
   if (allDone) {
+    const config = loadConfig(cwd);
+    if (config.notifications?.enabled !== false) {
+      const session = state.getSession(cwd, sessionId);
+      const sessionName = session.name ?? sessionId.slice(0, 8);
+      sendTerminalNotification('Sisyphus', `All agents complete: ${sessionName}`, session.tmuxSessionName);
+    }
     onAllAgentsDone(sessionId, cwd, windowId);
   }
 }
@@ -637,6 +652,12 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   const wallClockMs = Date.now() - new Date(session.createdAt).getTime();
   await state.updateSession(cwd, sessionId, { wallClockMs });
   markSessionCompleted(sessionId, session.createdAt, cwd);
+
+  const config = loadConfig(cwd);
+  if (config.notifications?.enabled !== false) {
+    const sessionName = session.name ?? sessionId.slice(0, 8);
+    sendTerminalNotification('Sisyphus', `Session completed: ${sessionName}`, session.tmuxSessionName);
+  }
 
   // Clean up tracking and tmux resources (mirrors handleKill cleanup)
   untrackSession(sessionId);
@@ -970,6 +991,10 @@ export async function handlePaneExited(
       respawningSessions.delete(sessionId);
       await state.updateSessionStatus(cwd, sessionId, 'paused');
       console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane exited with no agents`);
+      const config = loadConfig(cwd);
+      if (config.notifications?.enabled !== false) {
+        sendTerminalNotification('Sisyphus', `Session paused (no agents): ${sessionName}`, session.tmuxSessionName);
+      }
     } else {
       // Agents still running — their panes keep the window alive
       respawningSessions.delete(sessionId);
