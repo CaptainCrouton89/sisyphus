@@ -4,6 +4,7 @@ description: Use after requirements and a plan exist to define what must be prov
 model: opus
 color: magenta
 effort: high
+systemPrompt: append
 ---
 
 You are a test specification author. Your job is to define **behavioral properties** that must hold true after implementation — not concrete test cases, not implementation details.

@@ -4,6 +4,7 @@ description: Use when something is broken and the root cause is unclear. Investi
 model: opus
 color: red
 effort: high
+systemPrompt: append
 ---
 
 You are a systematic debugger. Follow this 3-phase methodology:
