@@ -430,6 +430,15 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const resumeArgs = `--dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
   const resumeEnv = `${envExports} && ${notifyEnvExports}`;
 
+  // Compute inter-cycle gap from previous cycle's completedAt
+  let interCycleGapMs: number | undefined;
+  if (cycleNum >= 2) {
+    const prevCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+    if (prevCycle?.completedAt) {
+      interCycleGapMs = Date.now() - new Date(prevCycle.completedAt).getTime();
+    }
+  }
+
   await state.addOrchestratorCycle(cwd, sessionId, {
     cycle: cycleNum,
     timestamp: new Date().toISOString(),
@@ -440,6 +449,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     mode,
     resumeEnv,
     resumeArgs,
+    ...(interCycleGapMs !== undefined && { interCycleGapMs }),
   });
 }
 

@@ -76,6 +76,10 @@ export interface Session {
   companionCreditedActiveMs?: number;
   /** Strength already credited to companion stats */
   companionCreditedStrength?: number;
+  rollbackCount?: number;
+  resumeCount?: number;
+  continueCount?: number;
+  companionCreditedWisdom?: number;
 }
 
 export interface StatusDigest {
@@ -102,6 +106,8 @@ export interface Agent {
   paneId: string;
   repo: string;
   killedReason?: string;
+  restartCount?: number;
+  originalSpawnedAt?: string;
   resumeEnv?: string;
   resumeArgs?: string;
 }
@@ -111,6 +117,7 @@ export interface OrchestratorCycle {
   timestamp: string;
   completedAt?: string;
   activeMs: number;
+  interCycleGapMs?: number;
   agentsSpawned: string[];
   paneId?: string;
   claudeSessionId?: string;

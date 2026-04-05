@@ -353,6 +353,11 @@ export async function restartAgent(
     windowId, color, provider, agentConfig, paneCwd, claudeSessionId,
   });
 
+  // Preserve original spawn time (immutable after first restart)
+  const originalSpawnedAt = agent.originalSpawnedAt ?? agent.spawnedAt;
+  const restartCount = (agent.restartCount ?? 0) + 1;
+  const previousStatus = agent.status;
+
   // Update agent state in-place
   await state.updateAgent(cwd, sessionId, agentId, {
     status: 'running',
@@ -362,9 +367,13 @@ export async function restartAgent(
     spawnedAt: new Date().toISOString(),
     completedAt: null,
     killedReason: undefined,
+    originalSpawnedAt,
+    restartCount,
   });
 
   tmux.sendKeys(paneId, fullCmd);
+
+  emitHistoryEvent(sessionId, 'agent-restarted', { agentId, restartCount, originalSpawnedAt, previousStatus });
 }
 
 function nextReportNumber(cwd: string, sessionId: string, agentId: string): string {

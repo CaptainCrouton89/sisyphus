@@ -284,8 +284,9 @@ async function pollAllSessions(): Promise<void> {
       companion.moodUpdatedAt = new Date().toISOString();
       // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
       saveCompanion(companion);
-      for (const [sessionId] of trackedSessions) {
-        emitHistoryEvent(sessionId, 'signals-snapshot', { from: oldMood, to: newMood, signals });
+      const firstSessionId = trackedSessions.keys().next().value;
+      if (firstSessionId) {
+        emitHistoryEvent(firstSessionId, 'signals-snapshot', { from: oldMood, to: newMood, signals });
       }
     }
     // Late-night commentary (2-6am, throttled to once per 30min)

@@ -4,7 +4,7 @@ import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
 import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
-import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp } from './pane-monitor.js';
+import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, flushAgentTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { loadConfig } from '../shared/config.js';
 import { goalPath, cycleLogPath, sessionDir, sessionsDir, tmuxSessionName } from '../shared/paths.js';
@@ -15,7 +15,7 @@ import { generateSessionName, generateSentiment } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
-import { loadCompanion, saveCompanion, recordCommentary, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain } from './companion.js';
+import { loadCompanion, saveCompanion, recordCommentary, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain, computeWisdomGain } from './companion.js';
 import { SPINNER_VERBS } from '../shared/companion-render.js';
 import { generateCommentary, generateNickname } from './companion-commentary.js';
 import { showCommentaryPopup, showCommentaryPopupQueue } from './companion-popup.js';
@@ -316,6 +316,9 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
     await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
   }
 
+  const previousStatus = session.status;
+  let lostAgentCount = 0;
+
   if (session.status !== 'active') {
     // Determine which agents still have live panes
     const livePaneIds = new Set<string>();
@@ -336,12 +339,16 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
             completedAt: new Date().toISOString(),
             killedReason: 'session resumed — agent was still running',
           });
+          emitHistoryEvent(sessionId, 'agent-exited', { agentId: agent.id, status: 'lost', activeMs: agent.activeMs, reason: 'pane gone on resume' });
+          lostAgentCount++;
         }
       }
     }
   }
 
   await state.updateSessionStatus(cwd, sessionId, 'active');
+  await state.updateSession(cwd, sessionId, { resumeCount: (session.resumeCount ?? 0) + 1 });
+  emitHistoryEvent(sessionId, 'session-resumed', { previousStatus, lostAgentCount });
   await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
 
   // Reset counters based on existing agents
@@ -672,6 +679,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
       companionCreditedCycles: completedSession.orchestratorCycles.length,
       companionCreditedActiveMs: completedSession.activeMs,
       companionCreditedStrength: computeStrengthGain(completedSession.agents.length),
+      companionCreditedWisdom: computeWisdomGain(completedSession),
     });
     markEventCompletion();
     const leveledUp = companion.level > prevLevel;
@@ -726,7 +734,10 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
 }
 
 export async function handleContinue(sessionId: string, cwd: string): Promise<void> {
+  const session = state.getSession(cwd, sessionId);
   await state.continueSession(cwd, sessionId);
+  await state.updateSession(cwd, sessionId, { continueCount: (session.continueCount ?? 0) + 1 });
+  emitHistoryEvent(sessionId, 'session-continued', { cycleCount: session.orchestratorCycles.length, activeMs: session.activeMs });
 }
 
 export async function handleKill(sessionId: string, cwd: string): Promise<number> {
@@ -736,6 +747,8 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
 
   await flushTimers(sessionId);
   const session = state.getSession(cwd, sessionId);
+  const wallClockMs = Date.now() - new Date(session.createdAt).getTime();
+  await state.updateSession(cwd, sessionId, { wallClockMs });
   const windowId = orchestrator.getWindowId(sessionId);
 
   // Kill all running agents
@@ -782,7 +795,7 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   try { recomputeDots(); } catch { /* best-effort */ }
 
   const killedSession = state.getSession(cwd, sessionId);
-  emitHistoryEvent(sessionId, 'session-end', { status: 'killed', activeMs: killedSession.activeMs, agentCount: killedSession.agents.length, cycleCount: killedSession.orchestratorCycles.length });
+  emitHistoryEvent(sessionId, 'session-end', { status: 'killed', activeMs: killedSession.activeMs, wallClockMs: killedSession.wallClockMs ?? null, agentCount: killedSession.agents.length, cycleCount: killedSession.orchestratorCycles.length });
   writeSessionSummary(killedSession);
 
   console.log(`[sisyphus] Session ${sessionName} killed (${killedAgents} agents, ${Date.now() - t0}ms)`);
@@ -809,6 +822,9 @@ export async function handleKillAgent(sessionId: string, cwd: string, agentId: s
   // Unregister pane first so the pane monitor doesn't trigger a respawn
   unregisterAgentPane(sessionId, agentId);
 
+  // Flush timer before killing so we capture accumulated active time
+  const flushedActiveMs = flushAgentTimer(sessionId, agentId);
+
   // Kill the tmux pane
   if (agent.paneId) {
     tmux.killPane(agent.paneId);
@@ -818,11 +834,14 @@ export async function handleKillAgent(sessionId: string, cwd: string, agentId: s
     status: 'killed',
     killedReason: 'killed by user',
     completedAt: new Date().toISOString(),
+    activeMs: flushedActiveMs,
   });
+  emitHistoryEvent(sessionId, 'agent-killed', { agentId, status: 'killed', activeMs: flushedActiveMs, reason: 'killed by user' });
 }
 
 export async function handleRollback(sessionId: string, cwd: string, toCycle: number): Promise<{ sessionId: string; restoredToCycle: number }> {
   const session = state.getSession(cwd, sessionId);
+  const fromCycle = session.orchestratorCycles.length;
 
   // Validate cycle range
   if (toCycle < 1 || toCycle > session.orchestratorCycles.length) {
@@ -840,14 +859,21 @@ export async function handleRollback(sessionId: string, cwd: string, toCycle: nu
     );
   }
 
+  // Flush timers before reading activeMs values, then re-read state
+  await flushTimers(sessionId);
+  const flushedSession = state.getSession(cwd, sessionId);
+
+  // Capture rollback count BEFORE restore (restore wipes state)
+  const currentRollbackCount = (flushedSession.rollbackCount ?? 0) + 1;
+
   // Kill running agents (without completing session or killing window)
-  for (const agent of session.agents) {
+  let killedAgentCount = 0;
+  for (const agent of flushedSession.agents) {
     if (agent.status === 'running') {
-      await state.updateAgent(cwd, sessionId, agent.id, {
-        status: 'killed',
-        killedReason: 'session rolled back',
-        completedAt: new Date().toISOString(),
-      });
+      // Don't update agent state — restoreSnapshot() below will overwrite it anyway.
+      // History events are the only useful record that these agents were killed.
+      emitHistoryEvent(sessionId, 'agent-exited', { agentId: agent.id, status: 'killed', activeMs: agent.activeMs, reason: 'session rolled back' });
+      killedAgentCount++;
     }
   }
 
@@ -868,6 +894,10 @@ export async function handleRollback(sessionId: string, cwd: string, toCycle: nu
 
   // Delete snapshots for cycles after the rollback target
   state.deleteSnapshotsAfter(cwd, sessionId, toCycle);
+
+  // Emit rollback event and persist count AFTER restore (restore wipes state)
+  emitHistoryEvent(sessionId, 'rollback', { fromCycle, toCycle, killedAgentCount });
+  await state.updateSession(cwd, sessionId, { rollbackCount: currentRollbackCount });
 
   return { sessionId, restoredToCycle: toCycle };
 }

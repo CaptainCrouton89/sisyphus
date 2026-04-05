@@ -637,7 +637,7 @@ export function onSessionStart(companion: CompanionState, cwd: string): void {
  *
  * Returns 0-3 points per session.
  */
-function computeWisdomGain(session: Session): number {
+export function computeWisdomGain(session: Session): number {
   let wisdom = 0;
   const totalAgents = session.agents.length;
   const totalCycles = session.orchestratorCycles?.length ?? 0;
@@ -684,7 +684,9 @@ export function onSessionComplete(companion: CompanionState, session: Session): 
   if (allModes.has('completion') && !prevModes.has('completion')) companion.stats.patience += 1;
 
   // Wisdom: clean execution, parallelization, mode variety
-  companion.stats.wisdom += computeWisdomGain(session);
+  const creditedWisdom = session.companionCreditedWisdom ?? 0;
+  const totalWisdom = computeWisdomGain(session);
+  companion.stats.wisdom += Math.max(0, totalWisdom - creditedWisdom);
 
   // Repo memory
   updateRepoMemory(companion, session.cwd, 'completion');

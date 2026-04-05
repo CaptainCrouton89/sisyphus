@@ -330,6 +330,16 @@ function formatEventData(e: HistoryEvent): string {
       const durStr = durMs != null ? formatDuration(durMs) : '—';
       return `${c('cyan', d.type as string)}  ${durStr}  ${d.itemsReviewed}/${d.itemsTotal} reviewed`;
     }
+    case 'agent-killed':
+      return `${d.agentId}  ${fmtStatus(d.status as string)}  ${DIM}${formatDuration(d.activeMs as number)}${RESET}  ${d.reason ?? ''}`;
+    case 'agent-restarted':
+      return `${d.agentId}  restart #${d.restartCount}  ${DIM}was ${d.previousStatus}${RESET}`;
+    case 'rollback':
+      return `cycle ${d.fromCycle} → ${d.toCycle}  ${d.killedAgentCount} agents killed`;
+    case 'session-resumed':
+      return `was ${fmtStatus(d.previousStatus as string)}  ${d.lostAgentCount} agents lost`;
+    case 'session-continued':
+      return `${d.cycleCount} cycles  ${DIM}${formatDuration(d.activeMs as number)}${RESET}`;
     case 'session-end':
       return `${fmtStatus(d.status as string)}  ${formatDuration(d.activeMs as number)}  ${d.agentCount} agents  ${d.cycleCount} cycles`;
     default:
@@ -375,6 +385,50 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   // Avg session duration
   const avgMs = totalActiveMs / sessions.length;
 
+  // Efficiency
+  const efficiencyValues: number[] = [];
+  for (const { summary: s } of sessions) {
+    const eff = s.efficiency ?? (s.wallClockMs ? s.activeMs / s.wallClockMs : null);
+    if (eff != null) efficiencyValues.push(eff);
+  }
+  const avgEfficiency = efficiencyValues.length > 0
+    ? efficiencyValues.reduce((a, b) => a + b, 0) / efficiencyValues.length
+    : null;
+
+  // Duration distributions (p50/p90)
+  const sortedActiveMs = sessions.map(s => s.summary.activeMs).sort((a, b) => a - b);
+  const n = sortedActiveMs.length;
+  const p50Ms = n >= 3 ? sortedActiveMs[Math.ceil(50 / 100 * n) - 1]! : null;
+  const p90Ms = n >= 3 ? sortedActiveMs[Math.ceil(90 / 100 * n) - 1]! : null;
+
+  // Per-agent-type performance
+  const agentTypeMap = new Map<string, { count: number; totalMs: number; crashed: number; completed: number }>();
+  for (const { summary: s } of sessions) {
+    for (const a of s.agents) {
+      const type = a.agentType ?? 'untyped';
+      const entry = agentTypeMap.get(type) ?? { count: 0, totalMs: 0, crashed: 0, completed: 0 };
+      entry.count++;
+      entry.totalMs += a.activeMs;
+      if (a.status === 'crashed') entry.crashed++;
+      if (a.status === 'completed') entry.completed++;
+      agentTypeMap.set(type, entry);
+    }
+  }
+
+  // Temporal patterns
+  const hourBlocks = new Map<string, number>();
+  const dayCounts = new Map<string, number>();
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  for (const { summary: s } of sessions) {
+    const d = new Date(s.startedAt);
+    const hour = d.getHours();
+    const blockStart = hour - (hour % 2);
+    const blockLabel = `${String(blockStart).padStart(2, '0')}:00–${String(blockStart + 2).padStart(2, '0')}:00`;
+    hourBlocks.set(blockLabel, (hourBlocks.get(blockLabel) ?? 0) + 1);
+    const day = dayNames[d.getDay()]!;
+    dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
+  }
+
   if (opts.json) {
     console.log(JSON.stringify({
       total: sessions.length,
@@ -382,10 +436,23 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
       killed: killed.length,
       totalActiveMs,
       avgActiveMs: Math.round(avgMs),
+      avgEfficiency,
+      p50Ms,
+      p90Ms,
       totalAgents,
       totalCycles,
       totalMessages,
       byProject: Object.fromEntries([...byProject.entries()].map(([k, v]) => [k, v])),
+      agentTypes: Object.fromEntries([...agentTypeMap.entries()].map(([k, v]) => [k, {
+        ...v,
+        avgMs: Math.round(v.totalMs / v.count),
+        crashRate: v.count > 0 ? v.crashed / v.count : 0,
+        completionRate: v.count > 0 ? v.completed / v.count : 0,
+      }])),
+      temporalPatterns: sessions.length >= 5 ? {
+        hourBlocks: Object.fromEntries(hourBlocks),
+        dayOfWeek: Object.fromEntries(dayCounts),
+      } : null,
     }, null, 2));
     return;
   }
@@ -393,7 +460,13 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   console.log(`${BOLD}Session History Stats${RESET}`);
   console.log('');
   console.log(`  ${BOLD}Sessions:${RESET}  ${sessions.length} total  ${c('cyan', `${completed.length} completed`)}  ${c('red', `${killed.length} killed`)}`);
-  console.log(`  ${BOLD}Time:${RESET}      ${formatDuration(totalActiveMs)} total  ${formatDuration(avgMs)} avg`);
+  const timeLine = `  ${BOLD}Time:${RESET}      ${formatDuration(totalActiveMs)} total  ${formatDuration(avgMs)} avg` +
+    (p50Ms != null && p90Ms != null ? `  ${DIM}p50=${formatDuration(p50Ms)} p90=${formatDuration(p90Ms)}${RESET}` : '');
+  console.log(timeLine);
+  if (avgEfficiency != null) {
+    const effColor = avgEfficiency >= 0.7 ? 'green' : avgEfficiency >= 0.4 ? 'yellow' : 'red';
+    console.log(`  ${BOLD}Efficiency:${RESET} ${c(effColor, (avgEfficiency * 100).toFixed(1) + '%')}  ${DIM}(${efficiencyValues.length} sessions with data)${RESET}`);
+  }
   console.log(`  ${BOLD}Agents:${RESET}    ${totalAgents} spawned (${(totalAgents / sessions.length).toFixed(1)} avg/session)`);
   console.log(`  ${BOLD}Cycles:${RESET}    ${totalCycles} total (${(totalCycles / sessions.length).toFixed(1)} avg/session)`);
   console.log(`  ${BOLD}Messages:${RESET}  ${totalMessages} total`);
@@ -403,6 +476,33 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   const sorted = [...byProject.entries()].sort((a, b) => b[1].count - a[1].count);
   for (const [proj, data] of sorted) {
     console.log(`  ${c('gray', fmtProject(proj))}  ${data.count} sessions  ${formatDuration(data.activeMs)}  ${data.agents} agents`);
+  }
+
+  // Per-agent-type performance table
+  if (agentTypeMap.size > 0) {
+    console.log('');
+    console.log(`${BOLD}By Agent Type${RESET}`);
+    const typeHeader = `  ${'Type'.padEnd(20)} ${'Count'.padStart(6)} ${'Avg Time'.padStart(10)} ${'Crash %'.padStart(8)} ${'Done %'.padStart(8)}`;
+    console.log(`${DIM}${typeHeader}${RESET}`);
+    const sortedTypes = [...agentTypeMap.entries()].sort((a, b) => b[1].count - a[1].count);
+    for (const [type, data] of sortedTypes) {
+      const avgTime = formatDuration(data.totalMs / data.count);
+      const crashRate = data.count > 0 ? ((data.crashed / data.count) * 100).toFixed(0) + '%' : '0%';
+      const completionRate = data.count > 0 ? ((data.completed / data.count) * 100).toFixed(0) + '%' : '0%';
+      const crashColor = data.crashed > 0 ? 'red' : 'green';
+      console.log(`  ${type.padEnd(20)} ${String(data.count).padStart(6)} ${avgTime.padStart(10)} ${c(crashColor, crashRate.padStart(8))} ${c('cyan', completionRate.padStart(8))}`);
+    }
+  }
+
+  // Temporal patterns
+  if (sessions.length >= 5) {
+    console.log('');
+    console.log(`${BOLD}Temporal Patterns${RESET}`);
+    const topBlocks = [...hourBlocks.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    console.log(`  ${DIM}Busiest times:${RESET}  ${topBlocks.map(([label, count]) => `${label} (${count})`).join('  ')}`);
+    const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayParts = dayOrder.map(d => `${d} ${dayCounts.get(d) ?? 0}`);
+    console.log(`  ${DIM}By day:${RESET}         ${dayParts.join('  ')}`);
   }
 }
 

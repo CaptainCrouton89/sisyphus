@@ -12,7 +12,12 @@ export type HistoryEventType =
   | 'session-named'
   | 'agent-nicknamed'
   | 'review-started'
-  | 'review-completed';
+  | 'review-completed'
+  | 'agent-killed'
+  | 'agent-restarted'
+  | 'rollback'
+  | 'session-resumed'
+  | 'session-continued';
 
 export interface HistoryEvent {
   ts: string;
@@ -37,6 +42,7 @@ export interface SessionSummaryAgent {
   activeMs: number;
   spawnedAt: string;
   completedAt: string | null;
+  restartCount?: number;
 }
 
 export interface SessionSummaryCycle {
@@ -77,6 +83,11 @@ export interface SessionSummary {
   messages: SessionSummaryMessage[];
   finalMoodSignals: MoodSignals | null;
   achievements: string[];
+  crashCount: number;
+  lostCount: number;
+  killedAgentCount: number;
+  rollbackCount: number;
+  efficiency: number | null;
   xpGained: number;
   sentiment: string | null;
   reviews?: ReviewTiming[];

@@ -44,6 +44,11 @@ export function writeSessionSummary(
       activeMs: session.activeMs,
       wallClockMs: session.wallClockMs ?? null,
       agentCount: session.agents.length,
+      crashCount: session.agents.filter(a => a.status === 'crashed').length,
+      lostCount: session.agents.filter(a => a.status === 'lost').length,
+      killedAgentCount: session.agents.filter(a => a.status === 'killed').length,
+      rollbackCount: session.rollbackCount ?? 0,
+      efficiency: session.wallClockMs ? session.activeMs / session.wallClockMs : null,
       cycleCount: session.orchestratorCycles.length,
       context: session.context ?? null,
       completionReport: session.completionReport ?? null,
@@ -56,6 +61,7 @@ export function writeSessionSummary(
         activeMs: a.activeMs,
         spawnedAt: a.spawnedAt,
         completedAt: a.completedAt,
+        restartCount: a.restartCount ?? 0,
       })),
       cycles: session.orchestratorCycles.map(c => ({
         cycle: c.cycle,
@@ -154,12 +160,20 @@ export function pruneHistory(): void {
         const summary = JSON.parse(raw) as { startedAt?: string };
         sessions.push({ dir, startedAt: new Date(summary.startedAt ?? 0).getTime() });
       } catch {
-        // No session.json — fall back to dir mtime
+        // No session.json — try first line of events.jsonl for stable creation timestamp
         try {
-          const st = statSync(dir);
-          sessions.push({ dir, startedAt: st.mtimeMs });
+          const eventsPath = join(dir, 'events.jsonl');
+          const firstLine = readFileSync(eventsPath, 'utf-8').split('\n')[0];
+          const firstEvent = JSON.parse(firstLine) as { ts?: string };
+          sessions.push({ dir, startedAt: new Date(firstEvent.ts ?? 0).getTime() });
         } catch {
-          continue;
+          // Fall back to dir mtime only if events.jsonl is unreadable
+          try {
+            const st = statSync(dir);
+            sessions.push({ dir, startedAt: st.mtimeMs });
+          } catch {
+            continue;
+          }
         }
       }
     }
