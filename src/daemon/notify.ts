@@ -58,8 +58,8 @@ function ensureSwitchScript(): void {
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(scriptPath, SWITCH_SCRIPT, { mode: 0o755 });
-  } catch {
-    // Best effort
+  } catch (err) {
+    console.error('[sisyphus] Failed to write notification switch script:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -132,7 +132,9 @@ export function sendTerminalNotification(titleOrOpts: string | NotificationOptio
       execFile('osascript', [
         '-e',
         `display notification "${msg.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"`,
-      ], () => {});
+      ], (osErr) => {
+        if (osErr) console.error('[sisyphus] All notification methods failed:', osErr instanceof Error ? osErr.message : osErr);
+      });
     }
   });
 }

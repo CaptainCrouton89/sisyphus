@@ -34,7 +34,9 @@ function readGoal(cwd: string, sessionId: string, fallback: string): string {
   try {
     const p = goalPath(cwd, sessionId);
     if (existsSync(p)) return readFileSync(p, 'utf-8').trim();
-  } catch { /* fall through */ }
+  } catch (err) {
+    console.error('[sisyphus] Failed to read goal file:', err instanceof Error ? err.message : err);
+  }
   return fallback;
 }
 
@@ -65,7 +67,10 @@ function fireHaikuNaming(
 
     try {
       tmux.renameSession(renameTarget, candidate);
-    } catch { return; }
+    } catch (err) {
+      console.error('[sisyphus] Failed to rename tmux session:', err instanceof Error ? err.message : err);
+      return;
+    }
 
     await state.updateSessionName(cwd, sessionId, finalName);
     const windowId = currentSession.tmuxWindowId!;
@@ -104,9 +109,13 @@ function fireCommentary(event: CommentaryEvent, companion: CompanionState, conte
         recordCommentary(c, text, event);
         saveCompanion(c);
         if (flash) showCommentaryPopup(text);
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        console.error('[sisyphus] Failed to record commentary:', err instanceof Error ? err.message : err);
+      }
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    console.error('[sisyphus] Commentary generation failed:', err instanceof Error ? err.message : err);
+  });
 }
 
 /**
@@ -130,13 +139,17 @@ function fireCompletionCommentary(
         const c = loadCompanion();
         recordCommentary(c, text, events[i].event);
         saveCompanion(c);
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        console.error('[sisyphus] Failed to record completion commentary:', err instanceof Error ? err.message : err);
+      }
       pages.push({ text, title: events[i].popupTitle });
     }
     if (pages.length > 0) {
       showCommentaryPopupQueue(pages);
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    console.error('[sisyphus] Completion commentary generation failed:', err instanceof Error ? err.message : err);
+  });
 }
 
 function switchToHomeSession(session: Session): void {
@@ -192,7 +205,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
     fireHaikuNaming(sessionId, cwd, tmuxName, task);
   }
 
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
   // Companion hook — fire-and-forget, errors must not break session flow
   try {
@@ -200,7 +213,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
     onSessionStart(companion, cwd);
     saveCompanion(companion);
     fireCommentary('session-start', companion, task);
-  } catch { /* companion errors are non-fatal */ }
+  } catch (err) { console.error('[sisyphus] Companion session-start hook failed:', err instanceof Error ? err.message : err); }
 
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
 }
@@ -286,14 +299,14 @@ It is the other session's responsibility. You do not need to monitor it.
   // 9. Housekeeping
   pruneOldSessions(cwd);
   pruneHistory();
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
   try {
     const companion = loadCompanion();
     onSessionStart(companion, cwd);
     saveCompanion(companion);
     fireCommentary('session-start', companion, goal);
-  } catch { /* companion errors are non-fatal */ }
+  } catch (err) { console.error('[sisyphus] Companion session-start hook failed:', err instanceof Error ? err.message : err); }
 
   // 10. Return
   return { ...state.getSession(cwd, cloneId), tmuxSessionName: tmuxName };
@@ -465,7 +478,7 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
     tmux.killPane(initialPaneId);
   }
 
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
   return state.getSession(cwd, sessionId);
 }
 
@@ -568,9 +581,9 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         const log = readFileSync(logPath, 'utf-8').trim();
         if (log) cycleCtx += `\nCycle log: ${truncate(log, 200)}`;
       }
-    } catch { /* best-effort */ }
+    } catch (err) { console.error('[sisyphus] Failed to read cycle log:', err instanceof Error ? err.message : err); }
     fireCommentary('cycle-boundary', companion, cycleCtx, true);
-  } catch { /* non-fatal */ }
+  } catch (err) { console.error('[sisyphus] Companion cycle-boundary hook failed:', err instanceof Error ? err.message : err); }
 
   // Respawn on next tick — agents already finished, no delay needed
   setImmediate(async () => {
@@ -620,7 +633,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         }
       }
       tmux.selectLayout(activeWindowId);
-      try { recomputeDots(); } catch { /* best-effort */ }
+      try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
       const config = loadConfig(cwd);
       if (config.notifications?.enabled !== false) {
@@ -673,7 +686,7 @@ export async function handleSpawn(
 
   emitHistoryEvent(sessionId, 'agent-spawned', { agentId: agent.id, name, agentType, instruction: instruction.slice(0, 500), repo });
 
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
   // Companion hook — fire-and-forget, errors must not break session flow
   try {
@@ -682,18 +695,22 @@ export async function handleSpawn(
     saveCompanion(companion);
     generateNickname(companion).then(nickname => {
       if (nickname) {
-        state.updateAgent(cwd, sessionId, agent.id, { nickname }).catch(() => {});
+        state.updateAgent(cwd, sessionId, agent.id, { nickname }).catch((err) => {
+          console.error('[sisyphus] Failed to save agent nickname:', err instanceof Error ? err.message : err);
+        });
         emitHistoryEvent(sessionId, 'agent-nicknamed', { agentId: agent.id, nickname });
       }
-    }).catch(() => {});
-  } catch { /* companion errors are non-fatal */ }
+    }).catch((err) => {
+      console.error('[sisyphus] Nickname generation failed:', err instanceof Error ? err.message : err);
+    });
+  } catch (err) { console.error('[sisyphus] Companion agent-spawned hook failed:', err instanceof Error ? err.message : err); }
 
   return { agentId: agent.id };
 }
 
 export async function handleSubmit(cwd: string, sessionId: string, agentId: string, report: string, windowId: string): Promise<void> {
   const allDone = await handleAgentSubmit(cwd, sessionId, agentId, report);
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
   if (allDone) {
     const config = loadConfig(cwd);
     if (config.notifications?.enabled !== false) {
@@ -725,7 +742,7 @@ export async function handleYield(sessionId: string, cwd: string, nextPrompt?: s
 
   // Mark orchestrator as done for this cycle — unblocks respawn
   orchestratorDone.add(sessionId);
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
   const session = state.getSession(cwd, sessionId);
   const hasRunningAgents = session.agents.some(a => a.status === 'running');
@@ -765,7 +782,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   clearAgentCounter(sessionId);
   orchestratorDone.delete(sessionId);
 
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
   const completedSession = state.getSession(cwd, sessionId);
   emitHistoryEvent(sessionId, 'session-end', { status: 'completed', activeMs: completedSession.activeMs, wallClockMs: completedSession.wallClockMs ?? null, agentCount: completedSession.agents.length, cycleCount: completedSession.orchestratorCycles.length, completionReport: completedSession.completionReport ?? null });
@@ -787,7 +804,9 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     if (sentiment) {
       writeSessionSummary(completedSession, { sentiment });
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    console.error('[sisyphus] Sentiment generation failed:', err instanceof Error ? err.message : err);
+  });
 
   // Companion hook — fire-and-forget, errors must not break session flow
   try {
@@ -840,7 +859,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     }
 
     fireCompletionCommentary(completionEvents);
-  } catch { /* companion errors are non-fatal */ }
+  } catch (err) { console.error('[sisyphus] Companion session-complete hook failed:', err instanceof Error ? err.message : err); }
 
   switchToHomeSession(session);
 
@@ -913,7 +932,7 @@ export async function handleKill(sessionId: string, cwd: string): Promise<number
   clearAgentCounter(sessionId);
   orchestratorDone.delete(sessionId);
 
-  try { recomputeDots(); } catch { /* best-effort */ }
+  try { recomputeDots(); } catch (err) { console.error('[sisyphus] recomputeDots failed:', err instanceof Error ? err.message : err); }
 
   const killedSession = state.getSession(cwd, sessionId);
   emitHistoryEvent(sessionId, 'session-end', { status: 'killed', activeMs: killedSession.activeMs, wallClockMs: killedSession.wallClockMs ?? null, agentCount: killedSession.agents.length, cycleCount: killedSession.orchestratorCycles.length });
@@ -1057,7 +1076,7 @@ export async function handlePaneExited(
       const running = freshSession.agents.filter(a => a.status === 'running').length;
       crashCtx += `\n${running}/${freshSession.agents.length} agents still running`;
       fireCommentary('agent-crash', companion, crashCtx);
-    } catch { /* companion errors are non-fatal */ }
+    } catch (err) { console.error('[sisyphus] Companion agent-crash hook failed:', err instanceof Error ? err.message : err); }
 
     if (allDone) {
       const windowId = orchestrator.getWindowId(sessionId) ?? session.tmuxWindowId;

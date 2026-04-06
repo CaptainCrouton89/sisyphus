@@ -47,7 +47,10 @@ export function loadSessionRegistry(): Record<string, string> {
   if (!existsSync(p)) return {};
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, string>;
-  } catch {
+  } catch (err) {
+    if (existsSync(p)) {
+      console.error('[sisyphus] Failed to parse session registry:', err instanceof Error ? err.message : err);
+    }
     return {};
   }
 }
@@ -108,7 +111,7 @@ function collectAllSessionIds(): Map<string, string> {
           idToCwd.set(entry.name, cwd);
         }
       }
-    } catch { /* skip unreadable dirs */ }
+    } catch (err) { console.error(`[sisyphus] Failed to scan session dirs in ${cwd}:`, err instanceof Error ? err.message : err); }
   }
 
   return idToCwd;
@@ -538,6 +541,11 @@ export function startServer(): Promise<Server> {
           handleRequest(req).then((res) => {
             if (!conn.destroyed) {
               conn.write(JSON.stringify(res) + '\n');
+            }
+          }).catch((err) => {
+            console.error('[sisyphus] Unhandled error in request handler:', err instanceof Error ? err.message : err);
+            if (!conn.destroyed) {
+              conn.write(JSON.stringify({ ok: false, error: 'Internal server error' }) + '\n');
             }
           });
         }

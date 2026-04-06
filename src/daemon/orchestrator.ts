@@ -30,7 +30,7 @@ function detectRepos(cwd: string): RepoInfo[] {
 
   // Check if session root is a git repo
   if (existsSync(join(cwd, '.git'))) {
-    try { repos.push(getRepoInfo(cwd, '.')); } catch { /* skip unreadable root repo */ }
+    try { repos.push(getRepoInfo(cwd, '.')); } catch (err) { console.error('[sisyphus] Failed to read root repo info:', err instanceof Error ? err.message : err); }
   }
 
   // Scan immediate children for git repos
@@ -41,10 +41,10 @@ function detectRepos(cwd: string): RepoInfo[] {
       if (entry.name.startsWith('.')) continue;
       const childPath = join(cwd, entry.name);
       if (existsSync(join(childPath, '.git'))) {
-        try { repos.push(getRepoInfo(childPath, entry.name)); } catch { /* skip unreadable repo */ }
+        try { repos.push(getRepoInfo(childPath, entry.name)); } catch (err) { console.error(`[sisyphus] Failed to read repo info for ${entry.name}:`, err instanceof Error ? err.message : err); }
       }
     }
-  } catch { /* ignore read errors */ }
+  } catch (err) { console.error('[sisyphus] Failed to scan for child repos:', err instanceof Error ? err.message : err); }
 
   // Filter by config.repos if present
   if (config.repos && config.repos.length > 0) {

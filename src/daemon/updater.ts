@@ -24,7 +24,9 @@ function readPackageVersion(): string {
       const raw = readFileSync(resolve(import.meta.dirname, rel), 'utf-8');
       const pkg = JSON.parse(raw) as { name?: string; version?: string };
       if (pkg.name === 'sisyphi' && pkg.version) return pkg.version;
-    } catch {}
+    } catch (err) {
+      console.error('[sisyphus] Failed to read package.json:', err instanceof Error ? err.message : err);
+    }
   }
   return '0.0.0';
 }
@@ -94,11 +96,11 @@ export function applyUpdate(expectedVersion: string): boolean {
 }
 
 function markUpdating(version: string): void {
-  try { writeFileSync(daemonUpdatingPath(), version, 'utf-8'); } catch {}
+  try { writeFileSync(daemonUpdatingPath(), version, 'utf-8'); } catch (err) { console.error('[sisyphus] Failed to write updating marker:', err instanceof Error ? err.message : err); }
 }
 
 function clearUpdating(): void {
-  try { unlinkSync(daemonUpdatingPath()); } catch {}
+  try { unlinkSync(daemonUpdatingPath()); } catch (err) { console.error('[sisyphus] Failed to clear updating marker:', err instanceof Error ? err.message : err); }
 }
 
 function isLinkedInstall(): boolean {

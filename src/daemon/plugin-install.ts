@@ -49,7 +49,7 @@ export function installPlugin(): void {
     // Ensure hook script is executable
     const hookScript = join(INSTALL_DIR, 'hooks', 'tmux-state.sh');
     if (existsSync(hookScript)) {
-      try { chmodSync(hookScript, 0o755); } catch { /* best-effort */ }
+      try { chmodSync(hookScript, 0o755); } catch (err) { console.error('[sisyphus] Failed to chmod hook script:', err instanceof Error ? err.message : err); }
     }
     console.log(`[plugin-install] Installed ${PLUGIN_NAME} to ${INSTALL_DIR}`);
   } catch (err) {

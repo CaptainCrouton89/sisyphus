@@ -20,8 +20,8 @@ export function emitHistoryEvent(sessionId: string, event: HistoryEventType, dat
     ensureDir(sessionId);
     const line = JSON.stringify({ ts: new Date().toISOString(), event, sessionId, data }) + '\n';
     appendFileSync(historyEventsPath(sessionId), line, 'utf-8');
-  } catch {
-    // Fire-and-forget — history is best-effort
+  } catch (err) {
+    console.error('[sisyphus] Failed to emit history event:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -189,7 +189,7 @@ export function pruneHistory(): void {
         rmSync(sessions[i].dir, { recursive: true, force: true });
       }
     }
-  } catch {
-    // Pruning is best-effort
+  } catch (err) {
+    console.error('[sisyphus] History pruning failed:', err instanceof Error ? err.message : err);
   }
 }

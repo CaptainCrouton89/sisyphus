@@ -121,7 +121,7 @@ function stopDaemon(): boolean {
   console.error(`[sisyphus] Daemon (pid ${pid}) did not exit within 5s, sending SIGKILL`);
   try {
     process.kill(pid, 'SIGKILL');
-  } catch { /* already dead */ }
+  } catch (err) { console.error('[sisyphus] SIGKILL failed (process may already be dead):', err instanceof Error ? err.message : err); }
   releasePidLock();
   return true;
 }
@@ -295,8 +295,8 @@ async function startDaemon(): Promise<void> {
   setRespawnCallback(onAllAgentsDone);
   setDotsCallback(() => {
     recomputeDots();
-    try { writeManifest(); } catch { /* best-effort */ }
-    try { compositor.render(); } catch { /* best-effort */ }
+    try { writeManifest(); } catch (err) { console.error('[sisyphus] Manifest write failed:', err instanceof Error ? err.message : err); }
+    try { compositor.render(); } catch (err) { console.error('[sisyphus] Compositor render failed:', err instanceof Error ? err.message : err); }
   });
   setTrackedEntriesProvider(getTrackedSessionEntries);
 
@@ -304,7 +304,7 @@ async function startDaemon(): Promise<void> {
   startMonitor(config.pollIntervalMs);
 
   await recoverSessions();
-  try { compositor.render(); } catch { /* best-effort */ }
+  try { compositor.render(); } catch (err) { console.error('[sisyphus] Compositor render failed:', err instanceof Error ? err.message : err); }
 
   if (config.autoUpdate !== false) {
     startPeriodicUpdateCheck();
@@ -316,9 +316,9 @@ async function startDaemon(): Promise<void> {
     stopMonitor();
     // Persist all in-memory active time accumulators before exiting
     for (const sessionId of getTrackedSessionIds()) {
-      try { await flushTimers(sessionId); } catch { /* best-effort */ }
+      try { await flushTimers(sessionId); } catch (err) { console.error('[sisyphus] Failed to flush timers for session:', err instanceof Error ? err.message : err); }
     }
-    try { writeEmptyManifest(); } catch { /* best-effort */ }
+    try { writeEmptyManifest(); } catch (err) { console.error('[sisyphus] Failed to write empty manifest:', err instanceof Error ? err.message : err); }
     await stopServer();
     releasePidLock();
     process.exit(0);

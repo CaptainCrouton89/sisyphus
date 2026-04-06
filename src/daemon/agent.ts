@@ -44,7 +44,8 @@ function renderAgentSuffix(sessionId: string, instruction: string): string {
   let template: string;
   try {
     template = readFileSync(templatePath, 'utf-8');
-  } catch {
+  } catch (err) {
+    console.error('[sisyphus] Failed to read agent suffix template, using fallback:', err instanceof Error ? err.message : err);
     template = `# Sisyphus Agent\nSession: {{SESSION_ID}}\nTask: {{INSTRUCTION}}`;
   }
 
@@ -344,7 +345,7 @@ export async function restartAgent(
 
   // Kill old pane if it still exists
   if (agent.paneId) {
-    try { tmux.killPane(agent.paneId); } catch { /* already dead */ }
+    try { tmux.killPane(agent.paneId); } catch (err) { console.error('[sisyphus] Failed to kill old agent pane (may already be dead):', err instanceof Error ? err.message : err); }
     unregisterAgentPane(sessionId, agentId);
   }
 
@@ -414,7 +415,9 @@ export async function handleAgentReport(
     if (aiSummary) {
       await state.updateReportSummary(cwd, sessionId, agentId, filePath, aiSummary);
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    console.error('[sisyphus] Report summarization failed:', err instanceof Error ? err.message : err);
+  });
 }
 
 export async function handleAgentSubmit(
@@ -442,7 +445,9 @@ export async function handleAgentSubmit(
     if (aiSummary) {
       await state.updateReportSummary(cwd, sessionId, agentId, filePath, aiSummary);
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    console.error('[sisyphus] Report summarization failed:', err instanceof Error ? err.message : err);
+  });
 
   const flushedActiveMs = flushAgentTimer(sessionId, agentId);
   await state.updateAgent(cwd, sessionId, agentId, {
@@ -461,7 +466,7 @@ export async function handleAgentSubmit(
   if (agent?.paneId) {
     unregisterAgentPane(sessionId, agentId);
     if (!allDone) {
-      try { tmux.killPane(agent.paneId); } catch { /* already dead */ }
+      try { tmux.killPane(agent.paneId); } catch (err) { console.error('[sisyphus] Failed to kill agent pane (may already be dead):', err instanceof Error ? err.message : err); }
     }
   }
 

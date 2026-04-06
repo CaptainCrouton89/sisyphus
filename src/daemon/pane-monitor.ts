@@ -166,7 +166,7 @@ export function trackSession(sessionId: string, cwd: string, tmuxSessionId: stri
     try {
       const session = state.getSession(cwd, sessionId);
       initTimers(sessionId, session);
-    } catch { /* state may not exist yet in edge cases — pollSession will init lazily */ }
+    } catch (err) { console.error(`[sisyphus] Failed to init timers for session ${sessionId} (will retry lazily):`, err instanceof Error ? err.message : err); }
   }
 }
 
@@ -198,7 +198,7 @@ async function pollAllSessions(): Promise<void> {
   }
 
   // Recompute status dots after polling all sessions
-  try { onDotsUpdate?.(); } catch { /* best-effort */ }
+  try { onDotsUpdate?.(); } catch (err) { console.error('[sisyphus] Dots update callback failed:', err instanceof Error ? err.message : err); }
 
   // Companion mood update — errors must never break the monitor loop
   try {
@@ -257,7 +257,7 @@ async function pollAllSessions(): Promise<void> {
             }
           }
         }
-      } catch { /* best-effort per-session */ }
+      } catch (err) { console.error(`[sisyphus] Failed to read session state for mood signals:`, err instanceof Error ? err.message : err); }
     }
 
     const timerKeys = [...activeTimers.keys()];
@@ -275,9 +275,11 @@ async function pollAllSessions(): Promise<void> {
                 const c = loadCompanion();
                 recordCommentary(c, text, 'idle-wake');
                 saveCompanion(c);
-              } catch { /* non-fatal */ }
+              } catch (err) { console.error('[sisyphus] Failed to record idle-wake commentary:', err instanceof Error ? err.message : err); }
             }
-          }).catch(() => {});
+          }).catch((err) => {
+            console.error('[sisyphus] Idle-wake commentary generation failed:', err instanceof Error ? err.message : err);
+          });
         }
       }
       idleStartTime = 0;
@@ -339,7 +341,7 @@ async function pollAllSessions(): Promise<void> {
           const taskSnip = s.task.length > 80 ? s.task.slice(0, 80) + '...' : s.task;
           lateCtx += `\n- ${taskSnip}`;
           if (lateCtx.length > 300) break;
-        } catch { /* skip */ }
+        } catch (err) { console.error('[sisyphus] Failed to read session for late-night context:', err instanceof Error ? err.message : err); }
       }
       generateCommentary('late-night', companion, lateCtx).then(text => {
         if (text) {
@@ -348,13 +350,15 @@ async function pollAllSessions(): Promise<void> {
             recordCommentary(c, text, 'late-night');
             saveCompanion(c);
             showCommentaryPopup(text);
-          } catch { /* non-fatal */ }
+          } catch (err) { console.error('[sisyphus] Failed to record late-night commentary:', err instanceof Error ? err.message : err); }
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('[sisyphus] Late-night commentary generation failed:', err instanceof Error ? err.message : err);
+      });
     }
 
     lastMoodCompute = nowMs;
-  } catch { /* companion poll failures are non-fatal */ }
+  } catch (err) { console.error('[sisyphus] Companion mood poll failed:', err instanceof Error ? err.message : err); }
 }
 
 async function pollSession(

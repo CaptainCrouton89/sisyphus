@@ -116,5 +116,5 @@ done
       ].join(' ');
       execSafe(`tmux display-popup ${args}`);
     }
-  } catch { /* non-fatal */ }
+  } catch (err) { console.error('[sisyphus] Companion popup failed:', err instanceof Error ? err.message : err); }
 }
