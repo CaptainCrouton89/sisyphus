@@ -364,10 +364,10 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const npmBinDir = resolveNpmBinDir();
 
   const envExports = buildEnvExports([
-    `export SISYPHUS_SESSION_ID='${sessionId}'`,
+    `export SISYPHUS_SESSION_ID=${shellQuote(sessionId)}`,
     `export SISYPHUS_AGENT_ID='orchestrator'`,
-    `export SISYPHUS_CWD='${cwd}'`,
-    `export SISYPHUS_SESSION_DIR='${sesDir}'`,
+    `export SISYPHUS_CWD=${shellQuote(cwd)}`,
+    `export SISYPHUS_SESSION_DIR=${shellQuote(sesDir)}`,
     `export PATH="${npmBinDir}:$PATH"`,
   ]);
 
@@ -409,9 +409,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const notifyEnabled = config.notifications?.enabled !== false ? '1' : '0';
   const notifySound = config.notifications?.sound ?? '/System/Library/Sounds/Hero.aiff';
   const notifyEnvExports = buildEnvExports([
-    `export SISYPHUS_NOTIFY_ENABLED='${notifyEnabled}'`,
-    `export SISYPHUS_NOTIFY_SOUND='${notifySound}'`,
-    `export SISYPHUS_SESSION_NAME='${sessionLabel}'`,
+    `export SISYPHUS_NOTIFY_ENABLED=${shellQuote(notifyEnabled)}`,
+    `export SISYPHUS_NOTIFY_SOUND=${shellQuote(notifySound)}`,
+    `export SISYPHUS_SESSION_NAME=${shellQuote(sessionLabel)}`,
   ]);
 
   const bannerCmd = resolveBannerCmd();

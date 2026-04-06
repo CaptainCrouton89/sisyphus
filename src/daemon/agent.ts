@@ -186,10 +186,10 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   const sesDir = sessionDir(cwd, sessionId);
 
   const envExports = buildEnvExports([
-    `export SISYPHUS_SESSION_ID='${sessionId}'`,
-    `export SISYPHUS_AGENT_ID='${agentId}'`,
-    `export SISYPHUS_CWD='${cwd}'`,
-    `export SISYPHUS_SESSION_DIR='${sesDir}'`,
+    `export SISYPHUS_SESSION_ID=${shellQuote(sessionId)}`,
+    `export SISYPHUS_AGENT_ID=${shellQuote(agentId)}`,
+    `export SISYPHUS_CWD=${shellQuote(cwd)}`,
+    `export SISYPHUS_SESSION_DIR=${shellQuote(sesDir)}`,
     `export PATH="${npmBinDir}:$PATH"`,
   ]);
 

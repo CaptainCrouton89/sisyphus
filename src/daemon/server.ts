@@ -1,9 +1,10 @@
 import { createServer, type Server } from 'node:net';
-import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync, rmSync, chmodSync } from 'node:fs';
 import { socketPath, globalDir, messagesDir, sessionsDir } from '../shared/paths.js';
 import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
 import type { MessageSource } from '../shared/types.js';
+import { validateSessionId, validateRepoName } from '../shared/shell.js';
 import * as sessionManager from './session-manager.js';
 import { loadCompanion, saveCompanion } from './companion.js';
 import * as state from './state.js';
@@ -159,8 +160,11 @@ function ensureTracked(id: string, idToCwd: Map<string, string>): void {
 
 async function handleRequest(req: Request): Promise<Response> {
   try {
-    // Resolve partial session IDs before dispatching
+    // Validate session IDs to prevent path traversal
     if ('sessionId' in req && req.sessionId) {
+      if (!validateSessionId(req.sessionId)) {
+        return { ok: false, error: `Invalid session ID: must contain only alphanumeric characters, hyphens, and underscores` };
+      }
       const resolved = resolvePartialSessionId(req.sessionId);
       if ('error' in resolved) return resolved.error;
       (req as Record<string, unknown>).sessionId = resolved.id;
@@ -200,6 +204,10 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'spawn': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
+        // Validate repo name to prevent path traversal from IPC clients bypassing CLI
+        if (req.repo && req.repo !== '.' && !validateRepoName(req.repo)) {
+          return { ok: false, error: 'Invalid repo name: must be a simple directory name without path separators or ".."' };
+        }
         const result = await sessionManager.handleSpawn(req.sessionId, tracking.cwd, req.agentType, req.name, req.instruction, req.repo);
         return { ok: true, data: { agentId: result.agentId } };
       }
@@ -554,6 +562,10 @@ export function startServer(): Promise<Server> {
     server.on('error', reject);
 
     server.listen(sock, () => {
+      // Restrict socket permissions to owner-only (prevent other users on multi-user systems)
+      try {
+        chmodSync(sock, 0o600);
+      } catch { /* best-effort — some platforms may not support this */ }
       console.log(`[sisyphus] Daemon listening on ${sock}`);
       resolve(server!);
     });

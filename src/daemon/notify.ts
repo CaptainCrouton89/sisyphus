@@ -2,6 +2,7 @@ import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { escapeAppleScript } from '../shared/shell.js';
 
 export interface NotificationOptions {
   title: string;
@@ -128,10 +129,10 @@ export function sendTerminalNotification(titleOrOpts: string | NotificationOptio
   // Fallback: terminal-notifier (no click action)
   execFile('terminal-notifier', ['-title', title, '-message', msg], (err) => {
     if (err) {
-      // Last resort: osascript
+      // Last resort: osascript — use escapeAppleScript for safe string interpolation
       execFile('osascript', [
         '-e',
-        `display notification "${msg.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"`,
+        `display notification "${escapeAppleScript(msg)}" with title "${escapeAppleScript(title)}"`,
       ], () => {});
     }
   });

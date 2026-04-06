@@ -1,5 +1,6 @@
 import { writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { shellQuote } from '../shared/shell.js';
 
 export function resolveCliBin(): string {
   return resolve(import.meta.dirname, 'cli.js');
@@ -23,7 +24,7 @@ export function buildEnvExports(statements: string[]): string {
 /** Builds the notify command for a given pane. */
 export function buildNotifyCmd(paneId: string): string {
   const cliBin = resolveCliBin();
-  return `node "${cliBin}" notify pane-exited --pane-id ${paneId}`;
+  return `node "${cliBin}" notify pane-exited --pane-id ${shellQuote(paneId)}`;
 }
 
 /**
