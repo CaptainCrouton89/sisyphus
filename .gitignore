@@ -8,3 +8,6 @@ dist/
 .sisyphus/sessions/*/snapshots/
 .sisyphus/sessions/*/.tui/
 .DS_Store
+
+# Sisyphus
+.sisyphus

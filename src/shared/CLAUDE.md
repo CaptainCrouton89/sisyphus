@@ -1,77 +1,40 @@
 # src/shared/
 
-Protocol contract, types, and utilities shared by CLI and Daemon layers.
+## Paths
 
-## paths.ts
+- `cycleLogPath` zero-pads to 3 digits (`cycle-001.md`); `snapshotDir` does not (`cycle-1/`). Don't sort or glob them interchangeably.
+- `legacyLogsPath` (`logs.md`) — read for backward compat. Don't delete even though new code never creates it.
+- `tmuxSessionName` produces `ssyph_` prefix; `isSisyphusSession` checks it — renaming breaks pane-monitor detection.
 
-- **`daemonUpdatingPath()`** — sentinel written by `updater.ts`; CLI's `waitForDaemon` extends socket-ready timeout while it exists. Without it the CLI times out during self-updates.
-- **Padding inconsistency**: `cycleLogPath` zero-pads to 3 digits (`cycle-001.md`); `snapshotDir` does not (`cycle-1/`). Don't sort or glob them interchangeably.
-- **`legacyLogsPath`** — `state.ts` reads and writes `logs.md` for backward compat. Don't delete even though new code never creates it.
-- **`contextDir`** — Files injected into orchestrator prompt on cycle 1+. On cycle 0 only `session.context` string is used — files added before the first yield are invisible until cycle 1.
-- **`messagesDir`** — Only messages longer than 200 chars get a file; shorter ones inline in state.json. Don't assume `message.content` is full text when `filePath` is set.
-- **`tmuxSessionName`** produces `ssyph_{basename(cwd)}_{sessionLabel}`. `isSisyphusSession` checks `ssyph_` prefix — renaming breaks all pane-monitor detection.
+## Config
 
-## config.ts
+- `statusBar` deep-merges `colors` and `segments` sub-objects independently; all other top-level fields shallow-merge (last wins).
 
-- **`statusBar` deep-merges** `colors` and `segments` sub-objects independently; all other top-level fields are shallow-merged (last wins). A project config `statusBar: { colors: { processing: 'red' } }` merges with global colors, not replaces the entire `statusBar` object.
-- **`DEFAULT_CONFIG` includes `requiredPlugins: [{ name: 'devcore', marketplace: 'crouton-kit' }]`** — always present unless overridden by project config. Plugins listed here are validated at session start.
+## Types
 
-## Protocol (protocol.ts)
+- `companionCredited*` sentinels prevent double-counting on re-complete. Adding a new companion stat requires a matching credited sentinel or it double-counts every re-completion.
+- `Session.tmuxSessionId` (`$N` format) is stable across renames; prefer over `tmuxSessionName` for exact-match targeting.
+- `update-segment` only updates `content`, not `side`/`priority`/`bg`.
 
-- **`continue` / `resume` / `reopen-window` / `reconnect`**: `continue` reactivates completed session in-place (no cycle increment). `resume` increments cycle, optionally injects message, creates new tmux session if needed. `reopen-window` recreates tmux window only. `reconnect` re-attaches daemon tracking to an already-running tmux session by name — fails if the session doesn't exist.
-- **`pane-exited`** — internal only, sent by `pane-monitor.ts`. Carries `paneId` (not `agentId`); never route from CLI code.
-- **`register-segment` / `update-segment` / `unregister-segment`** — external status bar injection. `priority` determines sort order within a side (lower = closer to edge). Segments persist until `unregister-segment`; `update-segment` only updates `content`, not `side`/`priority`/`bg`.
+## Companion Types
 
-## types.ts
+- `commentaryHistory` is a 30-entry ring buffer for anti-repetition. Trimming below ~30 lets duplicates recur.
+- `recentCompletions` comment says "last 3" but stores enough for momentum check (5 in 4h). Don't cap to 3.
+- `RunningStats.m2` is raw sum of squared deviations (Welford's). Variance = `m2 / (count - 1)`, not `m2` directly.
+- Achievement counter names are misleading: `consecutiveEfficientSessions` tracks `speed-demon`; `consecutiveHighCycleSessions` tracks `iron-will`. Both reset to 0 on a non-qualifying session.
 
-- **`AgentStatus` terminal states**: `killed` = explicit kill; `crashed` = pane exited unexpectedly; `lost` = pane gone with no exit event. `Agent.killedReason` only populated for `killed`.
-- **`claudeSessionId`** — pre-generated UUID passed as `--session-id`. Not set for OpenAI agents. Both `Agent.claudeSessionId` and `OrchestratorCycle.claudeSessionId` exist; TUI uses whichever is set to build `claude --resume` for the respective pane.
-- **`Session.tmuxSessionId`** (`$N` format) is stable across renames; `tmuxSessionName` can be renamed and breaks if the `ssyph_` prefix is lost. When both are present, use `tmuxSessionId` for exact-match targeting.
-- **`companionCredited*`** (`companionCreditedCycles`, `companionCreditedActiveMs`, `companionCreditedStrength`, `companionCreditedWisdom`) — sentinels tracking stats already awarded to the companion. On `continue` → re-complete, companion logic awards only the delta (current total − credited). Without them every re-completion double-counts all four stats. Adding a new companion stat requires a matching credited sentinel or it double-counts on re-complete.
-- **`resumeEnv`/`resumeArgs`** on both `Agent` and `OrchestratorCycle` — carry the env vars and CLI args needed for `--resume` re-attachment. Written by daemon on spawn; read by `agent.ts` and `orchestrator.ts` on restart. Absent on pre-resume agents.
+## Companion Render
 
-## companion-types.ts
+- `getBaseForm` placeholder asymmetry: bare `FACE` (no braces) vs `{BOULDER}` (with braces). A face string containing `{BOULDER}` corrupts output.
+- `'hobby'` is deterministic: `(getHours() + companion.level) % IDLE_HOBBIES.length` — same hour + level always yields the same hobby.
+- Color drops silently on narrow `maxWidth` — truncates `facePart` out of the replace target, returning uncolored output with no error.
 
-- **`AchievementDef.badge`** is inline short text for list views — distinct from `BADGE_ART` multi-line art in `companion-badges.ts`. `badge: null` has no bearing on `BADGE_ART`; the two registrations are independent.
-- **`MoodSignals` optional fields** — `cycleCount`, `sessionsCompletedToday`, and `activeAgentCount` absent → treated as 0 (degraded but not broken mood variety). `totalAgentCount` is a cross-session aggregate (max agents across all tracked active sessions), used for z-score baselines — don't supply a single-session agent count here.
-- **`CompanionState.baselines`** is optional — absent until the first session completes. Mood z-score comparisons fall back to raw signal values when undefined; don't assume it's populated on new installs.
-- **`CompanionBaselines.pendingDayCount`** holds today's session count until `lastCountedDay` rolls over — `sessionsPerDay` baselines always lag by one calendar day. Reading `sessionsPerDay.mean` intra-day misses all of today's sessions.
-- **`RunningStats.m2`** is the raw sum of squared deviations (Welford's algorithm). Variance is `m2 / (count - 1)`, not `m2` directly.
-- **`commentaryHistory`** is a 30-entry ring buffer fed to Haiku on every commentary call for anti-repetition. Trimming it below ~30 entries lets duplicate lines recur — Haiku needs the window to detect them.
-- **`recentCompletions`** comment says "last 3" but stores enough for momentum check (5 completions in 4 hours). Don't cap or trim it to 3.
-- **`taskHistory`** keys are normalized task hashes, not raw strings. Powers sisyphean/stubborn/one-must-imagine achievements.
-- **`dailyRepos`** keys on ISO date strings (`YYYY-MM-DD`), values are arrays of cwd paths. **`repos`** keys on absolute cwd paths, values are `RepoMemory`. Different key formats — don't join or compare them directly.
-- **`spinnerVerbIndex`** — persists verb spinner position across daemon restarts; load from state, don't reset to 0 on read.
-- **Achievement counter semantics** (misleading names): `consecutiveEfficientSessions` tracks `speed-demon` (≤3 cycles per session, 10-streak); `consecutiveHighCycleSessions` tracks `iron-will` (8+ cycles per session, 5-streak). Both reset to 0 on a non-qualifying session. Adding a session-completion path requires updating both counters or the corresponding achievement silently never unlocks.
+## History
 
-## companion-badges.ts
+- `wallClockMs` vs `activeMs`: wall time (start→end) vs cumulative agent active time. Summing cycle-level `activeMs` double-counts cross-cycle agents.
+- `SessionSummary.efficiency` may be null even when `wallClockMs` exists (written before the field was added); `history.ts` CLI recomputes inline — don't assume `null` means data unavailable.
 
-- **`BADGE_ART` is `Record<AchievementId, string[]>`** (not Partial) — adding a new `AchievementId` without a `BADGE_ART` entry is a TypeScript compile error. Art hard-capped at 9 lines via `art.slice(0, 9)`; `first-blood` (12) and `marathon` (10) silently lose bottom lines. `centerLine` strips ANSI before padding — don't embed ANSI in art strings.
-- **Gallery sort**: unlocked first by `unlockedAt` date, then locked in their `ACHIEVEMENTS` category order. `createBadgeGallery` always re-sorts — index from a prior call is not stable across unlock events.
+## Exec
 
-## companion-render.ts
-
-- **Placeholder asymmetry**: `getBaseForm` uses bare `FACE` (no braces) and `{BOULDER}` (with braces). A face string containing `{BOULDER}` corrupts output.
-- **`getStatCosmetics` thresholds**: `wisdom > 5` → wisps; `endurance > 36_000_000` ms (10 hrs) → trail; `patience > 50` → zen-prefix. Units differ — don't compare endurance to a raw count.
-- **`'hobby'` is deterministic**: `(getHours() + companion.level) % IDLE_HOBBIES.length` — same hour and level always yields the same hobby.
-- **`'verb'` field**: `opts.verbIndex` overrides `companion.spinnerVerbIndex` — lets callers advance the spinner frame independently without mutating companion state.
-- **Mood intensity requires `debugMood`**: without it, intensity is always 0 → always mild-tier face (normal runtime).
-- **`getBoulderForm` with `repoNickname`**: when `opts.repoPath` resolves a nickname, return value is a display string (`o "reponame"`), not a bare boulder char.
-- **Boulder thresholds**: ≤2→`o`, ≤6→`O`, ≤15→`◉`, ≤35→`@`, else `@@`. Thresholds were bumped ~2× in a refactor to reflect typical multi-agent session sizes — old thresholds (≤1/≤4/≤9/≤20) appear in git history but are no longer active.
-- **Color drops silently on narrow `maxWidth`**: `applyColor` does `result.replace(facePart, coloredFace)`. If `maxWidth` truncates `facePart` out of the string, the replace finds no match and returns uncolored output. Color also requires `'face'` in fields — `color: true` with only `['mood', 'commentary']` is a no-op.
-- **`maxWidth` truncates commentary first**: shortens `lastCommentary.text` progressively before hard-truncating with `…`; uses `stringWidth` (display columns) not `.length` — wide chars like ಠ益ಠ have `.length < displayWidth`.
-- **`zen-prefix` vs `wisps`/`trail` asymmetry**: `zen-prefix` (☯ prefix) applies even when boulder is empty; `wisps` and `trail` are no-ops without a boulder.
-
-## history-types.ts
-
-- **`wallClockMs` vs `activeMs`**: `wallClockMs` is start→end wall time (null on sessions predating the field); `activeMs` is cumulative agent active time. They diverge heavily during idle/paused periods.
-- **`activeMs` at three levels**: `SessionSummary.activeMs` = sum of agent `activeMs` values. `SessionSummaryCycle.activeMs` = sum of agents active during that cycle. Summing cycle-level values to reconstruct session totals double-counts agents active across multiple cycles.
-- **`reviews?: ReviewTiming[]`** is optional (not `[]`) — absent on sessions predating the field. Use `summary.reviews ?? []` when iterating; direct iteration throws on old sessions.
-- **`SessionSummary.efficiency`** — `activeMs / wallClockMs` ratio (0.0–1.0). Null when `wallClockMs` is null. Old summaries may have `null` in the field even though `wallClockMs` exists (written before the field was added); `history.ts` CLI recomputes it inline for those cases — don't assume `null` means data is unavailable.
-- **`SessionSummary.sentiment`** — one-sentence Haiku read of the session, written async (fire-and-forget) after session end via a second `writeSessionSummary` call. May be null on recent sessions if Haiku was rate-limited or failed. `getRecentSentiments()` in `history.ts` feeds it to companion commentary for emotional-arc context.
-- **`HistoryEvent.data`** is `Record<string, unknown>` — event-specific field shapes are enforced only at write sites, not by the type. Mismatched reads silently return `undefined`.
-
-## exec.ts
-
-- **`EXEC_ENV`** augments `PATH` with Homebrew, nix, and user-local bin dirs. Skipping it may fail to find `tmux`, `git`, or `claude` in stripped environments (launchd, CI).
-- **`exec` vs `execSafe`**: `exec` bleeds stderr to daemon logs; `execSafe` suppresses and returns `null` on non-zero exit. Default 30s timeout — pass `timeoutMs` for network or large git ops.
+- `EXEC_ENV` augments PATH with Homebrew/nix/user-local dirs — skipping it may fail to find `tmux`/`git`/`claude` in stripped environments (launchd, CI).
+- `exec` bleeds stderr to logs; `execSafe` suppresses and returns null. Default 30s timeout.

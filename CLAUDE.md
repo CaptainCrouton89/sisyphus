@@ -18,105 +18,41 @@ node --import tsx --test src/__tests__/state.test.ts  # single test file
 
 ## Architecture
 
-Four layers over a Unix socket (`~/.sisyphus/daemon.sock`, JSON line-delimited):
+Unix socket (`~/.sisyphus/daemon.sock`, JSON line-delimited). Four layers — each has its own `CLAUDE.md`, read before touching that layer:
 
-```
-CLI (src/cli/)  ←→  Daemon (src/daemon/)
-TUI (src/tui/)  ←→  Shared (src/shared/)
-```
-
-- **CLI** (`src/cli/`): Commander.js, `client.ts` handles socket (10s timeout), each command maps to a protocol request
-- **Daemon** (`src/daemon/`): `server.ts` routes; `session-manager.ts` lifecycle; `orchestrator.ts`/`agent.ts` spawn tmux panes; `pane-monitor.ts` polls; `state.ts` atomic writes; `summarize.ts` / `companion-commentary.ts` call Haiku via `haiku.ts` (`callHaiku` for text, `callHaikuStructured<T>(prompt, jsonSchema, zodSchema)` for typed JSON via `@r-cli/sdk` `query()`) — fire-and-forget, silently skips on auth failure (5 min cooldown)
-- **TUI** (`src/tui/`): raw ANSI cursor rendering with frame-buffer diffing (no React/Ink); embeds a live neovim instance via `node-pty` + `@xterm/headless` (`NvimBridge`) for in-dashboard file editing. Two standalone entries not connected to the daemon: `review.ts` (`sisyphus-review <requirements.json>`) — interactive EARS requirements reviewer; `design.ts` (`sisyphus-design <design.json>`) — interactive terminal walkthrough for technical designs
-- **Shared** (`src/shared/`): protocol types, path helpers, layered config resolution
-
-Each layer has its own `CLAUDE.md` — read before touching that layer.
+- **CLI** (`src/cli/`): Commander.js commands → socket requests
+- **Daemon** (`src/daemon/`): session lifecycle, tmux pane spawning, state, Haiku calls
+- **TUI** (`src/tui/`): raw ANSI frame-buffer rendering (no React/Ink), embedded neovim
+- **Shared** (`src/shared/`): protocol types, path helpers, config resolution
 
 ## Native Notification Helper
 
-`native/` contains a Swift macOS app (`SisyphusNotify`) that fires click-to-switch notifications.
-
-- Built during `postinstall` via `bash native/build-notify.sh`; installs to `~/.sisyphus/SisyphusNotify.app`
-- Requires `swiftc` (Xcode Command Line Tools) — build silently skips if missing
-- `native/` is included in published package files so postinstall works after `npm install`
-- To rebuild manually: `bash native/build-notify.sh`
-
-## Session Lifecycle
-
-1. `sisyphus start "task"` → daemon creates session, spawns orchestrator in tmux pane
-2. Orchestrator updates `roadmap.md`, spawns agents, calls `sisyphus yield`
-3. Daemon kills orchestrator pane, polls agent panes for completion
-4. Agents call `sisyphus submit --report "..."` when done
-5. When all agents finish, daemon respawns orchestrator (next cycle)
-6. Orchestrator reviews reports, spawns more agents or calls `sisyphus complete`
-
-Orchestrator and agents receive `SISYPHUS_SESSION_ID` / `SISYPHUS_AGENT_ID` env vars.
-
-- `sisyphus message "..."` — queue a message the orchestrator sees on its next cycle (works from agent panes too)
-- `sisyphus continue "instruction"` — resume a paused/completed session with new direction
-- `sisyphus update-task "..."` — update the session goal mid-flight
-- `sisyphus restart-agent <agentId>` — respawn a failed/killed/lost agent in a new pane without resetting the session
-- `sisyphus rollback <sessionId> <cycle>` — rewind state to a prior cycle boundary (use `sisyphus status` to find cycle numbers)
-
-## Prompt Delivery
-
-Prompts are written to `{sessionDir}/prompts/` (avoids shell quoting issues with tmux send-keys):
-
-- **Orchestrator**: `orchestrator-system-{N}.md` (template) + `orchestrator-user-{N}.md` (state summary). Both passed via `--append-system-prompt`.
-- **Agents**: `{agentId}-system.md` rendered from `templates/agent-suffix.md` with `{{SESSION_ID}}` / `{{INSTRUCTION}}` placeholders.
-
-Templates: `templates/orchestrator.md`, `templates/agent-suffix.md`. Project override: `.sisyphus/orchestrator.md`.
+`native/` — Swift macOS app (`SisyphusNotify`). Built during `postinstall` via `bash native/build-notify.sh`; installs to `~/.sisyphus/SisyphusNotify.app`. Requires `swiftc` — build silently skips if missing.
 
 ## Agent Types
 
-Orchestrators can spawn typed agents (`sisyphus spawn --type namespace:name "task"`). Agent type templates are Markdown files with optional YAML frontmatter:
-
-```yaml
----
-name: reviewer
-model: claude-opus-4-5        # overrides session model; gpt-*/codex-* routes to OpenAI
-color: cyan                   # overrides pane color
-skills: [skill-a, skill-b]   # Claude Code skills to enable
-permissionMode: bypassPermissions
-effort: high
-interactive: false
----
-Agent instruction body here...
-```
-
 **Resolution order (first match wins):** `.claude/agents/{name}.md` → `~/.claude/agents/{name}.md` → bundled `sisyphus:{name}` → installed Claude Code plugins (`~/.claude/plugins/`).
 
-- Untyped agents use the default `templates/agent-suffix.md` template
-- Provider is inferred from model name — no explicit config needed
+- Provider inferred from model name — no explicit config needed
 - `sisyphus spawn --list-types` to discover available types in current project
 
 ## Key Conventions
 
 ### State
 - **Always mutate through `state.ts`** — atomic temp-file + rename, never write state JSON directly
-- Session state: `.sisyphus/sessions/{sessionId}/state.json` (project-relative to cwd of `sisyphus start`)
+- Session state: `.sisyphus/sessions/{sessionId}/state.json` (project-relative)
 - Global daemon files: `~/.sisyphus/{daemon.sock,daemon.pid,daemon.log,config.json}`
 
 ### Config (layered, last wins)
 Defaults → `~/.sisyphus/config.json` → `.sisyphus/config.json`
 
-| Option | Notes |
-|--------|-------|
-| `model` | LLM model for orchestrator + agents |
-| `orchestratorEffort` | `low`/`medium`/`high`/`max` |
-| `agentEffort` | `low`/`medium`/`high`/`max` |
-| `orchestratorPrompt` | File path to custom orchestrator system prompt |
-| `pollIntervalMs` | Daemon poll interval (default `5000`) |
-| `autoUpdate` | npm auto-update on new releases — **skipped for `npm link`** |
-| `notifications.enabled` | Desktop notifications on lifecycle events |
-| `notifications.sound` | Path to `.aiff` sound file |
-| `requiredPlugins` | Claude Code plugins auto-installed for agents (e.g. `["devcore"]`) |
+`statusBar` deep-merges `colors` and `segments` sub-objects; all other top-level fields shallow-merge.
 
 ### IDs
 - Sessions: UUIDs; Agents: `agent-001`, `agent-002` (zero-padded)
 
 ### Bug Fixes
-- When fixing a bug, write a test that reproduces the failure first, then fix the code. Keep the test — it's a regression guard.
+- Write a test that reproduces the failure first, then fix the code. Keep the test.
 
 ### TypeScript
 - Strict ESM, Node 22, tsup bundles five entry points (`daemon`, `cli`, `tui`, `review`, `design`)
@@ -125,27 +61,7 @@ Defaults → `~/.sisyphus/config.json` → `.sisyphus/config.json`
 
 ## Integration Tests
 
-Docker-based integration tests in `test/integration/`. Requires Docker running locally.
-
-```bash
-bash test/integration/run.sh          # run all tiers, print pass/fail matrix
-```
-
-Three tiers (single multi-stage Dockerfile): **base** (node-only), **tmux** (node + tmux), **full** (node + tmux + neovim). Each tier adds tests that require its capabilities. Run a single tier for faster iteration:
-
-```bash
-docker build --target tmux -t sisyphus-test:tmux test/integration/
-docker run --rm sisyphus-test:tmux bash /tests/suites/test-tmux.sh
-```
-
-GHA workflow (`.github/workflows/integration-tests.yml`) covers macOS-specific paths (launchd, Swift notifications).
-
-## Companion
-
-Persistent per-user state (`~/.sisyphus/companion.json`) tracking mood, achievements, and session history. Updated automatically at session end.
-
-- Commentary via `callHaikuStructured` (Zod schema → typed JSON) — silently skips if Haiku auth fails
-- State: `src/daemon/companion.ts`; rendering: `src/shared/companion-render.ts` / `companion-badges.ts`
+Docker-based in `test/integration/`. Three tiers: **base** (node-only), **tmux** (node + tmux), **full** (node + tmux + neovim). Run `bash test/integration/run.sh`.
 
 ## Debugging
 
@@ -155,5 +71,4 @@ sisyphus status                   # session + agent state
 sisyphus doctor                   # checks tmux, Claude CLI, native notify, launchd
 ```
 
-- **Auto-update**: daemon checks npm on start and every 6 hours (`updater.ts`); if a newer version is found it runs `npm install -g sisyphi` then `process.exit(0)` — launchd respawns with the new binary. **Skipped automatically for `npm link`ed installs** (symlink detection), so dev setups are safe.
-- `node-pty` is external to the bundle (native module, not compiled in) — prebuilds need execute permission. `postinstall` fixes this automatically; run `npm rebuild node-pty` manually if pane spawning fails.
+- `node-pty` is external to the bundle (native module) — prebuilds need execute permission. `postinstall` fixes this; run `npm rebuild node-pty` if pane spawning fails.
