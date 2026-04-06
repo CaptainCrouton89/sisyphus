@@ -8,6 +8,7 @@ import { execSafe } from '../shared/exec.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { shellQuote } from '../shared/shell.js';
+import { sessionDisplayLabel, substituteSessionEnvVars } from '../shared/utils.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import { discoverAgentTypes, parseAgentFrontmatter, extractAgentBody } from './frontmatter.js';
 import * as state from './state.js';
@@ -337,9 +338,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     : '  (none)';
 
   const sesDir = sessionDir(cwd, sessionId);
-  const substituteEnvVars = (text: string) => text
-    .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
-    .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
+  const substituteEnvVars = (text: string) => substituteSessionEnvVars(text, sesDir, sessionId);
 
   // Inject available orchestrator modes into system prompt
   const modes = discoverOrchestratorModes();
@@ -396,13 +395,14 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const requiredPluginDirs = resolveRequiredPluginDirs(cwd);
   const extraPluginFlags = requiredPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
   const claudeSessionId = randomUUID();
-  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name "ssph:orch ${session.name ?? sessionId.slice(0, 8)} c${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const orchLabel = sessionDisplayLabel(session.name, sessionId);
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name "ssph:orch ${orchLabel} c${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 
   sessionOrchestratorPane.set(sessionId, paneId);
   registerPane(paneId, sessionId, 'orchestrator');
-  const sessionLabel = session.name ?? sessionId.slice(0, 8);
+  const sessionLabel = sessionDisplayLabel(session.name, sessionId);
   tmux.setPaneTitle(paneId, `ssph:orch ${sessionLabel} c${cycleNum}`);
   tmux.setPaneStyle(paneId, ORCHESTRATOR_COLOR, { role: 'orch', session: sessionLabel, cycle: `c${cycleNum}`, mode });
 

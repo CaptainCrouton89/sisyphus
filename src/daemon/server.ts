@@ -78,6 +78,24 @@ function unknownSessionError(sessionId: string): Response {
 }
 
 /**
+ * Ensure a session is tracked in memory, recovering from disk if needed.
+ * Returns the tracking entry on success, or an error response if the session
+ * cannot be found on disk either.
+ */
+function ensureTrackedFromDisk(sessionId: string, cwd: string): { tracking: SessionTracking } | { error: Response } {
+  const existing = sessionTrackingMap.get(sessionId);
+  if (existing) return { tracking: existing };
+  const stateFile = `${cwd}/.sisyphus/sessions/${sessionId}/state.json`;
+  if (existsSync(stateFile)) {
+    const tracking: SessionTracking = { cwd, messageCounter: 0 };
+    sessionTrackingMap.set(sessionId, tracking);
+    persistSessionRegistry();
+    return { tracking };
+  }
+  return { error: unknownSessionError(sessionId) };
+}
+
+/**
  * Build a map of sessionId → cwd from all known sources:
  * in-memory tracking map, persisted registry, and on-disk session directories.
  */
@@ -303,18 +321,9 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'resume': {
-        let tracking = sessionTrackingMap.get(req.sessionId);
-        if (!tracking) {
-          // Session not in memory — try to recover from disk using the cwd provided by CLI
-          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
-          if (existsSync(stateFile)) {
-            tracking = { cwd: req.cwd, messageCounter: 0 };
-            sessionTrackingMap.set(req.sessionId, tracking);
-            persistSessionRegistry();
-          } else {
-            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sisyphus list --all\` to see available sessions.` };
-          }
-        }
+        const resumeResult = ensureTrackedFromDisk(req.sessionId, req.cwd);
+        if ('error' in resumeResult) return resumeResult.error;
+        const tracking = resumeResult.tracking;
         const session = await sessionManager.resumeSession(req.sessionId, tracking.cwd, req.message);
         if (session.tmuxSessionName) tracking.tmuxSession = session.tmuxSessionName;
         if (session.tmuxWindowId) tracking.windowId = session.tmuxWindowId;
@@ -345,31 +354,17 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'rollback': {
-        let tracking = sessionTrackingMap.get(req.sessionId);
-        if (!tracking) {
-          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
-          if (existsSync(stateFile)) {
-            registerSessionCwd(req.sessionId, req.cwd);
-            tracking = sessionTrackingMap.get(req.sessionId)!;
-          } else {
-            return unknownSessionError(req.sessionId);
-          }
-        }
+        const rollbackResult = ensureTrackedFromDisk(req.sessionId, req.cwd);
+        if ('error' in rollbackResult) return rollbackResult.error;
+        const tracking = rollbackResult.tracking;
         const result = await sessionManager.handleRollback(req.sessionId, tracking.cwd, req.toCycle);
         return { ok: true, data: result as unknown as Record<string, unknown> };
       }
 
       case 'reconnect': {
-        let tracking = sessionTrackingMap.get(req.sessionId);
-        if (!tracking) {
-          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
-          if (existsSync(stateFile)) {
-            registerSessionCwd(req.sessionId, req.cwd);
-            tracking = sessionTrackingMap.get(req.sessionId)!;
-          } else {
-            return unknownSessionError(req.sessionId);
-          }
-        }
+        const reconnectResult = ensureTrackedFromDisk(req.sessionId, req.cwd);
+        if ('error' in reconnectResult) return reconnectResult.error;
+        const tracking = reconnectResult.tracking;
         const result = await sessionManager.reconnectSession(req.sessionId, tracking.cwd);
         tracking.tmuxSession = result.tmuxSessionName;
         tracking.windowId = result.tmuxWindowId;
@@ -378,17 +373,9 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'reopen-window': {
-        let tracking = sessionTrackingMap.get(req.sessionId);
-        if (!tracking) {
-          const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
-          if (existsSync(stateFile)) {
-            tracking = { cwd: req.cwd, messageCounter: 0 };
-            sessionTrackingMap.set(req.sessionId, tracking);
-            persistSessionRegistry();
-          } else {
-            return unknownSessionError(req.sessionId);
-          }
-        }
+        const reopenResult = ensureTrackedFromDisk(req.sessionId, req.cwd);
+        if ('error' in reopenResult) return reopenResult.error;
+        const tracking = reopenResult.tracking;
         const result = await sessionManager.reopenWindow(req.sessionId, tracking.cwd);
         tracking.tmuxSession = result.tmuxSessionName;
         tracking.windowId = result.tmuxWindowId;

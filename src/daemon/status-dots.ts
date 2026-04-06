@@ -5,6 +5,7 @@ import { respawningSessions } from './respawn-guard.js';
 import { sendTerminalNotification } from './notify.js';
 import { loadConfig } from '../shared/config.js';
 import type { Session } from '../shared/types.js';
+import { sessionDisplayLabel } from '../shared/utils.js';
 
 const CLAUDE_STATE_DIR = '/tmp/claude-tmux-state';
 
@@ -248,7 +249,7 @@ export function recomputeDots(): void {
         if (phase === 'orchestrator:idle' && prevPhase !== 'orchestrator:idle') {
           const config = loadConfig(cwd);
           if (config.notifications?.enabled !== false) {
-            const sessionName = session.name ?? sessionId.slice(0, 8);
+            const sessionName = sessionDisplayLabel(session.name, sessionId);
             sendTerminalNotification('Sisyphus', `Waiting for input: ${sessionName}`, session.tmuxSessionName);
           }
         }

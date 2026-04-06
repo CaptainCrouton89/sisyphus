@@ -23,6 +23,7 @@ import type { PopupPage } from './companion-popup.js';
 import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
 import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.js';
 import { formatDuration } from '../shared/format.js';
+import { stripAgentTypePrefix, sessionDisplayLabel } from '../shared/utils.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -82,7 +83,7 @@ function fireHaikuNaming(
         const agent = session.agents.find(a => a.id === pane.agentId);
         if (agent) {
           const shortType = agent.agentType && agent.agentType !== 'worker'
-            ? agent.agentType.replace(/^sisyphus:/, '')
+            ? stripAgentTypePrefix(agent.agentType)
             : '';
           const paneLabel = shortType ? `${agent.name}-${shortType}` : agent.name;
           tmux.setPaneTitle(pane.paneId, `ssph:${finalName} ${paneLabel} c${session.orchestratorCycles.length}`);
@@ -152,7 +153,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
     throw new Error(`Invalid session name "${name}": only alphanumeric, hyphens, and underscores allowed`);
   }
 
-  const tmuxName = tmuxSessionName(cwd, name ?? sessionId.slice(0, 8));
+  const tmuxName = tmuxSessionName(cwd, sessionDisplayLabel(name, sessionId));
 
   if (tmux.sessionNameTaken(tmuxName)) {
     throw new Error(`Tmux session "${tmuxName}" already exists. Choose a different name.`);
@@ -226,7 +227,7 @@ export async function cloneSession(
     throw new Error(`Invalid session name "${name}": only alphanumeric, hyphens, and underscores allowed`);
   }
 
-  const tmuxName = tmuxSessionName(cwd, name ?? cloneId.slice(0, 8));
+  const tmuxName = tmuxSessionName(cwd, sessionDisplayLabel(name, cloneId));
 
   if (tmux.sessionNameTaken(tmuxName)) {
     throw new Error(`Tmux session "${tmuxName}" already exists. Choose a different name.`);
@@ -346,7 +347,7 @@ function pruneOldSessions(cwd: string): void {
 
 export async function reopenWindow(sessionId: string, cwd: string): Promise<{ tmuxSessionName: string; tmuxWindowId: string }> {
   const session = state.getSession(cwd, sessionId);
-  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, session.name ?? sessionId.slice(0, 8));
+  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, sessionDisplayLabel(session.name, sessionId));
 
   // If window still exists, just return the existing IDs
   if (tmux.isSessionAlive(session.tmuxSessionId, tmuxName) && session.tmuxWindowId) {
@@ -363,7 +364,7 @@ export async function reopenWindow(sessionId: string, cwd: string): Promise<{ tm
 
 export async function reconnectSession(sessionId: string, cwd: string): Promise<{ tmuxSessionName: string; tmuxWindowId: string; tmuxSessionId: string }> {
   const session = state.getSession(cwd, sessionId);
-  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, session.name ?? sessionId.slice(0, 8));
+  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, sessionDisplayLabel(session.name, sessionId));
 
   // Find the tmux session by name (since $N ID may be stale/missing)
   if (!tmux.sessionNameTaken(tmuxName)) {
@@ -397,7 +398,7 @@ export async function reconnectSession(sessionId: string, cwd: string): Promise<
 export async function resumeSession(sessionId: string, cwd: string, message?: string): Promise<Session> {
   const session = state.getSession(cwd, sessionId);
 
-  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, session.name ?? sessionId.slice(0, 8));
+  const tmuxName = session.tmuxSessionName ?? tmuxSessionName(cwd, sessionDisplayLabel(session.name, sessionId));
 
   let windowId: string;
   let tmuxSessId: string | undefined;
@@ -557,7 +558,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
     const spawnedThisCycle = (lastCycle?.agentsSpawned ?? [])
       .map(id => agentMap.get(id))
       .filter(Boolean)
-      .map(a => `${a!.name} (${a!.agentType.replace(/^sisyphus:/, '')}, ${a!.status})`)
+      .map(a => `${a!.name} (${stripAgentTypePrefix(a!.agentType)}, ${a!.status})`)
       .join(', ');
     let cycleCtx = `Cycle ${cycleNumber}${modeLabel} complete. Goal: ${truncate(goal, 80)}`;
     if (spawnedThisCycle) cycleCtx += `\nAgents: ${truncate(spawnedThisCycle, 200)}`;
@@ -627,7 +628,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         const updatedSession = state.getSession(cwd, sessionId);
         const newCycle = updatedSession.orchestratorCycles[updatedSession.orchestratorCycles.length - 1];
         const modeLabel = newCycle?.mode ? ` (${newCycle.mode})` : '';
-        const sessionName = updatedSession.name ?? sessionId.slice(0, 8);
+        const sessionName = sessionDisplayLabel(updatedSession.name, sessionId);
         sendTerminalNotification('Sisyphus', `Cycle ${newCycle?.cycle ?? '?'}${modeLabel}: ${sessionName}`, updatedSession.tmuxSessionName);
       }
     } catch (err) {
@@ -698,7 +699,7 @@ export async function handleSubmit(cwd: string, sessionId: string, agentId: stri
     const config = loadConfig(cwd);
     if (config.notifications?.enabled !== false) {
       const session = state.getSession(cwd, sessionId);
-      const sessionName = session.name ?? sessionId.slice(0, 8);
+      const sessionName = sessionDisplayLabel(session.name, sessionId);
       sendTerminalNotification('Sisyphus', `All agents complete: ${sessionName}`, session.tmuxSessionName);
     }
     onAllAgentsDone(sessionId, cwd, windowId);
@@ -755,7 +756,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
 
   const config = loadConfig(cwd);
   if (config.notifications?.enabled !== false) {
-    const sessionName = session.name ?? sessionId.slice(0, 8);
+    const sessionName = sessionDisplayLabel(session.name, sessionId);
     sendTerminalNotification('Sisyphus', `Session completed: ${sessionName}`, session.tmuxSessionName);
   }
 
@@ -850,7 +851,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     tmux.killSession(completeKillTarget);
   }
 
-  const sessionName = session.name ?? sessionId.slice(0, 8);
+  const sessionName = sessionDisplayLabel(session.name, sessionId);
   console.log(`[sisyphus] Session ${sessionName} completed (${session.agents.length} agents, ${session.orchestratorCycles.length} cycles, ${Date.now() - t0}ms)`);
 }
 
@@ -863,7 +864,7 @@ export async function handleContinue(sessionId: string, cwd: string): Promise<vo
 
 export async function handleKill(sessionId: string, cwd: string): Promise<number> {
   const t0 = Date.now();
-  const sessionName = state.getSession(cwd, sessionId).name ?? sessionId.slice(0, 8);
+  const sessionName = sessionDisplayLabel(state.getSession(cwd, sessionId).name, sessionId);
   console.log(`[sisyphus] Killing session ${sessionName} (${sessionId})`);
 
   await flushTimers(sessionId);
@@ -1052,7 +1053,7 @@ export async function handlePaneExited(
       saveCompanion(companion);
       markEventCrash();
       const freshSession = state.getSession(cwd, sessionId);
-      const typeLabel = agent.agentType.replace(/^sisyphus:/, '');
+      const typeLabel = stripAgentTypePrefix(agent.agentType);
       let crashCtx = `${agent.name} (${typeLabel}) crashed: ${truncate(agent.instruction, 120)}`;
       const running = freshSession.agents.filter(a => a.status === 'running').length;
       crashCtx += `\n${running}/${freshSession.agents.length} agents still running`;
@@ -1067,7 +1068,7 @@ export async function handlePaneExited(
     }
   } else if (role === 'orchestrator') {
     // Orchestrator pane exited unexpectedly (crash, context exhaustion, /exit)
-    const sessionName = session.name ?? sessionId.slice(0, 8);
+    const sessionName = sessionDisplayLabel(session.name, sessionId);
     sendTerminalNotification('Sisyphus', `Orchestrator exited without yielding (${sessionName})`, session.tmuxSessionName);
 
     // Guard against pane monitor pausing us during the await below

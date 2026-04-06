@@ -16,6 +16,7 @@ import type { Provider } from './frontmatter.js';
 import { loadConfig } from '../shared/config.js';
 import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
+import { stripAgentTypePrefix, sessionDisplayLabel, substituteSessionEnvVars } from '../shared/utils.js';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { resolveRequiredPluginDirs, resolveAgentPluginDirs } from './plugins.js';
 import { emitHistoryEvent } from './history.js';
@@ -74,12 +75,10 @@ function createAgentPlugin(
 
   // Substitute session env vars in agent type templates
   const sesDir = sessionDir(cwd, sessionId);
-  const substituteEnvVars = (text: string) => text
-    .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
-    .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
+  const substituteEnvVars = (text: string) => substituteSessionEnvVars(text, sesDir, sessionId);
 
   if (agentConfig?.filePath && agentType && agentType !== 'worker') {
-    const shortName = agentType.replace(/^sisyphus:/, '');
+    const shortName = stripAgentTypePrefix(agentType);
     writeFileSync(`${base}/agents/${shortName}.md`, substituteEnvVars(readFileSync(agentConfig.filePath, 'utf-8')), 'utf-8');
 
     // Copy sub-agent definitions if a subdirectory exists
@@ -114,7 +113,7 @@ function createAgentPlugin(
     ];
   }
 
-  const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
+  const normalizedType = agentType ? stripAgentTypePrefix(agentType) : '';
   const userPromptHooks: Record<string, string> = {
     'problem': 'problem-user-prompt.sh',
     'plan': 'plan-user-prompt.sh',
@@ -162,10 +161,10 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   const paneId = tmux.createPane(windowId, paneCwd);
   registerPane(paneId, sessionId, 'agent', agentId);
   const shortType = agentType && agentType !== 'worker'
-    ? agentType.replace(/^sisyphus:/, '')
+    ? stripAgentTypePrefix(agentType)
     : '';
   const paneLabel = shortType ? `${name}-${shortType}` : name;
-  const sessionLabel = opts.sessionName ?? sessionId.slice(0, 8);
+  const sessionLabel = sessionDisplayLabel(opts.sessionName, sessionId);
   const agentTitle = `ssph:${sessionLabel} ${paneLabel} c${cycleNum}`;
   tmux.setPaneTitle(paneId, agentTitle);
   tmux.setPaneStyle(paneId, color, { role: paneLabel, session: sessionLabel, cycle: `c${cycleNum}` });

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, reportsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath, strategyPath } from '../shared/paths.js';
 import { ensureSisyphusGitignore } from '../shared/gitignore.js';
 import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
+import { findAgentById } from '../shared/utils.js';
 
 const ROADMAP_SEED = `---
 description: >
@@ -108,7 +109,7 @@ export async function addAgent(cwd: string, sessionId: string, agent: Agent): Pr
 export async function updateAgent(cwd: string, sessionId: string, agentId: string, updates: Partial<Agent>): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
-    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    const agent = findAgentById(session.agents, agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
     Object.assign(agent, updates);
     saveSession(session);
@@ -175,7 +176,7 @@ export async function continueSession(cwd: string, sessionId: string): Promise<v
 export async function appendAgentReport(cwd: string, sessionId: string, agentId: string, entry: AgentReport): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
-    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    const agent = findAgentById(session.agents, agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
     agent.reports.push(entry);
     saveSession(session);
@@ -191,7 +192,7 @@ export async function updateReportSummary(
 ): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
-    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    const agent = findAgentById(session.agents, agentId);
     if (!agent) return;
     const report = agent.reports.find((r) => r.filePath === filePath);
     if (report) {
@@ -280,7 +281,7 @@ export async function incrementActiveTime(
     const session = getSession(cwd, sessionId);
     session.activeMs += sessionDelta;
     for (const [agentId, delta] of agentDeltas) {
-      const agent = session.agents.slice().reverse().find(a => a.id === agentId);
+      const agent = findAgentById(session.agents, agentId);
       if (agent) agent.activeMs += delta;
     }
     for (const [cycleNum, delta] of cycleDeltas) {

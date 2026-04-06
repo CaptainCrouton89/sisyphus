@@ -8,6 +8,7 @@ import { loadCompanion, saveCompanion, recordCommentary, computeMood } from './c
 import { generateCommentary } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
 import type { MoodSignals } from '../shared/companion-types.js';
+import { findAgentById } from '../shared/utils.js';
 import { emitHistoryEvent } from './history.js';
 import { getTotalActiveSessionAgents } from './status-dots.js';
 
@@ -79,7 +80,7 @@ export async function flushTimers(sessionId: string): Promise<void> {
   const sessionDelta = entry.sessionMs - session.activeMs;
   const agentDeltas = new Map<string, number>();
   for (const [agentId, ms] of entry.agentMs) {
-    const agent = session.agents.slice().reverse().find(a => a.id === agentId);
+    const agent = findAgentById(session.agents, agentId);
     const persisted = agent?.activeMs ?? 0;
     const delta = ms - persisted;
     if (delta > 0) agentDeltas.set(agentId, delta);
