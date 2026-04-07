@@ -1,10 +1,46 @@
 import type { Command } from 'commander';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
+import { basename } from 'node:path';
 import { sendRequest } from '../client.js';
 import { getTmuxSession, isTmuxInstalled } from '../tmux.js';
 import { shellQuote } from '../../shared/shell.js';
 import { openDashboardWindow } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
+
+
+/**
+ * Get or create a tmux session for the given cwd.
+ * Returns the session name. Does NOT attach — caller decides.
+ */
+function ensureTmuxSessionExists(cwd: string): string {
+  const sessionName = `sisyphus-${basename(cwd)}`;
+
+  try {
+    execSync(`tmux has-session -t ${shellQuote(sessionName)}`, { stdio: 'pipe' });
+  } catch {
+    execSync(
+      `tmux new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(cwd)}`,
+      { stdio: 'pipe' },
+    );
+  }
+
+  return sessionName;
+}
+
+/**
+ * Attach the user's terminal to a tmux session.
+ * If already inside tmux, switches the client. Otherwise, attaches directly.
+ * Attach/switch takes over the terminal — this blocks until detach.
+ */
+function attachToTmuxSession(sessionName: string): void {
+  if (process.env['TMUX']) {
+    // Already in tmux — switch to the target session
+    spawnSync('tmux', ['switch-client', '-t', sessionName], { stdio: 'inherit' });
+  } else {
+    // Not in tmux — attach takes over the terminal
+    spawnSync('tmux', ['attach-session', '-t', sessionName], { stdio: 'inherit' });
+  }
+}
 
 
 export function registerStart(program: Command): void {
@@ -18,56 +54,59 @@ export function registerStart(program: Command): void {
     .action(async (task: string, opts: { context?: string; name?: string; tmuxCheck?: boolean }) => {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
-      if (!process.env['TMUX'] && opts.tmuxCheck !== false) {
-        if (!isTmuxInstalled()) {
-          console.error('Error: tmux is not installed. Sisyphus requires tmux for agent panes.');
-          console.error('  Install: brew install tmux (macOS) or apt install tmux (Linux)');
-          console.error('  Then: tmux new-session');
-          process.exit(1);
-        }
-        console.error('Error: Not running inside a tmux session.');
-        console.error('  Sisyphus uses tmux to manage agent panes.');
-        console.error('  Start a tmux session first: tmux new-session');
-        console.error('');
-        console.error('  To skip this check: sisyphus start --no-tmux-check "task"');
+      if (!isTmuxInstalled()) {
+        console.error('Error: tmux is not installed. Sisyphus requires tmux for agent panes.');
+        console.error('  Install: brew install tmux (macOS) or apt install tmux (Linux)');
         process.exit(1);
       }
+
+      // Send the start request — this is just a socket call, no tmux needed
       const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name };
       const response = await sendRequest(request);
-      if (response.ok) {
-        const sessionId = response.data?.sessionId as string;
-        const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
-        // Tag the user's current tmux session so it's part of the same cycle group
-        if (process.env['TMUX']) {
-          try {
-            execSync(`tmux set-option @sisyphus_cwd ${shellQuote(cwd)}`, { stdio: 'ignore' });
-          } catch { /* not in tmux or tmux error — ignore */ }
-
-          try {
-            const tmuxSession = getTmuxSession();
-            if (openDashboardWindow(tmuxSession, cwd)) {
-              console.log(`Dashboard opened in tmux window "sisyphus-dashboard"`);
-            }
-          } catch { /* dashboard launch failed — non-fatal */ }
-        }
-
-        console.log(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
-        console.log(`The orchestrator and its agents will handle this task autonomously — no further action needed from you.`);
-
-        if (tmuxSessionName) {
-          console.log(`\nTmux session: ${tmuxSessionName}`);
-          console.log(`  tmux attach -t ${tmuxSessionName}`);
-        }
-
-        console.log(`\nMonitor:`);
-        console.log(`  sisyphus status ${sessionId}    # agents, cycles, reports`);
-        console.log(`  tail -f ~/.sisyphus/daemon.log   # daemon activity`);
-        console.log(`\nControl:`);
-        console.log(`  sisyphus resume ${sessionId} "new instructions"  # respawn with follow-up`);
-        console.log(`  sisyphus kill ${sessionId}        # stop all agents and orchestrator`);
-      } else {
+      if (!response.ok) {
         console.error(`Error: ${response.error}`);
         process.exit(1);
       }
+
+      const sessionId = response.data?.sessionId as string;
+      console.log(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
+
+      if (opts.tmuxCheck === false) {
+        // --no-tmux-check: print info and exit, don't touch tmux
+        const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
+        if (tmuxSessionName) {
+          console.log(`Tmux session: ${tmuxSessionName}`);
+          console.log(`  tmux attach -t ${tmuxSessionName}`);
+        }
+        console.log(`Monitor: sisyphus status ${sessionId}`);
+        return;
+      }
+
+      // Determine which tmux session to use for the dashboard.
+      // If we're already in tmux, use the current session.
+      // If not, create a dedicated session for this project.
+      const tmuxSession = process.env['TMUX']
+        ? getTmuxSession()
+        : ensureTmuxSessionExists(cwd);
+
+      // Tag the tmux session with the cwd
+      try {
+        execSync(
+          `tmux set-option -t ${shellQuote(tmuxSession)} @sisyphus_cwd ${shellQuote(cwd)}`,
+          { stdio: 'ignore' },
+        );
+      } catch { /* ignore */ }
+
+      // Open dashboard in the tmux session
+      try {
+        openDashboardWindow(tmuxSession, cwd);
+      } catch { /* non-fatal */ }
+
+      // If we weren't in tmux, attach now — user lands on the dashboard
+      if (!process.env['TMUX']) {
+        attachToTmuxSession(tmuxSession);
+      }
+
+      console.log(`Monitor: sisyphus status ${sessionId}`);
     });
 }
