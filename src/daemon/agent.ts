@@ -414,7 +414,7 @@ export async function handleAgentReport(
     if (aiSummary) {
       await state.updateReportSummary(cwd, sessionId, agentId, filePath, aiSummary);
     }
-  }).catch(() => {});
+  }).catch((err) => { console.warn('[sisyphus] Report summarization failed:', err instanceof Error ? err.message : err); });
 }
 
 export async function handleAgentSubmit(
@@ -442,7 +442,7 @@ export async function handleAgentSubmit(
     if (aiSummary) {
       await state.updateReportSummary(cwd, sessionId, agentId, filePath, aiSummary);
     }
-  }).catch(() => {});
+  }).catch((err) => { console.warn('[sisyphus] Report summarization failed:', err instanceof Error ? err.message : err); });
 
   const flushedActiveMs = flushAgentTimer(sessionId, agentId);
   await state.updateAgent(cwd, sessionId, agentId, {

@@ -682,10 +682,10 @@ export async function handleSpawn(
     saveCompanion(companion);
     generateNickname(companion).then(nickname => {
       if (nickname) {
-        state.updateAgent(cwd, sessionId, agent.id, { nickname }).catch(() => {});
+        state.updateAgent(cwd, sessionId, agent.id, { nickname }).catch((err) => { console.warn('[sisyphus] Failed to save agent nickname:', err instanceof Error ? err.message : err); });
         emitHistoryEvent(sessionId, 'agent-nicknamed', { agentId: agent.id, nickname });
       }
-    }).catch(() => {});
+    }).catch((err) => { console.warn('[sisyphus] Nickname generation failed:', err instanceof Error ? err.message : err); });
   } catch { /* companion errors are non-fatal */ }
 
   return { agentId: agent.id };
@@ -787,7 +787,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     if (sentiment) {
       writeSessionSummary(completedSession, { sentiment });
     }
-  }).catch(() => {});
+  }).catch((err) => { console.warn('[sisyphus] Sentiment generation failed:', err instanceof Error ? err.message : err); });
 
   // Companion hook — fire-and-forget, errors must not break session flow
   try {

@@ -48,7 +48,8 @@ export function loadSessionRegistry(): Record<string, string> {
   if (!existsSync(p)) return {};
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, string>;
-  } catch {
+  } catch (err) {
+    console.warn('[sisyphus] Failed to parse session registry:', err instanceof Error ? err.message : err);
     return {};
   }
 }
@@ -546,6 +547,11 @@ export function startServer(): Promise<Server> {
           handleRequest(req).then((res) => {
             if (!conn.destroyed) {
               conn.write(JSON.stringify(res) + '\n');
+            }
+          }).catch((err) => {
+            console.warn('[sisyphus] Unhandled request error:', err instanceof Error ? err.message : err);
+            if (!conn.destroyed) {
+              conn.write(JSON.stringify({ ok: false, error: 'Internal server error' }) + '\n');
             }
           });
         }
