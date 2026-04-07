@@ -91,7 +91,34 @@
 - `cloneSession()` fires the `session-start` companion hook (not a clone-specific event) — companion stat gains are identical to a new session.
 - `fireCompletionCommentary()` generates all completion commentary events in parallel and shows them as a multi-page popup (Enter advances pages); individual `fireCommentary()` calls show no popup unless `flash = true`.
 
+## Orchestrator Prompt Assembly (`orchestrator.ts`)
+
+- Mode resolution: `forceMode` → last *completed* cycle's `mode` → `'strategy'`. The `.reverse().find(c => c.completedAt)` scan skips any in-progress cycle, so an orchestrator that crashed mid-cycle doesn't influence mode.
+- `.sisyphus/orchestrator.md` (project override) replaces the entire system prompt — `orchestrator-base.md` and mode body are not appended. `{{AGENT_TYPES}}`, `{{ORCHESTRATOR_MODES}}`, and `$SISYPHUS_*` substitutions still apply if the placeholders exist in the project file.
+- Only `bundled` (`sisyphus:*`) agent types are injected into the orchestrator system prompt. Project/user/plugin-discovered types are deliberately hidden — adding a project agent type does not expose it to the orchestrator.
+- Context section switches on cycle number: cycle 1 inlines `session.context` text; cycles 2+ reference the `context/` directory by `@path`. Files written there by agents during cycle 1 only become visible to the orchestrator at cycle 2.
+- `drainMessages` is called inside `spawnOrchestrator` before the tmux pane is created — messages are consumed even if pane spawn subsequently fails. No retry path exists.
+- Goal source: `goal.md` file → `session.task`. Writing `goal.md` mid-session changes the orchestrator's goal; mutating `session.task` in state does not (it's only the initial fallback).
+- `handleOrchestratorComplete` does not kill the orchestrator pane — only `handleOrchestratorYield` does. The complete path assumes the pane already exited before the IPC hook fires.
+- `resolveOrchestratorPane`: in-memory `sessionOrchestratorPane` → `lastCycle.paneId` from persisted state. `sessionWindowMap` (window ID) has no persisted fallback — layout adjustment in `handleYield` is silently skipped after a daemon restart.
+- `detectRepos` scans root + immediate children only (1 level). `config.repos` filters child names; root `.` is never filtered out.
+
 ## Prompts
 
 - System + user prompts written to `prompts/` subdir, passed via CLI flags to avoid tmux quoting issues.
 - Agent suffix uses `--system-prompt` when `frontmatter.systemPrompt === 'replace'`; `--append-system-prompt` otherwise.
+
+## Orchestrator Spawning (`orchestrator.ts`)
+
+- **System/user prompt split**: system prompt = template + agent types (no session state); user prompt = formatted state + continuation instructions. Both written to numbered files (`orchestrator-system-N.md`, `orchestrator-user-N.md`) at spawn time.
+- **Project-level override** (`projectOrchestratorPromptPath`): if `.sisyphus/orchestrator.md` exists, it is used verbatim as the system prompt — `orchestrator-base.md` + mode composition is skipped entirely.
+- **Mode resolution order**: `forceMode` arg → last completed cycle's `mode` → `'strategy'`. If the selected mode file is absent, silently falls back to `'strategy'`; only errors if `'strategy'` is also missing.
+- **Agent types visible to orchestrator**: filtered to `source === 'bundled'` (`sisyphus:*` only). Project-, user-, and plugin-discovered agent types are intentionally hidden — the orchestrator cannot spawn them by name.
+- **Context section per cycle**: cycle 0 inlines `session.context` text directly in the user prompt; cycle 1+ references `@contextDir` as a file path instead. There is no inline context after cycle 0.
+- **Goal resolution**: `goal.md` (if present) takes precedence over `session.task` in the user prompt. Orchestrator can change its own goal by writing to this file.
+- **`drainMessages`** is called in `spawnOrchestrator`, not at yield — messages rendered in cycle N are cleared before cycle N+1 starts. Spawning again (e.g. resume) drains again.
+- **Continuation instructions priority**: explicit `message` arg > `lastCycle.nextPrompt` (set by orchestrator at yield) > default `'Review the current session…'` text.
+- **`sessionWindowMap` is memory-only** — no persistence fallback. Lost on daemon restart; `sessionOrchestratorPane` falls back to `lastCycle.paneId` from state, but window layout calls will fail silently.
+- **`handleOrchestratorComplete` does NOT kill the pane** — only `handleOrchestratorYield` does. Complete relies on the caller (daemon `handleComplete`) to clean up the pane afterward.
+- **`cleanupSessionMaps`** must be called on every kill/complete — omitting leaks entries in `sessionWindowMap`, `sessionOrchestratorPane`, and the pane registry.
+- **`claudeSessionId`** is a fresh UUID each spawn — there is no Claude session continuity across orchestrator cycles.
