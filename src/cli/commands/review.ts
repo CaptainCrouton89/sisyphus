@@ -1,15 +1,47 @@
 import type { Command } from 'commander';
 import { join, resolve, dirname } from 'node:path';
-import { existsSync, readFileSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { shellQuote } from '../../shared/shell.js';
-import { historyEventsPath, historySessionDir } from '../../shared/paths.js';
+import { contextDir, historyEventsPath, historySessionDir, sessionsDir } from '../../shared/paths.js';
 import { openTmuxWindow, waitForTmuxWindow } from '../../shared/tmux.js';
+
+function resolveContextArtifact(
+  file: string | undefined,
+  opts: { sessionId?: string; cwd?: string },
+  filename: string,
+  notFoundMessage: string,
+): string {
+  const cwd = opts.cwd || process.env.SISYPHUS_CWD || process.cwd();
+  if (file) return resolve(file);
+
+  const sessionId = opts.sessionId || process.env.SISYPHUS_SESSION_ID;
+  if (sessionId) {
+    const target = join(contextDir(cwd, sessionId), filename);
+    if (!existsSync(target)) {
+      console.error(`Error: File not found: ${target}`);
+      process.exit(1);
+    }
+    return target;
+  }
+
+  const dir = sessionsDir(cwd);
+  if (existsSync(dir)) {
+    const sessions = readdirSync(dir);
+    for (const session of sessions.reverse()) {
+      const candidate = join(dir, session, 'context', filename);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+
+  console.error(`Error: ${notFoundMessage}`);
+  process.exit(1);
+}
 
 export function registerReview(program: Command): void {
   program
     .command('requirements')
-    .description('Interactive EARS requirements reviewer — approve, comment on, and refine requirements produced by the requirements agent')
+    .description('Interactive EARS requirements reviewer — approve, comment on, and refine requirements produced by `sisyphus:spec` (or compatible writers)')
     .argument('[file]', 'Path to requirements.json (auto-detected from session if omitted)')
     .option('--session-id <id>', 'Session ID to find requirements for')
     .option('--cwd <path>', 'Project directory')
@@ -17,6 +49,8 @@ export function registerReview(program: Command): void {
     .option('--wait', 'Block until review completes and print feedback (implies --window)')
     .option('--schema', 'Print the requirements.json schema and exit')
     .option('--annotated', 'Print the schema with writing guidance annotations and exit')
+    .option('--export', 'Render requirements.json into requirements.md (no LLM tokens; overwrites existing requirements.md)')
+    .option('--force', 'With --export: overwrite existing requirements.md even if hand-edited; existing file is moved to requirements.md.bak before overwrite')
     .addHelpText('after', `
 File resolution (first match wins):
   1. Positional [file] argument
@@ -31,8 +65,62 @@ Examples:
   $ sisyphus requirements --wait                       Block until review completes (for agent use)
   $ sisyphus requirements --schema                     Print the JSON schema
   $ sisyphus requirements --annotated                  Print schema with writing guidance
+  $ sisyphus requirements --export                       Render requirements.md from JSON
+  $ sisyphus requirements --export --session-id abc123   Target a specific session
+  $ sisyphus requirements --export --force               Overwrite even if hand-edited
 `)
     .action(async (file, opts) => {
+      if (opts.force && !opts.export) {
+        console.error('Error: --force requires --export');
+        process.exit(1);
+      }
+      if (opts.export && opts.schema) {
+        console.error('Error: --export cannot be combined with --schema');
+        process.exit(1);
+      }
+      if (opts.export && opts.annotated) {
+        console.error('Error: --export cannot be combined with --annotated');
+        process.exit(1);
+      }
+      if (opts.export) {
+        const targetPath = resolveContextArtifact(
+          file,
+          opts,
+          'requirements.json',
+          'No requirements.json found. Provide a path or use --session-id.',
+        );
+
+        if (!existsSync(targetPath)) {
+          console.error(`Error: File not found: ${targetPath}`);
+          process.exit(1);
+        }
+
+        const parsed = JSON.parse(readFileSync(targetPath, 'utf-8')) as Record<string, unknown>;
+        const rendered = renderRequirementsMarkdown(parsed);
+        const outPath = join(dirname(targetPath), 'requirements.md');
+        const tmpPath = outPath + '.tmp';
+
+        if (existsSync(outPath)) {
+          const existing = readFileSync(outPath, 'utf-8');
+          if (existing !== rendered) {
+            if (!opts.force) {
+              process.stderr.write(
+                `Error: ${outPath} has been hand-edited (differs from rendered output).\n` +
+                `Use --force to overwrite (existing file backed up to requirements.md.bak).\n`,
+              );
+              process.exit(1);
+            }
+            const bakPath = outPath + '.bak';
+            renameSync(outPath, bakPath);
+            process.stderr.write(`Note: Existing requirements.md backed up to ${bakPath}\n`);
+          }
+        }
+
+        writeFileSync(tmpPath, rendered, 'utf-8');
+        renameSync(tmpPath, outPath);
+        process.stdout.write(resolve(outPath) + '\n');
+        return;
+      }
       if (opts.schema) {
         process.stdout.write(JSON.stringify(REQUIREMENTS_SCHEMA, null, 2) + '\n');
         return;
@@ -52,7 +140,7 @@ Examples:
 
   program
     .command('design')
-    .description('Interactive design walkthrough — review architecture decisions, trade-offs, and component designs produced by the design agent')
+    .description('Interactive design walkthrough — review architecture decisions, trade-offs, and component designs produced by `sisyphus:spec` (or compatible writers)')
     .argument('[file]', 'Path to design.json (auto-detected from session if omitted)')
     .option('--session-id <id>', 'Session ID to find design for')
     .option('--cwd <path>', 'Project directory')
@@ -106,34 +194,7 @@ async function runReviewTui(
   opts: { sessionId?: string; cwd?: string; window?: boolean; wait?: boolean },
   config: ReviewTuiConfig,
 ): Promise<void> {
-  const cwd = opts.cwd || process.env.SISYPHUS_CWD || process.cwd();
-  let targetPath: string;
-
-  if (file) {
-    targetPath = resolve(file);
-  } else {
-    const sessionId = opts.sessionId || process.env.SISYPHUS_SESSION_ID;
-    if (sessionId) {
-      targetPath = join(cwd, '.sisyphus', 'sessions', sessionId, 'context', config.filename);
-    } else {
-      const sessionsDir = join(cwd, '.sisyphus', 'sessions');
-      if (existsSync(sessionsDir)) {
-        const { readdirSync } = await import('node:fs');
-        const sessions = readdirSync(sessionsDir);
-        for (const s of sessions.reverse()) {
-          const candidate = join(sessionsDir, s, 'context', config.filename);
-          if (existsSync(candidate)) {
-            targetPath = candidate;
-            break;
-          }
-        }
-      }
-      if (!targetPath!) {
-        console.error(`Error: ${config.notFoundMessage}`);
-        process.exit(1);
-      }
-    }
-  }
+  const targetPath = resolveContextArtifact(file, opts, config.filename, config.notFoundMessage);
 
   if (!existsSync(targetPath)) {
     console.error(`Error: File not found: ${targetPath}`);
@@ -220,6 +281,63 @@ function emitReviewEvent(sessionId: string, event: 'review-started' | 'review-co
 
 const REQUIREMENTS_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $defs: {
+    requirementItem: {
+      type: 'object',
+      required: ['id', 'title', 'ears', 'criteria', 'status'],
+      properties: {
+        id: { type: 'string', pattern: '^REQ-\\d{3}$' },
+        title: { type: 'string' },
+        ears: {
+          type: 'object',
+          required: ['shall'],
+          properties: {
+            when: { type: 'string' },
+            while: { type: 'string' },
+            if: { type: 'string' },
+            where: { type: 'string' },
+            shall: { type: 'string' },
+          },
+          oneOf: [
+            { required: ['when', 'shall'] },
+            { required: ['while', 'shall'] },
+            { required: ['if', 'shall'] },
+            { required: ['where', 'shall'] },
+          ],
+        },
+        criteria: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['text', 'checked'],
+            properties: {
+              text: { type: 'string' },
+              checked: { type: 'boolean' },
+            },
+          },
+        },
+        status: { type: 'string', enum: ['draft', 'question', 'approved', 'rejected', 'deferred'] },
+        agentNotes: { type: 'string' },
+        userNotes: { type: 'string' },
+        questions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['id', 'question', 'response'],
+            properties: {
+              id: { type: 'string' },
+              question: { type: 'string' },
+              response: { type: 'string' },
+            },
+          },
+        },
+        reviewAction: { type: ['string', 'null'], enum: ['approve', 'comment', 'bounce-to-design', null] },
+        userComment: { type: 'string' },
+        startedAt: { type: 'string', format: 'date-time', readOnly: true },
+        completedAt: { type: 'string', format: 'date-time', readOnly: true },
+      },
+    },
+  },
   title: 'Sisyphus Requirements',
   description: 'EARS-format behavioral requirements for the sisyphus review TUI',
   type: 'object',
@@ -227,7 +345,7 @@ const REQUIREMENTS_SCHEMA = {
   properties: {
     meta: {
       type: 'object',
-      required: ['title', 'subtitle', 'summary', 'version', 'lastModified', 'draft'],
+      required: ['title', 'summary', 'version', 'lastModified', 'draft'],
       properties: {
         title: { type: 'string' },
         subtitle: { type: 'string' },
@@ -237,6 +355,9 @@ const REQUIREMENTS_SCHEMA = {
         draft: { type: 'integer', minimum: 1 },
         reviewStartedAt: { type: 'string', format: 'date-time', readOnly: true },
         reviewCompletedAt: { type: 'string', format: 'date-time', readOnly: true },
+        stage: { type: 'string', enum: ['stage-2-in-progress', 'stage-2-done', 'stage-3-done'] },
+        nextSectionId: { type: 'string' },
+        bounceIterations: { type: 'object', additionalProperties: { type: 'integer', minimum: 0 } },
       },
     },
     groups: {
@@ -251,61 +372,11 @@ const REQUIREMENTS_SCHEMA = {
           context: { type: 'string' },
           requirements: {
             type: 'array',
-            items: {
-              type: 'object',
-              required: ['id', 'title', 'ears', 'criteria', 'status'],
-              properties: {
-                id: { type: 'string', pattern: '^REQ-\\d{3}$' },
-                title: { type: 'string' },
-                ears: {
-                  type: 'object',
-                  required: ['shall'],
-                  properties: {
-                    when: { type: 'string' },
-                    while: { type: 'string' },
-                    if: { type: 'string' },
-                    where: { type: 'string' },
-                    shall: { type: 'string' },
-                  },
-                  oneOf: [
-                    { required: ['when', 'shall'] },
-                    { required: ['while', 'shall'] },
-                    { required: ['if', 'shall'] },
-                    { required: ['where', 'shall'] },
-                  ],
-                },
-                criteria: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    required: ['text', 'checked'],
-                    properties: {
-                      text: { type: 'string' },
-                      checked: { type: 'boolean' },
-                    },
-                  },
-                },
-                status: { type: 'string', enum: ['draft', 'question', 'approved', 'rejected', 'deferred'] },
-                agentNotes: { type: 'string' },
-                userNotes: { type: 'string' },
-                questions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    required: ['id', 'question', 'response'],
-                    properties: {
-                      id: { type: 'string' },
-                      question: { type: 'string' },
-                      response: { type: 'string' },
-                    },
-                  },
-                },
-                reviewAction: { type: ['string', 'null'], enum: ['approve', 'comment', null] },
-                userComment: { type: 'string' },
-                startedAt: { type: 'string', format: 'date-time', readOnly: true },
-                completedAt: { type: 'string', format: 'date-time', readOnly: true },
-              },
-            },
+            items: { $ref: '#/$defs/requirementItem' },
+          },
+          safeAssumptions: {
+            type: 'array',
+            items: { $ref: '#/$defs/requirementItem' },
           },
           openQuestions: {
             type: 'array',
@@ -327,7 +398,7 @@ const REQUIREMENTS_SCHEMA = {
                   },
                 },
                 response: { type: 'string' },
-                selectedOption: { type: ['string', 'null'] },
+                selectedOption: { type: ['integer', 'null'] },
               },
             },
           },
@@ -342,6 +413,9 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 # This is NOT valid JSON — it's a reference showing every field with
 # inline guidance. Run \`sisyphus requirements --schema\` for the raw
 # JSON Schema.
+#
+# Safe assumptions are progressively disclosed in the TUI and must satisfy
+# the same EARS shape requirements as regular requirements.
 
 {
   "meta": {
@@ -368,6 +442,11 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
     // ── TUI-owned fields (do NOT write these) ──
     // "reviewStartedAt": set by TUI when user opens review
     // "reviewCompletedAt": set by TUI when user finishes review
+
+    // ── Spec lead state-machine fields (do NOT write unless you are the spec lead) ──
+    // "stage": "stage-2-in-progress" | "stage-2-done" | "stage-3-done" — current spec lead stage
+    // "nextSectionId": section ID the lead is about to dispatch the writer for
+    // "bounceIterations": Record<sectionId, number> — per-section bounce-loop counter, never decrements
   },
 
   "groups": [
@@ -464,10 +543,46 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
           ]
 
           // ── TUI-owned fields (do NOT write these) ──
-          // "reviewAction": "approve" | "comment" — set by TUI during review
+          // "reviewAction": "approve" | "comment" | "bounce-to-design" — set by TUI during review
+          //   "bounce-to-design" means the user thinks this requirement exposes a flaw in the
+          //   underlying design and wants to revisit Stage 1 before continuing.
           // "userComment": free-form comment from user's review session
           // "startedAt": ISO timestamp when user first views this item
           // "completedAt": ISO timestamp when user takes action
+        }
+      ],
+
+      /*
+       * safeAssumptions — items the writer is confident the user will accept without
+       * discussion: defaults, conventions, and obviously-correct behaviors that follow
+       * directly from the design.
+       *
+       * NOT safe assumptions: anything novel, anything the writer is uncertain about,
+       * or anything that would change with a small design tweak.
+       *
+       * TUI behavior: collapsed by default in the group-intro phase with a count badge;
+       * bulk-approvable in one keystroke, expandable for spot-check.
+       *
+       * Field shape: identical to a requirements item — same id pattern (REQ-NNN), same
+       * ears structure, same criteria, same agentNotes. Cap is 9 per group (matches the
+       * TUI's 1-9 number-key affordance). Typical group has 3-7 requirements and 0-9
+       * safe assumptions. Use agentNotes to briefly justify why each item qualifies as safe.
+       */
+      "safeAssumptions": [
+        {
+          "id": "REQ-010",
+          "title": "Default session timeout is 30 minutes",
+          "ears": {
+            "where": "Where no custom timeout is configured",
+            "shall": "the system shall expire idle sessions after 30 minutes"
+          },
+          "criteria": [
+            { "text": "Session expires after 30 minutes of inactivity", "checked": false }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe assumption: 30-minute idle timeout is a near-universal default and the design doc does not specify an alternative.",
+          "userNotes": "",
+          "questions": []
         }
       ],
 
@@ -749,3 +864,156 @@ const DESIGN_ANNOTATED = `# design.json — Annotated Writing Guide
     }
   ]
 }`;
+
+// ── Requirements markdown renderer ───────────────────────────────────
+
+function renderRequirementItem(out: string[], req: Record<string, unknown>): void {
+  const item: string[] = [];
+
+  item.push(`### ${req.id}: ${req.title}`);
+  item.push('');
+  item.push(`**Status:** ${req.status}`);
+  item.push('');
+
+  const ears = req.ears as Record<string, string>;
+  const earsClauses: string[] = [];
+  if (ears.when) earsClauses.push(ears.when);
+  if (ears.while) earsClauses.push(ears.while);
+  if (ears.if) earsClauses.push(ears.if);
+  if (ears.where) earsClauses.push(ears.where);
+  earsClauses.push(ears.shall);
+  item.push(earsClauses.join(', '));
+  item.push('');
+
+  const criteria = req.criteria as Array<{ text: string; checked: boolean }> | undefined;
+  if (criteria && criteria.length > 0) {
+    item.push('**Acceptance Criteria:**');
+    item.push('');
+    for (const c of criteria) {
+      item.push(`- [${c.checked ? 'x' : ' '}] ${c.text}`);
+    }
+    item.push('');
+  }
+
+  const agentNotes = req.agentNotes ? String(req.agentNotes).trim() : '';
+  if (agentNotes) {
+    item.push('**Agent Notes:**');
+    item.push('');
+    item.push(agentNotes);
+    item.push('');
+  }
+
+  const userNotes = req.userNotes ? String(req.userNotes).trim() : '';
+  if (userNotes) {
+    item.push('**User Notes:**');
+    item.push('');
+    item.push(userNotes);
+    item.push('');
+  }
+
+  const questions = req.questions as Array<{ id: string; question: string; response: string }> | undefined;
+  if (questions && questions.length > 0) {
+    item.push('**Questions:**');
+    item.push('');
+    for (const q of questions) {
+      item.push(`- **${q.id}:** ${q.question}`);
+      const resp = q.response.trim();
+      item.push(`  **Response:** ${resp !== '' ? resp : '(unanswered)'}`);
+    }
+    item.push('');
+  }
+
+  const userComment = req.userComment ? String(req.userComment).trim() : '';
+  if (userComment) {
+    item.push('**User Comment:**');
+    item.push('');
+    item.push(userComment);
+    item.push('');
+  }
+
+  while (item.length > 0 && item[item.length - 1] === '') item.pop();
+  out.push(...item);
+}
+
+function renderRequirementsMarkdown(json: Record<string, unknown>): string {
+  const meta = json.meta as Record<string, unknown>;
+  const groups = json.groups as Array<Record<string, unknown>>;
+  const out: string[] = [];
+
+  out.push(`# ${meta.title}`);
+  out.push('');
+  if (meta.subtitle) {
+    out.push(`*${meta.subtitle}*`);
+    out.push('');
+  }
+  out.push(`Draft ${meta.draft} — ${meta.lastModified}`);
+  out.push('');
+  out.push('---');
+  out.push('');
+  if (meta.summary) {
+    out.push(String(meta.summary));
+    out.push('');
+  }
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi];
+
+    if (gi > 0) {
+      out.push('');
+      out.push('');
+    }
+
+    out.push(`## ${group.name}`);
+    out.push('');
+
+    if (group.description) {
+      out.push(String(group.description));
+      out.push('');
+    }
+
+    if (group.context) {
+      out.push(String(group.context));
+      out.push('');
+    }
+
+    const requirements = group.requirements as Array<Record<string, unknown>>;
+    for (let ri = 0; ri < requirements.length; ri++) {
+      if (ri > 0) out.push('');
+      renderRequirementItem(out, requirements[ri]);
+    }
+
+    const safeAssumptions = group.safeAssumptions as Array<Record<string, unknown>> | undefined;
+    if (safeAssumptions && safeAssumptions.length > 0) {
+      out.push('');
+      out.push('### Safe Assumptions');
+      out.push('');
+      for (let si = 0; si < safeAssumptions.length; si++) {
+        if (si > 0) out.push('');
+        renderRequirementItem(out, safeAssumptions[si]);
+      }
+    }
+
+    const openQuestions = group.openQuestions as Array<Record<string, unknown>> | undefined;
+    if (openQuestions && openQuestions.length > 0) {
+      out.push('');
+      out.push('### Open Questions');
+      out.push('');
+      for (const oq of openQuestions) {
+        out.push(`**${oq.id}:** ${oq.question}`);
+        out.push('');
+        const options = oq.options as Array<Record<string, unknown>> | undefined;
+        if (options && options.length > 0) {
+          for (const opt of options) {
+            out.push(`- **${opt.title}:** ${opt.description}`);
+          }
+          out.push('');
+        }
+        const resp = typeof oq.response === 'string' ? oq.response.trim() : '';
+        out.push(`**Response:** ${resp !== '' ? resp : '(unanswered)'}`);
+        out.push('');
+      }
+    }
+  }
+
+  return out.join('\n') + '\n';
+}
