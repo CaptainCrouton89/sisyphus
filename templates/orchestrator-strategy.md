@@ -21,7 +21,7 @@ This means every stage you design needs to be self-sufficient: the orchestrator 
 
 The user's role at each stage:
 - **Discovery/exploration**: answer questions about their intent, constraints, priorities
-- **Requirements/design**: approve requirements and architecture decisions
+- **Spec**: approve design and requirements (both handled by `sisyphus:spec`)
 - **Implementation**: mostly hands-off — they see progress, intervene if something looks wrong
 - **Validation**: sign off on the final result
 
@@ -87,10 +87,10 @@ discovery → product-design → technical-investigation → architecture → im
 exploration → spike → design → implementation → validation
 investigation → recommendation → (user decides) → implementation
 analysis → phased-transformation → verification
-discovery → requirements → design → planning → implementation → validation
+discovery → spec → planning → implementation → validation
 ```
 
-Mix and match. The orchestrator plays different roles at different stages — product designer during discovery, architect during design, engineering lead during implementation. A massive refactor might start with investigation, move through phased transformation, and end with validation. A research-heavy feature might cycle between exploration and prototyping before ever reaching a design stage. Let the problem dictate the shape.
+Mix and match. The orchestrator plays different roles at different stages — product designer during discovery, architect during spec, engineering lead during implementation. A massive refactor might start with investigation, move through phased transformation, and end with validation. A research-heavy feature might cycle between exploration and prototyping before ever reaching a design stage. Let the problem dictate the shape.
 
 Not every stage needs to appear. Skip what's already clear. Add stages the patterns don't show — spikes, prototypes, migration stages, compatibility checks, whatever the problem demands. Stages can be anything — they're not limited to the patterns below.
 
@@ -121,40 +121,33 @@ Produces: spike findings in context/, prototype code (may be throwaway)
 Backtrack: if spike fails → re-explore alternatives
 </stage>
 
-<stage name="requirements" use-when="Need to define what to build before designing how">
-Process: draft requirements from exploration/discovery findings → review for feasibility against actual codebase → align with user → revise
-Exit: user-approved requirements with testable acceptance criteria
-Produces: requirements document in context/
+<stage name="spec" use-when="Need to define what to build and how, in a single interactive session">
+Process: spawn sisyphus:spec → lead explores codebase, asks user questions, dispatches engineer for design and writers for requirements → user reviews via TUI per section → lead deepens design with findings
+Exit: user-approved design + requirements with testable acceptance criteria
+Produces: context/design.md + context/design.json + context/requirements.json + context/requirements.md
 Backtrack: if problem was misframed → re-explore or re-discover
 </stage>
 
-<stage name="design" use-when="Requirements approved, need to define the architecture and approach">
-Process: explore viable approaches → draft design (architecture, component boundaries, data models, contracts) → review for feasibility and gaps → align with user
-Exit: user-approved design document
-Produces: design doc in context/
-Backtrack: if requirements wrong or incomplete → update requirements
-</stage>
-
 <stage name="planning" use-when="Design approved, need an executable breakdown">
-Process: spawn plan lead with requirements + design as inputs → adversarial review of plan → create e2e verification recipe
+Process: spawn plan lead with spec outputs (requirements + design) as inputs → adversarial review of plan → create e2e verification recipe
 Exit: reviewed plan + executable e2e-recipe.md that defines how to prove the feature works
 Produces: phased implementation plan + e2e recipe in context/
-Backtrack: if plan reveals design infeasibility → revisit design
+Backtrack: if plan reveals design infeasibility → revisit spec
 </stage>
 
 <stage name="implementation" use-when="Plan exists, time to build">
 Process: for each phase → detail-plan → spawn implement agents → critique → refine → validate phase
 Exit: all phases validated with evidence, no critical review findings remain
 Produces: code changes, phase validation results
-Loops: critique/refine within each phase (cap at 3 rounds before escalating to plan/design)
-Backtrack: if 2+ agents hit same unexpected complexity → revisit plan or design
+Loops: critique/refine within each phase (cap at 3 rounds before escalating to plan/spec)
+Backtrack: if 2+ agents hit same unexpected complexity → revisit plan or spec
 </stage>
 
 <stage name="validation" use-when="Implementation complete, need to prove it works end-to-end">
 Process: run full e2e recipe → collect evidence (command output, screenshots, responses) → assess against success criteria → step back and check if the goal is actually met
 Exit: all recipe steps pass with concrete evidence, original goal satisfied
 Produces: validation report with evidence
-Backtrack: if bugs found → implementation; if architectural issues → design
+Backtrack: if bugs found → implementation; if architectural issues → spec
 </stage>
 
 </stage-patterns>

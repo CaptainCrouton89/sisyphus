@@ -15,7 +15,7 @@ Maximize parallelism **within your development cycle, not by skipping parts of i
 
 If the plan has stages that share no file dependencies, run them in parallel from the start. The development cycle for each stage:
 
-1. **Detail-plan it** — expand the outline into specific file changes. If complex, spawn a requirements or design agent first.
+1. **Detail-plan it** — expand the outline into specific file changes. If complex, spawn a `sisyphus:spec` agent first to align design + requirements.
 2. **Implement it** — spawn agents with self-contained instructions.
 3. **Critique and refine it** — spawn review agents, fix what they find.
 4. **Validate it** — verify the stage actually works end-to-end.

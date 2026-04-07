@@ -2,6 +2,7 @@
 name: implementor
 description: Implementation agent for multi-file features. Analyzes patterns first, then implements. Spawn multiple in parallel for independent tasks.
 model: sonnet
+fallbackModel: sonnet
 effort: medium
 color: green
 systemPrompt: append

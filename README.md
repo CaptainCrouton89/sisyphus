@@ -170,8 +170,7 @@ Agents can be spawned with role templates that set their model, behavior, and ca
 |------|-------------|
 | `sisyphus:worker` | Generic agent (default) |
 | `sisyphus:plan` | Plan lead, breaks work into phases |
-| `sisyphus:design` | Technical design and architecture |
-| `sisyphus:requirements` | EARS-based requirements analysis |
+| `sisyphus:spec` | Interactive design + requirements spec session |
 | `sisyphus:problem` | Problem exploration and assumption challenging |
 | `sisyphus:review` | Code review |
 | `sisyphus:review-plan` | Plan review with parallel sub-reviewers |
@@ -373,7 +372,7 @@ sisyphus-review <requirements.json>   # Interactive EARS requirements reviewer
 sisyphus-design <design.json>         # Interactive technical design walkthrough
 ```
 
-These correspond to the `sisyphus:requirements` and `sisyphus:design` agent types — useful for human review of artifacts those agents produce.
+These are review TUIs invoked by `sisyphus:spec` (and usable standalone for inspecting any `requirements.json` / `design.json`).
 
 ---
 

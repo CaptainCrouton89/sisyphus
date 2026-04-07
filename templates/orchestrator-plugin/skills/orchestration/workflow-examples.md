@@ -122,7 +122,7 @@ Agents spawned:
     what storage backends are available (Redis?), user identification mechanisms."
 ```
 
-### Cycle 2 — Requirements (after human reviews problem doc)
+### Cycle 2 — Spec (after human iterates on problem)
 ```
 Agent report: "Problem document saved to context/problem-rate-limiting.md.
   Current middleware chain uses Express middleware pattern. Redis is already in stack.
@@ -130,35 +130,27 @@ Agent report: "Problem document saved to context/problem-rate-limiting.md.
 
 roadmap.md updated:
   - [x] ~~Problem exploration~~
-  - [ ] Requirements — define acceptance criteria
+  - [ ] Spec — define acceptance criteria and architecture
   ...
 
 Agents spawned:
-  requirements agent → "Draft acceptance criteria for per-user API rate limiting.
-    Read context/problem-rate-limiting.md for context.
-    Questions to resolve: limit granularity (per-endpoint vs global),
-    response format for rate-limited requests, override mechanisms."
-```
+  sisyphus:spec → "Run a spec session for per-user API rate limiting. Read context/problem-rate-limiting.md for context."
 
-### Cycle 3 — Design (after human reviews requirements)
-```
-Agent report: "Requirements saved to context/requirements-rate-limiting.md.
+Later report: "Spec completed.
+  Requirements saved to context/requirements-rate-limiting.md.
+  Design saved to context/design-rate-limiting.md.
   Covers: per-user limits, endpoint-specific overrides, 429 response format,
-  Retry-After headers. User confirmed Redis-backed approach."
-
-Agents spawned:
-  design agent → "Create technical design for rate limiting based on
-    context/requirements-rate-limiting.md and context/problem-rate-limiting.md."
+  Retry-After headers, and a Redis-backed sliding window approach."
 ```
 
-### Cycle 4 — Plan (after human reviews design)
+### Cycle 3 — Plan (after human reviews spec)
 ```
-Agent report: "Design saved to context/design-rate-limiting.md.
+Agent report: "Spec outputs approved.
   Approach: Redis-backed sliding window middleware. Per-user with endpoint-specific
   overrides. Standard 429 response with Retry-After header. Config via environment variables."
 
 roadmap.md updated:
-  - [x] ~~Problem exploration~~, [x] ~~Requirements~~, [x] ~~Design~~
+  - [x] ~~Problem exploration~~, [x] ~~Spec~~
   - [ ] Plan implementation
   ...
 
@@ -169,7 +161,7 @@ Agents spawned:
     context/requirements-rate-limiting.md"
 ```
 
-### Cycle 5 — Review plan
+### Cycle 4 — Review plan
 ```
 Both agents complete. Plan at context/plan-rate-limiting.md.
 Plan has 3 phases: middleware, config, response format.
@@ -179,12 +171,12 @@ Agents spawned:
     against context/requirements-rate-limiting.md and context/design-rate-limiting.md"
 ```
 
-### Cycle 6 — Implement phases 1+2 (parallel, low-risk foundation)
+### Cycle 5 — Implement phases 1+2 (parallel, low-risk foundation)
 ```
 Plan review: PASS.
 
 roadmap.md updated (plan review done, starting implementation):
-  - [x] ~~Requirements~~, [x] ~~Design~~, [x] ~~Plan~~, [x] ~~Review plan~~
+  - [x] ~~Spec~~, [x] ~~Plan~~, [x] ~~Review plan~~
   - [ ] Implement rate limiting middleware
   - [ ] Implement rate limit configuration
   - [ ] Critique phases 1-2 — review before integration phase
@@ -199,7 +191,7 @@ Agents spawned (parallel — phases touch different files):
     rate limit configuration in src/config/rate-limits.ts"
 ```
 
-### Cycle 7 — Critique before integration builds on top
+### Cycle 6 — Critique before integration builds on top
 ```
 Both implementation agents complete.
 
@@ -217,7 +209,7 @@ Agents spawned:
     config schema matches what middleware expects."
 ```
 
-### Cycle 8 — Implement phase 3 + address critique
+### Cycle 7 — Implement phase 3 + address critique
 ```
 Review: 2 findings — middleware doesn't handle Redis connection failure gracefully,
   config schema allows negative rate limits.
@@ -229,7 +221,7 @@ Agents spawned (parallel):
     rate limit headers and 429 error responses in src/api/middleware/rate-limit.ts"
 ```
 
-### Cycle 9 — Validate end-to-end
+### Cycle 8 — Validate end-to-end
 ```
 Phase 3 and fixes complete.
 

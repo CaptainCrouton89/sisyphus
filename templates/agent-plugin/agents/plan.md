@@ -79,8 +79,13 @@ A plan tells agents **what to build and where** — not how to write it. Agents 
 
 **Never write code in the plan.** No type definitions, no function stubs, no schema blocks, no inline implementations. Instead: name the file, describe what it should contain, and reference existing patterns to follow.
 
-- Bad: 60-line TypeScript stub with full Zod schemas
-- Good: "`src/worker/index.ts` — Worker types and enums. Follow the three-part enum pattern in `src/jobs/index.ts`. Export WorkerState, WakeReason, Worker DTO, request/response schemas."
+<example>
+Bad — code in the plan:
+60-line TypeScript stub with full Zod schemas
+
+Good — pointer in the plan:
+`src/worker/index.ts` — Worker types and enums. Follow the three-part enum pattern in `src/jobs/index.ts`. Export WorkerState, WakeReason, Worker DTO, request/response schemas.
+</example>
 
 ## Process
 
@@ -126,6 +131,7 @@ Master plan + sub-plans. The master plan is a navigable index (<200 lines) with 
 ```markdown
 # {Topic} Implementation Plan
 
+<!-- requirements.md and design.md artifacts are now typically produced by `sisyphus:spec` -->
 **Requirements:** `path/to/requirements.md`
 **Design:** `path/to/design.md`
 
