@@ -6,6 +6,7 @@ import type { Provider } from '../shared/types.js';
 export interface AgentTypeFrontmatter {
   name?: string;
   model?: string;
+  fallbackModel?: string;
   color?: string;
   description?: string;
   skills?: string[];
@@ -38,6 +39,7 @@ export function parseAgentFrontmatter(content: string): AgentTypeFrontmatter {
 
   fm.name = str('name');
   fm.model = str('model');
+  fm.fallbackModel = str('fallbackModel');
   fm.color = str('color');
   fm.description = str('description');
   fm.permissionMode = str('permissionMode');

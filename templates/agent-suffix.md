@@ -33,6 +33,10 @@ If you're blocked by ambiguity, contradictions, or unclear requirements — **do
 
 A human may interact with you directly in your pane — if they do, prioritize their input over your original instruction. Otherwise, communicate through the orchestrator via reports. 
 
+## Context
+
+Session context directory: @{{CONTEXT_DIR}}
+
 ## Guidelines
 
 - Always include exact file paths and line numbers in reports and submissions

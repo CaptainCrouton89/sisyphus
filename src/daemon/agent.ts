@@ -1,13 +1,13 @@
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { resolve, dirname, join } from 'node:path';
+import { resolve, relative, dirname, join } from 'node:path';
 import type { Agent, AgentReport } from '../shared/types.js';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { getNextColor, normalizeTmuxColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
-import { promptsDir, reportsDir, reportFilePath, sessionDir } from '../shared/paths.js';
+import { contextDir, promptsDir, reportsDir, reportFilePath, sessionDir } from '../shared/paths.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 import { flushAgentTimer } from './pane-monitor.js';
 import { summarizeReport } from './summarize.js';
@@ -39,7 +39,7 @@ export function clearAgentCounter(sessionId: string): void {
   agentCounters.delete(sessionId);
 }
 
-function renderAgentSuffix(sessionId: string, instruction: string): string {
+function renderAgentSuffix(sessionId: string, instruction: string, contextDirRel: string): string {
   const templatePath = resolve(import.meta.dirname, '../templates/agent-suffix.md');
   let template: string;
   try {
@@ -51,7 +51,7 @@ function renderAgentSuffix(sessionId: string, instruction: string): string {
   return template
     .replace(/\{\{SESSION_ID\}\}/g, sessionId)
     .replace(/\{\{INSTRUCTION\}\}/g, instruction)
-    .replace(/\{\{WORKTREE_CONTEXT\}\}/g, '');
+    .replace(/\{\{CONTEXT_DIR\}\}/g, contextDirRel);
 }
 
 function createAgentPlugin(
@@ -118,7 +118,7 @@ function createAgentPlugin(
   const userPromptHooks: Record<string, string> = {
     'problem': 'problem-user-prompt.sh',
     'plan': 'plan-user-prompt.sh',
-    'requirements': 'requirements-user-prompt.sh',
+    'spec': 'spec-user-prompt.sh',
     'review': 'review-user-prompt.sh',
     'review-plan': 'review-plan-user-prompt.sh',
     'debug': 'debug-user-prompt.sh',
@@ -170,7 +170,8 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   tmux.setPaneTitle(paneId, agentTitle);
   tmux.setPaneStyle(paneId, color, { role: paneLabel, session: sessionLabel, cycle: `c${cycleNum}` });
 
-  const suffix = renderAgentSuffix(sessionId, instruction);
+  const ctxDirRel = relative(paneCwd, contextDir(cwd, sessionId));
+  const suffix = renderAgentSuffix(sessionId, instruction, ctxDirRel);
   // For typed agents, prepend the agent type body to the system prompt.
   // --agent doesn't resolve from --plugin-dir, so we deliver it via --append-system-prompt.
   const systemParts: string[] = [];
@@ -258,15 +259,28 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   // Resolve agent config for frontmatter (color, model, provider)
   const agentConfig = resolveAgentConfig(agentType, bundledPluginPath, cwd);
-  const provider = detectProvider(agentConfig?.frontmatter.model);
+  let provider = detectProvider(agentConfig?.frontmatter.model);
   const color = (agentConfig?.frontmatter.color ? normalizeTmuxColor(agentConfig.frontmatter.color) : null) ?? getNextColor(sessionId);
 
-  // Verify CLI is available before spawning
-  const cliToCheck = provider === 'openai' ? 'codex' : 'claude';
+  // Verify CLI is available before spawning; fall back if configured
+  let cliToCheck = provider === 'openai' ? 'codex' : 'claude';
   try {
     execSync(`which ${cliToCheck}`, { stdio: 'pipe', env: execEnv() });
   } catch {
-    throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sisyphus doctor\` to diagnose.`);
+    const fallback = agentConfig?.frontmatter.fallbackModel;
+    if (fallback) {
+      const fallbackProvider = detectProvider(fallback);
+      const fallbackCli = fallbackProvider === 'openai' ? 'codex' : 'claude';
+      try {
+        execSync(`which ${fallbackCli}`, { stdio: 'pipe', env: execEnv() });
+      } catch {
+        throw new Error(`Neither ${cliToCheck} (model: ${agentConfig?.frontmatter.model}) nor ${fallbackCli} (fallback: ${fallback}) CLI found on PATH. Run \`sisyphus doctor\` to diagnose.`);
+      }
+      if (agentConfig) agentConfig.frontmatter.model = fallback;
+      provider = fallbackProvider;
+    } else {
+      throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sisyphus doctor\` to diagnose.`);
+    }
   }
 
   const repo = opts.repo !== undefined ? opts.repo : '.';
