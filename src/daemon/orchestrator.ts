@@ -323,9 +323,12 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const basePrompt = loadOrchestratorPrompt(cwd, sessionId, mode);
   const formattedState = formatStateForOrchestrator(session, mode);
 
-  // Inject available agent types into system prompt
+  // Inject available agent types into system prompt.
+  // Restricted to bundled `sisyphus:*` agents only — project/user/plugin-discovered
+  // agents are intentionally hidden from the orchestrator to keep the curated set stable.
   const agentPluginPath = resolve(import.meta.dirname, '../templates/agent-plugin');
-  const agentTypes = discoverAgentTypes(agentPluginPath, session.cwd);
+  const agentTypes = discoverAgentTypes(agentPluginPath, session.cwd)
+    .filter(t => t.source === 'bundled');
 
 
   const agentTypeLines = agentTypes.length > 0
