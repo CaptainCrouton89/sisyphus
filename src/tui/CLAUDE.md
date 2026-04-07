@@ -33,13 +33,23 @@ Raw ANSI terminal UI. No frameworks — frame-buffer with panel dirty-tracking a
 ## Design App
 
 - **`selectedAction` indexing shifts with `item.decision`**: `getDesignActions` returns `[comment, next]` without a decision, `[agree, alt-1…alt-N, comment, next]` with one. Hardcoding `=== 1` or `=== 2` breaks silently.
-- **`pick-alt` always opens a comment prompt**; `agree` advances immediately.
+- **`pick-alt` always opens a comment prompt**; `agree` advances immediately. `InputMode.comment` in design-app carries `pendingAlt?: number` — if set, saves `reviewAction = 'pick-alt'` + `selectedAlternative`; if absent, saves `reviewAction = 'comment'`. Review-app's `InputMode.comment` uses `action: 'approve' | 'comment' | 'bounce-to-design'` instead — the two shapes are incompatible.
+- **`n` in `item-walkthrough` skips without recording** — same silent non-count as review-app.
 
 ## Review App
 
-- **`reqIndex` indexes `pendingRequirements(group)`**, not `group.requirements` — pre-approved items excluded. Off-by-one trap when correlating by index.
+- **`reqIndex` source depends on `bucket`**: `bucket === 'requirements'` → `pendingRequirements(group)`; `bucket === 'safeAssumptions'` → `pendingSafeAssumptions(group)`. Off-by-one trap when correlating by index to `group.requirements` or `group.safeAssumptions`.
+- **`bucket === 'safeAssumptions'` post-action nav returns to `group-intro`**, not `advanceItem` — applies to both confirm actions and `n` skip. Normal requirements advance to the next item.
+- **`safeAssumptionsExpanded`** is on `ReviewState`; every nav helper resets it to `false`. New nav shortcuts that bypass the helpers must reset it manually or the expand state bleeds into the next group.
+- **`questionIndex` in `group-questions` indexes `filter(q => !q.response)`**, not raw `openQuestions` — same trap. Adding a pre-answered question shifts live indices.
+- **`actionCount = 4` is hardcoded** in the `item-review` input handler (0=approve&next, 1=approve-with-comment, 2=comment, 3=bounce-to-design) — `getDesignActions` is dynamic but review's action count is not. Adding a 5th action requires updating this constant too.
 - **`n` in `item-review` skips without recording action** — not counted by `totalReviewed`.
+- **Adding an action**: append at the end of the actions array; never insert. Update the `actionCount` literal in the `item-review` switch. Update the index→semantic comment block above the array.
 - **Helpers live in `review-types.ts`**, not `review-app.ts`.
+
+## Standalone App Renderer (design-app, review-app)
+
+- **`flush` uses synchronized output** (`\x1b[?2026h`/`\x1b[?2026l`) to batch all terminal writes into one atomic update. `prevFrame` is module-level per file — two concurrent render loops in the same process would corrupt each other's line diff.
 
 ## Input
 
