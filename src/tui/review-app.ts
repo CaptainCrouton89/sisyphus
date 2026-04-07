@@ -8,8 +8,8 @@ import type {
   OpenQuestion, EarsKeyword, InputMode,
 } from './review-types.js';
 import {
-  resolveEarsKeyword, getEarsCondition, pendingRequirements,
-  totalRequirements, totalReviewed, EARS_KEYWORDS,
+  resolveEarsKeyword, getEarsCondition, pendingRequirements, pendingSafeAssumptions,
+  safeAssumptionsApproved, totalRequirements, totalReviewed, EARS_KEYWORDS,
 } from './review-types.js';
 import { renderMarkdownLines, clearMarkdownCache } from './lib/md-render.js';
 
@@ -203,6 +203,7 @@ function buildReviewFeedback(state: ReviewState): string {
     for (const r of g.requirements) {
       if (!r.reviewAction && r.status !== 'approved') continue;
       const action = r.reviewAction === 'approve' ? '✓ approved'
+        : r.reviewAction === 'bounce-to-design' ? '⚠ bounce-to-design'
         : r.reviewAction === 'comment' ? '◆ commented'
         : r.status === 'approved' ? '✓ previously approved'
         : '—';
@@ -218,6 +219,38 @@ function buildReviewFeedback(state: ReviewState): string {
     const skipped = g.requirements.filter(r => !r.reviewAction && r.status !== 'approved');
     for (const r of skipped) {
       lines.push(`- **${r.id}** ${r.title} — skipped (no action taken)`);
+    }
+
+    // Safe assumptions
+    const safeAssumptions = g.safeAssumptions ?? [];
+    if (safeAssumptions.length > 0) {
+      lines.push('');
+      lines.push('### Safe assumptions');
+      lines.push('');
+      for (const r of safeAssumptions) {
+        if (!r.reviewAction && r.status !== 'approved') continue;
+        const action = r.reviewAction === 'approve' ? '✓ approved'
+          : r.reviewAction === 'bounce-to-design' ? '⚠ bounce-to-design'
+          : r.reviewAction === 'comment' ? '◆ commented'
+          : r.status === 'approved' ? '✓ previously approved'
+          : '—';
+        // Bulk-approved items have near-zero duration; use "(bulk)" suffix
+        const isBulk = r.startedAt && r.completedAt
+          && (new Date(r.completedAt).getTime() - new Date(r.startedAt).getTime()) < 100;
+        const dur = isBulk ? ' (bulk)'
+          : r.startedAt && r.completedAt
+            ? ` (${formatDurationMs(new Date(r.completedAt).getTime() - new Date(r.startedAt).getTime())})`
+            : '';
+        lines.push(`- **${r.id}** ${r.title} — ${action}${dur}`);
+        if (r.userComment) {
+          lines.push(`  > ${r.userComment}`);
+        }
+      }
+
+      const skippedSA = safeAssumptions.filter(r => !r.reviewAction && r.status !== 'approved');
+      for (const r of skippedSA) {
+        lines.push(`- **${r.id}** ${r.title} — skipped (no action taken)`);
+      }
     }
 
     if (g.openQuestions) {
@@ -291,9 +324,12 @@ function renderOverview(state: ReviewState): string[] {
 
   for (let i = 0; i < data.groups.length; i++) {
     const g = data.groups[i]!;
-    const pending = pendingRequirements(g);
-    const approved = g.requirements.length - pending.length;
-    const statusIcon = pending.length === 0
+    const pendingReqs = pendingRequirements(g);
+    const pendingSA = pendingSafeAssumptions(g);
+    const allPending = pendingReqs.length + pendingSA.length;
+    const totalItems = g.requirements.length + (g.safeAssumptions?.length ?? 0);
+    const approved = totalItems - allPending;
+    const statusIcon = allPending === 0
       ? `${FG_GREEN}${ICON.approved}${RESET}`
       : `${FG_GRAY}${ICON.pending}${RESET}`;
 
@@ -308,10 +344,10 @@ function renderOverview(state: ReviewState): string[] {
     }
 
     // Stats
-    const statsText = pending.length === 0
-      ? `${FG_GREEN}all ${g.requirements.length} approved${RESET}`
-      : `${pending.length} to review${approved > 0 ? `, ${approved} approved` : ''}`;
-    lines.push(`${m}    ${FG_GRAY}${g.requirements.length} requirements${RESET} ${DIM}·${RESET} ${statsText}`);
+    const statsText = allPending === 0
+      ? `${FG_GREEN}all ${totalItems} approved${RESET}`
+      : `${allPending} to review${approved > 0 ? `, ${approved} approved` : ''}`;
+    lines.push(`${m}    ${FG_GRAY}${totalItems} item${totalItems !== 1 ? 's' : ''}${RESET} ${DIM}·${RESET} ${statsText}`);
 
     if (g.openQuestions && g.openQuestions.length > 0) {
       const unanswered = g.openQuestions.filter(q => !q.response).length;
@@ -366,15 +402,37 @@ function renderGroupIntro(state: ReviewState, groupIndex: number): string[] {
       lines.push(`${m}  ${FG_YELLOW}${unanswered} open question${unanswered !== 1 ? 's' : ''} to answer${RESET}`);
     }
   }
+
+  // Safe assumptions section
+  if ((group.safeAssumptions?.length ?? 0) > 0) {
+    if (safeAssumptionsApproved(group)) {
+      lines.push(`${m}  ${FG_GRAY}${ICON.approved} Safe assumptions (${group.safeAssumptions!.length}) — all approved${RESET}`);
+    } else {
+      const pendingSA = pendingSafeAssumptions(group);
+      lines.push(`${m}  ${FG_CYAN}${ICON.expand} Safe assumptions (${pendingSA.length})${RESET}  ${DIM}[B] bulk-approve  [E] expand${RESET}`);
+      lines.push(`${m}  ${DIM}Routine items the writer marked as defaults; expand to skim or approve all in one keystroke${RESET}`);
+
+      if (state.safeAssumptionsExpanded) {
+        lines.push(`${m}  ${ICON.collapse} (E to collapse)`);
+        for (let i = 0; i < pendingSA.length; i++) {
+          const item = pendingSA[i]!;
+          const prefix = i < 9 ? `${i + 1}` : ICON.bullet;
+          lines.push(`${m}    ${FG_GRAY}${prefix}${RESET}  ${item.id} — ${item.title}`);
+        }
+        lines.push(`${m}  ${DIM}1-9 to review individually · B to bulk-approve all${RESET}`);
+      }
+    }
+  }
+
   lines.push('');
 
   return lines;
 }
 
-function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: number, expanded: boolean, selectedAction: number): string[] {
+function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: number, expanded: boolean, selectedAction: number, bucket: 'requirements' | 'safeAssumptions'): string[] {
   const { data, cols } = state;
   const group = data.groups[groupIndex]!;
-  const pending = pendingRequirements(group);
+  const pending = bucket === 'safeAssumptions' ? pendingSafeAssumptions(group) : pendingRequirements(group);
   const req = pending[reqIndex];
   if (!req) return ['  No items to review.'];
 
@@ -385,9 +443,10 @@ function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: numb
   const lines: string[] = [];
 
   // Header: section + item progress
+  const itemLabel = bucket === 'safeAssumptions' ? 'Safe assumption' : 'Item';
   lines.push('');
   lines.push(`${m}  ${sectionDots(groupIndex, data.groups.length)} ${DIM}${group.name}${RESET}`);
-  lines.push(`${m}  ${FG_GRAY}Item ${reqIndex + 1} of ${pending.length}${RESET}  ${progressBar(reqIndex, pending.length, 20)}`);
+  lines.push(`${m}  ${FG_GRAY}${itemLabel} ${reqIndex + 1} of ${pending.length}${RESET}  ${progressBar(reqIndex, pending.length, 20)}`);
   lines.push('');
 
   // Requirement title
@@ -484,18 +543,28 @@ function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: numb
   if (req.reviewAction) {
     const actionLabel = req.reviewAction === 'approve'
       ? `${FG_GREEN}${ICON.approved} Approved${RESET}`
+      : req.reviewAction === 'bounce-to-design'
+      ? `${FG_MAGENTA}${ICON.warning} Bounced to design${RESET}`
       : `${FG_YELLOW}${ICON.comment} Commented${RESET}`;
-    lines.push(`${m}  ${actionLabel}  ${DIM}(2/3 to change)${RESET}`);
+    lines.push(`${m}  ${actionLabel}  ${DIM}(2/3/4 to change)${RESET}`);
     lines.push('');
   }
 
   // Action bar
   lines.push(`${m}  ${hr(boxW)}`);
   lines.push('');
+  // Action index → semantic mapping (DO NOT REORDER — append only):
+  //   0 = approve & next
+  //   1 = approve with comment
+  //   2 = comment
+  //   3 = bounce to design
+  // When adding a new action: append at the END, update the actionCount literal in
+  // the item-review handleInput case, and update this comment block.
   const actions = [
     { label: `${ICON.approved} Approve & next`, color: FG_GREEN },
     { label: `${ICON.approved}+ Approve with comment`, color: FG_CYAN },
     { label: `${ICON.comment} Comment`, color: FG_YELLOW },
+    { label: `${ICON.warning} Bounce to design`, color: FG_MAGENTA },
   ];
   for (let i = 0; i < actions.length; i++) {
     const act = actions[i]!;
@@ -628,7 +697,7 @@ function renderFinal(state: ReviewState): string[] {
 
 // ─── Footer ──────────────────────────────────────────────────────────────────
 
-function renderFooter(state: ReviewState): string[] {
+function renderFooter(state: ReviewState, overflow?: { pct: number }): string[] {
   const { phase, cols, data } = state;
   const cw = Math.min(MAX_CONTENT_WIDTH, cols - 4);
   const marginL = Math.max(0, Math.floor((cols - cw) / 2));
@@ -659,6 +728,16 @@ function renderFooter(state: ReviewState): string[] {
       break;
   }
 
+  // Scroll indicator: show only when content overflows and not in text input mode.
+  // j/k navigates options in item-review/group-questions, so those phases get
+  // pgup/pgdn instead.
+  let scrollHint = '';
+  if (overflow && !state.inputMode) {
+    const jkScrolls = phase.kind !== 'item-review' && phase.kind !== 'group-questions';
+    const key = jkScrolls ? '↑↓' : 'pgup/pgdn';
+    scrollHint = `  ${DIM}${key} scroll ↕ ${overflow.pct}%${RESET}`;
+  }
+
   const progressText = `${FG_GRAY}${totalReviewed(data)}/${totalR} reviewed${RESET}`;
 
   // Input mode: show wrapped text input area
@@ -674,7 +753,7 @@ function renderFooter(state: ReviewState): string[] {
     }
     lines.push(`${m}  ${DIM}enter${RESET} submit  ${DIM}esc${RESET} cancel  ${progressText}`);
   } else {
-    lines.push(`${m}  ${hints}  ${progressText}`);
+    lines.push(`${m}  ${hints}${scrollHint}  ${progressText}`);
   }
 
   return lines;
@@ -694,7 +773,7 @@ function render(state: ReviewState): void {
       content = renderGroupIntro(state, phase.groupIndex);
       break;
     case 'item-review':
-      content = renderItemReview(state, phase.groupIndex, phase.reqIndex, phase.expanded, phase.selectedAction);
+      content = renderItemReview(state, phase.groupIndex, phase.reqIndex, phase.expanded, phase.selectedAction, phase.bucket);
       break;
     case 'group-questions':
       content = renderGroupQuestions(state, phase.groupIndex, phase.questionIndex, phase.selectedOption);
@@ -704,14 +783,21 @@ function render(state: ReviewState): void {
       break;
   }
 
-  const footer = renderFooter(state);
+  // First pass without overflow info to measure footer height (height does not change
+  // with the scroll indicator — it lives on the existing hints line).
+  const footerProvisional = renderFooter(state);
 
   // Fit content to screen height, apply scroll
-  const footerH = footer.length;
+  const footerH = footerProvisional.length;
   const availH = rows - footerH;
   const maxScroll = Math.max(0, content.length - availH);
   if (state.scroll > maxScroll) state.scroll = maxScroll;
   if (state.scroll < 0) state.scroll = 0;
+
+  // Re-render footer with overflow info if there's something to scroll.
+  const footer = maxScroll > 0
+    ? renderFooter(state, { pct: Math.round((state.scroll / maxScroll) * 100) })
+    : footerProvisional;
 
   const visible = content.slice(state.scroll, state.scroll + availH);
 
@@ -736,6 +822,7 @@ function advanceToNextGroup(state: ReviewState, currentGroupIndex: number): void
   } else {
     state.phase = { kind: 'final' };
   }
+  state.safeAssumptionsExpanded = false;
   state.scroll = 0;
 }
 
@@ -744,7 +831,8 @@ function startGroupReview(state: ReviewState, groupIndex: number): void {
   const pending = pendingRequirements(group);
   if (pending.length > 0) {
     stampStarted(pending[0]!);
-    state.phase = { kind: 'item-review', groupIndex, reqIndex: 0, expanded: false, selectedAction: 0 };
+    state.phase = { kind: 'item-review', groupIndex, reqIndex: 0, expanded: false, selectedAction: 0, bucket: 'requirements' };
+    state.safeAssumptionsExpanded = false;
   } else {
     // No pending items, go to questions or next group
     startGroupQuestions(state, groupIndex);
@@ -757,7 +845,8 @@ function advanceItem(state: ReviewState, groupIndex: number, reqIndex: number): 
   const pending = pendingRequirements(group);
   if (reqIndex + 1 < pending.length) {
     stampStarted(pending[reqIndex + 1]!);
-    state.phase = { kind: 'item-review', groupIndex, reqIndex: reqIndex + 1, expanded: false, selectedAction: 0 };
+    state.phase = { kind: 'item-review', groupIndex, reqIndex: reqIndex + 1, expanded: false, selectedAction: 0, bucket: 'requirements' };
+    state.safeAssumptionsExpanded = false;
   } else {
     startGroupQuestions(state, groupIndex);
   }
@@ -770,6 +859,7 @@ function startGroupQuestions(state: ReviewState, groupIndex: number): void {
   if (unanswered.length > 0) {
     stampStarted(unanswered[0]!);
     state.phase = { kind: 'group-questions', groupIndex, questionIndex: 0, selectedOption: 0 };
+    state.safeAssumptionsExpanded = false;
   } else {
     advanceToNextGroup(state, groupIndex);
   }
@@ -793,7 +883,9 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       const text = state.inputBuffer.trim();
       if (state.inputMode.kind === 'comment' && phase.kind === 'item-review') {
         const group = state.data.groups[phase.groupIndex]!;
-        const pending = pendingRequirements(group);
+        const pending = phase.bucket === 'safeAssumptions'
+          ? pendingSafeAssumptions(group)
+          : pendingRequirements(group);
         const req = pending[phase.reqIndex];
         if (req) {
           req.reviewAction = state.inputMode.action;
@@ -801,7 +893,11 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           stampCompleted(req);
           state.dirty = true;
           saveData(state);
-          advanceItem(state, phase.groupIndex, phase.reqIndex);
+          if (phase.bucket === 'safeAssumptions') {
+            state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
+          } else {
+            advanceItem(state, phase.groupIndex, phase.reqIndex);
+          }
         }
       } else if (state.inputMode.kind === 'custom-answer' && phase.kind === 'group-questions') {
         const group = state.data.groups[phase.groupIndex]!;
@@ -815,6 +911,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           if (phase.questionIndex + 1 < unanswered.length) {
             stampStarted(unanswered[phase.questionIndex + 1]!);
             state.phase = { kind: 'group-questions', groupIndex: phase.groupIndex, questionIndex: phase.questionIndex + 1, selectedOption: 0 };
+            state.safeAssumptionsExpanded = false;
           } else {
             advanceToNextGroup(state, phase.groupIndex);
           }
@@ -867,6 +964,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       if (input === 'n' || key.return) {
         if (state.data.groups.length > 0) {
           state.phase = { kind: 'group-intro', groupIndex: 0 };
+          state.safeAssumptionsExpanded = false;
           state.scroll = 0;
         }
       }
@@ -874,26 +972,58 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
     }
 
     case 'group-intro': {
+      const group = state.data.groups[phase.groupIndex]!;
       if (input === 'n' || key.return) {
         startGroupReview(state, phase.groupIndex);
+      } else if (input === 'B' || input === 'b') {
+        for (const item of group.safeAssumptions ?? []) {
+          if (item.status === 'approved') continue;
+          item.reviewAction = 'approve';
+          item.status = 'approved';
+          stampStarted(item);
+          stampCompleted(item);
+        }
+        state.dirty = true;
+        saveData(state);
+      } else if (input === 'E' || input === 'e') {
+        state.safeAssumptionsExpanded = !state.safeAssumptionsExpanded;
       } else if (input === 'p') {
         if (phase.groupIndex > 0) {
           state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex - 1 };
         } else {
           state.phase = { kind: 'overview' };
         }
+        state.safeAssumptionsExpanded = false;
         state.scroll = 0;
+      } else {
+        const num = parseInt(input, 10);
+        if (state.safeAssumptionsExpanded && num >= 1 && num <= 9) {
+          const pendingSA = pendingSafeAssumptions(group);
+          if (num <= pendingSA.length) {
+            state.phase = {
+              kind: 'item-review',
+              groupIndex: phase.groupIndex,
+              reqIndex: num - 1,
+              expanded: false,
+              selectedAction: 0,
+              bucket: 'safeAssumptions',
+            };
+            state.scroll = 0;
+          }
+        }
       }
       break;
     }
 
     case 'item-review': {
       const group = state.data.groups[phase.groupIndex]!;
-      const pending = pendingRequirements(group);
+      const pending = phase.bucket === 'safeAssumptions'
+        ? pendingSafeAssumptions(group)
+        : pendingRequirements(group);
       const req = pending[phase.reqIndex];
       if (!req) break;
 
-      const actionCount = 3;
+      const actionCount = 4;
 
       if (input === 'j' || key.downArrow) {
         const next = Math.min(phase.selectedAction + 1, actionCount - 1);
@@ -908,12 +1038,19 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           stampCompleted(req);
           state.dirty = true;
           saveData(state);
-          advanceItem(state, phase.groupIndex, phase.reqIndex);
+          if (phase.bucket === 'safeAssumptions') {
+            state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
+          } else {
+            advanceItem(state, phase.groupIndex, phase.reqIndex);
+          }
         } else if (phase.selectedAction === 1) {
           state.inputMode = { kind: 'comment', action: 'approve' };
           state.inputBuffer = req.userComment || '';
         } else if (phase.selectedAction === 2) {
           state.inputMode = { kind: 'comment', action: 'comment' };
+          state.inputBuffer = req.userComment || '';
+        } else if (phase.selectedAction === 3) {
+          state.inputMode = { kind: 'comment', action: 'bounce-to-design' };
           state.inputBuffer = req.userComment || '';
         }
       } else if (input === ' ') {
@@ -926,7 +1063,11 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         stampCompleted(req);
         state.dirty = true;
         saveData(state);
-        advanceItem(state, phase.groupIndex, phase.reqIndex);
+        if (phase.bucket === 'safeAssumptions') {
+          state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
+        } else {
+          advanceItem(state, phase.groupIndex, phase.reqIndex);
+        }
       } else if (input === '2') {
         // Approve with comment — enter inline input mode, pre-fill existing comment
         state.inputMode = { kind: 'comment', action: 'approve' };
@@ -935,19 +1076,31 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         // Comment only — enter inline input mode, pre-fill existing comment
         state.inputMode = { kind: 'comment', action: 'comment' };
         state.inputBuffer = req.userComment || '';
+      } else if (input === '4' || input === 'b') {
+        // Bounce to design — enter inline input mode for optional note
+        state.inputMode = { kind: 'comment', action: 'bounce-to-design' };
+        state.inputBuffer = req.userComment || '';
       } else if (input === 'p') {
         if (phase.reqIndex > 0) {
-          const prevReq = pendingRequirements(state.data.groups[phase.groupIndex]!)[phase.reqIndex - 1];
+          const prevPending = phase.bucket === 'safeAssumptions'
+            ? pendingSafeAssumptions(group)
+            : pendingRequirements(group);
+          const prevReq = prevPending[phase.reqIndex - 1];
           if (prevReq) stampStarted(prevReq);
-          state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex - 1, expanded: false, selectedAction: 0 };
+          state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex - 1, expanded: false, selectedAction: 0, bucket: phase.bucket };
           state.scroll = 0;
         } else {
           state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
+          if (phase.bucket !== 'safeAssumptions') state.safeAssumptionsExpanded = false;
           state.scroll = 0;
         }
       } else if (input === 'n') {
         // Skip without action
-        advanceItem(state, phase.groupIndex, phase.reqIndex);
+        if (phase.bucket === 'safeAssumptions') {
+          state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
+        } else {
+          advanceItem(state, phase.groupIndex, phase.reqIndex);
+        }
       }
       break;
     }
@@ -956,7 +1109,13 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       const group = state.data.groups[phase.groupIndex]!;
       const unanswered = (group.openQuestions || []).filter(q => !q.response);
       const q = unanswered[phase.questionIndex];
-      if (!q) break;
+      if (!q) {
+        if (key.return) {
+          advanceToNextGroup(state, phase.groupIndex);
+          state.scroll = 0;
+        }
+        break;
+      }
 
       const optionCount = q.options.length + 1; // +1 for custom
 
@@ -967,10 +1126,11 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           // Back to last item in this group (or group intro if no pending items)
           const pending = pendingRequirements(group);
           if (pending.length > 0) {
-            state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: pending.length - 1, expanded: false, selectedAction: 0 };
+            state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: pending.length - 1, expanded: false, selectedAction: 0, bucket: 'requirements' };
           } else {
             state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
           }
+          state.safeAssumptionsExpanded = false;
         }
         state.scroll = 0;
       } else if (input === 'j' || key.downArrow) {
@@ -999,6 +1159,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         if (phase.questionIndex + 1 < unanswered.length) {
           stampStarted(unanswered[phase.questionIndex + 1]!);
           state.phase = { kind: 'group-questions', groupIndex: phase.groupIndex, questionIndex: phase.questionIndex + 1, selectedOption: 0 };
+          state.safeAssumptionsExpanded = false;
         } else {
           advanceToNextGroup(state, phase.groupIndex);
         }
@@ -1022,6 +1183,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         const lastG = state.data.groups.length - 1;
         if (lastG >= 0) {
           state.phase = { kind: 'group-intro', groupIndex: lastG };
+          state.safeAssumptionsExpanded = false;
           state.scroll = 0;
         }
       }
@@ -1056,6 +1218,7 @@ export function startReviewApp(data: RequirementsData, filePath: string): void {
     dirty: false,
     inputMode: null,
     inputBuffer: '',
+    safeAssumptionsExpanded: false,
   };
 
   // Render

@@ -9,6 +9,9 @@ export interface RequirementsMeta {
   draft: number;
   reviewStartedAt?: string;
   reviewCompletedAt?: string;
+  stage?: 'stage-2-in-progress' | 'stage-2-done' | 'stage-3-done';
+  nextSectionId?: string;
+  bounceIterations?: Record<string, number>;
 }
 
 export interface QuestionOption {
@@ -56,7 +59,7 @@ export interface Requirement {
   agentNotes: string;
   userNotes: string;
   questions: RequirementQuestion[];
-  reviewAction?: 'approve' | 'comment';
+  reviewAction?: 'approve' | 'comment' | 'bounce-to-design';
   userComment?: string;
   startedAt?: string;
   completedAt?: string;
@@ -68,6 +71,7 @@ export interface RequirementsGroup {
   description: string;
   context?: string;
   requirements: Requirement[];
+  safeAssumptions?: Requirement[];
   openQuestions?: OpenQuestion[];
 }
 
@@ -81,13 +85,13 @@ export interface RequirementsData {
 export type Phase =
   | { kind: 'overview' }
   | { kind: 'group-intro'; groupIndex: number }
-  | { kind: 'item-review'; groupIndex: number; reqIndex: number; expanded: boolean; selectedAction: number }
+  | { kind: 'item-review'; groupIndex: number; reqIndex: number; expanded: boolean; selectedAction: number; bucket: 'requirements' | 'safeAssumptions' }
   | { kind: 'group-questions'; groupIndex: number; questionIndex: number; selectedOption: number }
   | { kind: 'final' };
 
 export type InputMode =
   | null
-  | { kind: 'comment'; action: 'approve' | 'comment' }
+  | { kind: 'comment'; action: 'approve' | 'comment' | 'bounce-to-design' }
   | { kind: 'custom-answer' };
 
 export interface ReviewState {
@@ -100,6 +104,7 @@ export interface ReviewState {
   dirty: boolean;
   inputMode: InputMode;
   inputBuffer: string;
+  safeAssumptionsExpanded: boolean;
 }
 
 // ─── EARS Helpers ────────────────────────────────────────────────────────────
@@ -123,14 +128,26 @@ export function pendingRequirements(group: RequirementsGroup): Requirement[] {
   return group.requirements.filter(r => r.status !== 'approved');
 }
 
+/** Get pending (non-approved) safe assumptions for a group */
+export function pendingSafeAssumptions(group: RequirementsGroup): Requirement[] {
+  return (group.safeAssumptions ?? []).filter(r => r.status !== 'approved');
+}
+
+/** True if every safe assumption is approved (empty/undefined → true) */
+export function safeAssumptionsApproved(group: RequirementsGroup): boolean {
+  const sa = group.safeAssumptions;
+  if (!sa || sa.length === 0) return true;
+  return sa.every(r => r.status === 'approved');
+}
+
 /** Count total pending items across all groups */
 export function totalPending(data: RequirementsData): number {
-  return data.groups.reduce((sum, g) => sum + pendingRequirements(g).length, 0);
+  return data.groups.reduce((sum, g) => sum + pendingRequirements(g).length + pendingSafeAssumptions(g).length, 0);
 }
 
 /** Count total items across all groups */
 export function totalRequirements(data: RequirementsData): number {
-  return data.groups.reduce((sum, g) => sum + g.requirements.length, 0);
+  return data.groups.reduce((sum, g) => sum + g.requirements.length + (g.safeAssumptions?.length ?? 0), 0);
 }
 
 /** Count items that have been reviewed (approved status or reviewAction set) */
@@ -138,6 +155,9 @@ export function totalReviewed(data: RequirementsData): number {
   let count = 0;
   for (const g of data.groups) {
     for (const r of g.requirements) {
+      if (r.status === 'approved' || r.reviewAction) count++;
+    }
+    for (const r of g.safeAssumptions ?? []) {
       if (r.status === 'approved' || r.reviewAction) count++;
     }
   }

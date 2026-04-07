@@ -660,7 +660,7 @@ function renderFinal(state: DesignState): string[] {
 
 // ─── Footer ──────────────────────────────────────────────────────────────────
 
-function renderFooter(state: DesignState): string[] {
+function renderFooter(state: DesignState, overflow?: { pct: number }): string[] {
   const { phase, cols, data } = state;
   const cw = Math.min(MAX_CONTENT_WIDTH, cols - 4);
   const marginL = Math.max(0, Math.floor((cols - cw) / 2));
@@ -690,6 +690,16 @@ function renderFooter(state: DesignState): string[] {
       break;
   }
 
+  // Scroll indicator: show only when content overflows and not in text input mode.
+  // j/k navigates options in item-walkthrough/section-questions, so those phases
+  // get pgup/pgdn instead.
+  let scrollHint = '';
+  if (overflow && !state.inputMode) {
+    const jkScrolls = phase.kind !== 'item-walkthrough' && phase.kind !== 'section-questions';
+    const key = jkScrolls ? '↑↓' : 'pgup/pgdn';
+    scrollHint = `  ${DIM}${key} scroll ↕ ${overflow.pct}%${RESET}`;
+  }
+
   const progressText = `${FG_GRAY}${totalReviewed(data)}/${totalI} reviewed${RESET}`;
 
   if (state.inputMode) {
@@ -704,7 +714,7 @@ function renderFooter(state: DesignState): string[] {
     }
     lines.push(`${m}  ${DIM}enter${RESET} submit  ${DIM}esc${RESET} cancel  ${progressText}`);
   } else {
-    lines.push(`${m}  ${hints}  ${progressText}`);
+    lines.push(`${m}  ${hints}${scrollHint}  ${progressText}`);
   }
 
   return lines;
@@ -734,13 +744,20 @@ function render(state: DesignState): void {
       break;
   }
 
-  const footer = renderFooter(state);
+  // First pass without overflow info to measure footer height (height does not change
+  // with the scroll indicator — it lives on the existing hints line).
+  const footerProvisional = renderFooter(state);
 
-  const footerH = footer.length;
+  const footerH = footerProvisional.length;
   const availH = rows - footerH;
   const maxScroll = Math.max(0, content.length - availH);
   if (state.scroll > maxScroll) state.scroll = maxScroll;
   if (state.scroll < 0) state.scroll = 0;
+
+  // Re-render footer with overflow info if there's something to scroll.
+  const footer = maxScroll > 0
+    ? renderFooter(state, { pct: Math.round((state.scroll / maxScroll) * 100) })
+    : footerProvisional;
 
   const visible = content.slice(state.scroll, state.scroll + availH);
 
@@ -1015,7 +1032,13 @@ function handleInput(state: DesignState, input: string, key: Key): boolean {
       const section = state.data.sections[phase.sectionIndex]!;
       const unanswered = (section.openQuestions || []).filter(q => !q.response);
       const q = unanswered[phase.questionIndex];
-      if (!q) break;
+      if (!q) {
+        if (key.return) {
+          advanceToNextSection(state, phase.sectionIndex);
+          state.scroll = 0;
+        }
+        break;
+      }
 
       const optionCount = q.options.length + 1; // +1 for custom
 
