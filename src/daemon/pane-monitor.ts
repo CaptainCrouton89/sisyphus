@@ -9,7 +9,6 @@ import { generateCommentary } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
 import type { MoodSignals } from '../shared/companion-types.js';
 import { emitHistoryEvent } from './history.js';
-import { getTotalActiveSessionAgents } from './status-dots.js';
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
 type DotsCallback = () => void;
@@ -180,6 +179,29 @@ export function untrackSession(sessionId: string): void {
   trackedSessions.delete(sessionId);
 }
 
+/**
+ * A session is "recently active" if any agent was spawned/completed within the cutoff,
+ * OR if its most recent orchestrator cycle started/completed within the cutoff.
+ *
+ * `agent.status === 'running'` is intentionally NOT used — that flag persists forever
+ * after a daemon crash or abandoned session, so it's not a reliable activity signal.
+ */
+function hasRecentSessionActivity(s: Session, recentCutoffMs: number): boolean {
+  for (const agent of s.agents) {
+    const spawnedMs = agent.spawnedAt ? new Date(agent.spawnedAt).getTime() : 0;
+    const completedMs = agent.completedAt ? new Date(agent.completedAt).getTime() : 0;
+    if (spawnedMs > recentCutoffMs || completedMs > recentCutoffMs) return true;
+  }
+  const cycles = s.orchestratorCycles;
+  if (cycles?.length) {
+    const last = cycles[cycles.length - 1];
+    const startMs = last?.timestamp ? new Date(last.timestamp).getTime() : 0;
+    const endMs = last?.completedAt ? new Date(last.completedAt).getTime() : 0;
+    if (startMs > recentCutoffMs || endMs > recentCutoffMs) return true;
+  }
+  return false;
+}
+
 async function pollAllSessions(): Promise<void> {
   // Compute sleep-aware increment
   const now = Date.now();
@@ -222,39 +244,39 @@ async function pollAllSessions(): Promise<void> {
     let totalRestartedAgents = 0;
     let totalLostAgents = 0;
     let totalKilledAgents = 0;
+    let recentActiveSessionAgents = 0;
     const cutoff = nowMs - 30 * 60 * 1000;
     const recentCutoff = nowMs - 2 * 60 * 60 * 1000; // 2 hours
 
+    // Iterate tracked sessions, but skip zombies entirely. A session is "real" only if
+    // status === 'active' AND it has activity (agent spawn/complete or cycle) within 2h.
+    // Zombie sessions (active status but no recent activity) shouldn't influence mood
+    // signals OR boulder size — their stale state pollutes everything.
     for (const { id: sessionId, cwd } of trackedSessions.values()) {
       try {
         const s = pollSessionCache.get(sessionId) ?? state.getSession(cwd, sessionId);
-        if (s.status === 'active') {
-          sessionLengthMs = Math.max(sessionLengthMs, s.activeMs);
-          totalAgentCount = Math.max(totalAgentCount, s.agents.length);
-          maxCycleCount = Math.max(maxCycleCount, s.orchestratorCycles?.length ?? 0);
-          maxRollbackCount = Math.max(maxRollbackCount, s.rollbackCount ?? 0);
-          for (const agent of s.agents) {
-            if (agent.status === 'crashed' && agent.completedAt && new Date(agent.completedAt).getTime() > cutoff) {
-              recentCrashes++;
-            }
-            if (agent.status === 'running') {
-              activeAgentCount++;
-            }
-            if (agent.status === 'lost') {
-              totalLostAgents++;
-            }
-            if (agent.status === 'killed') {
-              totalKilledAgents++;
-            }
-            if ((agent.restartCount ?? 0) > 0) {
-              totalRestartedAgents++;
-            }
-            // Count agents with activity in the last 2 hours (running, recently spawned, or recently completed)
-            const spawnedMs = agent.spawnedAt ? new Date(agent.spawnedAt).getTime() : 0;
-            const completedMs = agent.completedAt ? new Date(agent.completedAt).getTime() : 0;
-            if (agent.status === 'running' || spawnedMs > recentCutoff || completedMs > recentCutoff) {
-              recentAgentCount++;
-            }
+        if (s.status !== 'active') continue;
+        if (!hasRecentSessionActivity(s, recentCutoff)) continue;
+
+        recentActiveSessionAgents += s.agents.length;
+        sessionLengthMs = Math.max(sessionLengthMs, s.activeMs);
+        totalAgentCount = Math.max(totalAgentCount, s.agents.length);
+        maxCycleCount = Math.max(maxCycleCount, s.orchestratorCycles?.length ?? 0);
+        maxRollbackCount = Math.max(maxRollbackCount, s.rollbackCount ?? 0);
+
+        for (const agent of s.agents) {
+          if (agent.status === 'crashed' && agent.completedAt && new Date(agent.completedAt).getTime() > cutoff) {
+            recentCrashes++;
+          }
+          if (agent.status === 'running') activeAgentCount++;
+          if (agent.status === 'lost') totalLostAgents++;
+          if (agent.status === 'killed') totalKilledAgents++;
+          if ((agent.restartCount ?? 0) > 0) totalRestartedAgents++;
+
+          const spawnedMs = agent.spawnedAt ? new Date(agent.spawnedAt).getTime() : 0;
+          const completedMs = agent.completedAt ? new Date(agent.completedAt).getTime() : 0;
+          if (spawnedMs > recentCutoff || completedMs > recentCutoff) {
+            recentAgentCount++;
           }
         }
       } catch { /* best-effort per-session */ }
@@ -305,15 +327,15 @@ async function pollAllSessions(): Promise<void> {
       killedAgentCount: totalKilledAgents,
     };
 
-    // Sync global agent count from status-dots (single source of truth for boulder size)
-    const globalAgents = getTotalActiveSessionAgents();
-    const agentsChanged = companion.totalActiveAgents !== globalAgents;
-    if (agentsChanged) companion.totalActiveAgents = globalAgents;
+    // Sync agent counts (computed above from tracked sessions — single source of truth)
     const recentAgentsChanged = companion.lastRecentAgentCount !== recentAgentCount;
     if (recentAgentsChanged) companion.lastRecentAgentCount = recentAgentCount;
+    const recentActiveChanged = companion.recentActiveAgents !== recentActiveSessionAgents;
+    if (recentActiveChanged) companion.recentActiveAgents = recentActiveSessionAgents;
 
     const newMood = computeMood(companion, undefined, signals);
     const moodChanged = newMood !== companion.mood;
+    const companionDirty = recentAgentsChanged || recentActiveChanged;
     if (moodChanged) {
       const oldMood = companion.mood;
       companion.mood = newMood;
@@ -323,8 +345,7 @@ async function pollAllSessions(): Promise<void> {
       if (firstSessionId) {
         emitHistoryEvent(firstSessionId, 'signals-snapshot', { from: oldMood, to: newMood, signals });
       }
-    } else if (agentsChanged) {
-      // debugMood (updated by computeMood) is saved here; may be slightly stale when mood is unchanged
+    } else if (companionDirty) {
       saveCompanion(companion);
     }
     // Late-night commentary (2-6am, throttled to once per 30min)

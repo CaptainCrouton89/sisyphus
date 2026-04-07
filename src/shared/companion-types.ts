@@ -176,10 +176,10 @@ export interface CompanionState {
   spinnerVerbIndex: number;
   // Deviation-based mood scoring: running statistics for personal baselines
   baselines?: CompanionBaselines;
-  // Live agent count across all active sessions (written by pane-monitor, read by TUI + status bar)
-  totalActiveAgents?: number;
   // Agents active in last 2h across all sessions/dirs (written by pane-monitor, read at session completion for baseline)
   lastRecentAgentCount?: number;
+  // Sum of agents in sessions with 2h-recent activity (boulder size, mood signal source)
+  recentActiveAgents?: number;
   // Debug: last mood signals and scores (written by pane-monitor, read by TUI debug overlay)
   debugMood?: {
     signals: MoodSignals;

@@ -287,7 +287,7 @@ export function renderTreePanel(
     // breaks when maxWidth truncates the result. Apply mood color externally.
     const faceLine = renderCompanion(companion, fields, {
       maxWidth: innerW,
-      agentCount: companion.totalActiveAgents ?? 0,
+      agentCount: companion.recentActiveAgents ?? 0,
       verbIndex: companion.spinnerVerbIndex,
     });
     const moodCode = getMoodAnsiCode(companion.mood);

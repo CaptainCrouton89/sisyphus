@@ -21,7 +21,7 @@ export function createCompanionSegment(): Segment {
         companionStr = renderCompanion(companion, fields, {
           maxWidth: 38,
           tmuxFormat: true,
-          agentCount: ctx.companion.totalActiveAgents ?? 0,
+          agentCount: ctx.companion.recentActiveAgents ?? 0,
           verbIndex: companion.spinnerVerbIndex,
         });
       } catch {

@@ -24,7 +24,13 @@
 - `commentaryHistory` is a 30-entry ring buffer for anti-repetition. Trimming below ~30 lets duplicates recur.
 - `recentCompletions` comment says "last 3" but stores enough for momentum check (5 in 4h). Don't cap to 3.
 - `RunningStats.m2` is raw sum of squared deviations (Welford's). Variance = `m2 / (count - 1)`, not `m2` directly.
-- Achievement counter names are misleading: `consecutiveEfficientSessions` tracks `speed-demon`; `consecutiveHighCycleSessions` tracks `iron-will`. Both reset to 0 on a non-qualifying session.
+- Achievement counter names are misleading: `consecutiveEfficientSessions` tracks `speed-demon`; `consecutiveHighCycleSessions` tracks `iron-will`; `consecutiveCleanSessions` tracks `hot-streak`. All reset to 0 on a non-qualifying session.
+- Two distinct agent count fields on `CompanionState`, both optional (absent = pane-monitor hasn't run): `recentActiveAgents` (pane-monitor → boulder size + TUI; sum of agents in sessions with 2h-recent activity), `lastRecentAgentCount` (per-agent count of those with 2h-recent timestamps; used for mood baseline at session completion). Don't conflate them.
+- `CompanionBaselines.recentAgentThroughput` is a *completion-time snapshot* RunningStats — its z-score drives the `grind` mood signal. Different from `recentActiveAgents` (live value, written by pane-monitor). Updating one doesn't update the other.
+- `debugMood` on `CompanionState` is written by pane-monitor, consumed only by the TUI debug overlay. Don't use it as a mood input source — it's a read-after-write snapshot and may be stale.
+- `taskHistory` keys are normalized task hashes. Adding task tracking without matching the same normalization silently misses matches, breaking `sisyphean`/`stubborn`/`one-must-imagine` achievement counts.
+- `CompanionBaselines.pendingDayCount` holds the current day's running total and is finalized the next day. `sessionsPerDay` RunningStats always lags one full day — never reflects today's count.
+- `MoodSignals` frustration fields (`rollbackCount`, `restartedAgentCount`, `lostAgentCount`, `killedAgentCount`) are aggregated across all tracked active sessions (max rollbacks, totals for the rest), not scoped to the current session.
 
 ## Companion Render
 
