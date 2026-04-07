@@ -67,7 +67,7 @@ export const DEFAULT_STATUS_BAR_CONFIG: StatusBarConfig = {
     processing: '#d4ad6a',
     stopped: '#a9b16e',
     idle: '#5e584e',
-    activeBg: '#3d3225',
+    activeBg: '#3d3225', // gloam.sel_yellow
     activeText: '#e2d9c6',
     inactiveText: '#b0a898',
   },
@@ -78,6 +78,6 @@ export const DEFAULT_STATUS_BAR_CONFIG: StatusBarConfig = {
     'sisyphus-sessions': { bg: '#36383e' },
     companion: { bg: '#4a4d55' },
     'session-name': { bg: '#4a4d55' },
-    windows: { bg: '#2d2f33', activeBg: '#3d3225' },
+    windows: { bg: '#2d2f33', activeBg: '#3d3225' /* gloam.sel_yellow */ },
   },
 };
