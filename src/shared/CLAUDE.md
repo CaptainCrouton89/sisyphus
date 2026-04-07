@@ -15,6 +15,9 @@
 - `companionCredited*` sentinels prevent double-counting on re-complete. Adding a new companion stat requires a matching credited sentinel or it double-counts every re-completion.
 - `Session.tmuxSessionId` (`$N` format) is stable across renames; prefer over `tmuxSessionName` for exact-match targeting.
 - `update-segment` only updates `content`, not `side`/`priority`/`bg`.
+- `AgentStatus 'lost'` ≠ `'crashed'`: `'lost'` means the tmux pane vanished (daemon restart, session resume with pane gone); `'crashed'` means process exited non-zero. Filtering only `'crashed'` misses silently-disappeared agents.
+- `Agent.resumeEnv`/`resumeArgs` and `OrchestratorCycle.resumeEnv`/`resumeArgs` store the exact env exports + CLI flags used to spawn the process — written for pane recovery, not display.
+- `OrchestratorCycle.interCycleGapMs` is undefined on cycle 1 (no previous cycle); from cycle 2+ it measures wall time from the previous cycle's `completedAt` to the current spawn, including daemon poll delay and any user pause.
 
 ## Companion Types
 

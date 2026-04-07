@@ -16,6 +16,7 @@ export interface SegmentConfig {
 }
 
 export interface StatusBarConfig {
+  enabled?: boolean;
   colors?: StatusBarColors;
   left?: string[];
   right?: string[];

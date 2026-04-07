@@ -278,33 +278,43 @@ async function startDaemon(): Promise<void> {
   statusBarConfig.segments = { ...DEFAULT_STATUS_BAR_CONFIG.segments, ...config.statusBar?.segments };
   if (config.statusBar?.left) statusBarConfig.left = config.statusBar.left;
   if (config.statusBar?.right) statusBarConfig.right = config.statusBar.right;
+  if (config.statusBar?.enabled !== undefined) statusBarConfig.enabled = config.statusBar.enabled;
 
-  const compositor = new Compositor(statusBarConfig);
+  const statusBarEnabled = statusBarConfig.enabled;
 
-  // Register built-in segments
-  const sessionsBg = statusBarConfig.segments.sessions?.bg ?? DEFAULT_STATUS_BAR_CONFIG.segments.sessions!.bg!;
-  compositor.register(createSessionsSegment(sessionsBg));
-  compositor.register(createSisyphusSessionsSegment());
-  compositor.register(createCompanionSegment());
-  compositor.register(createWindowsSegment());
-  compositor.register(createSessionNameSegment());
+  if (statusBarEnabled) {
+    const compositor = new Compositor(statusBarConfig);
 
-  // Expose compositor for external segment handlers in server.ts
-  setCompositor(compositor);
+    // Register built-in segments
+    const sessionsBg = statusBarConfig.segments.sessions?.bg ?? DEFAULT_STATUS_BAR_CONFIG.segments.sessions!.bg!;
+    compositor.register(createSessionsSegment(sessionsBg));
+    compositor.register(createSisyphusSessionsSegment());
+    compositor.register(createCompanionSegment());
+    compositor.register(createWindowsSegment());
+    compositor.register(createSessionNameSegment());
+
+    // Expose compositor for external segment handlers in server.ts
+    setCompositor(compositor);
+
+    setDotsCallback(() => {
+      recomputeDots();
+      try { writeManifest(); } catch { /* best-effort */ }
+      try { compositor.render(); } catch { /* best-effort */ }
+    });
+  } else {
+    setDotsCallback(() => {
+      recomputeDots();
+      try { writeManifest(); } catch { /* best-effort */ }
+    });
+  }
 
   setRespawnCallback(onAllAgentsDone);
-  setDotsCallback(() => {
-    recomputeDots();
-    try { writeManifest(); } catch { /* best-effort */ }
-    try { compositor.render(); } catch { /* best-effort */ }
-  });
   setTrackedEntriesProvider(getTrackedSessionEntries);
 
   await startServer();
   startMonitor(config.pollIntervalMs);
 
   await recoverSessions();
-  try { compositor.render(); } catch { /* best-effort */ }
 
   if (config.autoUpdate !== false) {
     startPeriodicUpdateCheck();

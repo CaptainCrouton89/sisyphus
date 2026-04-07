@@ -42,6 +42,7 @@ export interface SegmentConfig {
 }
 
 export interface StatusBarConfig {
+  enabled: boolean;
   colors: StatusBarColors;
   left: string[];
   right: string[];
@@ -61,6 +62,7 @@ export interface RenderContext {
 }
 
 export const DEFAULT_STATUS_BAR_CONFIG: StatusBarConfig = {
+  enabled: true,
   colors: {
     processing: '#d4ad6a',
     stopped: '#a9b16e',
