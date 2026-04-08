@@ -19,19 +19,14 @@
 ## Respawn & Lifecycle
 
 - `pendingRespawns` has no TTL — if `setImmediate` callback throws after `.add()` but before `.delete()`, session permanently blocked. Recovery: kill + restart.
-- `onAllAgentsDone()` early-return paths: (1) `orchestratorDone` not set → guard stays, correct; (2) `session.status !== 'active'` (non-paused) outside `setImmediate` → clears `respawningSessions`, skips respawn → session stuck, recovery: kill + restart. Inside `setImmediate`, `status === 'paused' && respawningSessions.has(sessionId)` re-activates the session (pane monitor raced); other non-active statuses still clear and return.
-- `onAllAgentsDone()` creates a cycle snapshot before spawning — rollback targets correspond to cycle boundaries. Its `setImmediate` also recreates the tmux window/session if destroyed (e.g., yield killed the last pane), registering new tmux IDs before spawning.
+- `onAllAgentsDone()` early-returns: (1) `orchestratorDone` not set → guard stays; (2) `status !== 'active'` outside `setImmediate` → clears `respawningSessions`, skips respawn → session stuck (recovery: kill + restart); inside `setImmediate`, `status === 'paused' && respawningSessions.has()` re-activates (pane monitor raced). Creates a cycle snapshot before spawning; `setImmediate` also recreates destroyed tmux windows, registering new IDs before spawning.
 - `orchestratorDone` is checked both in-memory AND from `lastCycle.completedAt` in persisted state — handles daemon restart between yield and agents finishing.
-- `respawningSessions` guard in `handleYield()`: added before killing the orchestrator pane, cleared inside `onAllAgentsDone`'s `setImmediate` (or immediately if agents are still running). Without it, the pane monitor sees 0 live panes and pauses the session mid-transition.
-- `handleYield()` re-activates `paused` sessions before proceeding. If no windowId is resolvable after yield (neither in-memory `sessionWindowMap` nor `session.tmuxWindowId`), the respawn guard is cleared without spawning — session stays `active` but no orchestrator runs. Recovery: `sisyphus resume`.
+- `respawningSessions` guard: set in `handleYield()` before killing the orchestrator pane, cleared in `onAllAgentsDone`'s `setImmediate` (or immediately if agents still running) — without it, pane monitor sees 0 panes and pauses mid-transition. If no windowId is resolvable after yield (neither `sessionWindowMap` nor `session.tmuxWindowId`), guard clears without spawning — session stays `active` but no orchestrator runs. Recovery: `sisyphus resume`.
 - Always unregister panes from pane-registry and pane-monitor when killing/completing. `pane-exited` IPC notifications are silently dropped if the pane has no registry entry — orchestrator never learns the agent died.
-- `handleSpawn()` called on a completed session reverts `status` to `'active'` — completion was not terminal. `companionCredited*` fields retain pre-completion values; `onSessionComplete()` skips re-crediting correctly when it completes again.
-- `handleSpawn()` resolves windowId via `orchestrator.getWindowId(sessionId)` (in-memory only) — no persisted fallback. Fails after daemon restart if the session hasn't been re-registered. Contrast `handleRestartAgent()`, which falls back to `session.tmuxWindowId`.
+- `handleSpawn()` called on a completed session reverts `status` to `'active'` — completion was not terminal. `companionCredited*` fields retain pre-completion values; `onSessionComplete()` skips re-crediting correctly when it completes again. Resolves windowId via `orchestrator.getWindowId(sessionId)` (in-memory only); fails post-restart. Contrast `handleRestartAgent()`, which falls back to `session.tmuxWindowId`.
 - Orchestrator `pane-exited` without yield (crash) branches on agent state: (1) no agents → pause session; (2) agents running → clear `respawningSessions` guard and let them reach `onAllAgentsDone` naturally; (3) agents present but none running → trigger respawn immediately.
-- `allAgentsDone()` counts ALL agents in the session, including those spawned by other agents via `sisyphus spawn`. Also returns false when `session.agents.length === 0` — a session where the orchestrator never spawned any agents never triggers `onAllAgentsDone`.
-- Last completing agent's pane is NOT killed in `handleAgentSubmit()` — deferred to `onAllAgentsDone()` so the tmux window survives until the orchestrator has a new pane. All other agents are killed immediately on submit.
-- `resumeSession()` marks running agents as `lost` only if their pane is gone — live panes stay `running`. `restartAgent()` auto-transitions a `running` agent with a dead pane to `lost` before restarting (not an error).
-- `reconnectSession()` does NOT call `resetAgentCounterFromState()` — agent ID collision risk post-reconnect. `resume` and `clone` do call it; `reconnect` does not.
+- `allAgentsDone()` counts ALL agents (including `sisyphus spawn` sub-agents) and returns false when `session.agents.length === 0` — an orchestrator with no spawns never triggers `onAllAgentsDone`. Last completing agent's pane is NOT killed in `handleAgentSubmit()` — deferred to `onAllAgentsDone()` so the tmux window survives for the new orchestrator pane.
+- `resumeSession()` marks running agents as `lost` only if their pane is gone — live panes stay `running`. `restartAgent()` auto-transitions a zombie `running` agent to `lost` before restarting. `reconnectSession()` does NOT call `resetAgentCounterFromState()` — agent ID collision risk post-reconnect; `resume` and `clone` do call it.
 
 ## Session ID Resolution (`server.ts`)
 
@@ -40,24 +35,19 @@
 - `resume`, `rollback`, `reconnect`, and `reopen-window` auto-register sessions from disk using the caller-provided `cwd` when the session ID isn't in memory — this is the post-restart recovery path. Other request types return `unknownSessionError`.
 - `registerSessionCwd()` must be called before `registerSessionTmux()` — `registerSessionTmux` creates tracking with `cwd: ''` if absent; a subsequent `registerSessionCwd` call creates a fresh object, silently discarding any tmux metadata already set.
 - `delete` physically removes the session directory from disk; `kill` only terminates processes and removes tracking.
-- `validateSessionId()` and `validateRepoName()` guard every IPC request against path traversal — not just format validation.
 
 ## Agent Plugin System (`agent.ts`, `frontmatter.ts`, `plugins.ts`)
 
 - `createAgentPlugin()` writes a per-agent plugin dir under `prompts/` at spawn time. Path is deterministic (`{agentId}-plugin`) so `restartAgent()` rebuilds it at the same location — but the dir is recreated from source each time. Any files agents wrote into the plugin dir at runtime are lost on restart.
 - Same-named subdirectory adjacent to an agent's `.md` file: its `.md` files (excluding `CLAUDE.md`) become sub-agent definitions in the plugin. `$SISYPHUS_SESSION_DIR`/`$SISYPHUS_SESSION_ID` substituted at plugin-creation time, not at runtime.
-- `--agent` flag does not resolve from `--plugin-dir`; typed agent body is delivered via `--append-system-prompt` (or `--system-prompt` when `frontmatter.systemPrompt === 'replace'`).
-- `permissionMode` frontmatter overrides `--dangerously-skip-permissions`; when set, uses `--permission-mode <value>` instead.
+- `permissionMode` frontmatter overrides `--dangerously-skip-permissions`; when set, uses `--permission-mode <value>` instead. Typed agent body is delivered via `--append-system-prompt` (or `--system-prompt` when `frontmatter.systemPrompt === 'replace'`).
 - `restartAgent()` updates `spawnedAt` but preserves `originalSpawnedAt` (set only when absent); `restartCount` increments each call. Use `originalSpawnedAt ?? spawnedAt` for spawn-time filtering. Does NOT persist new `resumeArgs` — `agent.resumeArgs` in state permanently reflects the original spawn's flags.
 - `detectProvider(model)` routes OpenAI model names to the `codex` CLI; `claudeSessionId` only injected for non-OpenAI agents — Codex spawns have no session continuity.
 - Codex agents skip plugin/hooks entirely — no plugin dir, no Stop hook, no UserPromptSubmit. Prompt written to `{agentId}-codex-prompt.md`; model defaults to `codex-mini`. Codex agents can stop without submitting.
 - `UserPromptSubmit` hook injected only for: `problem`, `plan`, `spec`, `review`, `review-plan`, `debug`, `operator`, `test-spec`, `explore`. Worker and unrecognized types get none. Interactive agents of recognized types still receive it — only Stop is skipped.
-- `fallbackModel` frontmatter: if primary CLI is absent from PATH, `agentConfig.frontmatter.model` is mutated in-place — agent state records the fallback as the model actually used. No log entry beyond the agent state field.
-- Non-namespaced agent types resolve project → user-global → bundled only. Installed Claude Code plugins not searched. Use `namespace:name` for installed plugin agents (orchestrator sees bundled types only).
-- `plugins` frontmatter field and `config.requiredPlugins` use `name@marketplace` format. `ensurePluginInstalled()` is **blocking at spawn time** (60s timeout). Install failure logs a warning; agent spawns without the plugin — no error thrown.
-- `parseAgentFrontmatter` is regex-based, not YAML — quoted strings, multi-line values, nested structures silently ignored; only `skills`/`plugins` support list syntax.
-- Agent report `summary` in state is initially `content.slice(0, 200)`; asynchronously replaced by Haiku summarization. State read immediately after `handleAgentSubmit` may contain truncated text.
-- `agent.repo` field: `'.'` means agent pane cwd = session cwd; any other value → `join(cwd, repo)`. Stored in agent state; `restartAgent()` uses it to recreate the pane in the original directory.
+- Non-namespaced agent types resolve project → user-global → bundled only. Installed Claude Code plugins not searched. Use `namespace:name` for installed plugin agents (orchestrator sees bundled types only). `fallbackModel` frontmatter: if primary CLI absent from PATH, `agentConfig.frontmatter.model` is mutated in-place — agent state records the fallback; no separate log entry.
+- `plugins` frontmatter field and `config.requiredPlugins` use `name@marketplace` format. `ensurePluginInstalled()` is **blocking at spawn time** (60s timeout); install failure logs a warning and agent spawns without the plugin. `parseAgentFrontmatter` is regex-based, not YAML — quoted strings, multi-line values, and nested structures are silently ignored; only `skills`/`plugins` support list syntax.
+- Agent report `summary` in state is initially `content.slice(0, 200)`; asynchronously replaced by Haiku summarization. State read immediately after `handleAgentSubmit` may contain truncated text. `agent.repo` field: `'.'` means pane cwd = session cwd; any other value → `join(cwd, repo)`; used by `restartAgent()` to recreate the pane in the original directory.
 
 ## Session Naming (`session-manager.ts`)
 
@@ -101,6 +91,9 @@
 - `lastLateNightCommentary` resets on daemon restart (memory-only 30-min cooldown) — first post-2am poll after restart fires unconditionally.
 - Call `recomputeDots()` after any handler that changes session phase — omitting leaves dashboard stale until next poll.
 - `onSessionComplete()` return value (new achievement IDs) must be inspected — achievement commentary only fires if the array is non-empty.
+- `captureObservationContext` must be called before `onSessionComplete` to snapshot pre-mutation companion state. `runPostSessionObservations` fires after `saveCompanion()` as fire-and-forget; errors are logged but otherwise silent. The memory context passed to `fireCompletionCommentary` reflects the pre-session repo state — observations from this session are not yet persisted.
+- `companion.sessionsCompleted` increments unconditionally in `onSessionComplete` — NOT delta-safe. A continue→re-complete inflates the count, unlike `strength`/`wisdom`/`endurance`/`patience` which use `companionCredited*` deltas.
+- `shouldGenerateCommentary` probabilistically suppresses: `agent-crash` fires 30%, `idle-wake` 50%. All other event types (`session-start`, `session-complete`, `level-up`, `achievement`, `late-night`, `cycle-boundary`) always generate.
 
 ## Orchestrator Prompt Assembly (`orchestrator.ts`)
 
@@ -111,6 +104,4 @@
 - `drainMessages` is called inside `spawnOrchestrator` before the tmux pane is created — messages are consumed even if pane spawn subsequently fails. No retry path.
 - Goal source: `goal.md` file → `session.task`. Writing `goal.md` mid-session changes the orchestrator's goal; mutating `session.task` in state does not.
 - `handleOrchestratorComplete` does not kill the orchestrator pane — only `handleOrchestratorYield` does. The complete path assumes the pane already exited before the IPC hook fires.
-- `resolveOrchestratorPane`: in-memory `sessionOrchestratorPane` → `lastCycle.paneId` from persisted state. `sessionWindowMap` (window ID) has no persisted fallback — layout adjustment in `handleYield` is silently skipped after a daemon restart.
-- `cleanupSessionMaps` must be called on every kill/complete — omitting leaks entries in `sessionWindowMap`, `sessionOrchestratorPane`, and the pane registry.
-- `claudeSessionId` is a fresh UUID each orchestrator spawn — no Claude session continuity across cycles.
+- `resolveOrchestratorPane`: in-memory `sessionOrchestratorPane` → `lastCycle.paneId` from persisted state; `sessionWindowMap` (window ID) has no persisted fallback — layout adjustment in `handleYield` is silently skipped post-restart. `cleanupSessionMaps` must be called on every kill/complete — omitting leaks entries in `sessionWindowMap`, `sessionOrchestratorPane`, and the pane registry.

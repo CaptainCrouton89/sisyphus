@@ -3,7 +3,7 @@
 ## Entry point
 
 - `sortSubcommands: false` — help lists commands in registration order; append new commands at the end of `index.ts`
-- First-run welcome: `skipWelcome` exempts `doctor`, `setup`, `init`, `getting-started`, `uninstall`, `help`, `--help`, `-h`, `--version`, `-V`; any other command consumes the welcome
+- First-run welcome: triggered by `!existsSync(globalDir())` — creating `~/.sisyphus` suppresses it. `skipWelcome` exempts `doctor`, `setup`, `init`, `getting-started`, `uninstall`, `help`, `--help`, `-h`, `--version`, `-V`; any other command creates `~/.sisyphus` and won't show again (deleting `~/.sisyphus` re-triggers)
 
 ## Tmux integration
 
@@ -14,7 +14,7 @@
 - Bindings live in `~/.sisyphus/tmux.conf` (managed file); user's tmux.conf only gets a `source-file` line appended. `removeTmuxKeybind` strips that line, deletes `~/.sisyphus/tmux.conf`, and restores `prefix-x` to default `kill-pane \; select-layout even-horizontal`.
 - `userTmuxConfPath()` for `source-file` append: prefers XDG (`~/.config/tmux/tmux.conf`) over dotfile; returns `null` if neither exists → `source-file` line is skipped and the setup result message includes the manual line to add. `removeTmuxKeybind` scans both paths.
 - Keybinding scripts (`sisyphus-cycle`, `sisyphus-home`, etc.) install to `~/.sisyphus/bin/` and are **regenerated on every `setupTmuxKeybind` call** — edits to those scripts are lost on next setup
-- `cycleKey` (`M-s`) and `pick-session` (`C-s l`) both scope to same cwd only — read `sessions-manifest.tsv`, skip sessions from other projects. Cycle includes H-type (home) sessions alongside S-type; `SESSION_RESOLVE` skips H-type when resolving session ID for kill/delete/etc.
+- `cycleKey` (`M-s`) and `pick-session` (`C-s l`) both scope to same cwd only — read `sessions-manifest.tsv`, skip sessions from other projects. Cycle includes H-type (home) sessions alongside S-type; `SESSION_RESOLVE` skips H-type when resolving session ID for kill/delete/etc. `pick-session` uses fzf if available, falls back to numbered prompt — behavior differs on machines without fzf
 - `prefix-x` override only fires for `ssyph_*` sessions; non-sisyphus sessions get default `kill-pane \\; select-layout even-horizontal`
 - `RESOLVE_HOME` (home/kill-pane navigation) reads live `@sisyphus_cwd` from tmux options — works without manifest but requires a live tmux server. `CYCLE_SCRIPT` reads manifest instead — works without running tmux but requires an up-to-date manifest. If a session appears in one but not the other, home nav and cycling diverge.
 - Kill/delete scripts: `SESSION_RESOLVE` captures `$cwd` **before** the destructive action; `GO_HOME_AFTER` consumes that captured value. If `SESSION_RESOLVE` ran after the kill, the session would be gone and cwd lookup would return empty, silently skipping home navigation.
@@ -40,6 +40,7 @@
 - `tryAutoInstallNvim`: if no `~/.config/nvim` dir exists, clones LazyVim starter and removes `.git` (user owns config). `lazyVimInstalled` uses `lazy-lock.json` as signal — that file is generated on first nvim launch, not at clone time, so it will be `false` immediately after clone. `installBaleiaPlugin()` silently returns `false` if `lua/plugins/` doesn't exist; both self-heal on next `sisyphus setup` after nvim has bootstrapped.
 - `tryAutoInstallTermrender`: prefers pipx over pip3/pip (isolated install); falls through to pip if pipx unavailable
 - `checkItermOptionKey()` only checks the currently-active profile when `ITERM_PROFILE` is set; all other profiles are skipped
+- `runOnboarding()` (nvim/termrender auto-install, iTerm check) is **only called by `sisyphus setup`** — `ensureDaemonInstalled()` (auto-install on first command) only installs the begin command, tmux keybindings, and required plugins
 
 ## Status bar segments
 

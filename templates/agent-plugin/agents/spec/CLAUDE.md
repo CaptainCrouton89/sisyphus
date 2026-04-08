@@ -17,7 +17,9 @@ Sub-agent templates for `agents/spec.md` (spawned via Agent tool, never top-leve
 - **Target density**: 3–7 groups, 3–6 requirements per group. A 10-requirement group signals over-granularity. Each behavioral fact appears once — pick one home for cross-group behaviors.
 - **Bail**: empty/unreadable `design-rendered.txt` → write no chunk, output error only
 - **Don't restate the design**: skip requirements for behaviors already explicit in `design-rendered.txt` — not load-bearing. If standard + low-risk, use `safeAssumptions`. Requirement IDs sequential across whole file (`REQ-001`…), not per-group; group IDs: `^[a-z0-9-]+$`
+- **`context` field** on each group: markdown preamble rendered in TUI before requirements — omitting it leaves the reviewer without framing
+- **Two question fields**: group-level `openQuestions[]` (ambiguities blocking extraction) vs per-requirement `questions[]` (inline clarifications); TUI reads both separately
 
 ## Engineer-Writer Isolation
 
-Writer input: path to `design-rendered.txt` + output path only. No user goal, no history, no codebase access. Ambiguity → `openQuestion`; never infer intent not documented in the design.
+Writer input: path to `design-rendered.txt` + output path only. No user goal, no history, no codebase access. Ambiguity → `openQuestions[]`; never infer intent not documented in the design.

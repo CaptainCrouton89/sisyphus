@@ -19,46 +19,44 @@
 
 `goal.md`, `strategy.md`, and `roadmap.md` live at `$SISYPHUS_SESSION_DIR/` — not in `context/`. Planning outputs (exploration docs, spec outputs, stage plans `plan-stage-N-*.md`, `e2e-recipe.md`) go to `$SISYPHUS_SESSION_DIR/context/`. Pass downstream agents only the context files relevant to their task.
 
-- **`strategy.md`**: Completed / Current Stage / Ahead. Update when the **shape** changes, not every cycle — triggers: goal crystallizes/shifts, a stage completes, or the approach is wrong. Revise if it exists; don't start from scratch.
-- **`roadmap.md`**: four sections — current stage, exit criteria, active context references, next steps. Updated every cycle; decisions fold into context docs.
+- **`goal.md`**: one paragraph — what "done" looks like, scope boundaries, who/what is affected. Not a requirements doc.
+- **`strategy.md`**: Completed / Current Stage / Ahead. Update when the **shape** changes — triggers: goal crystallizes/shifts, a stage completes, or approach is wrong. Revise if it exists; don't start from scratch.
+- **`roadmap.md`**: current stage, exit criteria, active context references, next steps. Updated every cycle; decisions fold into context docs.
 
 ## Phase Transitions
 
-`sisyphus yield --mode <phase>` loads phase-specific orchestrator guidance. Omitting `--mode` loads no guidance. Known phases: `strategy`, `planning`, `implementation`, `validation`.
+`sisyphus yield --mode <phase> --prompt "<instruction>"` — `--mode` loads phase guidance for the next cycle; `--prompt` seeds its starting instruction. Omitting `--mode` loads no guidance. Known phases: `strategy`, `planning`, `implementation`, `validation`.
 
-Re-enter `--mode strategy` mid-session when the goal fundamentally shifts or the current approach is wrong — not just at session start.
+Re-enter `--mode strategy` when the goal fundamentally shifts or the current approach is wrong — not just at session start.
 
 ## `sisyphus:spec` Agent
 
-Handles product discovery **and** technical design in one interactive session. Don't split into separate agents — synthesizes both.
+Handles product discovery **and** technical design in one session. Don't split into separate agents — synthesizes both.
 
-**Skip spec when:** pure bug fix with clear repro steps, mechanical refactor with no behavioral change, or starting prompt already contains explicit detailed acceptance criteria.
+**Skip when:** pure bug fix with clear repro steps, mechanical refactor with no behavioral change, or starting prompt has explicit detailed acceptance criteria.
 
-Spec docs are authoritative — when reviews or exploration resolve open questions, update `requirements.md`/`design.md` directly (delete resolved questions, update topical sections). Never create addendum files alongside them.
+Outputs: `context/requirements.json` + `context/requirements.md` + `context/design.json` + `context/design.md`. The `.json` files are what TUI commands consume. Update docs directly when reviews resolve open questions — delete resolved questions, update topical sections. Never create addendum files.
 
 ## e2e-recipe.md Required Before Implementation
 
 Write to `context/e2e-recipe.md` before yielding to implementation. If no concrete verification method is determinable, ask the user — don't proceed without it.
 
+## Plan Lead
+
+Spawn **one plan lead per feature**. Pass what needs planning and why — not a pre-made agent decomposition. If you pre-split (e.g. "backend plan agent" + "frontend plan agent"), the plan lead's cross-domain conflict resolution never runs. Split only for features with genuinely no shared files or integration points.
+
 ## Small Task Shortcut
 
 1–3 files, single domain: skip all phases. Roadmap is a short checklist (diagnose → fix → validate). Single plan agent, single implement agent.
-
-## Plan Lead Anti-Pattern
-
-Spawn **one plan lead per feature** — pre-splitting into domain agents skips the synthesis step that catches cross-domain conflicts. Split only for features with genuinely no shared files or integration points.
 
 ## Fix Agents Get the Report Path
 
 Pass the reviewer report path and triage notes — don't rewrite findings as line-by-line instructions. Exception: architectural constraints the agent wouldn't know (specific method names, existing service locations).
 
-## Critique Accumulation Cap
+## Critique / Backtrack Limits
 
-Cap at 2–3 implementation stages without critique. Critique rounds cap at 3 — if 3+ rounds are needed, spawn a redesign.
-
-## Backtrack Triggers (Implementation → Planning)
-
-Yield back to planning when: 2+ agents report the same unexpected complexity in the same subsystem; a dependency invalidates the current approach; fix agents keep patching the same area across cycles. Document before yielding; update `roadmap.md`.
+- Critique rounds cap at 3 per stage — if more are needed, spawn a redesign.
+- **Backtrack to planning when:** 2+ agents hit the same unexpected complexity; a dependency invalidates the approach; fix agents keep patching the same area across cycles.
 
 ## Implementation State Recovery
 

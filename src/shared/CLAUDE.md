@@ -26,6 +26,7 @@
 ## Companion Memory
 
 - `companion-memory.json` and `companion.json` are separate stores written by different code paths. `MemoryStoreParseError` is specific to memory corruption — don't conflate with state parse errors.
+- `ObservationRecord.repo` is `string | null` — null means cross-repo (not tied to a cwd). Rule detectors that fire globally must set `repo: null`; defaulting to cwd silently scopes the observation to one repo.
 - `ObservationContext` must be captured *before* mutating `CompanionState` — it's the pre-update snapshot for threshold-crossing detection (`prevLevel`, `prevSessionsCompleted`, `prevConsecutiveEfficientSessions`). Building it after mutation silently kills level-up/streak firings.
 - `firedDetectors[detectorId] = lastDedupKey` prevents re-firing. Changing a detector's key derivation logic silently re-enables all previously suppressed observations for existing installations.
 - `observations` is ordered oldest→newest; prune from index 0 (head), not tail.
@@ -41,6 +42,7 @@
 - `debugMood` on `CompanionState` is written by pane-monitor, consumed only by the TUI debug overlay. Don't use it as a mood input source — it's a read-after-write snapshot and may be stale.
 - `taskHistory` keys are normalized task hashes. Adding task tracking without matching the same normalization silently misses matches, breaking `sisyphean`/`stubborn`/`one-must-imagine` achievement counts.
 - `CompanionBaselines.pendingDayCount` holds the current day's running total and is finalized the next day. `sessionsPerDay` RunningStats always lags one full day — never reflects today's count.
+- `MoodSignals` has three distinct agent count fields — `activeAgentCount` (status=running), `totalAgentCount` (max `agents.length` across sessions, feeds baseline z-score), `recentAgentCount` (2h-active, drives grind signal). These are computed at mood-evaluation time and are not the same as the similarly-named `CompanionState` fields.
 - `MoodSignals` frustration fields (`rollbackCount`, `restartedAgentCount`, `lostAgentCount`, `killedAgentCount`) are aggregated across all tracked active sessions (max rollbacks, totals for the rest), not scoped to the current session.
 
 ## Companion Render
