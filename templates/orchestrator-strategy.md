@@ -122,7 +122,7 @@ Backtrack: if spike fails → re-explore alternatives
 </stage>
 
 <stage name="spec" use-when="Need to define what to build and how, in a single interactive session">
-Process: spawn sisyphus:spec → lead explores codebase, asks user questions, dispatches engineer for design and writers for requirements → user reviews via TUI per section → lead deepens design with findings
+Process: spawn sisyphus:spec → lead explores codebase, asks user questions, dispatches engineer for design and a single writer for requirements → user reviews via TUI → lead deepens design with findings
 Exit: user-approved design + requirements with testable acceptance criteria
 Produces: context/design.md + context/design.json + context/requirements.json + context/requirements.md
 Backtrack: if problem was misframed → re-explore or re-discover

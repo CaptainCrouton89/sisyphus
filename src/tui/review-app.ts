@@ -1094,7 +1094,12 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           state.scroll = 0;
         }
       } else if (input === 'n') {
-        // Skip without action
+        // Skip = approve and advance (same as '1')
+        req.reviewAction = 'approve';
+        req.status = 'approved';
+        stampCompleted(req);
+        state.dirty = true;
+        saveData(state);
         if (phase.bucket === 'safeAssumptions') {
           state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
         } else {

@@ -341,7 +341,7 @@ const REQUIREMENTS_SCHEMA = {
   properties: {
     meta: {
       type: 'object',
-      required: ['title', 'summary', 'version', 'lastModified', 'draft'],
+      required: ['lastModified'],
       properties: {
         title: { type: 'string' },
         subtitle: { type: 'string' },
@@ -352,8 +352,7 @@ const REQUIREMENTS_SCHEMA = {
         reviewStartedAt: { type: 'string', format: 'date-time', readOnly: true },
         reviewCompletedAt: { type: 'string', format: 'date-time', readOnly: true },
         stage: { type: 'string', enum: ['stage-2-in-progress', 'stage-2-done', 'stage-3-done'] },
-        nextSectionId: { type: 'string' },
-        bounceIterations: { type: 'object', additionalProperties: { type: 'integer', minimum: 0 } },
+        bounceIterations: { type: 'integer', minimum: 0 },
       },
     },
     groups: {
@@ -441,8 +440,7 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 
     // ── Spec lead state-machine fields (do NOT write unless you are the spec lead) ──
     // "stage": "stage-2-in-progress" | "stage-2-done" | "stage-3-done" — current spec lead stage
-    // "nextSectionId": section ID the lead is about to dispatch the writer for
-    // "bounceIterations": Record<sectionId, number> — per-section bounce-loop counter, never decrements
+    // "bounceIterations": number — bounce-loop counter, never decrements
   },
 
   "groups": [
@@ -871,15 +869,19 @@ function renderRequirementItem(out: string[], req: Record<string, unknown>): voi
   item.push(`**Status:** ${req.status}`);
   item.push('');
 
-  const ears = req.ears as Record<string, string>;
-  const earsClauses: string[] = [];
-  if (ears.when) earsClauses.push(ears.when);
-  if (ears.while) earsClauses.push(ears.while);
-  if (ears.if) earsClauses.push(ears.if);
-  if (ears.where) earsClauses.push(ears.where);
-  earsClauses.push(ears.shall);
-  item.push(earsClauses.join(', '));
-  item.push('');
+  const ears = req.ears as Record<string, string> | undefined;
+  if (ears) {
+    const earsClauses: string[] = [];
+    if (ears.when) earsClauses.push(ears.when);
+    if (ears.while) earsClauses.push(ears.while);
+    if (ears.if) earsClauses.push(ears.if);
+    if (ears.where) earsClauses.push(ears.where);
+    if (ears.shall) earsClauses.push(ears.shall);
+    if (earsClauses.length > 0) {
+      item.push(earsClauses.join(', '));
+      item.push('');
+    }
+  }
 
   const criteria = req.criteria as Array<{ text: string; checked: boolean }> | undefined;
   if (criteria && criteria.length > 0) {
@@ -936,16 +938,26 @@ function renderRequirementsMarkdown(json: Record<string, unknown>): string {
   const groups = json.groups as Array<Record<string, unknown>>;
   const out: string[] = [];
 
-  out.push(`# ${meta.title}`);
-  out.push('');
+  const title = meta.title ? String(meta.title) : undefined;
+  if (title) {
+    out.push(`# ${title}`);
+    out.push('');
+  }
   if (meta.subtitle) {
     out.push(`*${meta.subtitle}*`);
     out.push('');
   }
-  out.push(`Draft ${meta.draft} — ${meta.lastModified}`);
-  out.push('');
-  out.push('---');
-  out.push('');
+  const draftParts: string[] = [];
+  if (meta.draft) draftParts.push(`Draft ${meta.draft}`);
+  if (meta.lastModified) draftParts.push(String(meta.lastModified));
+  if (draftParts.length > 0) {
+    out.push(draftParts.join(' — '));
+    out.push('');
+  }
+  if (title || draftParts.length > 0) {
+    out.push('---');
+    out.push('');
+  }
   if (meta.summary) {
     out.push(String(meta.summary));
     out.push('');

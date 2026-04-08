@@ -24,7 +24,7 @@ Use explore agents to build understanding before making decisions. Each agent sa
 
 <spec-alignment>
 
-Spec is the combined product discovery + technical design stage. Spawning a spec agent hands off both to a specialist that collaborates with the user directly: exploring the codebase, asking informed questions, drafting a design, writing EARS requirements per section with TUI review, and deepening the design with what was learned.
+Spec is the combined product discovery + technical design stage. Spawning a spec agent hands off both to a specialist that collaborates with the user directly: exploring the codebase, asking informed questions, drafting a design, writing EARS requirements with TUI review, and deepening the design with what was learned.
 
 **When to spawn a spec agent:**
 - Any feature that adds or changes user-visible behavior
@@ -89,7 +89,7 @@ sisyphus design <file> --wait          # launch design review TUI, block until u
 sisyphus requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
 ```
 
-These are review TUIs the spec agent invokes per section — also usable standalone for inspecting any `requirements.json` / `design.json`. `--wait` blocks your pane until the user completes the review and returns their feedback to stdout. Use `--pane` (implied by `--wait`) to open in a side tmux pane so your pane stays visible.
+These are review TUIs the spec agent invokes — also usable standalone for inspecting any `requirements.json` / `design.json`. `--wait` blocks your pane until the user completes the review and returns their feedback to stdout. Use `--pane` (implied by `--wait`) to open in a side tmux pane so your pane stays visible.
 
 </planning-cli>
 

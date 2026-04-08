@@ -1,26 +1,23 @@
 # spec/
 
-Sub-agent templates orchestrated by `agents/spec.md`. These are **not** top-level spawn targets — `spec.md` spawns them via the Agent tool using `subagent_type`.
-
-## Sub-Agents
-
-- **engineer.md** — Steel-thread designer. Given a topic + stage marker, writes/refines `context/design.md` and `context/design.json` using termrender directives. Two modes: Stage 1 high-level (infra/services altitude) and Stage 3 deepening (component-level + data shapes, no implementation detail).
-- **requirements-writer.md** — EARS requirements writer. Given a section name and the path to `context/design-rendered.txt`, produces a single `RequirementsGroup` JSON chunk for that section. Deliberately isolated from design discussion to prevent anchoring bias.
-
-## Key Patterns
-
-**Three-stage flow**: shape → requirements → deepen. Lead infers current stage from artifact existence and `meta.stage` in `requirements.json`. Stage 1 = no `requirements.json` yet. Stage 2 = `meta.stage: 'stage-2-in-progress'`. Stage 3 = `meta.stage: 'stage-2-done'`.
-
-**Engineer-writer isolation**: requirements-writer is dispatched fresh per section with no design discussion context — only the rendered design text. Engineer carries design state across stages via `design.json`/`design.md`. They never share message history. The writer's only view of user intent is whatever the engineer encoded in the rendered design.
-
-**Sequential section drafting**: Stage 2 dispatches one writer per section sequentially — dispatch → wait → merge chunk → launch review TUI → wait → process verdict → next section. v2 may parallelize.
-
-**Termrender as context bridge**: `design.md` is the canonical design artifact authored by the engineer. The lead renders it to `context/design-rendered.txt` via `termrender --no-color` before each writer dispatch. `design-rendered.txt` is the writer's *only* view of the design.
-
-## Scaling
+Sub-agent templates for `agents/spec.md` (spawned via Agent tool, never top-level targets). Stage inferred from artifacts + `meta.stage`: Stage 1 = no `requirements.json`. Stage 2 = `meta.stage: 'stage-2-in-progress'`. Stage 3 = `meta.stage: 'stage-2-done'`.
 
 | Stage | Dispatches | Notes |
 |-------|-----------|-------|
-| Stage 1 — Shape | 1 engineer (+ 1 retry if user requests revision) | Lead signs off verbally; no review TUI |
-| Stage 2 — Requirements | 1 writer per section (3–7 typical), 1 review TUI launch per section | Strictly sequential |
-| Stage 3 — Deepen | 1 engineer | Reads `requirements.json` to inform deepening |
+| Stage 1 — Shape | 1 engineer | Lead signs off verbally; no TUI |
+| Stage 2 — Requirements | 1 writer; bounce loops re-dispatch against revised design | One TUI review, one verdict |
+| Stage 3 — Deepen | 1 engineer | Reads `requirements.json` |
+
+## requirements-writer Constraints
+
+- **Output**: writes to `requirements.attempt-N.json` (chunk); lead promotes to `requirements.json` after TUI sign-off
+- **Atomic write**: `.tmp` → rename mandatory; never write directly to final path
+- **Meta-sections** ("locked decisions", "open questions", "file listing") are not feature groups — load-bearing facts from them belong in the group where that behavior lives
+- **Safe assumptions**: qualifies only if all three hold — (1) standard domain convention, (2) no user-visible surface change, (3) low cost to undo. Every entry requires `agentNotes`; invalid without one.
+- **Target density**: 3–7 groups, 3–6 requirements per group. A 10-requirement group signals over-granularity. Each behavioral fact appears once — pick one home for cross-group behaviors.
+- **Bail**: empty/unreadable `design-rendered.txt` → write no chunk, output error only
+- **Don't restate the design**: skip requirements for behaviors already explicit in `design-rendered.txt` — not load-bearing. If standard + low-risk, use `safeAssumptions`. Requirement IDs sequential across whole file (`REQ-001`…), not per-group; group IDs: `^[a-z0-9-]+$`
+
+## Engineer-Writer Isolation
+
+Writer input: path to `design-rendered.txt` + output path only. No user goal, no history, no codebase access. Ambiguity → `openQuestion`; never infer intent not documented in the design.

@@ -10,8 +10,7 @@ export interface RequirementsMeta {
   reviewStartedAt?: string;
   reviewCompletedAt?: string;
   stage?: 'stage-2-in-progress' | 'stage-2-done' | 'stage-3-done';
-  nextSectionId?: string;
-  bounceIterations?: Record<string, number>;
+  bounceIterations?: number;
 }
 
 export interface QuestionOption {
