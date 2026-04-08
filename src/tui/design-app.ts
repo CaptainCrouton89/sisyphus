@@ -54,8 +54,7 @@ const ICON = {
 
 // ─── Layout Constants ────────────────────────────────────────────────────────
 
-const MAX_CONTENT_WIDTH = 72;
-const MIN_CONTENT_WIDTH = 50;
+const MAX_CONTENT_WIDTH = 120;
 
 // ─── Text Utilities ──────────────────────────────────────────────────────────
 

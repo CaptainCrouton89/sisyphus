@@ -71,8 +71,7 @@ const EARS_COLORS: Record<EarsKeyword, { fg: string; bg: string; label: string }
 
 // ─── Layout Constants ────────────────────────────────────────────────────────
 
-const MAX_CONTENT_WIDTH = 72;
-const MIN_CONTENT_WIDTH = 50;
+const MAX_CONTENT_WIDTH = 120;
 
 // ─── Text Utilities ──────────────────────────────────────────────────────────
 
