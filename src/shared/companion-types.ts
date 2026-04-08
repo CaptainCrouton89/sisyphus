@@ -1,3 +1,45 @@
+import type { Session } from './types.js';
+
+export const OBSERVATION_CATEGORIES = ['session-sentiments', 'repo-impressions', 'user-patterns', 'notable-moments'] as const;
+
+export type ObservationCategory = typeof OBSERVATION_CATEGORIES[number];
+
+export type ObservationSource = 'rule' | 'haiku';
+
+export interface ObservationRecord {
+  id: string;                    // crypto.randomUUID()
+  category: ObservationCategory;
+  source: ObservationSource;
+  text: string;                  // one-sentence observation; validated per §0.1
+  repo: string | null;           // absolute cwd path, or null for cross-repo observations
+  sessionId: string;
+  timestamp: string;             // ISO 8601
+  detectorId?: string;           // rule-only: which detector produced this
+}
+
+export interface CompanionMemoryState {
+  version: 1;
+  observations: ObservationRecord[];          // ordered oldest → newest
+  prunedAt: string | null;                    // ISO timestamp of last prune, or null if never
+  firedDetectors: Record<string, string>;     // detectorId → lastDedupKey (per §0.1)
+}
+
+export interface ObservationContext {
+  prevLevel: number;                          // read by: level-up
+  prevSessionsCompleted: number;              // read by: session-milestone
+  prevConsecutiveEfficientSessions: number;   // read by: efficient-streak (pre-update comparison)
+}
+
+export interface ObservationEngineInput {
+  companion: CompanionState;
+  session: Session;
+  prev: ObservationContext;
+}
+
+export class MemoryStoreParseError extends Error {
+  constructor(public cause: unknown) { super('companion-memory.json is corrupt'); }
+}
+
 export type Mood = 'happy' | 'grinding' | 'frustrated' | 'zen' | 'sleepy' | 'excited' | 'existential';
 
 export type CompanionField = 'face' | 'boulder' | 'title' | 'commentary' | 'mood' | 'level' | 'stats' | 'achievements' | 'verb' | 'hobby';

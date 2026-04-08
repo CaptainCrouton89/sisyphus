@@ -638,7 +638,7 @@ function recomputeXpLevelTitle(companion: CompanionState): void {
   companion.title = getTitle(companion.level);
 }
 
-function todayIso(): string {
+export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -826,9 +826,35 @@ export function onAgentCrashed(companion: CompanionState): void {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function normalizeTask(task: string, cwd: string): string {
+export function normalizeTask(task: string, cwd: string): string {
   // Simple normalization: lowercase, collapse whitespace, prefix with cwd basename
   const normalized = task.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 100);
   const cwdBase = cwd.split('/').pop() ?? cwd;
   return `${cwdBase}:${normalized}`;
+}
+
+// ---------------------------------------------------------------------------
+// Observation engine integration
+// ---------------------------------------------------------------------------
+
+import type { ObservationContext } from '../shared/companion-types.js';
+import { runObservationEngine } from './companion-memory.js';
+
+export function captureObservationContext(
+  companion: CompanionState,
+  _repoCwd: string, // kept for future, unused today
+): ObservationContext {
+  return {
+    prevLevel: companion.level,
+    prevSessionsCompleted: companion.sessionsCompleted,
+    prevConsecutiveEfficientSessions: companion.consecutiveEfficientSessions ?? 0,
+  };
+}
+
+export async function runPostSessionObservations(
+  companion: CompanionState,
+  session: Session,
+  prev: ObservationContext,
+): Promise<void> {
+  return runObservationEngine({ companion, session, prev });
 }

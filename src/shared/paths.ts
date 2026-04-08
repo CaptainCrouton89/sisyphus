@@ -132,6 +132,10 @@ export function companionPath(): string {
   return join(globalDir(), 'companion.json');
 }
 
+export function companionMemoryPath(): string {
+  return join(globalDir(), 'companion-memory.json');
+}
+
 export function historyBaseDir(): string {
   return join(globalDir(), 'history');
 }

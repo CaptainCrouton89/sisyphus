@@ -570,7 +570,8 @@ function buildSentimentContext(): string {
 export async function generateCommentary(
   event: CommentaryEvent,
   companion: CompanionState,
-  context?: string
+  context?: string,
+  memoryCtx?: string,
 ): Promise<string | null> {
   if (!shouldGenerateCommentary(event)) return null;
 
@@ -639,7 +640,7 @@ Level: ${level} (${title})
 Tone: ${timeModifier}
 ${sentimentCtx}
 </state>
-${moodBreakdown}
+${moodBreakdown}${memoryCtx ? memoryCtx : ''}
 
 Event: ${event}${context ? `\nContext: ${context}` : ''}
 

@@ -15,7 +15,8 @@ import { generateSessionName, generateSentiment } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
-import { loadCompanion, saveCompanion, recordCommentary, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain, computeWisdomGain } from './companion.js';
+import { loadCompanion, saveCompanion, recordCommentary, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain, computeWisdomGain, captureObservationContext, runPostSessionObservations } from './companion.js';
+import { buildMemoryContext } from './companion-memory.js';
 import { SPINNER_VERBS } from '../shared/companion-render.js';
 import { generateCommentary, generateNickname } from './companion-commentary.js';
 import { showCommentaryPopup, showCommentaryPopupQueue } from './companion-popup.js';
@@ -96,8 +97,9 @@ function fireHaikuNaming(
   });
 }
 
-function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false): void {
-  generateCommentary(event, companion, context).then(text => {
+function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false, repo?: string): void {
+  const memoryCtx = buildMemoryContext(repo);
+  generateCommentary(event, companion, context, memoryCtx).then(text => {
     if (text) {
       try {
         const c = loadCompanion();
@@ -115,11 +117,12 @@ function fireCommentary(event: CommentaryEvent, companion: CompanionState, conte
  */
 function fireCompletionCommentary(
   events: Array<{ event: CommentaryEvent; companion: CompanionState; context?: string; popupTitle?: string }>,
+  memoryCtx?: string,
 ): void {
   if (events.length === 0) return;
   Promise.all(
     events.map(({ event, companion, context }) =>
-      generateCommentary(event, companion, context).catch(() => null)
+      generateCommentary(event, companion, context, memoryCtx).catch(() => null)
     )
   ).then(results => {
     const pages: PopupPage[] = [];
@@ -199,7 +202,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
     const companion = loadCompanion();
     onSessionStart(companion, cwd);
     saveCompanion(companion);
-    fireCommentary('session-start', companion, task);
+    fireCommentary('session-start', companion, task, false, cwd);
   } catch { /* companion errors are non-fatal */ }
 
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
@@ -292,7 +295,7 @@ It is the other session's responsibility. You do not need to monitor it.
     const companion = loadCompanion();
     onSessionStart(companion, cwd);
     saveCompanion(companion);
-    fireCommentary('session-start', companion, goal);
+    fireCommentary('session-start', companion, goal, false, cwd);
   } catch { /* companion errors are non-fatal */ }
 
   // 10. Return
@@ -473,12 +476,12 @@ export function getSessionStatus(cwd: string, sessionId: string): Session {
   return state.getSession(cwd, sessionId);
 }
 
-export function listSessions(cwd: string): Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> {
+export function listSessions(cwd: string): Array<{ id: string; name?: string; task: string; status: string; createdAt: string; activeMs: number; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];
 
   const entries = readdirSync(dir, { withFileTypes: true });
-  const sessions: Array<{ id: string; name?: string; task: string; status: string; createdAt: string; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> = [];
+  const sessions: Array<{ id: string; name?: string; task: string; status: string; createdAt: string; activeMs: number; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string }> = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -490,6 +493,7 @@ export function listSessions(cwd: string): Array<{ id: string; name?: string; ta
         task: session.task,
         status: session.status,
         createdAt: session.createdAt,
+        activeMs: session.activeMs,
         agentCount: session.agents.length,
         runningAgentCount: session.agents.filter(a => a.status === 'running').length,
         tmuxSessionName: session.tmuxSessionName,
@@ -569,7 +573,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         if (log) cycleCtx += `\nCycle log: ${truncate(log, 200)}`;
       }
     } catch { /* best-effort */ }
-    fireCommentary('cycle-boundary', companion, cycleCtx, true);
+    fireCommentary('cycle-boundary', companion, cycleCtx, true, session.cwd);
   } catch { /* non-fatal */ }
 
   // Respawn on next tick — agents already finished, no delay needed
@@ -671,7 +675,7 @@ export async function handleSpawn(
   registerAgentTimer(sessionId, agent.id);
   await state.appendAgentToLastCycle(cwd, sessionId, agent.id);
 
-  emitHistoryEvent(sessionId, 'agent-spawned', { agentId: agent.id, name, agentType, instruction: instruction.slice(0, 500), repo });
+  emitHistoryEvent(sessionId, 'agent-spawned', { agentId: agent.id, name, agentType, instruction: instruction.slice(0, 500), repo, claudeSessionId: agent.claudeSessionId });
 
   try { recomputeDots(); } catch { /* best-effort */ }
 
@@ -793,6 +797,8 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
   try {
     const companion = loadCompanion();
     const prevLevel = companion.level;
+    // Snapshot pre-update state for the observation engine
+    const prevContext = captureObservationContext(companion, completedSession.cwd);
     const newAchievementIds = onSessionComplete(companion, completedSession);
     saveCompanion(companion);
     // Record what was credited so continue→re-complete doesn't double-count
@@ -839,7 +845,15 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
       });
     }
 
-    fireCompletionCommentary(completionEvents);
+    // Fire observation engine fire-and-forget — errors are logged inside the engine
+    void runPostSessionObservations(companion, completedSession, prevContext)
+      .catch(err => console.error('[companion-memory] observation engine failed:', err instanceof Error ? err.message : err));
+
+    // Pre-build memory context once for all completion events (avoids redundant disk reads inside Promise.all).
+    // Memory reflects the previous state of the repo — observations from this session are not yet persisted.
+    const memoryCtx = buildMemoryContext(completedSession.cwd);
+
+    fireCompletionCommentary(completionEvents, memoryCtx);
   } catch { /* companion errors are non-fatal */ }
 
   switchToHomeSession(session);
@@ -1056,7 +1070,7 @@ export async function handlePaneExited(
       let crashCtx = `${agent.name} (${typeLabel}) crashed: ${truncate(agent.instruction, 120)}`;
       const running = freshSession.agents.filter(a => a.status === 'running').length;
       crashCtx += `\n${running}/${freshSession.agents.length} agents still running`;
-      fireCommentary('agent-crash', companion, crashCtx);
+      fireCommentary('agent-crash', companion, crashCtx, false, session.cwd);
     } catch { /* companion errors are non-fatal */ }
 
     if (allDone) {
