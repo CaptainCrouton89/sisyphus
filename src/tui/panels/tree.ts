@@ -39,7 +39,8 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
       const color = statusColor(node.status);
       const dim = node.status === 'completed';
       const cyclePart = node.cycleCount > 0 ? `C${node.cycleCount}` : '';
-      const dur = formatDuration(node.createdAt, node.completedAt);
+      // Use tracked active time (matches detail panel), not wall-clock elapsed.
+      const dur = formatDuration(node.activeMs);
       const agopart =
         node.status === 'completed' && node.completedAt ? formatTimeAgo(node.completedAt) : '';
       const meta = [cyclePart, dur, agopart].filter(Boolean).join(' ');

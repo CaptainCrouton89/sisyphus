@@ -283,6 +283,12 @@ async function handleRequest(req: Request): Promise<Response> {
 
       case 'list': {
         const allSessions: Array<Record<string, unknown>> = [];
+        // Overlay live in-memory timer values so callers see real-time activeMs
+        // for the running session without waiting for a persistence flush.
+        const overlayLiveTimers = (s: { id: string; activeMs: number }) => {
+          const timers = getActiveTimers(s.id);
+          if (timers) s.activeMs = timers.sessionMs;
+        };
         if (req.all) {
           // List sessions across all known cwds
           const seenCwds = new Set<string>();
@@ -290,11 +296,13 @@ async function handleRequest(req: Request): Promise<Response> {
             if (seenCwds.has(tracking.cwd)) continue;
             seenCwds.add(tracking.cwd);
             const sessions = sessionManager.listSessions(tracking.cwd);
+            sessions.forEach(overlayLiveTimers);
             allSessions.push(...sessions.map(s => ({ ...s, cwd: tracking.cwd } as unknown as Record<string, unknown>)));
           }
         } else {
           // List sessions for the requesting cwd only
           const sessions = sessionManager.listSessions(req.cwd);
+          sessions.forEach(overlayLiveTimers);
           allSessions.push(...sessions.map(s => ({ ...s, cwd: req.cwd } as unknown as Record<string, unknown>)));
           // Count total across all cwds for the hint
           let totalCount = allSessions.length;

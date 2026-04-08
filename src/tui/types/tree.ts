@@ -21,6 +21,7 @@ export interface SessionTreeNode extends BaseTreeNode {
   runningAgentCount: number;
   createdAt: string;
   completedAt?: string;
+  activeMs: number;
 }
 
 export interface CycleTreeNode extends BaseTreeNode {

@@ -61,6 +61,9 @@ export function buildTree(
       runningAgentCount: s.runningAgentCount,
       createdAt: s.createdAt,
       completedAt: isSelected ? selectedSession?.completedAt : undefined,
+      // Prefer the live activeMs from the selected session (real-time, includes
+      // timer overlay from `status` request) over the list-snapshot value.
+      activeMs: isSelected ? (selectedSession?.activeMs ?? s.activeMs) : s.activeMs,
     } satisfies SessionTreeNode);
 
     // Only emit children for the selected+expanded session
