@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { historyBaseDir, historySessionDir, historyEventsPath, historySessionSummaryPath } from '../../shared/paths.js';
 import { formatDuration, statusColor } from '../../shared/format.js';
-import type { SessionSummary } from '../../shared/history-types.js';
+import type { SessionSummary, SessionSummaryAgent } from '../../shared/history-types.js';
 import type { HistoryEvent } from '../../shared/history-types.js';
 
 const RESET = '\x1b[0m';
@@ -16,6 +16,29 @@ const COLOR: Record<string, string> = {
 
 function c(color: string, text: string): string {
   return `${COLOR[color] ?? ''}${text}${RESET}`;
+}
+
+// Agent types that run interactive TUI sessions. Their activeMs includes
+// user think-time while the pane is open — not actual compute. Treat
+// separately from compute-only agent types in efficiency metrics.
+const INTERACTIVE_AGENT_TYPES = new Set<string>([
+  'sisyphus:requirements',
+  'sisyphus:design',
+  'sisyphus:spec',
+]);
+
+function isInteractiveAgent(agentType: string | null | undefined): boolean {
+  return agentType != null && INTERACTIVE_AGENT_TYPES.has(agentType);
+}
+
+function splitAgentTime(agents: SessionSummaryAgent[]): { computeMs: number; interactiveMs: number } {
+  let computeMs = 0;
+  let interactiveMs = 0;
+  for (const a of agents) {
+    if (isInteractiveAgent(a.agentType)) interactiveMs += a.activeMs;
+    else computeMs += a.activeMs;
+  }
+  return { computeMs, interactiveMs };
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +231,12 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
   console.log(`${DIM}Model:${RESET} ${s.model ?? 'default'}`);
   console.log(`${DIM}Started:${RESET} ${fmtDate(s.startedAt)}`);
   console.log(`${DIM}Ended:${RESET} ${fmtDate(s.completedAt)}`);
-  console.log(`${DIM}Active:${RESET} ${formatDuration(s.activeMs)}  ${DIM}Wall:${RESET} ${s.wallClockMs ? formatDuration(s.wallClockMs) : '—'}`);
+  const { computeMs, interactiveMs } = splitAgentTime(s.agents);
+  const wallStr = s.wallClockMs ? formatDuration(s.wallClockMs) : '—';
+  console.log(`${DIM}Active:${RESET} ${formatDuration(s.activeMs)}  ${DIM}Wall:${RESET} ${wallStr}`);
+  if (interactiveMs > 0) {
+    console.log(`${DIM}Compute:${RESET} ${formatDuration(computeMs)}  ${DIM}Interactive:${RESET} ${formatDuration(interactiveMs)} ${DIM}(TUI wait time, not compute)${RESET}`);
+  }
   console.log('');
 
   // Task
@@ -229,7 +257,8 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
     for (const a of s.agents) {
       const name = a.nickname ? `${a.name} "${a.nickname}"` : a.name;
       const type = a.agentType ? c('gray', ` [${a.agentType}]`) : '';
-      console.log(`  ${fmtStatus(a.status)}  ${name}${type}  ${DIM}${formatDuration(a.activeMs)}${RESET}`);
+      const interactive = isInteractiveAgent(a.agentType) ? c('yellow', ' (interactive)') : '';
+      console.log(`  ${fmtStatus(a.status)}  ${name}${type}${interactive}  ${DIM}${formatDuration(a.activeMs)}${RESET}`);
     }
     console.log('');
   }
