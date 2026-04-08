@@ -636,6 +636,28 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       }
     } catch (err) {
       console.error(`[sisyphus] Failed to respawn orchestrator for session ${sessionId}:`, err);
+      // Pause the session so the dashboard reflects the failure instead of
+      // sitting in a half-active state. Surface to the user via notification —
+      // silently logging means they only discover the wedge when they look.
+      try {
+        const failedSession = state.getSession(cwd, sessionId);
+        if (failedSession.status === 'active') {
+          await state.updateSessionStatus(cwd, sessionId, 'paused');
+        }
+        const sessionLabel = failedSession.name ?? sessionId.slice(0, 8);
+        const reason = err instanceof Error ? err.message : String(err);
+        const config = loadConfig(cwd);
+        if (config.notifications?.enabled !== false) {
+          sendTerminalNotification(
+            'Sisyphus',
+            `Orchestrator respawn failed: ${sessionLabel} — ${reason.slice(0, 80)}`,
+            failedSession.tmuxSessionName,
+          );
+        }
+        try { recomputeDots(); } catch { /* best-effort */ }
+      } catch (surfaceErr) {
+        console.error(`[sisyphus] Additionally failed to surface respawn error for ${sessionId}:`, surfaceErr);
+      }
     } finally {
       respawningSessions.delete(sessionId);
     }
