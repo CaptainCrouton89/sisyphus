@@ -23,7 +23,7 @@ Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 ## Review commands
 
 - `registerReview` registers two commands: `requirements` and `design` — not a `review` command
-- `--wait` implies `--window` (undocumented in help)
+- `--wait` implies `--pane` (undocumented in help)
 - Schemas and annotated writing guides are hardcoded constants in `review.ts` — update them there if artifact format changes
 
 ## Status bar segments

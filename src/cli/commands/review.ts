@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, readdirSync, unlin
 import { execSync } from 'node:child_process';
 import { shellQuote } from '../../shared/shell.js';
 import { contextDir, historyEventsPath, historySessionDir, sessionsDir } from '../../shared/paths.js';
-import { openTmuxWindow, waitForTmuxWindow } from '../../shared/tmux.js';
+import { openTmuxPane, waitForTmuxPane } from '../../shared/tmux.js';
 
 function resolveContextArtifact(
   file: string | undefined,
@@ -45,8 +45,8 @@ export function registerReview(program: Command): void {
     .argument('[file]', 'Path to requirements.json (auto-detected from session if omitted)')
     .option('--session-id <id>', 'Session ID to find requirements for')
     .option('--cwd <path>', 'Project directory')
-    .option('--window', 'Open in a new tmux window instead of inline')
-    .option('--wait', 'Block until review completes and print feedback (implies --window)')
+    .option('--pane', 'Open in a new tmux pane to the side instead of inline')
+    .option('--wait', 'Block until review completes and print feedback (implies --pane)')
     .option('--schema', 'Print the requirements.json schema and exit')
     .option('--annotated', 'Print the schema with writing guidance annotations and exit')
     .option('--export', 'Render requirements.json into requirements.md (no LLM tokens; overwrites existing requirements.md)')
@@ -61,7 +61,7 @@ Examples:
   $ sisyphus requirements                              Auto-detect from current session
   $ sisyphus requirements path/to/requirements.json    Open a specific file
   $ sisyphus requirements --session-id abc123           Target a specific session
-  $ sisyphus requirements --window                     Open in a new tmux window
+  $ sisyphus requirements --pane                       Open in a side tmux pane
   $ sisyphus requirements --wait                       Block until review completes (for agent use)
   $ sisyphus requirements --schema                     Print the JSON schema
   $ sisyphus requirements --annotated                  Print schema with writing guidance
@@ -132,7 +132,6 @@ Examples:
       await runReviewTui(file, opts, {
         filename: 'requirements.json',
         binaryName: 'review.js',
-        windowName: 'requirements-review',
         feedbackFilename: 'review-feedback.md',
         notFoundMessage: 'No requirements.json found. Provide a path or use --session-id.',
       });
@@ -144,8 +143,8 @@ Examples:
     .argument('[file]', 'Path to design.json (auto-detected from session if omitted)')
     .option('--session-id <id>', 'Session ID to find design for')
     .option('--cwd <path>', 'Project directory')
-    .option('--window', 'Open in a new tmux window instead of inline')
-    .option('--wait', 'Block until review completes and print feedback (implies --window)')
+    .option('--pane', 'Open in a new tmux pane to the side instead of inline')
+    .option('--wait', 'Block until review completes and print feedback (implies --pane)')
     .option('--schema', 'Print the design.json schema and exit')
     .option('--annotated', 'Print the schema with writing guidance annotations and exit')
     .addHelpText('after', `
@@ -174,7 +173,6 @@ Examples:
       await runReviewTui(file, opts, {
         filename: 'design.json',
         binaryName: 'design.js',
-        windowName: 'design-walkthrough',
         feedbackFilename: 'design-feedback.md',
         notFoundMessage: 'No design.json found. Provide a path or use --session-id.',
       });
@@ -184,14 +182,13 @@ Examples:
 interface ReviewTuiConfig {
   filename: string;
   binaryName: string;
-  windowName: string;
   feedbackFilename: string;
   notFoundMessage: string;
 }
 
 async function runReviewTui(
   file: string | undefined,
-  opts: { sessionId?: string; cwd?: string; window?: boolean; wait?: boolean },
+  opts: { sessionId?: string; cwd?: string; pane?: boolean; wait?: boolean },
   config: ReviewTuiConfig,
 ): Promise<void> {
   const targetPath = resolveContextArtifact(file, opts, config.filename, config.notFoundMessage);
@@ -202,13 +199,12 @@ async function runReviewTui(
   }
 
   const binaryPath = join(import.meta.dirname, config.binaryName);
-  const useWindow = opts.window || opts.wait;
+  const usePane = opts.pane || opts.wait;
 
-  if (useWindow) {
+  if (usePane) {
     const feedbackPath = join(dirname(targetPath), config.feedbackFilename);
 
-    const { windowId, channel } = openTmuxWindow(
-      config.windowName,
+    const { paneId, channel } = openTmuxPane(
       `node ${shellQuote(binaryPath)} ${shellQuote(targetPath)}`,
     );
 
@@ -222,7 +218,7 @@ async function runReviewTui(
         });
       }
 
-      waitForTmuxWindow(channel);
+      waitForTmuxPane(channel);
 
       if (existsSync(feedbackPath)) {
         process.stdout.write(readFileSync(feedbackPath, 'utf-8'));
@@ -257,7 +253,7 @@ async function runReviewTui(
         }
       }
     } else {
-      console.log(`Review opened in tmux window ${windowId}`);
+      console.log(`Review opened in tmux pane ${paneId}`);
     }
   } else {
     execSync(`node ${shellQuote(binaryPath)} ${shellQuote(targetPath)}`, {

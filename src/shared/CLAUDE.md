@@ -43,6 +43,11 @@
 - `wallClockMs` vs `activeMs`: wall time (start→end) vs cumulative agent active time. Summing cycle-level `activeMs` double-counts cross-cycle agents.
 - `SessionSummary.efficiency` may be null even when `wallClockMs` exists (written before the field was added); `history.ts` CLI recomputes inline — don't assume `null` means data unavailable.
 
+## Tmux
+
+- `openTmuxPane` appends `; tmux wait-for -S <channel>` to the command — signal fires only when the outermost shell exits. A command that never returns blocks `waitForTmuxPane` forever with no timeout.
+- `waitForTmuxPane` passes timeout=`0` to `exec` — infinite wait by design. The two are decoupled: omit `waitForTmuxPane` for fire-and-forget (non-blocking) splits.
+
 ## Exec
 
 - `EXEC_ENV` augments PATH with Homebrew/nix/user-local dirs — skipping it may fail to find `tmux`/`git`/`claude` in stripped environments (launchd, CI).

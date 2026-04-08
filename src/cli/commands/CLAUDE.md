@@ -36,7 +36,7 @@
 
 **`review-completed` re-reads the JSON after TUI exits:** Timing fields (`meta.reviewStartedAt`, `meta.reviewCompletedAt`) are read from the artifact *after* the window closes — the TUI must write these back into the JSON during the session for accurate history events.
 
-**History events require both `--wait` and a resolved `sessionId`:** `emitReviewEvent` is only called when `opts.wait` is set *and* `sessionId` resolves from `--session-id` or `SISYPHUS_SESSION_ID`. Auto-detected sessions (no flag, no env) silently produce no history events even with `--wait`. `--window`-only invocations also produce no history entries.
+**History events require both `--wait` and a resolved `sessionId`:** `emitReviewEvent` is only called when `opts.wait` is set *and* `sessionId` resolves from `--session-id` or `SISYPHUS_SESSION_ID`. Auto-detected sessions (no flag, no env) silently produce no history events even with `--wait`. `--pane`-only invocations also produce no history entries.
 
 **Session auto-detection order:** `readdirSync(sessionsDir).reverse()` — reverse *alphabetical* order, not mtime. Since session IDs are UUIDv4 (random), this doesn't reliably pick the most recently created session when multiple sessions have `requirements.json`.
 

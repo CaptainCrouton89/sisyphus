@@ -89,7 +89,7 @@ sisyphus design <file> --wait          # launch design review TUI, block until u
 sisyphus requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
 ```
 
-These are review TUIs the spec agent invokes per section — also usable standalone for inspecting any `requirements.json` / `design.json`. `--wait` blocks your pane until the user completes the review and returns their feedback to stdout. Use `--window` (implied by `--wait`) to open in a separate tmux window so your pane stays visible.
+These are review TUIs the spec agent invokes per section — also usable standalone for inspecting any `requirements.json` / `design.json`. `--wait` blocks your pane until the user completes the review and returns their feedback to stdout. Use `--pane` (implied by `--wait`) to open in a side tmux pane so your pane stays visible.
 
 </planning-cli>
 

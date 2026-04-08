@@ -2,29 +2,31 @@ import { randomBytes } from 'node:crypto';
 import { shellQuote } from './shell.js';
 import { exec } from './exec.js';
 
-export interface TmuxWindow {
-  windowId: string;
+export interface TmuxPane {
+  paneId: string;
   channel: string;
 }
 
 /**
- * Open a new tmux window that runs `command`, then signals a channel on exit.
- * The caller decides whether to block by calling `waitForTmuxWindow`.
+ * Open a new tmux pane to the right of the current pane that runs `command`,
+ * then signals a channel on exit. The caller decides whether to block by
+ * calling `waitForTmuxPane`.
  */
-export function openTmuxWindow(windowName: string, command: string): TmuxWindow {
+export function openTmuxPane(command: string): TmuxPane {
   const channel = `sisyphus-${randomBytes(4).toString('hex')}`;
-  const fullCmd = `${command}; tmux wait-for -S ${shellQuote(channel)}; exit`;
+  const fullCmd = `${command}; tmux wait-for -S ${shellQuote(channel)}`;
 
-  const windowId = exec(`tmux new-window -n ${shellQuote(windowName)} -P -F "#{window_id}"`);
-  exec(`tmux send-keys -t ${shellQuote(windowId)} ${shellQuote(fullCmd)} Enter`);
+  const paneId = exec(
+    `tmux split-window -h -l 50% -P -F "#{pane_id}" ${shellQuote(fullCmd)}`,
+  );
 
-  return { windowId, channel };
+  return { paneId, channel };
 }
 
 /**
- * Block until a tmux window signals its channel (user closes the window).
+ * Block until a tmux pane signals its channel (process exits / user closes).
  * No timeout — the user controls when they're done.
  */
-export function waitForTmuxWindow(channel: string): void {
+export function waitForTmuxPane(channel: string): void {
   exec(`tmux wait-for ${shellQuote(channel)}`, undefined, 0);
 }
