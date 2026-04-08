@@ -7,8 +7,8 @@ export function exec(cmd: string, cwd?: string, timeoutMs: number = 30_000): str
   return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd, timeout: timeoutMs }).trim();
 }
 
-export function execSafe(cmd: string, cwd?: string): string | null {
+export function execSafe(cmd: string, cwd?: string, timeoutMs?: number): string | null {
   try {
-    return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execSync(cmd, { encoding: 'utf-8', env: EXEC_ENV, cwd, stdio: ['pipe', 'pipe', 'pipe'], timeout: timeoutMs }).trim();
   } catch { return null; }
 }

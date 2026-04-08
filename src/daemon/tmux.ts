@@ -7,6 +7,50 @@ export { EXEC_ENV } from '../shared/exec.js';
 // in single quotes, preventing all expansion.
 const t = (target: string): string => shellQuote(target);
 
+// Local tmux IPC should return in well under a second. Cap to 5s so a wedged
+// tmux server (lock contention, blocked command queue) fails fast instead of
+// blocking the daemon for the 30s exec() default. See 2026-04-08 incident.
+const TMUX_TIMEOUT_MS = 5_000;
+
+export class PaneUnavailableError extends Error {
+  constructor(public paneTarget: string, public state: PaneState) {
+    super(`pane ${paneTarget} unavailable (exists=${state.exists}, dead=${state.dead}, inMode=${state.inMode})`);
+    this.name = 'PaneUnavailableError';
+  }
+}
+
+export interface PaneState {
+  exists: boolean;
+  dead: boolean;
+  inMode: boolean;
+}
+
+/**
+ * Pure decision logic for sendKeys preflight. Tested independently of tmux.
+ *
+ * - dead/missing pane → 'abort' (caller should throw, not block on send-keys)
+ * - pane in copy/clock mode → 'cancel-then-send' (without -X cancel first,
+ *   our keys would route through the copy-mode key table instead of the shell)
+ * - normal pane → 'send'
+ */
+export function planSendKeys(state: PaneState): { action: 'send' | 'cancel-then-send' | 'abort' } {
+  if (!state.exists || state.dead) return { action: 'abort' };
+  if (state.inMode) return { action: 'cancel-then-send' };
+  return { action: 'send' };
+}
+
+/**
+ * Read pane state in a single tmux call. Returns exists=false if the pane is
+ * gone. Uses execSafe with a tight timeout so a wedged tmux server can't block
+ * us indefinitely.
+ */
+export function getPaneState(paneTarget: string): PaneState {
+  const out = execSafe(`tmux display-message -t ${t(paneTarget)} -p '#{pane_dead} #{pane_in_mode}'`, undefined, TMUX_TIMEOUT_MS);
+  if (out === null) return { exists: false, dead: false, inMode: false };
+  const [deadStr, modeStr] = out.split(' ');
+  return { exists: true, dead: deadStr === '1', inMode: modeStr === '1' };
+}
+
 export function createPane(windowTarget: string, cwd?: string, position: 'left' | 'right' = 'right'): string {
   const cwdFlag = cwd ? ` -c ${shellQuote(cwd)}` : '';
   // Target the first/last pane in the window to ensure absolute left/right placement
@@ -20,7 +64,15 @@ export function createPane(windowTarget: string, cwd?: string, position: 'left' 
 }
 
 export function sendKeys(paneTarget: string, command: string): void {
-  exec(`tmux send-keys -t ${t(paneTarget)} ${shellQuote(command)} Enter`);
+  const state = getPaneState(paneTarget);
+  const { action } = planSendKeys(state);
+  if (action === 'abort') throw new PaneUnavailableError(paneTarget, state);
+  if (action === 'cancel-then-send') {
+    // Drop out of copy/clock-mode so the keys actually reach the underlying
+    // shell instead of being interpreted by the copy-mode key table.
+    execSafe(`tmux send-keys -t ${t(paneTarget)} -X cancel`, undefined, TMUX_TIMEOUT_MS);
+  }
+  exec(`tmux send-keys -t ${t(paneTarget)} ${shellQuote(command)} Enter`, undefined, TMUX_TIMEOUT_MS);
 }
 
 export function killPane(paneTarget: string): void {
