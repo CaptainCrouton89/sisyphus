@@ -95,12 +95,16 @@ export function registerStart(program: Command): void {
           `tmux set-option -t ${shellQuote(tmuxSession)} @sisyphus_cwd ${shellQuote(cwd)}`,
           { stdio: 'ignore' },
         );
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.error(`Warning: failed to tag tmux session with cwd: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       // Open dashboard in the tmux session
       try {
         openDashboardWindow(tmuxSession, cwd);
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        console.error(`Warning: failed to open dashboard window: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       // If we weren't in tmux, attach now — user lands on the dashboard
       if (!process.env['TMUX']) {

@@ -389,7 +389,7 @@ export async function restartAgent(
 
   tmux.sendKeys(paneId, fullCmd);
 
-  emitHistoryEvent(sessionId, 'agent-restarted', { agentId, restartCount, originalSpawnedAt, previousStatus });
+  emitHistoryEvent(sessionId, 'agent-restarted', { agentId, restartCount, originalSpawnedAt, previousStatus, claudeSessionId });
 }
 
 function nextReportNumber(cwd: string, sessionId: string, agentId: string): string {

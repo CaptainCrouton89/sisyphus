@@ -284,12 +284,12 @@ export function isBeginCommandInstalled(): boolean {
   return existsSync(beginCommandPath());
 }
 
-export function installBeginCommand(): CommandInfo {
+export function installBeginCommand(srcOverride?: string): CommandInfo {
   const dest = beginCommandPath();
   if (existsSync(dest)) {
     return { installed: true, autoInstalled: false, path: dest };
   }
-  const src = bundledBeginCommandPath();
+  const src = srcOverride ?? bundledBeginCommandPath();
   if (!existsSync(src)) {
     return { installed: false, autoInstalled: false, path: dest };
   }

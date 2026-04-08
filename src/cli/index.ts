@@ -43,6 +43,7 @@ import { registerRegisterSegment } from './commands/register-segment.js';
 import { registerUnregisterSegment } from './commands/unregister-segment.js';
 import { registerReview } from './commands/review.js';
 import { registerPresent } from './commands/present.js';
+import { registerScratch } from './commands/scratch.js';
 import { globalDir } from '../shared/paths.js';
 
 const program = new Command();
@@ -95,6 +96,7 @@ registerRegisterSegment(program);
 registerUnregisterSegment(program);
 registerReview(program);
 registerPresent(program);
+registerScratch(program);
 
 program.addHelpText('after', `
 Examples:

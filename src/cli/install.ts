@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
 import { ensureRequiredPlugins } from './plugins.js';
+import { installBeginCommand, type CommandInfo } from './onboard.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -57,6 +58,11 @@ export function isInstalled(): boolean {
 export async function ensureDaemonInstalled(): Promise<void> {
   if (process.platform !== 'darwin') return;
 
+  // Idempotent: early-returns if `~/.claude/commands/sisyphus/begin.md` already exists.
+  // Placed outside the !isInstalled() guard so users whose daemon was installed before
+  // this fix shipped self-heal the next time the daemon is unreachable.
+  const beginResult = installBeginCommand();
+
   if (!isInstalled()) {
     const nodePath = process.execPath;
     const daemonPath = daemonBinPath();
@@ -74,7 +80,7 @@ export async function ensureDaemonInstalled(): Promise<void> {
 
     await ensureRequiredPlugins(process.cwd());
 
-    printGettingStarted(keybindResult);
+    printGettingStarted(keybindResult, beginResult);
   }
 
   await waitForDaemon();
@@ -110,7 +116,7 @@ export async function uninstallDaemon(purge: boolean): Promise<void> {
   }
 }
 
-function printGettingStarted(keybindResult: SetupResult): void {
+function printGettingStarted(keybindResult: SetupResult, beginResult: CommandInfo): void {
   const lines = [
     '',
     'Sisyphus installed — daemon running via launchd.',
@@ -121,6 +127,12 @@ function printGettingStarted(keybindResult: SetupResult): void {
     lines.push(`Tmux keybind: ${keybindResult.message}`, '');
   } else if (keybindResult.status === 'conflict') {
     lines.push(`Keybind: ${keybindResult.message}`, '');
+  }
+
+  if (beginResult.installed && beginResult.autoInstalled) {
+    lines.push(`/begin command installed: ${beginResult.path}`, '');
+  } else if (!beginResult.installed) {
+    lines.push('/begin command: failed to install (run `sisyphus setup` to retry)', '');
   }
 
   lines.push(
