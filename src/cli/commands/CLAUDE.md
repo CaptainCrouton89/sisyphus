@@ -97,3 +97,17 @@
 **`reviewAction: 'bounce-to-design'`** (requirements only): Signals the user believes the requirement exposes a flaw in the underlying design and wants to revisit Stage 1 before continuing. Design items use a different action set: `agree | pick-alt | comment` — no `bounce-to-design`. Writing `bounce-to-design` into a design item's `reviewAction` is a schema violation.
 
 **Design `decision.lenses`:** Free-form `Record<string, string>` — pick evaluation dimensions relevant to the specific decision (complexity, durability, performance, etc.), not a fixed set. The `decision` object itself is optional; omit it entirely when there's only one reasonable approach. `selectedAlternative` (TUI-owned) stores the title string of the alternative the user picked with `pick-alt`; leave it null when writing.
+
+## history.ts
+
+**`INTERACTIVE_AGENT_TYPES` is a hardcoded set:** `sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec` have their `activeMs` bucketed as interactive (TUI wait time), not compute, in both the detail view and `--stats`. New TUI-based agent types must be added here or their time inflates compute averages.
+
+**`findSession` resolution order:** exact UUID → `startsWith` prefix → exact name match → name `includes` substring. The final step can match ambiguously — first result in newest-first sort wins. Passing a short substring that appears in multiple session names is unpredictable.
+
+**`--events` + `--json` outputs the event array, not the summary object:** `--json` alone outputs the summary; `--events` alone renders formatted timeline; both together outputs the events array as JSON. `--events` is silently ignored in list mode (no session argument).
+
+**`--stats` efficiency fallback:** Prefers stored `s.efficiency`; falls back to `s.activeMs / s.wallClockMs` when `efficiency` is null. Sessions where both are null are excluded from the average — a session pool with no `wallClockMs` will show no efficiency line at all.
+
+**Temporal patterns suppressed when filtered scope has fewer than 5 sessions:** The `< 5` threshold applies to the post-filter count, not total history. `--since 1d` on a quiet day produces no temporal section even with months of history.
+
+**`listSessions` calls `loadAllSummaries()` twice:** Once to build the filtered display list, a second time at the end for the "Showing X of Y" footer total. The footer total reflects unfiltered history regardless of `--cwd`/`--status`/`--since`/`--search` — it always shows total session count, not total matching count.
