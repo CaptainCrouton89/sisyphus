@@ -82,7 +82,7 @@ MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
 current=$(tmux display-message -p '#{session_name}')
 # Find cwd for current session from manifest
 cwd=""
-while IFS=$'\\t' read -r type name scwd phase dwid; do
+while IFS=$'\\t' read -r type name scwd phase; do
   [ "$name" = "$current" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
 [ -z "$cwd" ] && exit 0`.trim();
@@ -91,7 +91,7 @@ const CYCLE_SCRIPT = `#!/bin/bash
 ${MANIFEST_LOOKUP}
 # Collect all sessions (S and H) matching this cwd
 sessions=()
-while IFS=$'\\t' read -r type name scwd phase dwid; do
+while IFS=$'\\t' read -r type name scwd phase; do
   [[ "$type" == "#"* ]] && continue
   [ "$scwd" = "$cwd" ] && sessions+=("$name")
 done < "$MANIFEST"
@@ -106,68 +106,66 @@ done
 tmux switch-client -t "\${sessions[0]}"
 `;
 
-const HOME_SCRIPT_JUMP = `
-go_home() {
-  local name="$1" dwid="$2"
-  tmux switch-client -t "$name"
-  if [ -n "$dwid" ] && [ "$dwid" != "-" ]; then
-    tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
-      tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
+// Live tmux query for the home session + its dashboard window ID.
+// Sets HOME_SESSION and HOME_DWID. Returns 0 on success, 1 if no home found.
+// Optional arg: explicit cwd to look up. If omitted, uses @sisyphus_cwd from
+// the current tmux session, falling back to #{pane_current_path}.
+const RESOLVE_HOME = `
+HOME_SESSION=""
+HOME_DWID=""
+resolve_home() {
+  local target_cwd="$1"
+  local current_session sname scwd
+  if [ -z "$target_cwd" ]; then
+    current_session=$(tmux display-message -p '#{session_name}')
+    target_cwd=$(tmux show-options -t "$current_session" -v @sisyphus_cwd 2>/dev/null)
+    [ -z "$target_cwd" ] && target_cwd=$(tmux display-message -p '#{pane_current_path}')
   fi
+  target_cwd="\${target_cwd%/}"
+  [ -z "$target_cwd" ] && return 1
+  while IFS= read -r sname; do
+    [ -z "$sname" ] && continue
+    case "$sname" in ssyph_*) continue ;; esac
+    scwd=$(tmux show-options -t "$sname" -v @sisyphus_cwd 2>/dev/null)
+    scwd="\${scwd%/}"
+    if [ "$scwd" = "$target_cwd" ]; then
+      HOME_SESSION="$sname"
+      HOME_DWID=$(tmux show-options -t "$sname" -v @sisyphus_dashboard 2>/dev/null)
+      return 0
+    fi
+  done < <(tmux list-sessions -F '#{session_name}')
+  return 1
 }`.trim();
 
 const HOME_SCRIPT = `#!/bin/bash
-# Jump to the dashboard window — prefer current session, then manifest lookup
-${HOME_SCRIPT_JUMP}
+# Jump to the dashboard window for the home session matching this cwd.
+${RESOLVE_HOME}
+if ! resolve_home; then
+  tmux display-message "No sisyphus dashboard for this cwd"
+  exit 0
+fi
+if [ -z "$HOME_DWID" ]; then
+  tmux display-message "Home session has no dashboard window — re-run sisyphus start"
+  exit 0
+fi
 current=$(tmux display-message -p '#{session_name}')
-# If current session has a dashboard window, just select it (no session switch)
-local_dwid=$(tmux show-options -t "$current" -v @sisyphus_dashboard 2>/dev/null)
-if [ -n "$local_dwid" ]; then
-  tmux select-window -t "\${current}:\${local_dwid}" 2>/dev/null && exit 0
-fi
-# Otherwise, find the right home session via manifest
-MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
-[ ! -f "$MANIFEST" ] && exit 0
-cwd=""
-while IFS=$'\\t' read -r type name scwd phase dwid; do
-  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
-done < "$MANIFEST"
-if [ -n "$cwd" ]; then
-  while IFS=$'\\t' read -r type name scwd phase dwid; do
-    if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
-      go_home "$name" "$dwid"
-      exit 0
-    fi
-  done < "$MANIFEST"
-fi
+[ "$current" != "$HOME_SESSION" ] && tmux switch-client -t "$HOME_SESSION"
+tmux select-window -t "$HOME_DWID"
 `;
 
 const KILL_PANE_SCRIPT = `#!/bin/bash
 # prefix-x override for sisyphus sessions.
 # If this is the last pane, switch to the home session before killing.
+${RESOLVE_HOME}
 session=$(tmux display-message -p '#{session_name}')
 pane_count=$(tmux list-panes -t "$session" -F '#{pane_id}' | wc -l | tr -d ' ')
 
 if [ "$pane_count" -le 1 ]; then
-  MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
-  if [ -f "$MANIFEST" ]; then
-    cwd=""
-    while IFS=$'\\t' read -r type name scwd phase dwid; do
-      [ "$name" = "$session" ] && { cwd="$scwd"; break; }
-    done < "$MANIFEST"
-    if [ -n "$cwd" ]; then
-      while IFS=$'\\t' read -r type name scwd phase dwid; do
-        if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
-          tmux switch-client -t "$name"
-          if [ -n "$dwid" ] && [ "$dwid" != "-" ]; then
-            tmux select-window -t "\${name}:\${dwid}" 2>/dev/null || \\
-              tmux select-window -t "\${name}:sisyphus-dashboard" 2>/dev/null
-          fi
-          tmux kill-session -t "$session"
-          exit 0
-        fi
-      done < "$MANIFEST"
-    fi
+  if resolve_home; then
+    tmux switch-client -t "$HOME_SESSION"
+    [ -n "$HOME_DWID" ] && tmux select-window -t "$HOME_DWID"
+    tmux kill-session -t "$session"
+    exit 0
   fi
   tmux kill-pane
 else
@@ -195,11 +193,11 @@ if [ -z "$session_id" ]; then
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   [ ! -f "$MANIFEST" ] && { echo "No active sessions found"; sleep 1; exit 1; }
   cwd=""
-  while IFS=$'\\t' read -r type name scwd phase dwid; do
+  while IFS=$'\\t' read -r type name scwd phase; do
     [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
   done < "$MANIFEST"
   [ -z "$cwd" ] && { echo "Session not in manifest"; sleep 1; exit 1; }
-  while IFS=$'\\t' read -r type name scwd phase dwid; do
+  while IFS=$'\\t' read -r type name scwd phase; do
     if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
       session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
       [ -n "$session_id" ] && break
@@ -226,12 +224,12 @@ if [ -z "$session_id" ]; then
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   [ ! -f "$MANIFEST" ] && { echo "No active sessions found"; sleep 1; exit 1; }
   if [ -z "$cwd" ]; then
-    while IFS=$'\\t' read -r type name scwd phase dwid; do
+    while IFS=$'\\t' read -r type name scwd phase; do
       [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
     done < "$MANIFEST"
   fi
   [ -z "$cwd" ] && { echo "Session not in manifest"; sleep 1; exit 1; }
-  while IFS=$'\\t' read -r type name scwd phase dwid; do
+  while IFS=$'\\t' read -r type name scwd phase; do
     if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
       session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
       [ -n "$session_id" ] && break
@@ -243,17 +241,12 @@ fi
 [ -z "$cwd" ] && cwd=$(tmux display-message -p '#{pane_current_path}')`.trim();
 
 // --- Go-home helper used by kill/delete scripts ---
+// Assumes $cwd was captured before the destructive action ran (via SESSION_RESOLVE).
 const GO_HOME_AFTER = `
-${HOME_SCRIPT_JUMP}
-# After the action, switch back to the home/dashboard session
-MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
-if [ -f "$MANIFEST" ] && [ -n "$cwd" ]; then
-  while IFS=$'\\t' read -r type name scwd phase dwid; do
-    if [ "$type" = "H" ] && [ "$scwd" = "$cwd" ]; then
-      go_home "$name" "$dwid"
-      break
-    fi
-  done < "$MANIFEST"
+${RESOLVE_HOME}
+if resolve_home "$cwd"; then
+  tmux switch-client -t "$HOME_SESSION"
+  [ -n "$HOME_DWID" ] && tmux select-window -t "$HOME_DWID"
 fi`.trim();
 
 const KILL_SESSION_SCRIPT = `#!/bin/bash
@@ -313,11 +306,11 @@ if [ -z "$session_id" ]; then
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   if [ -f "$MANIFEST" ]; then
     cwd=""
-    while IFS=$'\\t' read -r type name scwd phase dwid; do
+    while IFS=$'\\t' read -r type name scwd phase; do
       [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
     done < "$MANIFEST"
     if [ -n "$cwd" ]; then
-      while IFS=$'\\t' read -r type name scwd phase dwid; do
+      while IFS=$'\\t' read -r type name scwd phase; do
         if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
           session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
           [ -n "$session_id" ] && break
@@ -341,13 +334,13 @@ MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
 
 current=$(tmux display-message -p '#{session_name}')
 cwd=""
-while IFS=$'\\t' read -r type name scwd phase dwid; do
+while IFS=$'\\t' read -r type name scwd phase; do
   [ "$name" = "$current" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
 
 declare -a entries=()
 declare -a targets=()
-while IFS=$'\\t' read -r type name scwd phase dwid; do
+while IFS=$'\\t' read -r type name scwd phase; do
   [[ "$type" == "#"* ]] && continue
   [ -n "$cwd" ] && [ "$scwd" != "$cwd" ] && continue
   display="$name"

@@ -8,7 +8,6 @@ interface ManifestEntry {
   tmuxName: string;
   cwd: string;
   phase: string | null;
-  dashboardWindowId: string | null;
 }
 
 interface Manifest {

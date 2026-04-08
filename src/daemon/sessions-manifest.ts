@@ -11,7 +11,6 @@ interface ManifestEntry {
   tmuxName: string;
   cwd: string;
   phase: SessionPhase | null;
-  dashboardWindowId: string | null;
 }
 
 function atomicWrite(filePath: string, data: string): void {
@@ -34,7 +33,6 @@ function buildEntries(): ManifestEntry[] {
       tmuxName: entry.tmuxSessionName,
       cwd: entry.cwd,
       phase: phaseInfo?.phase ?? null,
-      dashboardWindowId: null,
     });
   }
 
@@ -45,13 +43,11 @@ function buildEntries(): ManifestEntry[] {
     if (isSisyphusSession(name)) continue;
     const cwd = tmux.getSessionOption(name, '@sisyphus_cwd')?.trim();
     if (!cwd) continue;
-    const dashboardWindowId = tmux.getSessionOption(name, '@sisyphus_dashboard')?.trim() || null;
     entries.push({
       type: 'H',
       tmuxName: name,
       cwd,
       phase: null,
-      dashboardWindowId,
     });
   }
 
@@ -62,7 +58,7 @@ function toTsv(entries: ManifestEntry[]): string {
   const ts = Math.floor(Date.now() / 1000);
   const lines = [`#ts:${ts}`];
   for (const e of entries) {
-    lines.push(`${e.type}\t${e.tmuxName}\t${e.cwd}\t${e.phase ?? '-'}\t${e.dashboardWindowId ?? '-'}`);
+    lines.push(`${e.type}\t${e.tmuxName}\t${e.cwd}\t${e.phase ?? '-'}`);
   }
   return lines.join('\n') + '\n';
 }
