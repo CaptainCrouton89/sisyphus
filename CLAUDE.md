@@ -91,3 +91,5 @@ sisyphus doctor                   # checks tmux, Claude CLI, native notify, laun
 ```
 
 - `node-pty` is external to the bundle (native module) — prebuilds need execute permission. `postinstall` fixes this; run `npm rebuild node-pty` if pane spawning fails.
+
+See `.claude/skills/sisyphus/SKILL.md` for runtime mental model, agent boundaries, and workflow patterns.

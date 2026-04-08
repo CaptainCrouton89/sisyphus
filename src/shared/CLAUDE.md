@@ -5,6 +5,10 @@
 - `cycleLogPath` zero-pads to 3 digits (`cycle-001.md`); `snapshotDir` does not (`cycle-1/`). Don't sort or glob them interchangeably.
 - `legacyLogsPath` (`logs.md`) — read for backward compat. Don't delete even though new code never creates it.
 - `tmuxSessionName` produces `ssyph_` prefix; `isSisyphusSession` checks it — renaming breaks pane-monitor detection.
+- `daemonUpdatingPath()` → `~/.sisyphus/updating` — sentinel file; presence = update in progress, absence = safe to proceed. Check before mutating daemon state.
+- History (`historyBaseDir()`, `historySessionDir()`, etc.) lives at `~/.sisyphus/history/` (global). Session state (`.sisyphus/sessions/`) is project-relative. These are written by different code paths and must not be conflated.
+- `sessionsManifestPath()` (JSON) and `sessionsManifestTsvPath()` (TSV) are both maintained — JSON is canonical, TSV for external tooling. Updating one without the other leaves them out of sync.
+- `tmuxSessionDisplayName()` strips `ssyph_{basename(cwd)}_` prefix; `isSisyphusSession` checks the raw name. Use display name only for UI output.
 
 ## Config
 
@@ -18,6 +22,13 @@
 - `AgentStatus 'lost'` ≠ `'crashed'`: `'lost'` means the tmux pane vanished (daemon restart, session resume with pane gone); `'crashed'` means process exited non-zero. Filtering only `'crashed'` misses silently-disappeared agents.
 - `Agent.resumeEnv`/`resumeArgs` and `OrchestratorCycle.resumeEnv`/`resumeArgs` store the exact env exports + CLI flags used to spawn the process — written for pane recovery, not display.
 - `OrchestratorCycle.interCycleGapMs` is undefined on cycle 1 (no previous cycle); from cycle 2+ it measures wall time from the previous cycle's `completedAt` to the current spawn, including daemon poll delay and any user pause.
+
+## Companion Memory
+
+- `companion-memory.json` and `companion.json` are separate stores written by different code paths. `MemoryStoreParseError` is specific to memory corruption — don't conflate with state parse errors.
+- `ObservationContext` must be captured *before* mutating `CompanionState` — it's the pre-update snapshot for threshold-crossing detection (`prevLevel`, `prevSessionsCompleted`, `prevConsecutiveEfficientSessions`). Building it after mutation silently kills level-up/streak firings.
+- `firedDetectors[detectorId] = lastDedupKey` prevents re-firing. Changing a detector's key derivation logic silently re-enables all previously suppressed observations for existing installations.
+- `observations` is ordered oldest→newest; prune from index 0 (head), not tail.
 
 ## Companion Types
 

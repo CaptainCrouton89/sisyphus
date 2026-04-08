@@ -5,19 +5,16 @@
 - `explore.md` — Never spawned directly by orchestrator; only `problem.md` can spawn it
 - `operator.md` — Spawns sub-agents via **Task tool** (not Agent tool) — the only parent agent that does this
 - `debug.md` — May write reproduction tests despite "no code changes" stance; explicit carve-out, not inconsistency
-- `problem.md` — Save to `context/problem.md` is gated on explicit user sign-off; agent must wait, not save on completion. Uses `systemPrompt: replace` (not `append`) — base system prompt is dropped entirely; this is the only interactive agent that does this
-- `implementor.md` — Bail via `sisyphus report` when the task makes false assumptions; never "make it work". Build failure split: unrelated → note and continue; related-but-unexpected → STOP and report, no workarounds. Designed for parallel execution — pattern/naming coherence with co-running implementors takes priority over speed
-- `design.md` / `requirements.md` no longer exist as standalone agents — both are now `spec/` subagents (`engineer` and `requirements-writer`)
+- `problem.md` — Uses `systemPrompt: replace` (base prompt dropped; only interactive agent that does this). Draft → `context/problem.draft.md`; promoted via `mv` on explicit sign-off only. Draft rendered via `termrender --tmux`, **never pasted in chat** — one chat message: "Draft is in the pane — anything off?". Visual sketches write to `context/visual.md` then `termrender --tmux`. Uses `TaskCreate` to track parallel work (explore agents, perspective agents) — mark each task completed immediately, don't batch.
+- `implementor.md` — Bail via `sisyphus report` when task makes false assumptions; never "make it work". Build failure split: unrelated → note and continue; related-but-unexpected → STOP, no workarounds. **Only lints/typechecks files it changed** — never runs full builds. Parallel execution: pattern/naming coherence with co-running implementors takes priority over speed. Explicit permission to break existing code ("pre-production").
+
+## termrender Directive Nesting
+
+Outer directives need more colons than inner: `::::columns` > `:::col` > `:::`. Backtick fence also works: `` ```{panel} ``. Mermaid: keep to 3–6 nodes, use `graph TD` (not LR), group related steps into one node — extra nodes widen ASCII output and can overflow the terminal.
 
 ## problem.md Perspective Agents
 
-`problem/` subdirectory contains 8 sub-agents (adversarial, contrarian, first-principles, precedent, simplifier, systems-thinker, time-traveler, user-empathy). All 8 are spawned simultaneously with `run_in_background: true`.
-
-Timing constraint: spawn after the conversation has real substance but before conclusions harden — too early means no framing to react to; too late means the perspective agents can't affect the outcome.
-
-**Pre-spawn problem statement is required** — a shared 2-3 sentence framing written before spawning makes outputs comparable. Without it, the 8 results are incommensurable. Form your own take on the problem before spawning; the agents challenge your convergence, they don't substitute for your analysis.
-
-`context/visual.md` — scratch file written by `problem.md` for `termrender --tmux` display. Transient; not read by downstream agents (not in the context chain).
+8 sub-agents spawned simultaneously with `run_in_background: true`. Spawn after conversation has substance but before conclusions harden. Write a 2-3 sentence shared framing before spawning (what's happening, what's been considered, what a good outcome looks like) — makes outputs comparable across all 8. Form your own take first; they challenge convergence.
 
 ## Context Chain
 
@@ -25,43 +22,54 @@ Artifacts flow through `$SISYPHUS_SESSION_DIR/context/`. Ordering dependency:
 
 ```
 problem.md       →  context/problem.md  +  context/explore-{area}.md
-spec.md          →  context/design.json + context/design.md + context/requirements.json + context/requirements.md  (single interactive session; runs requirements.json → requirements.md via sisyphus requirements --export, no LLM tokens)
-plan.md          →  context/plan-{topic}.md        (reads all of context/ for prior findings)
-                    large plans also produce context/plan-{topic}-{slice}.md sub-plans linked from master
+spec.md          →  context/design.json + context/design.md + context/requirements.json + context/requirements.md
+plan.md          →  context/plan-{topic}.md  (reads all of context/ for prior findings)
 test-spec.md     →  context/test-spec-{topic}.md   (reads requirements + plan at provided paths)
 research-lead.md →  context/research-{topic}.md    (standalone; spawnable at any phase)
 ```
 
-`explore.md` depth: `quick` / `standard` (default, 2-3 layers) / `deep` (exhaustive + git history). Absent signal → `standard`.
-
 ## plan.md Constraints
 
-- **Master plan hard limit: 200 lines.** Exceeding it means stage detail has leaked into the master — move it to a sub-plan file, not an exception.
-- **No code in plans.** No type definitions, function stubs, schema blocks, or inline implementations. Use pattern references: "Follow the pattern in `src/jobs/index.ts`."
-- **File overlap between sub-planners is expected**, not a blocker — it surfaces integration points. Resolve ownership during synthesis; don't avoid delegation to prevent it.
-- **Adversarial review agents spawn after synthesis**, before delivery — code smell, edge case, ambiguity. Scale reviewer count to plan complexity (1 for 5-file plans, 2-3 for 30-file plans). Findings must be fixed or explicitly dismissed.
-- Delegation threshold: 6+ files, or a solo plan that would exceed 300 lines. Synthesis (editing sub-plans for coherence, naming, seams) is where the plan lead adds value — rubber-stamping sub-plans into a master doc is not synthesis.
+- **Master plan hard limit: 200 lines.** Exceeding it means stage detail leaked into the master — move it to a sub-plan file.
+- **No code in plans.** Use pattern references: "Follow the pattern in `src/jobs/index.ts`."
+- Adversarial review agents spawn after synthesis, before delivery. Scale to complexity (1 for 5-file plans, 2-3 for 30-file plans). Findings must be fixed or dismissed.
 
 ## Review Actions
 
-- `reviewAction: "approve"` → set `status` to `"approved"` — approved items are permanently skipped on re-entry
-- Design uses `"agree"` not `"approve"` to approve; `"pick-alt"` → read `selectedAlternative` and revise
+- `reviewAction: "approve"` → set `status` to `"approved"` — permanently skipped on re-entry
+- Design uses `"agree"` not `"approve"`; `"pick-alt"` → read `selectedAlternative` and revise
 - Read both `openQuestions[].response`+`selectedOption` (group-level) AND `questions[].response` (per-requirement inline) — separate fields
 
 ## TUI-Owned Fields
 
-- `startedAt`/`completedAt` on items and `meta.reviewStartedAt`/`meta.reviewCompletedAt` are set by the TUI — never write them
+`startedAt`/`completedAt` on items and `meta.reviewStartedAt`/`meta.reviewCompletedAt` are set by TUI — never write them.
 
 ## spec.md Non-Obvious Behavior
 
-`spec/` subagents: `engineer` (writes/revises `design.json`+`design.md`) and `requirements-writer` (isolated — receives exactly 4 fields: section name/ID, path to `design-rendered.txt`, chunk output path, atomic-write requirement. **Nothing else.** No user goal, no prior conversation, no other sections.)
+**Two termrender modes:**
+- `termrender --tmux design.md` — Stage 1/3 user review and bounce re-presentation; scrollable side pane, never paste in chat
+- `termrender --no-color design.md > design-rendered.txt` — Stage 2 writer input only; strips formatting for isolation
 
-Orphan chunk reconciliation (`context/requirements-{sectionId}.attempt-N.json`) runs on **every startup**, not just resume. Safe to repeat — never modifies `requirements.json` itself, only deletes chunk files.
+**Bounce verdict source**: after TUI exit, re-read `requirements.json` and scan for `reviewAction === 'bounce-to-design'`. The stdout feedback text printed after TUI is human-readable only — the lead never parses it.
 
-`meta.bounceIterations[sectionId]` **never decrements** — cumulative across daemon restarts. `> 3` per section → bail. Treating it as transient defeats the structural-conflict tripwire.
+**Three-way TUI exit**: (1) no bounces → Stage 3; (2) ≥1 bounce-to-design → bounce flow; (3) comments only / not yet approved → re-dispatch writer, same three-field contract, incremented attempt N. Third path easy to miss.
 
-Section IDs from `design.json` are validated against `^[a-z0-9-]+$` before any chunk path is constructed — path-traversal guard. Offending ID → bail immediately.
+User comments flow to engineer (revises design); writer re-extracts from revised `design-rendered.txt` with no memory of prior pass — user comment text never flows directly to the writer.
 
-## Sub-Agent Subdirectory Pattern
+`meta.bounceIterations` **never decrements** — cumulative across restarts. `> 3` → bail. `sisyphus requirements --export` (Stage 3) runs synchronously — not `run_in_background`. Contrast: TUI launch in Stage 2 uses `run_in_background: true`.
 
-Subdirectories (e.g., `review/`, `review-plan/`, `spec/`) contain sub-agent files copied into the plugin's `agents/` dir at spawn time via `createAgentPlugin()` in `src/daemon/agent.ts`. Sub-agents are invisible to the orchestrator — only the parent can spawn them.
+**Resume state machine:**
+
+| Disk state | Action |
+|---|---|
+| No `requirements.json`, no `design.json` | Stage 1 fresh |
+| No `requirements.json`, `design.json` present | Stage 1 sign-off pending — re-render and ask |
+| `meta.stage === 'stage-2-in-progress'` | Re-render to text, re-dispatch writer, launch TUI |
+| `meta.stage === 'stage-2-done'` | Resume into Stage 3 |
+| `meta.stage === 'stage-3-done'` | Submit — sanity-check `design.json.meta.draft` first |
+
+**Orphan chunk cleanup** runs on every startup, before resume — glob `requirements.attempt-*.json`, delete if unparseable or if `requirements.json` already has groups.
+
+**Stage 1 readiness** (all three required): (1) can name 3–7 major components; (2) can write 1-paragraph description not corrected on most recent turn; (3) codebase contradictions resolved. Cap at 3 question rounds — unmet → bail.
+
+**Resume sanity check**: `meta.stage === 'stage-3-done'` but `design.json.meta.draft < 2` → ask before submitting (Stage 3 engineer sets it to 2; if it didn't run, something is inconsistent).

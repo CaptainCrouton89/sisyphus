@@ -1,7 +1,5 @@
 # CLI Layer
 
-Entry point: `index.ts` (becomes `sisyphus` command via shebang).
-
 ## Entry point
 
 - `sortSubcommands: false` — help lists commands in registration order; append new commands at the end of `index.ts`
@@ -11,9 +9,15 @@ Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 
 - `M-s` cycles sessions in root table; `C-s` enters `sisyphus` key table
 - `@sisyphus_dashboard` stores window ID (not name) — survives renames
-- `ssyph_` prefix marks sisyphus sessions; renaming breaks pane-monitor detection
-- `setupTmuxKeybind` conflict detection requires running tmux server — if tmux is down, bindings are written without conflict checking
-- `removeTmuxKeybind` scans both `~/.tmux.conf` and `~/.config/tmux/tmux.conf`
+- `ssyph_` prefix marks sisyphus sessions; renaming breaks pane-monitor detection AND `RESOLVE_HOME` (which skips `ssyph_*` when finding the home session)
+- `setupTmuxKeybind` always rewrites `~/.sisyphus/tmux.conf` — conflict detection requires a running tmux server (if tmux is down, written without checking). Re-running setup is safe and self-heals drift.
+- Bindings live in `~/.sisyphus/tmux.conf` (managed file); user's tmux.conf only gets a `source-file` line appended. `removeTmuxKeybind` strips that line, deletes `~/.sisyphus/tmux.conf`, and restores `prefix-x` to default `kill-pane \; select-layout even-horizontal`.
+- `userTmuxConfPath()` for `source-file` append: prefers XDG (`~/.config/tmux/tmux.conf`) over dotfile; returns `null` if neither exists → `source-file` line is skipped and the setup result message includes the manual line to add. `removeTmuxKeybind` scans both paths.
+- Keybinding scripts (`sisyphus-cycle`, `sisyphus-home`, etc.) install to `~/.sisyphus/bin/` and are **regenerated on every `setupTmuxKeybind` call** — edits to those scripts are lost on next setup
+- `cycleKey` (`M-s`) and `pick-session` (`C-s l`) both scope to same cwd only — read `sessions-manifest.tsv`, skip sessions from other projects. Cycle includes H-type (home) sessions alongside S-type; `SESSION_RESOLVE` skips H-type when resolving session ID for kill/delete/etc.
+- `prefix-x` override only fires for `ssyph_*` sessions; non-sisyphus sessions get default `kill-pane \\; select-layout even-horizontal`
+- `RESOLVE_HOME` (home/kill-pane navigation) reads live `@sisyphus_cwd` from tmux options — works without manifest but requires a live tmux server. `CYCLE_SCRIPT` reads manifest instead — works without running tmux but requires an up-to-date manifest. If a session appears in one but not the other, home nav and cycling diverge.
+- Kill/delete scripts: `SESSION_RESOLVE` captures `$cwd` **before** the destructive action; `GO_HOME_AFTER` consumes that captured value. If `SESSION_RESOLVE` ran after the kill, the session would be gone and cwd lookup would return empty, silently skipping home navigation.
 - Status bar: daemon pre-renders to global `@sisyphus_status`; add `#{@sisyphus_status}` to `status-right`
 
 ## Companion
@@ -25,6 +29,17 @@ Entry point: `index.ts` (becomes `sisyphus` command via shebang).
 - `registerReview` registers two commands: `requirements` and `design` — not a `review` command
 - `--wait` implies `--pane` (undocumented in help)
 - Schemas and annotated writing guides are hardcoded constants in `review.ts` — update them there if artifact format changes
+
+## Install / onboard
+
+- `isInstalled()` checks plist **file existence only** — a plist present but not loaded (e.g. after manual `launchctl unload` without file removal) skips re-install and drops straight to `waitForDaemon()`, which will timeout. Fix: delete the plist or `launchctl load -w ~/.sisyphus/../LaunchAgents/com.sisyphus.daemon.plist`.
+- `installBeginCommand()` runs on every `ensureDaemonInstalled()` call, **outside** the `!isInstalled()` guard — self-heals missing `/begin` command for users who installed before the command existed
+- `waitForDaemon()` starts with 6s timeout but extends to 30s when `daemonUpdatingPath()` file is present — check that path if startup seems to hang indefinitely
+- Plist bakes in `process.execPath` at install time — upgrading or moving Node breaks the daemon; fix with `sisyphus setup` (which regenerates the plist)
+- `writeTmuxDefaults()` always writes to `~/.tmux.conf`, never XDG path — but `hasExistingTmuxConf()` checks both; defaults only written on fresh auto-install with no existing config
+- `tryAutoInstallNvim`: if no `~/.config/nvim` dir exists, clones LazyVim starter and removes `.git` (user owns config). `lazyVimInstalled` uses `lazy-lock.json` as signal — that file is generated on first nvim launch, not at clone time, so it will be `false` immediately after clone. `installBaleiaPlugin()` silently returns `false` if `lua/plugins/` doesn't exist; both self-heal on next `sisyphus setup` after nvim has bootstrapped.
+- `tryAutoInstallTermrender`: prefers pipx over pip3/pip (isolated install); falls through to pip if pipx unavailable
+- `checkItermOptionKey()` only checks the currently-active profile when `ITERM_PROFILE` is set; all other profiles are skipped
 
 ## Status bar segments
 
