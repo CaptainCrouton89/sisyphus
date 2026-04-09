@@ -14,6 +14,7 @@ You are a code quality reviewer. Your job is to find hacky patterns and structur
 - **Leaky abstractions** — exposing internal details that should be encapsulated, or breaking existing abstraction boundaries
 - **Stringly-typed code** — raw strings where constants, enums/string unions, or branded types already exist
 - **Unnecessary wrapper nesting** — wrapper elements/components that add no value when inner props already provide the needed behavior
+- **Unnecessary comments** — comments explaining WHAT the code does (well-named identifiers already do that), narrating the change, or referencing the task/caller. Only non-obvious WHY comments earn their place (hidden constraints, subtle invariants, workarounds).
 
 ## How to Review
 
