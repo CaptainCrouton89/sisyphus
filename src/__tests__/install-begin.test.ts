@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { installBeginCommand } from '../cli/onboard.js';
+import { installAutopsyCommand, installBeginCommand } from '../cli/onboard.js';
 
 // Regression test for the bug where `/begin` was only installed by the explicit
 // `sisyphus setup` command — users who jumped straight to `sisyphus start`
@@ -68,5 +68,77 @@ describe('installBeginCommand', () => {
     const result = installBeginCommand(join(fixtureDir, 'does-not-exist.md'));
     assert.equal(result.installed, false);
     assert.equal(result.autoInstalled, false);
+  });
+});
+
+describe('installAutopsyCommand', () => {
+  let fakeHome: string;
+  let originalHome: string | undefined;
+  let fixtureDir: string;
+  let fixtureSrc: string;
+  const fixtureContents = '---\ndescription: autopsy fixture\n---\n\nautopsy body\n';
+
+  beforeEach(() => {
+    fakeHome = mkdtempSync(join(tmpdir(), 'sisyphus-autopsy-home-'));
+    fixtureDir = mkdtempSync(join(tmpdir(), 'sisyphus-autopsy-fixture-'));
+    fixtureSrc = join(fixtureDir, 'autopsy.md');
+    writeFileSync(fixtureSrc, fixtureContents, 'utf8');
+
+    originalHome = process.env['HOME'];
+    process.env['HOME'] = fakeHome;
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = originalHome;
+    rmSync(fakeHome, { recursive: true, force: true });
+    rmSync(fixtureDir, { recursive: true, force: true });
+  });
+
+  it('writes /autopsy to ~/.claude/commands/sisyphus on first call', () => {
+    const dest = join(fakeHome, '.claude', 'commands', 'sisyphus', 'autopsy.md');
+    assert.equal(existsSync(dest), false);
+
+    const result = installAutopsyCommand(fixtureSrc);
+
+    assert.equal(result.installed, true);
+    assert.equal(result.autoInstalled, true);
+    assert.equal(result.path, dest);
+    assert.equal(existsSync(dest), true);
+    assert.equal(readFileSync(dest, 'utf-8'), fixtureContents);
+  });
+
+  it('is idempotent — second call reports already installed without rewriting', () => {
+    installAutopsyCommand(fixtureSrc);
+    const dest = join(fakeHome, '.claude', 'commands', 'sisyphus', 'autopsy.md');
+    const before = readFileSync(dest, 'utf-8');
+
+    writeFileSync(dest, before + 'sentinel', 'utf8');
+
+    const result = installAutopsyCommand(fixtureSrc);
+
+    assert.equal(result.installed, true);
+    assert.equal(result.autoInstalled, false);
+    assert.equal(readFileSync(dest, 'utf-8'), before + 'sentinel');
+  });
+
+  it('reports failure when source template is missing', () => {
+    const result = installAutopsyCommand(join(fixtureDir, 'does-not-exist.md'));
+    assert.equal(result.installed, false);
+    assert.equal(result.autoInstalled, false);
+  });
+
+  it('begin and autopsy coexist without collision', () => {
+    const beginDest = join(fakeHome, '.claude', 'commands', 'sisyphus', 'begin.md');
+    const autopsyDest = join(fakeHome, '.claude', 'commands', 'sisyphus', 'autopsy.md');
+
+    const beginFixture = join(fixtureDir, 'begin.md');
+    writeFileSync(beginFixture, 'begin-body', 'utf8');
+
+    installBeginCommand(beginFixture);
+    installAutopsyCommand(fixtureSrc);
+
+    assert.equal(readFileSync(beginDest, 'utf-8'), 'begin-body');
+    assert.equal(readFileSync(autopsyDest, 'utf-8'), fixtureContents);
   });
 });

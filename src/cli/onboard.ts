@@ -42,6 +42,7 @@ export interface OnboardResult {
   tmuxDefaultsWritten: boolean;
   nvim: NvimInfo;
   command: CommandInfo;
+  autopsy: CommandInfo;
   termrender: TermrenderInfo;
 }
 
@@ -271,25 +272,21 @@ export function tryAutoInstallNvim(): NvimInfo {
   return { installed: true, autoInstalled: true, version: getNvimVersion(), lazyVimInstalled, baleiaInstalled };
 }
 
-function beginCommandPath(): string {
-  return join(homedir(), '.claude', 'commands', 'sisyphus', 'begin.md');
+function slashCommandPath(name: string): string {
+  return join(homedir(), '.claude', 'commands', 'sisyphus', `${name}.md`);
 }
 
-function bundledBeginCommandPath(): string {
+function bundledSlashCommandPath(name: string): string {
   const distDir = dirname(fileURLToPath(import.meta.url));
-  return join(distDir, 'templates', 'begin.md');
+  return join(distDir, 'templates', `${name}.md`);
 }
 
-export function isBeginCommandInstalled(): boolean {
-  return existsSync(beginCommandPath());
-}
-
-export function installBeginCommand(srcOverride?: string): CommandInfo {
-  const dest = beginCommandPath();
+function installSlashCommand(name: string, srcOverride?: string): CommandInfo {
+  const dest = slashCommandPath(name);
   if (existsSync(dest)) {
     return { installed: true, autoInstalled: false, path: dest };
   }
-  const src = srcOverride ?? bundledBeginCommandPath();
+  const src = srcOverride ?? bundledSlashCommandPath(name);
   if (!existsSync(src)) {
     return { installed: false, autoInstalled: false, path: dest };
   }
@@ -300,6 +297,22 @@ export function installBeginCommand(srcOverride?: string): CommandInfo {
   } catch {
     return { installed: false, autoInstalled: false, path: dest };
   }
+}
+
+export function isBeginCommandInstalled(): boolean {
+  return existsSync(slashCommandPath('begin'));
+}
+
+export function installBeginCommand(srcOverride?: string): CommandInfo {
+  return installSlashCommand('begin', srcOverride);
+}
+
+export function isAutopsyCommandInstalled(): boolean {
+  return existsSync(slashCommandPath('autopsy'));
+}
+
+export function installAutopsyCommand(srcOverride?: string): CommandInfo {
+  return installSlashCommand('autopsy', srcOverride);
 }
 
 export function isTermrenderAvailable(): boolean {
@@ -386,13 +399,14 @@ export function runOnboarding(): OnboardResult {
   // Nvim
   const nvim = tryAutoInstallNvim();
 
-  // /begin command
+  // Slash commands
   const command = installBeginCommand();
+  const autopsy = installAutopsyCommand();
 
   // termrender (markdown rendering for TUI)
   const termrender = tryAutoInstallTermrender();
 
-  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command, termrender };
+  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command, autopsy, termrender };
 }
 
 export function formatOnboardingMessages(result: OnboardResult): string[] {

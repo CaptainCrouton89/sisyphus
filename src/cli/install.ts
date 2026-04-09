@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
 import { ensureRequiredPlugins } from './plugins.js';
-import { installBeginCommand, type CommandInfo } from './onboard.js';
+import { installAutopsyCommand, installBeginCommand, type CommandInfo } from './onboard.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -58,10 +58,11 @@ export function isInstalled(): boolean {
 export async function ensureDaemonInstalled(): Promise<void> {
   if (process.platform !== 'darwin') return;
 
-  // Idempotent: early-returns if `~/.claude/commands/sisyphus/begin.md` already exists.
+  // Idempotent: early-return if the target slash command file already exists.
   // Placed outside the !isInstalled() guard so users whose daemon was installed before
-  // this fix shipped self-heal the next time the daemon is unreachable.
+  // these commands shipped self-heal the next time the daemon is unreachable.
   const beginResult = installBeginCommand();
+  const autopsyResult = installAutopsyCommand();
 
   if (!isInstalled()) {
     const nodePath = process.execPath;
@@ -80,7 +81,7 @@ export async function ensureDaemonInstalled(): Promise<void> {
 
     await ensureRequiredPlugins(process.cwd());
 
-    printGettingStarted(keybindResult, beginResult);
+    printGettingStarted(keybindResult, beginResult, autopsyResult);
   }
 
   await waitForDaemon();
@@ -116,7 +117,11 @@ export async function uninstallDaemon(purge: boolean): Promise<void> {
   }
 }
 
-function printGettingStarted(keybindResult: SetupResult, beginResult: CommandInfo): void {
+function printGettingStarted(
+  keybindResult: SetupResult,
+  beginResult: CommandInfo,
+  autopsyResult: CommandInfo,
+): void {
   const lines = [
     '',
     'Sisyphus installed — daemon running via launchd.',
@@ -130,9 +135,15 @@ function printGettingStarted(keybindResult: SetupResult, beginResult: CommandInf
   }
 
   if (beginResult.installed && beginResult.autoInstalled) {
-    lines.push(`/begin command installed: ${beginResult.path}`, '');
+    lines.push(`/sisyphus:begin command installed: ${beginResult.path}`, '');
   } else if (!beginResult.installed) {
-    lines.push('/begin command: failed to install (run `sisyphus setup` to retry)', '');
+    lines.push('/sisyphus:begin command: failed to install (run `sisyphus setup` to retry)', '');
+  }
+
+  if (autopsyResult.installed && autopsyResult.autoInstalled) {
+    lines.push(`/sisyphus:autopsy command installed: ${autopsyResult.path}`, '');
+  } else if (!autopsyResult.installed) {
+    lines.push('/sisyphus:autopsy command: failed to install (run `sisyphus setup` to retry)', '');
   }
 
   lines.push(

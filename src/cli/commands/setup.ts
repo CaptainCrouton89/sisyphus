@@ -70,9 +70,16 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
 
   // /begin command
   if (result.command.installed) {
-    console.log(`  \u2713 /begin command: ${result.command.path}${result.command.autoInstalled ? ' (just installed)' : ''}`);
+    console.log(`  \u2713 /sisyphus:begin: ${result.command.path}${result.command.autoInstalled ? ' (just installed)' : ''}`);
   } else {
-    console.log('  \u2717 /begin command: Failed to install');
+    console.log('  \u2717 /sisyphus:begin: Failed to install');
+  }
+
+  // /autopsy command
+  if (result.autopsy.installed) {
+    console.log(`  \u2713 /sisyphus:autopsy: ${result.autopsy.path}${result.autopsy.autoInstalled ? ' (just installed)' : ''}`);
+  } else {
+    console.log('  \u2717 /sisyphus:autopsy: Failed to install');
   }
 
   // Nvim

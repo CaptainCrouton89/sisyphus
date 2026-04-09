@@ -30,6 +30,7 @@ test_full_setup() {
   start_daemon
   sisyphus setup >/dev/null 2>&1 || true
   assert_file_exists "setup-begin-cmd" "$HOME/.claude/commands/sisyphus/begin.md"
+  assert_file_exists "setup-autopsy-cmd" "$HOME/.claude/commands/sisyphus/autopsy.md"
   stop_daemon
   tmux kill-server 2>/dev/null || true
 }
@@ -269,6 +270,7 @@ test_malformed_frontmatter() {
 
 test_setup_idempotency() {
   local BEGIN_FILE="$HOME/.claude/commands/sisyphus/begin.md"
+  local AUTOPSY_FILE="$HOME/.claude/commands/sisyphus/autopsy.md"
 
   tmux new-session -d -s setup-idempotent-test 2>/dev/null || true
   if ! start_daemon; then
@@ -280,17 +282,22 @@ test_setup_idempotency() {
   # First run
   sisyphus setup >/dev/null 2>&1 || true
   assert_file_exists "setup-idempotent-first-run" "$BEGIN_FILE"
+  assert_file_exists "setup-idempotent-first-run-autopsy" "$AUTOPSY_FILE"
 
-  # Append a custom marker
+  # Append a custom marker to each
   echo "# CUSTOM MARKER" >> "$BEGIN_FILE"
+  echo "# CUSTOM AUTOPSY MARKER" >> "$AUTOPSY_FILE"
 
   # Second run
   sisyphus setup >/dev/null 2>&1 || true
 
-  # Marker must survive (file not overwritten)
+  # Markers must survive (files not overwritten)
   local content
   content=$(cat "$BEGIN_FILE" 2>/dev/null || echo "")
   assert_contains "setup-idempotent-preserves-custom" "$content" "CUSTOM MARKER"
+  local autopsy_content
+  autopsy_content=$(cat "$AUTOPSY_FILE" 2>/dev/null || echo "")
+  assert_contains "setup-idempotent-preserves-custom-autopsy" "$autopsy_content" "CUSTOM AUTOPSY MARKER"
 
   stop_daemon
   tmux kill-server 2>/dev/null || true
