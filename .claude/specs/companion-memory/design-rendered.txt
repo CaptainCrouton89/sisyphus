@@ -1,0 +1,142 @@
+│ Design a companion memory system for the sisyphus companion. The companion    
+│ should accumulate qualitative observations about the user over time — session 
+│ sentiments, repo impressions, user patterns, notable moments — and feed them  
+│ into commentary generation. The user wants both rule-based pattern detection  
+│ AND Haiku-generated qualitative observations. The memory should be inspectable
+│ by the user via CLI.                                                          
+│ — user                                                                        
+┌─ Mental model ───────────────────────────────────────────────────────────────┐
+│ The companion currently has quantitative memory — XP, stats, repo visit      │
+│ counts, mood signals — but no qualitative memory. This system adds a         │
+│ persistent observation store where the companion accumulates textual         │
+│ observations about the user across four categories: session sentiments, repo │
+│ impressions, user patterns, and notable moments. Observations come from two  │
+│ sources: rule-based detectors that fire on quantitative thresholds, and      │
+│ Haiku-generated qualitative summaries produced at session completion. The    │
+│ accumulated memory feeds into commentary generation as a new context         │
+│ section, giving the companion a sense of continuity and personality. The     │
+│ user can inspect the memory via CLI.                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+────────────────────────────── COMPONENT TOPOLOGY ──────────────────────────────
+┌───────────────────────┐                                                       
+│Session Completion Hook│                                                       
+└───────────┬───────────┘                                                       
+            ▼                                                                   
+┌───────────────────────┐                                                       
+│   Observation Engine  │                                                       
+└───────────┬───────────┘                                                       
+            ▼                                                                   
+┌───────────────────────┐                                                       
+│      Memory Store     ├────────┐                                              
+└───────────┬───────────┘        │                                              
+            ▼                    ▼                                              
+┌───────────────────────┐ ┌─────────────┐                                       
+│ Commentary Enrichment │ │CLI Inspector│                                       
+└───────────────────────┘ └─────────────┘                                       
+┌─ Components ─────────────────────────────────────────────────────────────────┐
+│ ┌──────────┬───────────────────────────────────────────────────────────────┐ │
+│ │ Componen │ Role                                                          │ │
+│ │ t        │                                                               │ │
+│ ├──────────┼───────────────────────────────────────────────────────────────┤ │
+│ │ Observat │ Runs at session end. Executes rule-based detectors against    │ │
+│ │ ion      │ quantitative data and dispatches a Haiku call for qualitative │ │
+│ │ Engine   │ summary. Produces observation records.                        │ │
+│ ├──────────┼───────────────────────────────────────────────────────────────┤ │
+│ │ Memory   │ Persistence layer for observations. Separate file from        │ │
+│ │ Store    │ companion.json. Handles append, prune, and query by category  │ │
+│ │          │ or repo.                                                      │ │
+│ ├──────────┼───────────────────────────────────────────────────────────────┤ │
+│ │ Commenta │ Selects relevant observations from the store and injects them │ │
+│ │ ry Enric │ into the commentary prompt as a <memory> section.             │ │
+│ │ hment    │                                                               │ │
+│ ├──────────┼───────────────────────────────────────────────────────────────┤ │
+│ │ CLI Insp │ sisyphus companion memory subcommand. Reads the memory store  │ │
+│ │ ector    │ and renders observations grouped by category.                 │ │
+│ ├──────────┼───────────────────────────────────────────────────────────────┤ │
+│ │ Rule Det │ Collection of threshold/pattern checks that run against       │ │
+│ │ ectors   │ companion stats, repo memory, and session history. Each       │ │
+│ │          │ detector can emit zero or one observation per session.        │ │
+│ └──────────┴───────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────┘
+───────────────────────────────────── FLOW ─────────────────────────────────────
+┌─────────────────────────────┐                                                 
+│   onSessionComplete fires   ├───────────────────┐                             
+└──────────────┬──────────────┘                   │                             
+               ▼                                  ▼                             
+┌─────────────────────────────┐ ┌───────────────────────────────────┐           
+│  Rule detectors scan stats  │ │Haiku generates qualitative summary│           
+└──────────────┬──────────────┘ └─────────────────┬─────────────────┘           
+               ▼                                  │                             
+┌─────────────────────────────┐                   │                             
+│    Observations collected   │◄──────────────────┘                             
+└──────────────┬──────────────┘                                                 
+               ▼                                                                
+┌─────────────────────────────┐                                                 
+│Memory store appends + prunes│                                                 
+└──────────────┬──────────────┘                                                 
+               ▼                                                                
+┌─────────────────────────────┐                                                 
+│ Next commentary reads memory│                                                 
+└─────────────────────────────┘                                                 
+┌─ Flow narrative ─────────────────────────────────────────────────────────────┐
+│ 1. A session completes. onSessionComplete() in companion.ts fires, updating  │
+│    stats and baselines as it does today.                                     │
+│ 2. After stat updates, the observation engine runs. Rule-based detectors     │
+│    scan the updated stats, repo memory, and session history for patterns     │
+│    worth noting. Each detector either emits an observation or stays silent.  │
+│ 3. In parallel (or sequentially), a Haiku call generates a short qualitative │
+│    observation about the session — a one-sentence impression that captures   │
+│    tone, effort, or trajectory.                                              │
+│ 4. All observations from this session are appended to the memory store with  │
+│    timestamps and category tags.                                             │
+│ 5. The store prunes old or low-value observations to stay within a size      │
+│    budget.                                                                   │
+│ 6. When commentary generation next runs, it queries the memory store for     │
+│    relevant observations (by repo, by recency, by category) and injects them │
+│    into the Haiku prompt as a <memory> context section alongside the         │
+│    existing personality, state, and variety sections.                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+──────────────────────────────────── FILES ─────────────────────────────────────
+src/daemon/                                                                     
+├── companion-memory.ts        # NEW — observation engine, rule detectors, memory store
+├── companion-commentary.ts    # MODIFIED — add <memory> section to commentary prompt
+└── companion.ts               # MODIFIED — call observation engine from onSessionComplete()
+src/shared/                                                                     
+└── companion-types.ts         # MODIFIED — add memory-related types            
+src/cli/commands/                                                               
+└── companion.ts               # MODIFIED — add `memory` subcommand             
+~/.sisyphus/                                                                    
+└── companion-memory.json      # NEW — persistent memory store (separate from companion.json)
+────────────────────────── DECISIONS AND CONSTRAINTS ───────────────────────────
+┌─ Locked Decisions ───────────────────────────────────────────────────────────┐
+│ • Memory store is a separate file (~/.sisyphus/companion-memory.json), not   │
+│   embedded in companion.json — avoids bloating the main state and allows     │
+│   independent pruning.                                                       │
+│ • Persistence follows the same atomic temp+rename pattern used by            │
+│   saveCompanion().                                                           │
+│ • Four observation categories: session sentiments, repo impressions, user    │
+│   patterns, notable moments — matching the companion roadmap.                │
+│ • Two observation sources: rule-based detectors (deterministic,              │
+│   threshold-driven) and Haiku-generated (qualitative, one per session        │
+│   completion).                                                               │
+│ • Memory feeds into commentary via a new <memory> section in the existing    │
+│   commentary prompt structure.                                               │
+│ • CLI inspection via sisyphus companion memory subcommand on the existing    │
+│   companion command.                                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+┌─ ⚠ Warning ──────────────────────────────────────────────────────────────────┐
+│ Open questions for the lead to resolve with the user:                        │
+│ • Retention policy: How many observations should the store keep? A fixed     │
+│   count (e.g., last 200), a time window (e.g., 90 days), or                  │
+│   category-specific limits?                                                  │
+│ • Observation granularity for Haiku: Should the Haiku call produce one       │
+│   observation per session, or should it produce multiple observations tagged │
+│   to different categories?                                                   │
+│ • Memory editing: Should the user be able to delete or edit individual       │
+│   observations via CLI, or is read-only inspection sufficient?               │
+│ • Repo scoping: Should sisyphus companion memory accept a --repo filter, or  │
+│   always show all observations?                                              │
+│ • Commentary selection strategy: When injecting memory into the commentary   │
+│   prompt, how many observations should be included? Should selection favor   │
+│   recency, variety across categories, or relevance to the current repo?      │
+└──────────────────────────────────────────────────────────────────────────────┘

@@ -1,0 +1,1421 @@
+{
+  "meta": {
+    "title": "Companion Memory System",
+    "subtitle": "EARS Behavioral Spec",
+    "summary": "Qualitative observation system for the sisyphus companion — rule-based detectors and Haiku-generated impressions produce session sentiments, repo impressions, user patterns, and notable moments, stored in a separate memory file, surfaced via CLI and injected into commentary.",
+    "version": 1,
+    "lastModified": "2026-04-07T10:27:38.387Z",
+    "draft": 1,
+    "stage": "stage-3-done",
+    "nextSectionId": null,
+    "bounceIterations": {},
+    "reviewStartedAt": "2026-04-07T10:21:22.943Z",
+    "reviewCompletedAt": "2026-04-07T10:23:13.317Z"
+  },
+  "groups": [
+    {
+      "id": "component-topology",
+      "name": "Component Topology",
+      "description": "Defines the five named components of the companion memory system, their individual roles, and the directed data flow between them.",
+      "context": "The companion memory system is structured as five components with a linear data flow: Session Completion Hook triggers the Observation Engine, which produces records written to the Memory Store. The Memory Store feeds two consumers: Commentary Enrichment (for generating richer commentary) and the CLI Inspector (for user-facing inspection). Rule Detectors are a sub-component of the Observation Engine, running threshold/pattern checks against quantitative data.",
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "title": "Observation Engine triggers on session completion",
+          "ears": {
+            "when": "When a session completes and onSessionComplete() fires after stat updates",
+            "shall": "the system shall invoke the observation engine to run rule-based detectors and dispatch a Haiku call for a qualitative summary"
+          },
+          "criteria": [
+            {
+              "text": "Observation engine is called after (not before) stat updates in onSessionComplete()",
+              "checked": false
+            },
+            {
+              "text": "Both rule-based detectors and Haiku call are initiated in the same session-completion cycle",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "The design explicitly sequences the observation engine after stat updates (flow narrative step 2). The design allows parallel or sequential execution of detectors and Haiku call but requires both to run.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:05.140Z",
+          "reviewAction": "approve",
+          "completedAt": "2026-04-07T10:23:01.459Z"
+        },
+        {
+          "id": "REQ-002",
+          "title": "Rule detectors emit at most one observation per session",
+          "ears": {
+            "when": "When rule detectors run against companion stats, repo memory, and session history",
+            "shall": "the system shall allow each detector to emit zero or one observation per session"
+          },
+          "criteria": [
+            {
+              "text": "No single detector can emit more than one observation in a single session-completion cycle",
+              "checked": false
+            },
+            {
+              "text": "Detectors that find no matching condition stay silent (emit zero observations)",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design states explicitly: 'Each detector can emit zero or one observation per session.' This is a cardinality constraint on detector output.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:30.193Z"
+        },
+        {
+          "id": "REQ-003",
+          "title": "Memory Store is a separate file from companion.json",
+          "ears": {
+            "where": "Where the companion memory store is persisted",
+            "shall": "the system shall write observations to ~/.sisyphus/companion-memory.json as a file separate from companion.json"
+          },
+          "criteria": [
+            {
+              "text": "companion-memory.json is stored at ~/.sisyphus/companion-memory.json",
+              "checked": false
+            },
+            {
+              "text": "No observation data is written into companion.json",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "This is a locked decision in the design: 'Memory store is a separate file (~/.sisyphus/companion-memory.json), not embedded in companion.json.'",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:32.685Z",
+          "reviewAction": "approve",
+          "completedAt": "2026-04-07T10:23:04.209Z"
+        },
+        {
+          "id": "REQ-004",
+          "title": "Memory Store supports append, prune, and category/repo query",
+          "ears": {
+            "while": "While observations are being stored or retrieved",
+            "shall": "the system shall support appending new observation records, pruning old or low-value observations, and querying by category or by repo"
+          },
+          "criteria": [
+            {
+              "text": "Observations can be appended to the store",
+              "checked": false
+            },
+            {
+              "text": "The store can prune entries to remain within a size budget",
+              "checked": false
+            },
+            {
+              "text": "Observations can be queried filtered by category",
+              "checked": false
+            },
+            {
+              "text": "Observations can be queried filtered by repo",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design lists these three operations explicitly in the Memory Store role column. The retention/pruning policy specifics are flagged as an open question by the design.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:37.915Z"
+        },
+        {
+          "id": "REQ-005",
+          "title": "Commentary Enrichment injects observations as a <memory> section",
+          "ears": {
+            "when": "When commentary generation runs",
+            "shall": "the system shall query the memory store for relevant observations and inject them into the commentary prompt as a <memory> section alongside existing personality, state, and variety sections"
+          },
+          "criteria": [
+            {
+              "text": "The commentary prompt includes a <memory> section when observations are available",
+              "checked": false
+            },
+            {
+              "text": "The <memory> section is added to the existing prompt structure without replacing personality, state, or variety sections",
+              "checked": false
+            },
+            {
+              "text": "companion-commentary.ts is modified to perform this injection",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "Both the component table and the locked decisions confirm the <memory> section approach. The commentary selection strategy (count, recency vs variety vs relevance) is flagged as an open question.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:47.834Z",
+          "reviewAction": "approve",
+          "completedAt": "2026-04-07T10:23:04.845Z"
+        },
+        {
+          "id": "REQ-006",
+          "title": "CLI Inspector exposes observations via companion memory subcommand",
+          "ears": {
+            "when": "When the user invokes sisyphus companion memory",
+            "shall": "the system shall read the memory store and render observations grouped by category"
+          },
+          "criteria": [
+            {
+              "text": "sisyphus companion memory is a subcommand of the existing companion command",
+              "checked": false
+            },
+            {
+              "text": "Output groups observations by category (session sentiments, repo impressions, user patterns, notable moments)",
+              "checked": false
+            },
+            {
+              "text": "The command reads from companion-memory.json",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Locked decision confirms: 'CLI inspection via sisyphus companion memory subcommand on the existing companion command.' Grouping by category is stated in the component table.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:49.418Z"
+        },
+        {
+          "id": "REQ-007",
+          "title": "Four observation categories are supported",
+          "ears": {
+            "where": "Where observations are tagged and stored",
+            "shall": "the system shall classify every observation into one of four categories: session sentiments, repo impressions, user patterns, or notable moments"
+          },
+          "criteria": [
+            {
+              "text": "Every observation record carries a category tag matching one of the four defined categories",
+              "checked": false
+            },
+            {
+              "text": "No categories outside the four defined ones are accepted",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "Locked decision: 'Four observation categories: session sentiments, repo impressions, user patterns, notable moments.' This is explicitly locked.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:12:51.488Z",
+          "reviewAction": "approve",
+          "completedAt": "2026-04-07T10:23:05.107Z"
+        },
+        {
+          "id": "REQ-008",
+          "title": "Haiku generates one qualitative observation per session completion",
+          "ears": {
+            "when": "When the observation engine runs at session completion",
+            "shall": "the system shall dispatch a Haiku call that produces a short qualitative observation — a one-sentence impression capturing tone, effort, or trajectory — for the completed session"
+          },
+          "criteria": [
+            {
+              "text": "Exactly one Haiku call is made per session-completion cycle for qualitative summary",
+              "checked": false
+            },
+            {
+              "text": "The Haiku output is a single-sentence qualitative impression",
+              "checked": false
+            },
+            {
+              "text": "The Haiku-generated observation is appended to the memory store alongside rule-based observations",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design describes 'a one-sentence impression' in the flow narrative. Whether Haiku produces one observation or multiple per session is flagged as an open question — this requirement captures the stated default of one.",
+          "userNotes": "",
+          "questions": [],
+          "startedAt": "2026-04-07T10:13:01.451Z"
+        }
+      ],
+      "safeAssumptions": [
+        {
+          "id": "REQ-009",
+          "title": "Memory store uses atomic temp+rename writes",
+          "ears": {
+            "where": "Where the memory store is written to disk",
+            "shall": "the system shall use the same atomic temp-file-then-rename pattern used by saveCompanion()"
+          },
+          "criteria": [
+            {
+              "text": "Writes to companion-memory.json go via a temp file and atomic rename",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "Safe: this is a locked decision in the design ('Persistence follows the same atomic temp+rename pattern'), it's a standard convention with no UX surface, and it's trivially verifiable.",
+          "userNotes": "",
+          "questions": [],
+          "reviewAction": "approve",
+          "startedAt": "2026-04-07T10:12:19.662Z",
+          "completedAt": "2026-04-07T10:12:19.663Z"
+        },
+        {
+          "id": "REQ-010",
+          "title": "Observation records include timestamps and category tags",
+          "ears": {
+            "when": "When observations are appended to the memory store",
+            "shall": "the system shall tag each observation with an ISO timestamp and a category label"
+          },
+          "criteria": [
+            {
+              "text": "Each stored observation has a timestamp field",
+              "checked": false
+            },
+            {
+              "text": "Each stored observation has a category field matching one of the four defined categories",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "Safe: the design states 'appended to the memory store with timestamps and category tags' in the flow narrative (step 4). This is a direct statement, not an inference, and is a standard data-persistence convention with no UX change.",
+          "userNotes": "",
+          "questions": [],
+          "reviewAction": "approve",
+          "startedAt": "2026-04-07T10:12:19.663Z",
+          "completedAt": "2026-04-07T10:12:19.663Z"
+        },
+        {
+          "id": "REQ-011",
+          "title": "New types for memory system are added to companion-types.ts",
+          "ears": {
+            "where": "Where memory-related TypeScript types are defined",
+            "shall": "the system shall add memory-related types to src/shared/companion-types.ts"
+          },
+          "criteria": [
+            {
+              "text": "companion-types.ts is modified to include observation record and memory store types",
+              "checked": false
+            }
+          ],
+          "status": "approved",
+          "agentNotes": "Safe: explicitly listed in the FILES section of the design as a modification. Standard TypeScript convention for shared types, no user-visible surface.",
+          "userNotes": "",
+          "questions": [],
+          "reviewAction": "approve",
+          "startedAt": "2026-04-07T10:12:19.663Z",
+          "completedAt": "2026-04-07T10:12:19.663Z"
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "oq1",
+          "question": "Should the Haiku call at session end produce one observation (tagged to a single category) or multiple observations each tagged to a different category?",
+          "options": [
+            {
+              "title": "Single observation",
+              "description": "One Haiku call produces one observation record tagged to the most relevant category. Simpler schema, predictable storage growth."
+            },
+            {
+              "title": "Multiple observations",
+              "description": "One Haiku call produces N observations, one per applicable category. Richer data but more complex prompt design and faster storage growth."
+            }
+          ],
+          "response": "Single observation",
+          "selectedOption": 0,
+          "startedAt": "2026-04-07T10:13:03.827Z",
+          "completedAt": "2026-04-07T10:13:11.788Z"
+        },
+        {
+          "id": "oq2",
+          "question": "What is the retention/pruning policy for the memory store: a fixed count, a time window, or category-specific limits?",
+          "options": [
+            {
+              "title": "Fixed count (e.g., last 200)",
+              "description": "Simple FIFO eviction. Predictable file size, but may lose important old observations."
+            },
+            {
+              "title": "Time window (e.g., 90 days)",
+              "description": "Age-based pruning. Keeps recent context fresh, but file can grow unbounded within the window."
+            },
+            {
+              "title": "Category-specific limits",
+              "description": "Each category has its own cap. More complex but ensures balanced coverage across observation types."
+            }
+          ],
+          "response": "Fixed count (e.g., last 200)",
+          "selectedOption": 0,
+          "startedAt": "2026-04-07T10:13:11.788Z",
+          "completedAt": "2026-04-07T10:23:05.133Z"
+        },
+        {
+          "id": "oq3",
+          "question": "When injecting memory into the commentary prompt, how many observations should be included and what is the selection strategy?",
+          "options": [
+            {
+              "title": "Recency-based",
+              "description": "Include the N most recent observations. Simple, but may cluster around one category."
+            },
+            {
+              "title": "Category-diverse",
+              "description": "Pick observations spread across categories. Better variety but more complex selection logic."
+            },
+            {
+              "title": "Repo-relevant",
+              "description": "Prioritize observations from the current repo. Most contextual but may miss cross-repo patterns."
+            }
+          ],
+          "response": "Recency based for this particular repo",
+          "selectedOption": null,
+          "completedAt": "2026-04-07T10:13:47.670Z"
+        },
+        {
+          "id": "oq4",
+          "question": "Should sisyphus companion memory accept a --repo filter to scope output, or always show all observations?",
+          "options": [
+            {
+              "title": "Always show all",
+              "description": "Simpler CLI surface. User can grep output manually if needed."
+            },
+            {
+              "title": "Support --repo filter",
+              "description": "First-class repo scoping. More useful for users with many repos but adds CLI complexity."
+            }
+          ],
+          "response": "",
+          "selectedOption": null,
+          "startedAt": "2026-04-07T10:13:47.671Z"
+        },
+        {
+          "id": "oq5",
+          "question": "Should the user be able to delete or edit individual observations via the CLI, or is read-only inspection sufficient?",
+          "options": [
+            {
+              "title": "Read-only",
+              "description": "Simpler to implement. Users can manually edit the JSON file if needed."
+            },
+            {
+              "title": "Delete support",
+              "description": "Allow deleting observations but not editing. Covers the main use case (removing bad data) without full CRUD."
+            },
+            {
+              "title": "Full edit support",
+              "description": "Allow both editing and deleting. Most flexible but significantly more CLI surface area."
+            }
+          ],
+          "response": "Read-only",
+          "selectedOption": 0,
+          "completedAt": "2026-04-07T10:13:54.886Z"
+        }
+      ]
+    },
+    {
+      "id": "flow",
+      "name": "End-to-End Flow",
+      "description": "Covers the sequencing of events from session completion through observation collection, memory persistence, pruning, and injection into the next commentary generation call.",
+      "context": "This section specifies the behavioral contract for the end-to-end pipeline that runs each time a session completes. The pipeline has two parallel branches (rule detectors and Haiku call), a single collection point, an append+prune write to the memory store, and a read path that feeds the next commentary generation. The design leaves several policy decisions open — retention limits, Haiku observation count, and commentary selection strategy — which are captured as open questions.",
+      "requirements": [
+        {
+          "id": "REQ-012",
+          "title": "Observation engine triggered on session completion",
+          "ears": {
+            "when": "When onSessionComplete() fires in companion.ts and stat updates have completed",
+            "shall": "the system shall invoke the observation engine before returning from the session-completion handler"
+          },
+          "criteria": [
+            {
+              "text": "The observation engine is called after stat and baseline updates, not before",
+              "checked": false
+            },
+            {
+              "text": "A failure in the observation engine does not prevent onSessionComplete from returning successfully (non-blocking on failure)",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design states 'After stat updates, the observation engine runs' (flow narrative step 2). The ordering constraint — after stats, not before — is explicit. The design does not specify error handling, so non-blocking behavior on failure is an open area; captured in criteria for user review.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-013",
+          "title": "Rule detectors and Haiku call run at session end",
+          "ears": {
+            "when": "When the observation engine runs at session completion",
+            "shall": "the system shall execute all rule-based detectors against the updated stats, repo memory, and session history, and dispatch a Haiku call to generate a qualitative session observation"
+          },
+          "criteria": [
+            {
+              "text": "Rule detectors run against the post-update stats (not pre-update)",
+              "checked": false
+            },
+            {
+              "text": "Each rule detector emits zero or one observation per session",
+              "checked": false
+            },
+            {
+              "text": "The Haiku call produces at least one qualitative observation capturing tone, effort, or trajectory",
+              "checked": false
+            },
+            {
+              "text": "Both branches (rule detectors and Haiku call) complete before observations are appended to the store",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The flow diagram and narrative both show rule detectors and Haiku call as parallel branches (flow step 2 and 3). 'In parallel (or sequentially)' is quoted directly from the design — the design does not commit to parallelism, so 'complete before appending' is the firm constraint regardless of ordering.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-014",
+          "title": "Observations appended to memory store with metadata",
+          "ears": {
+            "when": "When observations are collected from rule detectors and the Haiku call for a session",
+            "shall": "the system shall append all observations to the memory store with timestamps and category tags"
+          },
+          "criteria": [
+            {
+              "text": "Each observation record includes a timestamp",
+              "checked": false
+            },
+            {
+              "text": "Each observation record includes a category tag (one of: session sentiments, repo impressions, user patterns, notable moments)",
+              "checked": false
+            },
+            {
+              "text": "Observations from both rule detectors and the Haiku call are appended in the same write pass",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Flow narrative step 4 explicitly states 'appended to the memory store with timestamps and category tags'. The four category names are locked decisions from the design.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-015",
+          "title": "Memory store pruned after append",
+          "ears": {
+            "when": "When new observations are appended to the memory store",
+            "shall": "the system shall prune old or low-value observations to keep the store within a size budget"
+          },
+          "criteria": [
+            {
+              "text": "Pruning runs after every append, not on a separate schedule",
+              "checked": false
+            },
+            {
+              "text": "The pruning policy enforces a defined upper bound on stored observations",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Flow narrative step 5 states 'The store prunes old or low-value observations to stay within a size budget.' The retention policy (fixed count, time window, or category-specific limits) is an open question captured below — this requirement records only the invariant that pruning happens and enforces a budget.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-016",
+          "title": "Commentary generation queries memory store for relevant observations",
+          "ears": {
+            "when": "When commentary generation runs",
+            "shall": "the system shall query the memory store for relevant observations by repo, recency, and category, and inject them into the Haiku prompt as a <memory> context section"
+          },
+          "criteria": [
+            {
+              "text": "The memory query filters by at least repo and recency",
+              "checked": false
+            },
+            {
+              "text": "Injected observations are placed in a <memory> section alongside the existing personality, state, and variety sections in the commentary prompt",
+              "checked": false
+            },
+            {
+              "text": "Commentary generation still completes if the memory store is empty or unavailable",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Flow narrative step 6 specifies the query dimensions (repo, recency, category) and the injection point (<memory> section). The number of observations to inject is explicitly flagged as an open question in the design's warning panel.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "safeAssumptions": [
+        {
+          "id": "REQ-017",
+          "title": "Memory store written atomically via temp+rename",
+          "ears": {
+            "when": "When the memory store is written (append or prune)",
+            "shall": "the system shall write to a temporary file and rename it to the target path atomically"
+          },
+          "criteria": [
+            {
+              "text": "No partial write is ever visible to readers of the memory store",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe assumption: the design explicitly locks this as a decision ('Persistence follows the same atomic temp+rename pattern used by saveCompanion()'). Standard convention in this codebase, low cost to revisit, no user-visible surface change.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-018",
+          "title": "Observation engine errors are logged and do not crash the daemon",
+          "ears": {
+            "if": "If the observation engine (rule detectors or Haiku call) throws an error during session completion",
+            "shall": "then the system shall log the error and allow session completion to proceed without crashing the daemon process"
+          },
+          "criteria": [
+            {
+              "text": "Errors from the observation pipeline are logged to the daemon log",
+              "checked": false
+            },
+            {
+              "text": "A failing observation engine does not prevent companion stats from being saved",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe assumption: standard error-isolation convention for optional enrichment pipelines. The observation engine is additive; crashing the daemon on a Haiku call failure would be a regression. Not user-visible, low cost to revisit.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "OQ-flow-001",
+          "question": "What is the retention policy for the memory store? Should pruning use a fixed observation count (e.g., last 200), a time window (e.g., 90 days), or category-specific limits?",
+          "options": [
+            {
+              "title": "Fixed count",
+              "description": "Keep the N most recent observations regardless of category (e.g., last 200). Simple to implement and predict."
+            },
+            {
+              "title": "Time window",
+              "description": "Discard observations older than a rolling window (e.g., 90 days). Better reflects memory decay but may leave the store sparse after long inactive periods."
+            },
+            {
+              "title": "Category-specific limits",
+              "description": "Each category (session sentiments, repo impressions, user patterns, notable moments) has its own cap. More expressive but adds configuration surface."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        },
+        {
+          "id": "OQ-flow-002",
+          "question": "How many observations should the Haiku call produce per session? One observation tagged to the most relevant category, or multiple observations each tagged to a different category?",
+          "options": [
+            {
+              "title": "One observation per session",
+              "description": "Haiku produces a single one-sentence qualitative impression per session completion. Simpler prompt, predictable store growth."
+            },
+            {
+              "title": "Multiple observations per session",
+              "description": "Haiku produces one observation per relevant category it detects. Richer coverage but more variable output and harder to prompt reliably."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        },
+        {
+          "id": "OQ-flow-003",
+          "question": "When injecting memory into the commentary prompt, how many observations should be included, and what selection strategy should be used — recency, variety across categories, or relevance to the current repo?",
+          "options": [
+            {
+              "title": "Recency-first",
+              "description": "Always inject the N most recent observations. Predictable and cheap to implement."
+            },
+            {
+              "title": "Variety across categories",
+              "description": "Include one or two observations per category. Ensures the companion draws on all memory dimensions."
+            },
+            {
+              "title": "Repo-relevance-first",
+              "description": "Prioritize observations tagged to the current repo, then fill remaining slots from global observations by recency."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "name": "Files and Directories",
+      "description": "Describes the new and modified source files and the new persistent store file that together implement the companion memory system.",
+      "context": "The companion memory system touches five source files (two new, three modified) and introduces one new runtime data file at `~/.sisyphus/companion-memory.json`. The locked decisions mandate that the memory store is physically separate from `companion.json` and must be written with the same atomic temp+rename discipline used throughout the companion subsystem.",
+      "requirements": [
+        {
+          "id": "REQ-019",
+          "title": "Create companion-memory.ts module",
+          "ears": {
+            "when": "When the companion memory system is implemented",
+            "shall": "the system shall introduce a new file `src/daemon/companion-memory.ts` that contains the observation engine, rule detectors, and memory store logic"
+          },
+          "criteria": [
+            {
+              "text": "File `src/daemon/companion-memory.ts` exists and is the sole location for observation engine, rule detector, and memory store code",
+              "checked": false
+            },
+            {
+              "text": "No memory-engine logic is added directly to companion.ts or companion-commentary.ts",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design explicitly lists this as a NEW file in the FILES section and assigns it the three concerns: observation engine, rule detectors, and memory store. Keeping them in one file is a design decision, not just a file-placement choice.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-020",
+          "title": "Memory store stored separately from companion.json",
+          "ears": {
+            "where": "Where the companion memory store is persisted to disk",
+            "shall": "the system shall write observations to `~/.sisyphus/companion-memory.json` and not embed them in `~/.sisyphus/companion.json`"
+          },
+          "criteria": [
+            {
+              "text": "A file named `companion-memory.json` is created at `~/.sisyphus/` on first write",
+              "checked": false
+            },
+            {
+              "text": "`companion.json` is never modified to contain observation data",
+              "checked": false
+            },
+            {
+              "text": "Pruning operations target `companion-memory.json` exclusively",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "This is a locked decision stated in both the FILES section and the Locked Decisions panel: separate file, no bloating of companion.json, allows independent pruning.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-021",
+          "title": "Memory store writes use atomic temp+rename pattern",
+          "ears": {
+            "when": "When the system writes or updates `companion-memory.json`",
+            "shall": "the system shall write to a temporary file first and then rename it to the final path, using the same atomic pattern as `saveCompanion()`"
+          },
+          "criteria": [
+            {
+              "text": "No direct in-place write to `companion-memory.json` — all mutations go through a temp file followed by rename",
+              "checked": false
+            },
+            {
+              "text": "A partial write that crashes mid-way does not corrupt the existing store",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Explicitly required in Locked Decisions: 'Persistence follows the same atomic temp+rename pattern used by saveCompanion()'. This is a user-visible durability guarantee, not merely a coding convention, so it is load-bearing.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-022",
+          "title": "Modify companion-commentary.ts to include memory section",
+          "ears": {
+            "when": "When commentary generation runs",
+            "shall": "the system shall inject a `<memory>` context section into the Haiku commentary prompt via modifications to `src/daemon/companion-commentary.ts`"
+          },
+          "criteria": [
+            {
+              "text": "`companion-commentary.ts` is modified to accept and embed a `<memory>` section alongside the existing personality, state, and variety sections",
+              "checked": false
+            },
+            {
+              "text": "The `<memory>` section is populated from observations queried from the memory store",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The FILES section marks companion-commentary.ts as MODIFIED with the explicit note 'add <memory> section to commentary prompt'. The Locked Decisions confirm: 'Memory feeds into commentary via a new <memory> section in the existing commentary prompt structure.'",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-023",
+          "title": "Modify companion.ts to invoke observation engine on session completion",
+          "ears": {
+            "when": "When `onSessionComplete()` in `companion.ts` finishes updating stats and baselines",
+            "shall": "the system shall call the observation engine from `src/daemon/companion-memory.ts` to run rule detectors and trigger Haiku observation generation"
+          },
+          "criteria": [
+            {
+              "text": "`companion.ts` is modified to call the observation engine after stat updates complete",
+              "checked": false
+            },
+            {
+              "text": "The observation engine call is placed after — not before — the existing stat and baseline update logic",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The FILES section marks companion.ts as MODIFIED with the note 'call observation engine from onSessionComplete()'. The flow narrative (step 2) confirms the ordering: stat updates happen first, then the observation engine runs.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-024",
+          "title": "Add memory-related types to companion-types.ts",
+          "ears": {
+            "when": "When the companion memory system is implemented",
+            "shall": "the system shall define all memory-related TypeScript types in `src/shared/companion-types.ts` rather than in feature-local files"
+          },
+          "criteria": [
+            {
+              "text": "`src/shared/companion-types.ts` is modified to include types for observation records, the memory store structure, and the four observation categories",
+              "checked": false
+            },
+            {
+              "text": "Memory types are importable by both `companion-memory.ts` and `companion-commentary.ts` via the shared module",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The FILES section explicitly places memory type additions in `src/shared/companion-types.ts` (marked MODIFIED). Locating shared types in the shared layer is consistent with the project's architecture convention and is explicitly documented in the design.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-025",
+          "title": "Add memory subcommand to companion CLI",
+          "ears": {
+            "when": "When the user runs `sisyphus companion memory`",
+            "shall": "the system shall read the memory store and render observations grouped by category"
+          },
+          "criteria": [
+            {
+              "text": "`src/cli/commands/companion.ts` is modified to register a `memory` subcommand under the `companion` command",
+              "checked": false
+            },
+            {
+              "text": "Output groups observations by the four categories: session sentiments, repo impressions, user patterns, notable moments",
+              "checked": false
+            },
+            {
+              "text": "The subcommand reads from `~/.sisyphus/companion-memory.json`",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The FILES section marks `src/cli/commands/companion.ts` as MODIFIED for the `memory` subcommand. The Locked Decisions confirm: 'CLI inspection via sisyphus companion memory subcommand on the existing companion command.' The Components table states it 'renders observations grouped by category.'",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "safeAssumptions": [
+        {
+          "id": "REQ-026",
+          "title": "companion-memory.json initialized with empty observations on first run",
+          "ears": {
+            "if": "If `companion-memory.json` does not yet exist when the observation engine first attempts to append",
+            "shall": "then the system shall create the file with an empty observations structure rather than erroring"
+          },
+          "criteria": [
+            {
+              "text": "First-run creates the file rather than throwing a file-not-found error",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Standard boundary initialization convention for persistent stores. Low cost to undo, not a user-visible surface change, universally expected for append-on-first-use stores.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-027",
+          "title": "companion-memory.json path follows the existing global daemon data directory convention",
+          "ears": {
+            "where": "Where `companion-memory.json` is located",
+            "shall": "the system shall resolve its path using the same path helper that resolves `companion.json` (`~/.sisyphus/`)"
+          },
+          "criteria": [
+            {
+              "text": "Path is derived from the same helper as other global daemon files, not hardcoded as a separate constant",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Standard convention for the project: global daemon files go in `~/.sisyphus/` and are resolved through the shared path helper. The design names the location explicitly. Using the same helper is a low-risk, easily-reversed implementation detail.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "OQ-files-01",
+          "question": "The design does not specify whether `companion-memory.ts` should export the memory store as a class, a module-level singleton, or a set of pure functions. Which interface shape is preferred?",
+          "options": [
+            {
+              "title": "Pure functions (functional style)",
+              "description": "Export stateless functions like `appendObservation(store, obs)` that take and return the store value — consistent with immutable state patterns."
+            },
+            {
+              "title": "Module-level singleton",
+              "description": "Export functions that operate on a shared in-memory cache loaded once at daemon start — consistent with how companion.ts currently manages companion state."
+            },
+            {
+              "title": "Class-based store",
+              "description": "Export a `MemoryStore` class instance — useful if the store needs lifecycle methods (open, flush, close)."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        }
+      ]
+    },
+    {
+      "id": "locked-decisions",
+      "name": "Locked Decisions",
+      "description": "Non-negotiable design constraints explicitly committed to in the design: storage layout, persistence pattern, observation taxonomy, observation sources, commentary integration, and CLI surface.",
+      "context": "These requirements encode the six locked decisions from the design. They are not aspirational — they represent explicit, non-negotiable commitments. Each one must be implemented exactly as stated. Open questions about retention policy, Haiku granularity, memory editing, repo filtering, and commentary selection strategy are tracked separately and do not affect these requirements.",
+      "requirements": [
+        {
+          "id": "REQ-028",
+          "title": "Memory store is a separate file from companion.json",
+          "ears": {
+            "when": "When the system persists companion memory observations",
+            "shall": "the system shall write them to ~/.sisyphus/companion-memory.json and never embed them in ~/.sisyphus/companion.json"
+          },
+          "criteria": [
+            {
+              "text": "companion-memory.json exists as a distinct file under ~/.sisyphus/ independent of companion.json",
+              "checked": false
+            },
+            {
+              "text": "No observation data is written to or read from companion.json",
+              "checked": false
+            },
+            {
+              "text": "companion.json file size is unaffected by memory store growth",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Directly stated as a locked decision: 'Memory store is a separate file (~/.sisyphus/companion-memory.json), not embedded in companion.json'. The rationale given is avoiding bloat and enabling independent pruning, but the constraint itself is the locked item.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-029",
+          "title": "Memory store persistence uses atomic temp+rename pattern",
+          "ears": {
+            "when": "When the system writes or updates the companion memory store",
+            "shall": "the system shall use the same atomic temp-file-then-rename pattern used by saveCompanion()"
+          },
+          "criteria": [
+            {
+              "text": "Writes to companion-memory.json always go to a temp file first, then atomically renamed to the target path",
+              "checked": false
+            },
+            {
+              "text": "No partial writes to companion-memory.json are possible if the process is interrupted mid-write",
+              "checked": false
+            },
+            {
+              "text": "The implementation mirrors the saveCompanion() pattern already used for companion.json",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Explicitly locked: 'Persistence follows the same atomic temp+rename pattern used by saveCompanion()'. This is a specific implementation constraint, not a general best practice — the reference to saveCompanion() makes it load-bearing.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-030",
+          "title": "Observations use exactly four categories",
+          "ears": {
+            "when": "When the system creates or stores an observation",
+            "shall": "the system shall tag it with exactly one of four categories: session sentiments, repo impressions, user patterns, or notable moments"
+          },
+          "criteria": [
+            {
+              "text": "Every observation record carries a category field constrained to the four named values",
+              "checked": false
+            },
+            {
+              "text": "No observation is created without a category, and no categories outside these four are permitted",
+              "checked": false
+            },
+            {
+              "text": "The CLI inspector groups observations by these four categories when rendering",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Locked decision: 'Four observation categories: session sentiments, repo impressions, user patterns, notable moments — matching the companion roadmap.' The design states these match the companion roadmap, making them a committed taxonomy, not an initial default.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-031",
+          "title": "Rule-based detectors produce observations per session",
+          "ears": {
+            "when": "When the observation engine runs at session completion",
+            "shall": "the system shall execute rule-based detectors against companion stats, repo memory, and session history, with each detector emitting zero or one observation per session"
+          },
+          "criteria": [
+            {
+              "text": "Rule-based detectors run as part of the observation engine at every session completion",
+              "checked": false
+            },
+            {
+              "text": "Each individual detector emits at most one observation per session invocation",
+              "checked": false
+            },
+            {
+              "text": "Detectors are deterministic and threshold-driven, operating against quantitative data",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Locked decision: 'Two observation sources: rule-based detectors (deterministic, threshold-driven)'. The per-session, zero-or-one emission cap per detector is stated in the Components table: 'Each detector can emit zero or one observation per session.'",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-032",
+          "title": "Haiku produces one qualitative observation per session completion",
+          "ears": {
+            "when": "When the observation engine runs at session completion",
+            "shall": "the system shall invoke a Haiku call that generates exactly one qualitative observation about the session"
+          },
+          "criteria": [
+            {
+              "text": "A Haiku call is made as part of observation engine execution at each session completion",
+              "checked": false
+            },
+            {
+              "text": "The Haiku call produces one qualitative observation — a short impression capturing tone, effort, or trajectory",
+              "checked": false
+            },
+            {
+              "text": "The Haiku-generated observation is appended to the memory store alongside rule-based observations",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Locked decision: 'Two observation sources: ... Haiku-generated (qualitative, one per session completion)'. The flow narrative specifies 'a one-sentence impression that captures tone, effort, or trajectory.' The open question about whether Haiku should produce multiple tagged observations is tracked separately — the locked commitment is one per session.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-033",
+          "title": "Memory injects into commentary prompt as a <memory> section",
+          "ears": {
+            "when": "When the commentary generation system builds a Haiku prompt",
+            "shall": "the system shall inject relevant observations from the memory store as a <memory> context section within the existing commentary prompt structure"
+          },
+          "criteria": [
+            {
+              "text": "The commentary prompt contains a <memory> section when observations are available",
+              "checked": false
+            },
+            {
+              "text": "The <memory> section is injected alongside the existing personality, state, and variety sections — not replacing them",
+              "checked": false
+            },
+            {
+              "text": "Observations are queried from the memory store before each commentary generation run",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Locked decision: 'Memory feeds into commentary via a new <memory> section in the existing commentary prompt structure.' The specific XML tag name <memory> and the integration with the existing prompt structure (not a rewrite) are both explicitly committed.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-034",
+          "title": "Memory is inspectable via sisyphus companion memory subcommand",
+          "ears": {
+            "when": "When a user runs the sisyphus companion memory subcommand",
+            "shall": "the system shall read the memory store and render observations grouped by category"
+          },
+          "criteria": [
+            {
+              "text": "The subcommand is named 'memory' and is accessible as a subcommand of the existing 'sisyphus companion' command",
+              "checked": false
+            },
+            {
+              "text": "Output groups observations by the four defined categories",
+              "checked": false
+            },
+            {
+              "text": "The subcommand reads from companion-memory.json, not from companion.json",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Locked decision: 'CLI inspection via sisyphus companion memory subcommand on the existing companion command.' This surfaces the memory as a read path for the user; write/edit capability is an open question and is not locked.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "safeAssumptions": [
+        {
+          "id": "REQ-035",
+          "title": "Memory store is created on first write if absent",
+          "ears": {
+            "if": "If companion-memory.json does not exist when the observation engine first attempts to write",
+            "shall": "then the system shall create the file, initializing it with an empty observations structure"
+          },
+          "criteria": [
+            {
+              "text": "First-run bootstrap creates companion-memory.json without requiring manual setup",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe: standard file-initialization convention — create-on-first-write is the universal pattern for daemon-managed state files. No new UX surface; entirely internal. Cheap to undo.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-036",
+          "title": "Observation records include a timestamp",
+          "ears": {
+            "when": "When the system appends an observation to the memory store",
+            "shall": "the system shall include an ISO 8601 timestamp recording when the observation was created"
+          },
+          "criteria": [
+            {
+              "text": "Every observation in companion-memory.json has a timestamp field",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe: timestamps on persisted records are a universal convention for any store that requires recency-based querying or pruning — both of which the design explicitly describes. Not user-visible beyond CLI output. Trivial to change the format if needed.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "OQ-LD-001",
+          "question": "Should the Haiku call and rule-based detectors run in parallel at session completion, or sequentially? The flow narrative says 'In parallel (or sequentially)' — the design leaves this unresolved.",
+          "options": [
+            {
+              "title": "Parallel",
+              "description": "Haiku call and rule detectors run concurrently, reducing latency at session end."
+            },
+            {
+              "title": "Sequential",
+              "description": "Rule detectors run first, then the Haiku call. Simpler error handling; Haiku could potentially use rule detector output as context."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        }
+      ]
+    },
+    {
+      "id": "open-questions",
+      "name": "Open Questions",
+      "description": "Behavioral requirements implied by each unresolved design decision, paired with the open questions the user must resolve before implementation.",
+      "context": "The design flags five unresolved decisions that affect observable system behavior. Each requirement below captures what the system *must* do regardless of which way the question resolves. The paired open questions present the concrete options for the user to choose from.",
+      "requirements": [
+        {
+          "id": "REQ-037",
+          "title": "Memory Store Retention Enforcement",
+          "ears": {
+            "when": "When the memory store is written after a session completes",
+            "shall": "the system shall enforce a retention policy that prevents unbounded growth of the observation store"
+          },
+          "criteria": [
+            {
+              "text": "The store does not grow without bound across sessions",
+              "checked": false
+            },
+            {
+              "text": "Observations beyond the retention limit are removed or de-prioritized during the prune step",
+              "checked": false
+            },
+            {
+              "text": "The retention policy is applied consistently at every write, not only on-demand",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design mandates a prune step (flow step 5) and a 'size budget' but does not specify the policy. This requirement captures the invariant that is true under any retention policy the user selects. The specific limit or window is deferred to the open question.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-038",
+          "title": "Haiku Observation Output Per Session",
+          "ears": {
+            "when": "When a session completes and the Haiku qualitative call is dispatched",
+            "shall": "the system shall persist all observations returned by Haiku with category tags and timestamps to the memory store"
+          },
+          "criteria": [
+            {
+              "text": "Every observation returned by Haiku is written to the memory store with a category tag",
+              "checked": false
+            },
+            {
+              "text": "If Haiku returns multiple observations in a single call, all are stored individually",
+              "checked": false
+            },
+            {
+              "text": "If Haiku returns one observation, it is stored with the appropriate category",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design specifies that Haiku produces observations at session completion but leaves the count (one vs. multiple) unresolved. This requirement captures the invariant storage contract regardless of count. The granularity choice is deferred to the open question.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-039",
+          "title": "CLI Memory Inspection",
+          "ears": {
+            "when": "When the user runs the sisyphus companion memory subcommand",
+            "shall": "the system shall display the observation store contents grouped by category"
+          },
+          "criteria": [
+            {
+              "text": "Output is grouped by the four defined categories: session sentiments, repo impressions, user patterns, notable moments",
+              "checked": false
+            },
+            {
+              "text": "The command exits with a non-zero status if the memory store file cannot be read",
+              "checked": false
+            },
+            {
+              "text": "An empty store renders without error",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design locks in read access via CLI (Locked Decisions, line 125). Whether write/delete capabilities are also exposed is the open question. This requirement covers the locked behavior only.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-040",
+          "title": "Memory Store Mutability Contract",
+          "ears": {
+            "if": "If the user is permitted to delete or edit individual observations via CLI",
+            "shall": "then the system shall persist the mutation atomically using the same temp+rename pattern as all other memory store writes"
+          },
+          "criteria": [
+            {
+              "text": "Any CLI-initiated mutation uses atomic temp+rename write semantics",
+              "checked": false
+            },
+            {
+              "text": "A failed or interrupted mutation does not corrupt the store file",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Whether editing/deletion is exposed at all is unresolved. This requirement is conditional on that choice and ensures that if it is enabled, the atomic-write constraint (a Locked Decision) is respected.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-041",
+          "title": "Repo Scoping for Memory Display",
+          "ears": {
+            "when": "When the user runs sisyphus companion memory",
+            "shall": "the system shall support a mechanism to scope the displayed observations to a specific repository"
+          },
+          "criteria": [
+            {
+              "text": "A repo-scoped query returns only observations tagged with that repo",
+              "checked": false
+            },
+            {
+              "text": "An unscoped query returns observations for all repositories",
+              "checked": false
+            },
+            {
+              "text": "Repo filter is applied before rendering — it does not merely visually highlight",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design flags whether a --repo filter should exist as an open question. The query-by-repo capability is referenced in the Memory Store component description (line 47) as a planned feature. This requirement captures the behavior if the filter is added; the open question resolves whether to expose it via CLI.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-042",
+          "title": "Commentary Memory Injection Budget",
+          "ears": {
+            "when": "When commentary generation runs and the memory store is non-empty",
+            "shall": "the system shall select a bounded subset of observations and inject them into the commentary prompt as a <memory> section"
+          },
+          "criteria": [
+            {
+              "text": "The injected memory section is bounded — it does not include the entire store",
+              "checked": false
+            },
+            {
+              "text": "The selection strategy is deterministic and documented in code",
+              "checked": false
+            },
+            {
+              "text": "If the store is empty, the <memory> section is omitted rather than injected as empty",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "The design states memory is injected into the commentary prompt (Locked Decision, line 123) but leaves the selection strategy (count, recency vs. variety vs. relevance) unresolved. This requirement captures the bounded-injection invariant that holds under any selection strategy.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "safeAssumptions": [
+        {
+          "id": "REQ-043",
+          "title": "Invalid or Missing Memory Store Handled Gracefully",
+          "ears": {
+            "if": "If the memory store file does not exist or cannot be parsed",
+            "shall": "then the system shall treat the store as empty rather than crashing or blocking session completion"
+          },
+          "criteria": [
+            {
+              "text": "A missing store file initializes a fresh empty store on first write",
+              "checked": false
+            },
+            {
+              "text": "A corrupted store file is logged and treated as empty, not surfaced as a fatal error",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe assumption: graceful degradation on missing/corrupt storage is standard convention for file-backed persistence. It is not a user-facing surface change and is trivially reversible if the user prefers strict error handling instead.",
+          "userNotes": "",
+          "questions": []
+        },
+        {
+          "id": "REQ-044",
+          "title": "Observation Engine Does Not Block Session Completion",
+          "ears": {
+            "while": "While the observation engine (rule detectors and Haiku call) is running after session completion",
+            "shall": "the system shall not block the session from being marked complete in the daemon state"
+          },
+          "criteria": [
+            {
+              "text": "Session state is updated to complete before or independently of the observation engine finishing",
+              "checked": false
+            },
+            {
+              "text": "A timeout or failure in the Haiku call does not leave the session in an indefinite pending state",
+              "checked": false
+            }
+          ],
+          "status": "draft",
+          "agentNotes": "Safe assumption: it is standard practice in event-hook architectures to not let side-effect hooks block the primary event outcome. Not a UX surface change and low cost to revisit.",
+          "userNotes": "",
+          "questions": []
+        }
+      ],
+      "openQuestions": [
+        {
+          "id": "OQ-001",
+          "question": "Retention policy: How should the memory store limit its size over time?",
+          "options": [
+            {
+              "title": "Fixed count (e.g., last 200 observations)",
+              "description": "Keep the most recent N observations across all categories. Simple to implement and reason about. May under-represent older categories if one category dominates."
+            },
+            {
+              "title": "Time window (e.g., last 90 days)",
+              "description": "Discard observations older than a rolling window. Ensures temporal recency but can result in a very small store during quiet periods."
+            },
+            {
+              "title": "Category-specific limits",
+              "description": "Each of the four categories has its own cap (e.g., 50 per category). Ensures balanced representation across categories. More complex to configure and maintain."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        },
+        {
+          "id": "OQ-002",
+          "question": "Observation granularity for the Haiku call: How many observations should one Haiku call produce per session?",
+          "options": [
+            {
+              "title": "One observation per session",
+              "description": "Haiku produces a single sentence capturing the overall session impression. Simple prompt, predictable token cost, but only covers one category per session."
+            },
+            {
+              "title": "Multiple observations, one per applicable category",
+              "description": "Haiku produces up to four observations (one per category) in a single call. Richer output per session; requires structured output and a more complex prompt."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        },
+        {
+          "id": "OQ-003",
+          "question": "Memory editing: Should the CLI allow the user to delete or edit individual observations, or is read-only inspection sufficient?",
+          "options": [
+            {
+              "title": "Read-only inspection only",
+              "description": "sisyphus companion memory displays observations but provides no mutation commands. Simpler implementation; the pruning policy is the sole way observations are removed."
+            },
+            {
+              "title": "Delete individual observations via CLI",
+              "description": "User can remove specific observations (e.g., by ID or interactively). Adds user control but requires ID-stable observation records and additional CLI surface."
+            },
+            {
+              "title": "Delete and edit observations via CLI",
+              "description": "Full CRUD over individual observations. Maximum control; highest implementation cost; requires stable IDs and validation on edited content."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        },
+        {
+          "id": "OQ-004",
+          "question": "Repo scoping: Should sisyphus companion memory accept a --repo filter flag?",
+          "options": [
+            {
+              "title": "No filter — always show all observations",
+              "description": "Output is always global. Simpler command interface. Useful when the user wants a cross-repo view of patterns."
+            },
+            {
+              "title": "Optional --repo filter",
+              "description": "User can pass --repo <name> to narrow output to observations tagged with that repo. Requires repo tags on all relevant observations. More targeted for users working across many repos."
+            },
+            {
+              "title": "Auto-detect current repo, with --all override",
+              "description": "Default to filtering by the current working directory's repo (if detectable), with --all to show everything. Most ergonomic for single-repo workflows but adds detection logic."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        },
+        {
+          "id": "OQ-005",
+          "question": "Commentary selection strategy: How should the system choose which observations to inject into the commentary prompt?",
+          "options": [
+            {
+              "title": "Most recent N observations",
+              "description": "Select the N most recently written observations regardless of category or repo. Simple; biased toward recent sessions."
+            },
+            {
+              "title": "Recency-weighted with category variety",
+              "description": "Select the most recent observation from each category, then fill remaining slots by recency. Balances freshness and breadth."
+            },
+            {
+              "title": "Relevance to current repo, then recency",
+              "description": "Prioritize observations tagged to the current repo, then fill with recent cross-repo observations. Most contextually relevant but requires repo tagging on all observations."
+            }
+          ],
+          "response": "",
+          "selectedOption": null
+        }
+      ]
+    }
+  ]
+}

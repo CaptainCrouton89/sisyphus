@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "topic": "Companion memory system — qualitative observations (session sentiments, repo impressions, user patterns, notable moments) with rule-based and Haiku-generated sources, CLI inspection",
+    "draft": 2,
+    "stage": "stage-3"
+  },
+  "sections": [
+    { "id": "component-topology", "title": "Component Topology" },
+    { "id": "flow", "title": "End-to-End Flow" },
+    { "id": "files", "title": "Files and Directories" },
+    { "id": "locked-decisions", "title": "Locked Decisions" },
+    { "id": "open-questions", "title": "Open Questions" },
+    { "id": "observation-engine", "title": "Observation Engine — Component Detail" },
+    { "id": "rule-detectors", "title": "Rule Detectors — Component Detail" },
+    { "id": "memory-store", "title": "Memory Store — Component Detail" },
+    { "id": "commentary-enrichment", "title": "Commentary Enrichment — Component Detail" },
+    { "id": "cli-inspector", "title": "CLI Inspector — Component Detail" }
+  ],
+  "lockedDecisions": [
+    "Separate persistence file (~/.sisyphus/companion-memory.json) from companion.json",
+    "Atomic temp+rename persistence pattern",
+    "Four observation categories: session sentiments, repo impressions, user patterns, notable moments",
+    "Two observation sources: rule-based detectors and Haiku-generated qualitative summaries",
+    "Haiku produces a SINGLE observation per session, tagged to the most relevant category",
+    "Retention policy: fixed count (e.g., last 200), FIFO eviction",
+    "Commentary selection: recency-based, scoped to the current repo",
+    "CLI is read-only — no editing or deleting individual observations",
+    "Memory feeds into commentary via <memory> prompt section",
+    "CLI inspection via sisyphus companion memory subcommand"
+  ],
+  "openQuestions": [
+    "Repo scoping for CLI — should sisyphus companion memory accept a --repo filter? (unanswered)",
+    "Parallel vs sequential execution of rule detectors and Haiku call at session end (unanswered)",
+    "Module interface style for companion-memory.ts — pure functions, singleton, or class (unanswered)"
+  ]
+}
