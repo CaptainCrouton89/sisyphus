@@ -27,6 +27,9 @@
 - Orchestrator `pane-exited` without yield (crash) branches on agent state: (1) no agents → pause session; (2) agents running → clear `respawningSessions` guard and let them reach `onAllAgentsDone` naturally; (3) agents present but none running → trigger respawn immediately.
 - `allAgentsDone()` counts ALL agents (including `sisyphus spawn` sub-agents) and returns false when `session.agents.length === 0` — an orchestrator with no spawns never triggers `onAllAgentsDone`. Last completing agent's pane is NOT killed in `handleAgentSubmit()` — deferred to `onAllAgentsDone()` so the tmux window survives for the new orchestrator pane.
 - `resumeSession()` marks running agents as `lost` only if their pane is gone — live panes stay `running`. `restartAgent()` auto-transitions a zombie `running` agent to `lost` before restarting. `reconnectSession()` does NOT call `resetAgentCounterFromState()` — agent ID collision risk post-reconnect; `resume` and `clone` do call it.
+- `reconnectSession()` vs `resumeSession()`: use `reconnect` when the tmux session still exists by name but its `$N` ID is stale (daemon restarted, tmux server survived) — it re-resolves the `$N` and re-registers without spawning an orchestrator. Use `resume` when the tmux session is gone entirely — it creates a fresh session and spawns a new orchestrator.
+- `reopenWindow()` creates a fresh tmux session shell but does **not** spawn an orchestrator — used by TUI attach when the window is gone but the session isn't resumed. Call `resumeSession()` to spawn a new orchestrator.
+- Orchestrator respawn failure inside `setImmediate` auto-pauses the session and fires a native notification — prevents it sitting in a half-active state. Recovery: fix the underlying issue, then `sisyphus resume`.
 
 ## Session ID Resolution (`server.ts`)
 
@@ -73,6 +76,12 @@
 ## Tmux
 
 - `ssyph_` prefix is load-bearing for pane-monitor detection. Session names containing tmux format characters (`#`, `{`, `}`) break status bar compositor silently — no escaping is applied.
+- `TMUX_TIMEOUT_MS = 5_000` caps every tmux IPC call — a wedged tmux server (lock contention, blocked command queue) would otherwise block the daemon indefinitely (default `exec()` timeout is 30s).
+- `sendKeys()` calls `getPaneState()` first (one tmux round-trip). Copy/clock mode → issues `send-keys -X cancel` before the real keys; skipping it silently routes the keys through the copy-mode key table instead of the shell.
+- `sessionExistsById()` uses `has-session -t $N` (exact integer match, no prefix-match risk). `$N` IDs go stale after a tmux server restart — `isSessionAlive()` dispatches to `sessionExistsById` when a `$N` is available, otherwise falls back to `sessionNameTaken()`.
+- `resolveSessionId()` uses `list-sessions` not `display-message -t <name>` — `display-message` requires an attached client and fails silently in daemon context.
+- Pane border color is stored as per-pane `@pane_color` user variable; `pane-border-style` is window-level (last-write-wins). The window format string `#{@pane_color}` resolves the variable per-pane at render time, giving each pane its own border color without last-write clobbering.
+- `configureSessionDefaults()` is called only inside `createSession()` — windows added to an existing tmux session after creation do not inherit `allow-rename off`, `automatic-rename off`, or layout rebalance hooks. Agents spawned in those windows can overwrite pane/window titles.
 
 ## Timing
 

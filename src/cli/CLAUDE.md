@@ -33,14 +33,16 @@
 ## Install / onboard
 
 - `isInstalled()` checks plist **file existence only** — a plist present but not loaded (e.g. after manual `launchctl unload` without file removal) skips re-install and drops straight to `waitForDaemon()`, which will timeout. Fix: delete the plist or `launchctl load -w ~/.sisyphus/../LaunchAgents/com.sisyphus.daemon.plist`.
-- `installBeginCommand()` runs on every `ensureDaemonInstalled()` call, **outside** the `!isInstalled()` guard — self-heals missing `/begin` command for users who installed before the command existed
-- `waitForDaemon()` starts with 6s timeout but extends to 30s when `daemonUpdatingPath()` file is present — check that path if startup seems to hang indefinitely
+- Slash command installers (`installBeginCommand`, `installAutopsyCommand`) both delegate to the generic `installSlashCommand(name, srcOverride)` helper — add new user-facing slash commands by dropping a `templates/{name}.md` file and adding a matching `install{Name}Command` wrapper
+- `installSlashCommand` is idempotent by **dest file existence** — if `~/.claude/commands/sisyphus/{name}.md` exists it returns early without reading the bundled template. Package updates that change a template are silently ignored for existing installs; to force a refresh, delete the dest file.
+- `installBeginCommand()` and `installAutopsyCommand()` run on every `ensureDaemonInstalled()` call, **outside** the `!isInstalled()` guard — self-heal missing `/sisyphus:begin` and `/sisyphus:autopsy` commands for users who installed before the command existed
+- `waitForDaemon()` starts with 6s timeout but extends to 30s when `daemonUpdatingPath()` file is present (reads version string from that file for the log message) — check that path if startup seems to hang indefinitely
 - Plist bakes in `process.execPath` at install time — upgrading or moving Node breaks the daemon; fix with `sisyphus setup` (which regenerates the plist)
 - `writeTmuxDefaults()` always writes to `~/.tmux.conf`, never XDG path — but `hasExistingTmuxConf()` checks both; defaults only written on fresh auto-install with no existing config
-- `tryAutoInstallNvim`: if no `~/.config/nvim` dir exists, clones LazyVim starter and removes `.git` (user owns config). `lazyVimInstalled` uses `lazy-lock.json` as signal — that file is generated on first nvim launch, not at clone time, so it will be `false` immediately after clone. `installBaleiaPlugin()` silently returns `false` if `lua/plugins/` doesn't exist; both self-heal on next `sisyphus setup` after nvim has bootstrapped.
-- `tryAutoInstallTermrender`: prefers pipx over pip3/pip (isolated install); falls through to pip if pipx unavailable
-- `checkItermOptionKey()` only checks the currently-active profile when `ITERM_PROFILE` is set; all other profiles are skipped
-- `runOnboarding()` (nvim/termrender auto-install, iTerm check) is **only called by `sisyphus setup`** — `ensureDaemonInstalled()` (auto-install on first command) only installs the begin command, tmux keybindings, and required plugins
+- `tryAutoInstallNvim`: if no `~/.config/nvim` dir exists, clones LazyVim starter and removes `.git` (user owns config). `NvimInfo.lazyVimInstalled` has split semantics: in the auto-install path it is set `true` at clone time (before nvim ever runs); in the pre-existing-nvim path it reads `lazy-lock.json`, which is generated on first nvim launch — so it is `false` until the user opens nvim. `installBaleiaPlugin()` silently returns `false` if `lua/plugins/` doesn't exist; self-heals on next `sisyphus setup` after nvim has bootstrapped.
+- `tryAutoInstallTermrender`: prefers pipx over pip3/pip (isolated install); falls through to pip if pipx unavailable **or if pipx install throws or leaves termrender off PATH**
+- `runOnboarding()` and `formatOnboardingMessages()` are a two-step API — `runOnboarding()` executes all side effects and returns structured `OnboardResult` **with no console output**; `formatOnboardingMessages()` converts that result to display lines. Calling only `runOnboarding()` runs setup silently.
+- `runOnboarding()` (tmux auto-install, nvim, termrender, begin/autopsy slash commands, iTerm check) is **only called by `sisyphus setup`** — `ensureDaemonInstalled()` (auto-install on first command) only installs the begin/autopsy commands, tmux keybindings, and required plugins
 
 ## Status bar segments
 

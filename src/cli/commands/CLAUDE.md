@@ -1,5 +1,13 @@
 # CLI Commands
 
+## setup.ts
+
+**`daemonOk` fallback misrepresents failure:** If `ensureDaemonInstalled()` throws, `daemonOk` falls back to `isInstalled()` (plist file existence only). "✓ Daemon: Running" can appear when the daemon failed to start — as long as the plist exists. The output line does not distinguish "started successfully" from "plist present, start failed."
+
+**Keybindings always shows ✓:** `printResults` hardcodes `✓` before the keybindings line regardless of `setupTmuxKeybind()` status. Error messages from non-installed/non-already-installed statuses appear as the ✓ detail text, not as a ✗ failure.
+
+**Execution order:** `runOnboarding()` → `ensureDaemonInstalled()` → `setupTmuxKeybind()`. Daemon install happens before keybinding setup; a daemon install failure does not abort keybind setup.
+
 ## dashboard.ts
 
 `openDashboardWindow(tmuxSession, cwd)` and `registerDashboard` (the `sisyphus dashboard` command) launch the same TUI binary but through different mechanisms:

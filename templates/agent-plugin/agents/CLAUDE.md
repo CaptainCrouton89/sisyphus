@@ -7,6 +7,7 @@
 - `debug.md` — May write reproduction tests despite "no code changes" stance; explicit carve-out, not inconsistency
 - `problem.md` — `systemPrompt: replace` (base prompt dropped). Draft → `context/problem.draft.md`; `mv` to final on sign-off only. One chat message after rendering: "Draft is in the pane — anything off?" — never paste. **No alternatives section** in the problem document; they stay in the conversation. Sections are vocabulary not checklist — skip ones that don't earn their place, add ones that do. Perspective agents: spawn all 8 `run_in_background: true` after conversation has substance; shared 2–3 sentence framing first; form your own take before spawning. `TaskCreate` for parallel work — mark each task completed immediately.
 - `implementor.md` — Bail via `sisyphus report` on false assumptions; never "make it work". Unrelated build failures: note and continue; related-but-unexpected: STOP, no workarounds. Only lints/typechecks files it changed. Coherence with co-running implementors before speed. Explicit permission to break existing code ("pre-production").
+- `review.md` — Spawns sub-agents via **Agent tool** (`subagent_type`: `reuse`, `quality`, `efficiency`, `security`, `compliance`) — `sisyphus spawn --agent-type sisyphus:quality` fails silently. Dispatch is scope-only (diff + file boundaries): **no hypotheses, no suspicions** — sub-agents anchored on a leading conclusion miss independent findings. Validation spawns **1 sub-agent per source sub-agent that produced findings** (not 1 total, not 1 per finding): bugs/security at opus, everything else at sonnet, plus a dismissal-audit sub-agent (sonnet) that samples 1–2 dismissed entries per source agent — omitting dismissed output breaks this audit pass. See `review/CLAUDE.md` for sub-agent constraints.
 
 ## termrender Directive Nesting
 
@@ -45,18 +46,10 @@ research-lead.md →  context/research-{topic}.md    (standalone; spawnable at a
 
 **Writer isolation**: dispatch contract is exactly 3 fields — `design-rendered.txt` path, chunk output path, atomic-write requirement. Never add goal/exploration/conversation. On bounce re-runs: same 3-field contract; writer re-extracts from revised design with no memory of prior pass.
 
-**Bounce flow ordering**: engineer revises design → `termrender --tmux` for re-sign-off → THEN re-render to text → re-dispatch writer. The sign-off step before re-rendering is easy to skip.
+**Bounce flow**: engineer revises design → `termrender --tmux` re-sign-off → THEN re-render to text → re-dispatch writer (sign-off before re-rendering is easy to skip). Three TUI exits: (1) no bounces → Stage 3; (2) ≥1 bounce-to-design → bounce flow; (3) comments only / not yet approved → re-dispatch writer, same 3-field contract, incremented attempt N. Third path easy to miss. After TUI exit: re-read `requirements.json`, scan `reviewAction === 'bounce-to-design'` — never parse stdout.
 
-**Stage 3 engineer** must receive `requirements.json` path — it captures all Stage 2 clarifications, not just the design files.
-
-**Bounce verdict**: re-read `requirements.json` after TUI exit, scan for `reviewAction === 'bounce-to-design'`. Stdout text is human-readable only — never parse it.
-
-**Three-way TUI exit**: (1) no bounces → Stage 3; (2) ≥1 bounce-to-design → bounce flow; (3) comments only / not yet approved → re-dispatch writer, same 3-field contract, incremented attempt N. Third path easy to miss.
-
-`meta.bounceIterations` **never decrements** — cumulative across restarts; `> 3` → bail. `sisyphus requirements --export` (Stage 3) runs synchronously — not `run_in_background`. Contrast: TUI launch in Stage 2 uses `run_in_background: true`.
+**Stage 3**: engineer receives `requirements.json` path (all Stage 2 clarifications). `sisyphus requirements --export` runs synchronously — not `run_in_background` (contrast Stage 2 TUI: `run_in_background: true`). `meta.bounceIterations` never decrements — cumulative; `> 3` → bail. Delete `requirements.attempt-*.json` on startup if unparseable or `requirements.json` already has groups.
 
 **Resume state machine**: no files → Stage 1 fresh; `design.json` only → Stage 1 sign-off pending; `stage-2-in-progress` → re-dispatch writer + TUI; `stage-2-done` → Stage 3; `stage-3-done` → submit (sanity-check `design.json.meta.draft < 2` first).
-
-**Orphan chunk cleanup** on every startup before resume — delete `requirements.attempt-*.json` if unparseable or if `requirements.json` already has groups.
 
 **Stage 1 readiness** (all three): name 3–7 major components; sketch 1-paragraph description not corrected on most recent turn; codebase contradictions resolved. Cap at 3 rounds — unmet → bail.
