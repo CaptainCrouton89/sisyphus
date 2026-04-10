@@ -805,6 +805,12 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'w') {
     if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
 
+    // Paused session — tell user to resume regardless of window state
+    if (session.status === 'paused') {
+      notify(state, 'Session paused — press R to resume');
+      return;
+    }
+
     // If window is alive, switch to it directly
     if (session.status !== 'completed' && state.paneAlive && session.tmuxWindowId) {
       const switchTarget = session.tmuxSessionId ?? session.tmuxSessionName;
@@ -813,19 +819,9 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
       return;
     }
 
-    // Window is dead — reopen via daemon (recreates tmux session/window)
+    // Window is dead on an active session — tell user to resume
     if (session.status !== 'completed') {
-      void (async () => {
-        try {
-          const res = await actions.send({ type: 'reopen-window', sessionId: state.selectedSessionId!, cwd: state.cwd });
-          if (!res.ok) { notify(state, `Error: ${res.error}`); return; }
-          const data = res.data as { tmuxSessionName: string; tmuxWindowId: string };
-          actions.switchToSession(data.tmuxSessionName);
-          actions.selectWindow(data.tmuxWindowId);
-        } catch (err) {
-          notify(state, `Error: ${(err as Error).message}`);
-        }
-      })();
+      notify(state, 'Window dead — press R to resume session');
       return;
     }
 
