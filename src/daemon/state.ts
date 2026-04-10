@@ -300,6 +300,9 @@ export function createSnapshot(cwd: string, sessionId: string, cycleNumber: numb
   const roadmap = roadmapPath(cwd, sessionId);
   if (existsSync(roadmap)) copyFileSync(roadmap, join(dir, 'roadmap.md'));
 
+  const strategy = strategyPath(cwd, sessionId);
+  if (existsSync(strategy)) copyFileSync(strategy, join(dir, 'strategy.md'));
+
   const ld = logsDir(cwd, sessionId);
   if (existsSync(ld)) cpSync(ld, join(dir, 'logs'), { recursive: true });
   const legacyLogs = legacyLogsPath(cwd, sessionId);
@@ -322,9 +325,12 @@ export async function restoreSnapshot(cwd: string, sessionId: string, toCycle: n
     session.tmuxWindowId = undefined;
     atomicWrite(statePath(cwd, sessionId), JSON.stringify(session, null, 2));
 
-    // Restore roadmap.md and logs
+    // Restore roadmap.md, strategy.md, and logs
     const snapshotRoadmap = join(dir, 'roadmap.md');
     if (existsSync(snapshotRoadmap)) copyFileSync(snapshotRoadmap, roadmapPath(cwd, sessionId));
+
+    const snapshotStrategy = join(dir, 'strategy.md');
+    if (existsSync(snapshotStrategy)) copyFileSync(snapshotStrategy, strategyPath(cwd, sessionId));
 
     const snapshotLogsDir = join(dir, 'logs');
     if (existsSync(snapshotLogsDir)) {
