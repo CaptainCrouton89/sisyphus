@@ -9,7 +9,13 @@
 
 ## State & Persistence
 
-- Always mutate through `state.ts` — atomic temp-file + rename, never write state JSON directly.
+- All exported async functions in `state.ts` serialize through `withSessionLock(sessionId)` — a chained-promise per-session mutex. `createSession` and `createSnapshot` are synchronous and bypass the lock; a `createSnapshot` call can race with a concurrent `updateAgent` or `updateSession`.
+- `getSession` silently normalizes missing fields on load (`activeMs → 0`, `agent.repo → '.'`, cycle `activeMs → 0`). Adding a new required field to `Agent`/`Session`/`OrchestratorCycle` types requires a normalization entry here, or reads of old state return `undefined`.
+- `updateAgent`, `appendAgentReport`, and `updateReportSummary` reverse-find the **last** agent with the matching ID (`slice().reverse().find()`). A restarted agent appears twice in `session.agents` with the same ID; all mutations target the later (current) entry.
+- `continueSession` side effects beyond status flip: clears `session.completedAt`/`completionReport`, clears the last cycle's `completedAt` (mode resolution then treats it as in-progress and skips it), and truncates `roadmap.md` to empty.
+- `restoreSnapshot` always forces `status → 'paused'` and strips `tmuxSessionName`, `tmuxSessionId`, `tmuxWindowId` — caller must re-register tmux state before resuming. This is why `handleRollback` re-pauses and `sisyphus resume` must follow. Also restores `roadmap.md`, `strategy.md`, and `logs/` from snapshot (falls back to `logs.md` for pre-directory snapshots).
+- `cloneSessionDir` copies `context/`, `prompts/`, `reports/`, `snapshots/` but creates a fresh empty `logs/`. Strategy file only copied when `strategy: true`. `replaceIdInDir` rewrites sourceId → cloneId in all non-binary files (null-byte heuristic on first 8 KB) across copied dirs. `context/CLAUDE.md` is overwritten with the seed content after copying — any agent-modified version from the source session is discarded.
+- `createCloneState` normalizes any `running` agents from the source to `status: 'killed'` with `killedReason: 'inherited from source session'` — their tmux panes don't exist in the clone's context. Preserves `source.launchConfig` verbatim if present; `configModel`/`configOrchestratorPrompt` args are only used when source has no `launchConfig`. Sets `parentSessionId: sourceId`; resets `activeMs` to 0 but carries over all agents, cycles, and messages.
 - `persistSessionRegistry()` only writes `cwd` — tmux/window metadata is in-memory only.
 - Companion writes use own `loadCompanion()`/`saveCompanion()`, not `state.ts` — concurrent writes possible. Async commentary callbacks must reload fresh immediately before saving; never close over a captured companion reference across an `await`.
 - `commentaryHistory` ring buffer (max 30): `recordCommentary()` maintains both `lastCommentary` and buffer simultaneously. `saveCompanion()` directly bypasses the buffer — `lastCommentary` and `commentaryHistory` diverge silently.
@@ -54,8 +60,7 @@
 
 ## Session Naming (`session-manager.ts`)
 
-- `fireHaikuNaming()` is fire-and-forget at session/clone start; skipped when explicit `--name` provided. Null result → UUID name kept silently. 5-attempt collision loop (`-1`–`-5`); all taken → abandoned.
-- On success: renames the live tmux session, updates persisted state AND in-memory tracking (`trackSession`, `registerSessionTmux`), AND updates pane titles for ALL existing live panes via `updatePaneMeta` + `setPaneTitle`.
+- `fireHaikuNaming()` is fire-and-forget at session/clone start; skipped with explicit `--name`; null result keeps UUID silently; 5-attempt collision loop (`-1`–`-5`), abandoned if all taken. On success: renames the live tmux session, updates persisted state AND in-memory tracking, AND updates pane titles for ALL existing live panes via `updatePaneMeta` + `setPaneTitle`.
 
 ## History (`history.ts`)
 
@@ -85,8 +90,8 @@
 
 ## Timing
 
-- `flushAgentTimer(sessionId, agentId)` is read-only — returns accumulated ms but does NOT persist. Pass the return into `updateAgent()` as `activeMs` or it is lost. `flushTimers()` persists to state directly.
-- `handleRollback()` strict ordering: (1) flush timers, (2) capture `rollbackCount`, (3) `restoreSnapshot()` overwrites all state, (4) write `rollbackCount` back. Anything written before step 3 is lost.
+- `flushAgentTimer(sessionId, agentId)` is read-only — returns full accumulated ms (not a delta). Pass into `updateAgent({activeMs})` to persist; it sets the **absolute** value. `flushTimers()` uses `incrementActiveTime` to persist session + all-agent + all-cycle deltas in a single lock acquisition (delta = in-memory − persisted). Both paths are safe to interleave because they serialize through `withSessionLock`.
+- `handleRollback()` strict ordering: (1) flush timers, (2) capture `rollbackCount`, (3) `restoreSnapshot()` overwrites all state, (4) `deleteSnapshotsAfter(toCycle)` prunes future-cycle snapshots, (5) write `rollbackCount` back. Anything written before step 3 is lost. `deleteSnapshotsAfter` is permanent — rolling forward past the restore point requires re-running those cycles.
 - `pollAllSessions` is sleep-aware: elapsed > 3× poll interval caps timer increment at `pollIntervalMs` — prevents hour-long inflation from a single wake event.
 
 ## Session Housekeeping
@@ -111,6 +116,6 @@
 - Only `bundled` (`sisyphus:*`) agent types are injected into the orchestrator system prompt — project/user/plugin-discovered types are deliberately hidden.
 - Context section switches on cycle number: cycle 1 inlines `session.context` text; cycles 2+ reference the `context/` directory by `@path`. Files written there by agents during cycle 1 only become visible to the orchestrator at cycle 2.
 - `drainMessages` is called inside `spawnOrchestrator` before the tmux pane is created — messages are consumed even if pane spawn subsequently fails. No retry path.
-- Goal source: `goal.md` file → `session.task`. Writing `goal.md` mid-session changes the orchestrator's goal; mutating `session.task` in state does not.
+- Goal source: `goal.md` file → `session.task`. `updateTask()` is the safe path — updates both within the session lock. Direct `updateSession({task})` skips `goal.md`; orchestrator still reads the old goal on the next cycle.
 - `handleOrchestratorComplete` does not kill the orchestrator pane — only `handleOrchestratorYield` does. The complete path assumes the pane already exited before the IPC hook fires.
 - `resolveOrchestratorPane`: in-memory `sessionOrchestratorPane` → `lastCycle.paneId` from persisted state; `sessionWindowMap` (window ID) has no persisted fallback — layout adjustment in `handleYield` is silently skipped post-restart. `cleanupSessionMaps` must be called on every kill/complete — omitting leaks entries in `sessionWindowMap`, `sessionOrchestratorPane`, and the pane registry.
