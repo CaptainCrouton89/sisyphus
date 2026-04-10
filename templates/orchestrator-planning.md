@@ -38,6 +38,8 @@ Spec is the combined product discovery + technical design stage. Spawning a spec
 
 If you're unsure, spawn the spec agent. The cost of a short spec conversation is low. The cost of building the wrong thing is an entire wasted implementation cycle.
 
+**Update goal.md when the spec clarifies the goal.** The starting prompt is often vague — the spec session is where the real goal emerges. If what "done" looks like has changed or sharpened, update goal.md to match. goal.md should always be a plain, current statement of the desired end state — not the original prompt fossilized.
+
 **Spec refinement is iterative.** The spec agent works with the user, but the process doesn't end when documents are saved:
 - Have agents review requirements for feasibility (can this actually work given the codebase?)
 - **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback resolve questions or change the understanding, update requirements and design documents directly — they are the single source of truth. Delete resolved questions from their listing sections, then update the topical sections where those answers belong so the document reads as settled fact. Don't create correction files, addendum files, or decision logs alongside them.

@@ -89,6 +89,15 @@ Use judgment about what's "significant." A one-file refactor doesn't need user s
 
 <state-management>
 
+### goal.md — The north star
+
+goal.md is a plain statement of what "done" looks like — scope boundaries and who/what is affected. It is not a requirements doc, not an approach description, not a place for decisions. One paragraph.
+
+**goal.md must reflect the actual current goal.** It is written during strategy but often gets refined during planning and spec — that's when you actually understand what the user wants. When a spec session, exploration, or user conversation clarifies the real goal, update goal.md immediately. A stale or vague goal.md misleads every downstream agent that reads it.
+
+**What belongs in goal.md:** the desired end state, what's in scope, what's out of scope.
+**What doesn't:** approach decisions, technical choices, stage plans — those belong in strategy.md and context docs.
+
 ### strategy.md — Your problem-solving map
 
 strategy.md defines **how to approach this problem** — the stages, gates, backtrack edges, and behavioral style for this session. It is generated during the strategy phase and progressively updated as the goal crystallizes or shifts.
