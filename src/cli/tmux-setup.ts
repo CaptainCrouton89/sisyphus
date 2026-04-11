@@ -137,21 +137,32 @@ resolve_home() {
   return 1
 }`.trim();
 
-const HOME_SCRIPT = `#!/bin/bash
+function homeScript(): string {
+  const tuiPath = join(import.meta.dirname, 'tui.js');
+  return `#!/bin/bash
 # Jump to the dashboard window for the home session matching this cwd.
 ${RESOLVE_HOME}
 if ! resolve_home; then
   tmux display-message "No sisyphus dashboard for this cwd"
   exit 0
 fi
+# Validate dashboard window is still alive; clear if stale
+if [ -n "$HOME_DWID" ] && ! tmux list-panes -t "$HOME_DWID" >/dev/null 2>&1; then
+  HOME_DWID=""
+fi
 if [ -z "$HOME_DWID" ]; then
-  tmux display-message "Home session has no dashboard window — re-run sisyphus start"
-  exit 0
+  # Reopen dashboard: create window, launch TUI, update option
+  home_cwd=$(tmux show-options -t "$HOME_SESSION" -v @sisyphus_cwd 2>/dev/null)
+  [ -z "$home_cwd" ] && { tmux display-message "Home session has no cwd"; exit 0; }
+  HOME_DWID=$(tmux new-window -t "$HOME_SESSION:" -n "sisyphus-dashboard" -c "$home_cwd" -P -F "#{window_id}")
+  tmux send-keys -t "$HOME_DWID" "node '${tuiPath}' --cwd '$home_cwd'; exit" Enter
+  tmux set-option -t "$HOME_SESSION" @sisyphus_dashboard "$HOME_DWID"
 fi
 current=$(tmux display-message -p '#{session_name}')
 [ "$current" != "$HOME_SESSION" ] && tmux switch-client -t "$HOME_SESSION"
 tmux select-window -t "$HOME_DWID"
 `;
+}
 
 const KILL_PANE_SCRIPT = `#!/bin/bash
 # prefix-x override for sisyphus sessions.
@@ -414,7 +425,7 @@ function installScript(name: string, content: string): void {
 
 function installAllScripts(): void {
   installScript('sisyphus-cycle', CYCLE_SCRIPT);
-  installScript('sisyphus-home', HOME_SCRIPT);
+  installScript('sisyphus-home', homeScript());
   installScript('sisyphus-kill-pane', KILL_PANE_SCRIPT);
   installScript('sisyphus-new', NEW_PROMPT_SCRIPT);
   installScript('sisyphus-msg', MESSAGE_SCRIPT);

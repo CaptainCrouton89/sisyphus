@@ -10,15 +10,16 @@
 - `M-s` cycles sessions in root table; `C-s` enters `sisyphus` key table
 - `@sisyphus_dashboard` stores window ID (not name) — survives renames
 - `ssyph_` prefix marks sisyphus sessions; renaming breaks pane-monitor detection AND `RESOLVE_HOME` (which skips `ssyph_*` when finding the home session)
-- `setupTmuxKeybind` always rewrites `~/.sisyphus/tmux.conf` — conflict detection requires a running tmux server (if tmux is down, written without checking). Re-running setup is safe and self-heals drift.
-- Bindings live in `~/.sisyphus/tmux.conf` (managed file); user's tmux.conf only gets a `source-file` line appended. `removeTmuxKeybind` strips that line, deletes `~/.sisyphus/tmux.conf`, and restores `prefix-x` to default `kill-pane \; select-layout even-horizontal`.
-- `userTmuxConfPath()` for `source-file` append: prefers XDG (`~/.config/tmux/tmux.conf`) over dotfile; returns `null` if neither exists → `source-file` line is skipped and the setup result message includes the manual line to add. `removeTmuxKeybind` scans both paths.
-- Keybinding scripts (`sisyphus-cycle`, `sisyphus-home`, etc.) install to `~/.sisyphus/bin/` and are **regenerated on every `setupTmuxKeybind` call** — edits to those scripts are lost on next setup
-- `cycleKey` (`M-s`) and `pick-session` (`C-s l`) both scope to same cwd only — read `sessions-manifest.tsv`, skip sessions from other projects. Cycle includes H-type (home) sessions alongside S-type; `SESSION_RESOLVE` skips H-type when resolving session ID for kill/delete/etc. `pick-session` uses fzf if available, falls back to numbered prompt — behavior differs on machines without fzf
-- `prefix-x` override only fires for `ssyph_*` sessions; non-sisyphus sessions get default `kill-pane \\; select-layout even-horizontal`
-- `RESOLVE_HOME` (home/kill-pane navigation) reads live `@sisyphus_cwd` from tmux options — works without manifest but requires a live tmux server. `CYCLE_SCRIPT` reads manifest instead — works without running tmux but requires an up-to-date manifest. If a session appears in one but not the other, home nav and cycling diverge.
-- Kill/delete scripts: `SESSION_RESOLVE` captures `$cwd` **before** the destructive action; `GO_HOME_AFTER` consumes that captured value. If `SESSION_RESOLVE` ran after the kill, the session would be gone and cwd lookup would return empty, silently skipping home navigation.
-- Status bar: daemon pre-renders to global `@sisyphus_status`; add `#{@sisyphus_status}` to `status-right`
+- `setupTmuxKeybind` always rewrites `~/.sisyphus/tmux.conf` and regenerates all scripts — conflict detection and `already-installed` status are both checked *after* the full rewrite (diagnostic only, no early exit). Re-running is safe and self-heals drift.
+- Bindings live in `~/.sisyphus/tmux.conf`; user's tmux.conf only gets a `source-file` line appended. `removeTmuxKeybind` strips that line, deletes the conf, and restores `prefix-x` to default. It live-unbinds **hardcoded** `DEFAULT_CYCLE_KEY`/`DEFAULT_PREFIX_KEY` — custom keys passed to `setupTmuxKeybind` survive removal as live bindings (file is still cleaned up).
+- `userTmuxConfPath()` prefers XDG (`~/.config/tmux/tmux.conf`) over dotfile; returns `null` if neither exists → `source-file` line skipped, setup result includes the manual line to add. `removeTmuxKeybind` scans both paths.
+- All keybinding scripts install to `~/.sisyphus/bin/` and are **regenerated on every `setupTmuxKeybind` call** — edits are lost. Exception: `homeScript()` is a function (not a const) because it bakes `import.meta.dirname` as the absolute TUI path; if `dist/tui.js` moves, the script silently uses the stale path until re-run post-rebuild.
+- `homeScript()` also validates `@sisyphus_dashboard` window liveness and auto-recreates it if stale (spawns new window, launches TUI, updates tmux option). No other script does this recovery.
+- `cycleKey` and `pick-session` (`C-s l`) scope to same cwd only — read `sessions-manifest.tsv`. Cycle includes H-type sessions; `SESSION_RESOLVE` skips H-type and resolves to the matching S-type's session_id, so kill/delete/message/continue all work from home sessions. `pick-session` uses fzf if available, falls back to numbered prompt.
+- `prefix-x` override only fires for `ssyph_*` sessions; non-sisyphus sessions get default `kill-pane \; select-layout even-horizontal`
+- `RESOLVE_HOME` reads live `@sisyphus_cwd` from tmux options (no manifest, requires live server). `CYCLE_SCRIPT` reads manifest (no server, requires up-to-date manifest). If a session appears in one but not the other, home nav and cycling diverge.
+- Kill/delete scripts: `SESSION_RESOLVE` captures `$cwd` **before** the destructive action; `GO_HOME_AFTER` consumes it. Running after the kill would find no session and silently skip home navigation.
+- Status bar: daemon pre-renders to `@sisyphus_status`; add `#{@sisyphus_status}` to `status-right`. `register-segment`/`unregister-segment` — external injection via daemon socket, lower priority = closer to edge.
 
 ## Companion
 
@@ -43,10 +44,6 @@
 - `tryAutoInstallTermrender`: prefers pipx over pip3/pip (isolated install); falls through to pip if pipx unavailable **or if pipx install throws or leaves termrender off PATH**
 - `runOnboarding()` and `formatOnboardingMessages()` are a two-step API — `runOnboarding()` executes all side effects and returns structured `OnboardResult` **with no console output**; `formatOnboardingMessages()` converts that result to display lines. Calling only `runOnboarding()` runs setup silently.
 - `runOnboarding()` (tmux auto-install, nvim, termrender, begin/autopsy slash commands, iTerm check) is **only called by `sisyphus setup`** — `ensureDaemonInstalled()` (auto-install on first command) only installs the begin/autopsy commands, tmux keybindings, and required plugins
-
-## Status bar segments
-
-`sisyphus register-segment` / `unregister-segment` — external status bar injection via daemon socket. Lower priority = closer to edge.
 
 ## Command pitfalls
 

@@ -59,7 +59,7 @@ export function registerScratch(program: Command): void {
 
 function openScratchWindow(tmuxSession: string, cwd: string, prompt: string): void {
   const windowId = execSync(
-    `tmux new-window -t ${shellQuote(tmuxSession)} -n "scratch" -c ${shellQuote(cwd)} -P -F "#{window_id}"`,
+    `tmux new-window -t ${shellQuote(tmuxSession + ':')} -n "scratch" -c ${shellQuote(cwd)} -P -F "#{window_id}"`,
     { encoding: 'utf-8' },
   ).trim();
 
