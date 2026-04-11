@@ -26,6 +26,8 @@
 
 **No `; exit` suffix:** The window persists as a shell after claude exits (contrast with dashboard). Intentional — scratch sessions are exploratory.
 
+**`--cwd` flag takes precedence over `SISYPHUS_CWD`:** CWD resolution order is `-c/--cwd` flag → `SISYPHUS_CWD` env → `process.cwd()`. Unlike `start.ts` (which has no `--cwd` flag and reads only `SISYPHUS_CWD`), scratch accepts per-invocation overrides without touching the environment.
+
 **Home session lookup via live tmux option, not manifest:** `findHomeSession` reads `@sisyphus_cwd` from each non-`ssyph_*` session at call time. Falls back silently to the current tmux session if no match found — no warning is printed. CWD trailing slashes are stripped before matching, so `@sisyphus_cwd` must be stored without trailing slash (which `start.ts` ensures).
 
 **Prompt is positional args joined with a space:** `sisyphus scratch foo bar` becomes `--prompt "foo bar"`. No prompt omits the flag entirely (non-interactive claude session).
