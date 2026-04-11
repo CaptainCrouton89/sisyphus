@@ -80,9 +80,11 @@ function createAgentPlugin(
 
   if (agentConfig?.filePath && agentType && agentType !== 'worker') {
     const shortName = agentType.replace(/^sisyphus:/, '');
-    writeFileSync(`${base}/agents/${shortName}.md`, substituteEnvVars(readFileSync(agentConfig.filePath, 'utf-8')), 'utf-8');
 
-    // Copy sub-agent definitions if a subdirectory exists
+    // Copy sub-agent definitions if a subdirectory exists.
+    // The parent agent's own .md is NOT copied — it would make the parent
+    // visible as a Task-tool subagent inside its own pane, enabling self-dispatch.
+    // The main session receives the body via --append-system-prompt instead.
     const subAgentDir = join(dirname(agentConfig.filePath), shortName);
     if (existsSync(subAgentDir)) {
       for (const f of readdirSync(subAgentDir)) {
