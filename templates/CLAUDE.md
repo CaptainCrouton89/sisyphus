@@ -1,74 +1,89 @@
 # templates/
 
-## orchestrator-completion.md Constraints
+## Template Placeholders
 
-- **NEVER yield while waiting for user input** — yield kills the process. Ask, then stop.
-- **NEVER call `sisyphus complete` until the user explicitly confirms** — "looks good", "ship it", "approved", or equivalent.
+- `agent-suffix.md` / `agent-plugin/*.md` / `orchestrator-plugin/*.md`: `{{SESSION_ID}}`, `{{INSTRUCTION}}`, `{{CONTEXT_DIR}}` — substituted at **spawn time**. `{{CONTEXT_DIR}}` becomes an `@`-reference so the agent reads context files at startup.
+- `orchestrator-base.md`: `{{ORCHESTRATOR_MODES}}`, `{{AGENT_TYPES}}` — injected at **template render time** (before the orchestrator pane launches), not at spawn time.
 
-## Agent Prompt Rendering
+## orchestrator-completion.md
 
-- `agent-suffix.md` uses `{{SESSION_ID}}` / `{{INSTRUCTION}}` / `{{CONTEXT_DIR}}` placeholders — substituted at spawn time via `--append-system-prompt`
-- `{{CONTEXT_DIR}}` injected as `@`-reference so agent reads context files at startup. Plugin prompts (`agent-plugin/*.md`, `orchestrator-plugin/*.md`) follow the same rules.
+- **Never yield while waiting for user input** — yield kills the process and respawns a fresh instance with no memory. Ask, then stop.
+- **Never call `sisyphus complete` until the user explicitly confirms** — "looks good", "ship it", "approved", or equivalent.
 
 ## `sisyphus report` vs `sisyphus submit`
 
 - **`sisyphus report`**: non-terminal — agent keeps running; for mid-task flags (blockers, unexpected complexity)
 - **`sisyphus submit`**: terminal — pane closes immediately; final completion only
 
-## Session Directory Files
+## digest.json
 
-`goal.md`, `strategy.md`, and `roadmap.md` live at `$SISYPHUS_SESSION_DIR/` — not in `context/`. Planning outputs (exploration docs, spec outputs, stage plans `plan-stage-N-*.md`, `e2e-recipe.md`) go to `$SISYPHUS_SESSION_DIR/context/`. Pass downstream agents only the context files relevant to their task.
+4-field JSON at `$SISYPHUS_SESSION_DIR/digest.json`; displayed on TUI dashboard right panel. Update every cycle before yielding. TUI silently ignores malformed files.
 
-- **`goal.md`**: one paragraph — what "done" looks like, scope boundaries, who/what is affected. Not a requirements doc.
-- **`strategy.md`**: Completed / Current Stage / Ahead. Update when the **shape** changes — triggers: goal crystallizes/shifts, a stage completes, or approach is wrong. Revise if it exists; don't start from scratch.
-- **`roadmap.md`**: current stage, exit criteria, active context references, next steps. Updated every cycle; decisions fold into context docs.
+```json
+{
+  "recentWork": "one sentence — what was just completed",
+  "unusualEvents": ["array — agent crashes, autonomous decisions, scope changes; [] if nothing"],
+  "currentActivity": "one sentence — what's happening now",
+  "whatsNext": "one sentence — next predicted step"
+}
+```
+
+## roadmap.md
+
+Exactly four sections: **Current Stage** / **Exit Criteria** / **Active Context** / **Next Steps**. Nothing else belongs there.
+
+Delete completed items entirely — no `[done]` markers, no check-offs. Completed work goes in the cycle log, not the roadmap.
+
+## Cycle Logs
+
+Write-only per cycle. The orchestrator never reads its own old logs — context docs and agent reports are the working memory. Logs exist for human audit only.
+
+## Context File Resolution
+
+When a question is answered: delete it from its listing section, then update the topical section to incorporate the answer as settled fact. Never annotate in place or create addendum/decisions files. Document should read as if the answer was always known. Applies universally: spec outputs, design docs, any context file.
+
+## goal.md
+
+Update when spec clarifies the real goal — the starting prompt is often vague. goal.md must reflect the current desired end state, not the fossilized original prompt.
 
 ## Phase Transitions
 
-`sisyphus yield --mode <phase> --prompt "<instruction>"` — `--mode` loads phase guidance for the next cycle; `--prompt` seeds its starting instruction. Omitting `--mode` loads no guidance. Known phases: `strategy`, `planning`, `implementation`, `validation`.
-
-Re-enter `--mode strategy` when the goal fundamentally shifts or the current approach is wrong — not just at session start.
+`sisyphus yield --mode <phase>` loads phase guidance for the next cycle. Known phases: `strategy`, `planning`, `implementation`, `validation`. Re-enter `--mode strategy` when the goal fundamentally shifts or the current approach is wrong — not just at session start.
 
 ## `sisyphus:spec` Agent
 
-Handles product discovery **and** technical design in one session. Don't split into separate agents — synthesizes both.
+Handles product discovery **and** technical design in one session. Don't split into separate agents — synthesis of both is the point.
 
-**Skip when:** pure bug fix with clear repro steps, mechanical refactor with no behavioral change, or starting prompt has explicit detailed acceptance criteria.
+**Skip when:** pure bug fix with clear repro, mechanical refactor with no behavioral change, or starting prompt already has explicit acceptance criteria.
 
-Outputs: `context/requirements.json` + `context/requirements.md` + `context/design.json` + `context/design.md`. The `.json` files are what TUI commands consume. Update docs directly when reviews resolve open questions — delete resolved questions, update topical sections. Never create addendum files.
+## e2e-recipe.md
 
-## e2e-recipe.md Required Before Implementation
-
-Write to `context/e2e-recipe.md` before yielding to implementation. If no concrete verification method is determinable, ask the user — don't proceed without it.
+Write to `context/e2e-recipe.md` before yielding to implementation. Ask the user if no concrete verification method is determinable — don't proceed without it.
 
 ## Plan Lead
 
-Spawn **one plan lead per feature**. Pass what needs planning and why — not a pre-made agent decomposition. If you pre-split (e.g. "backend plan agent" + "frontend plan agent"), the plan lead's cross-domain conflict resolution never runs. Split only for features with genuinely no shared files or integration points.
+Spawn **one plan lead per feature**. Pass inputs (requirements, design, context docs), not a pre-made structure. Pre-splitting (e.g. "backend plan" + "frontend plan") bypasses cross-domain conflict resolution. Split only for features with genuinely no shared files or integration points.
 
-## Small Task Shortcut
+## Fix Agents
 
-1–3 files, single domain: skip all phases. Roadmap is a short checklist (diagnose → fix → validate). Single plan agent, single implement agent.
-
-## Fix Agents Get the Report Path
-
-Pass the reviewer report path and triage notes — don't rewrite findings as line-by-line instructions. Exception: architectural constraints the agent wouldn't know (specific method names, existing service locations).
+Pass the reviewer report path and triage notes — don't rewrite findings as line-by-line instructions. Exception: architectural constraints the agent wouldn't infer (specific method names, existing service locations).
 
 ## Critique / Backtrack Limits
 
 - Critique rounds cap at 3 per stage — if more are needed, spawn a redesign.
-- **Backtrack to planning when:** 2+ agents hit the same unexpected complexity; a dependency invalidates the approach; fix agents keep patching the same area across cycles.
+- **Backtrack to planning when:** 2+ agents hit the same unexpected complexity, a dependency invalidates the approach, or fix agents keep patching the same area across cycles.
 
 ## Implementation State Recovery
 
 - `sisyphus restart-agent <agentId>` — respawn a killed/failed agent in a new pane (preserves session)
 - `sisyphus rollback <sessionId> <cycle>` — destructive; rewinds to a prior cycle boundary. For discarding an entire cycle, not individual agent failures.
 
-## Planning CLI Reference
+## Planning CLI
 
 ```bash
-sisyphus requirements <file> --wait    # launch requirements TUI, block until done, returns feedback to stdout
-sisyphus design <file> --wait          # launch design TUI, block until done, returns feedback to stdout
-sisyphus requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
+sisyphus requirements <file> --wait              # launch requirements TUI, block until done, returns feedback to stdout
+sisyphus design <file> --wait                    # launch design TUI, block until done, returns feedback to stdout
+sisyphus requirements --export --session-id <id> # render requirements.json → requirements.md (no LLM tokens)
 ```
 
 `--wait` implies `--pane` — your pane stays visible; no polling needed.

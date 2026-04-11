@@ -10,6 +10,7 @@
 ## State & Persistence
 
 - All exported async functions in `state.ts` serialize through `withSessionLock(sessionId)` — a chained-promise per-session mutex. `createSession` and `createSnapshot` are synchronous and bypass the lock; a `createSnapshot` call can race with a concurrent `updateAgent` or `updateSession`.
+- `createSnapshot` captures: state JSON, `roadmap.md`, `strategy.md`, and `logs/` (falls back to legacy `logs.md`). Adding a new session file that needs rollback support requires updating `createSnapshot` AND `restoreSnapshot` — neither function scans the session dir.
 - `getSession` silently normalizes missing fields on load (`activeMs → 0`, `agent.repo → '.'`, cycle `activeMs → 0`). Adding a new required field to `Agent`/`Session`/`OrchestratorCycle` types requires a normalization entry here, or reads of old state return `undefined`.
 - `updateAgent`, `appendAgentReport`, and `updateReportSummary` reverse-find the **last** agent with the matching ID (`slice().reverse().find()`). A restarted agent appears twice in `session.agents` with the same ID; all mutations target the later (current) entry.
 - `continueSession` side effects beyond status flip: clears `session.completedAt`/`completionReport`, clears the last cycle's `completedAt` (mode resolution then treats it as in-progress and skips it), and truncates `roadmap.md` to empty.
