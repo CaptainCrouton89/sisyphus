@@ -93,14 +93,16 @@ Use judgment about what's "significant." A one-file refactor doesn't need user s
 
 goal.md is a plain statement of what "done" looks like — scope boundaries and who/what is affected. It is not a requirements doc, not an approach description, not a place for decisions. One paragraph.
 
-**goal.md must reflect the actual current goal.** It is written during strategy but often gets refined during planning and spec — that's when you actually understand what the user wants. When a spec session, exploration, or user conversation clarifies the real goal, update goal.md immediately. A stale or vague goal.md misleads every downstream agent that reads it.
+**goal.md must reflect the actual current goal.** It is written during discovery but often gets refined during planning and spec — that's when you actually understand what the user wants. When a spec session, exploration, or user conversation clarifies the real goal, update goal.md immediately. A stale or vague goal.md misleads every downstream agent that reads it.
 
 **What belongs in goal.md:** the desired end state, what's in scope, what's out of scope.
 **What doesn't:** approach decisions, technical choices, stage plans — those belong in strategy.md and context docs.
 
 ### strategy.md — Your problem-solving map
 
-strategy.md defines **how to approach this problem** — the stages, gates, backtrack edges, and behavioral style for this session. It is generated during the strategy phase and progressively updated as the goal crystallizes or shifts.
+strategy.md defines **how to approach this problem** — the stages, gates, backtrack edges, and behavioral style for this session. It is generated during discovery and progressively updated as the goal crystallizes or shifts.
+
+When writing or substantially revising strategy.md, invoke the **strategy skill** (`/orchestration` → strategy.md reference) for stage patterns, process shapes, and format guidance.
 
 Every cycle, read strategy.md first. It tells you:
 - What stages exist and their process flows (detailed for current, sketched for future)
@@ -141,10 +143,10 @@ Example roadmap:
 ```markdown
 ## Current Stage
 Stage: develop
-Status: iterating on design after review feedback
+Status: addressing design review feedback before plan stage
 
 ## Exit Criteria
-- Design reviewed with no critical issues
+- Critical review findings on token refresh flow resolved
 - User has approved the architecture approach
 - Integration points between auth and session modules are defined
 
@@ -155,8 +157,8 @@ Status: iterating on design after review feedback
 
 ## Next Steps
 - Address review feedback on token refresh flow
-- Re-review design after changes
-- If clean, transition to plan stage
+- Get user sign-off on revised design
+- Transition to plan stage
 ```
 
 **Remove completed items as stages finish** — exit criteria that are met, context files that are no longer relevant, next steps that are done. The roadmap reflects only outstanding work.
@@ -228,7 +230,7 @@ Each session lives at `$SISYPHUS_SESSION_DIR/`:
 
 - `state.json` — Session state (managed by daemon, do not edit)
 - `strategy.md` — Problem-solving map: completed stages (compressed), current stage (detailed), future stages (sketched)
-- `goal.md` — Refined goal statement (written during strategy phase)
+- `goal.md` — Refined goal statement (written during discovery)
 - `initial-prompt.md` — Immutable record of the original user prompt
 - `roadmap.md` — Working memory: current stage, exit criteria, next steps (you own this, update every cycle)
 - `digest.json` — Dashboard status summary (you own this, update every cycle)

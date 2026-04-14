@@ -71,7 +71,7 @@ Feature with moderate complexity. Requirements may need clarification. Multiple 
 ## Feature: [description]
 
 ### Requirements & Design
-- [ ] Problem exploration — understand goals, constraints, assumptions
+- [ ] (conditional) Problem exploration — if goal is nebulous, explore before spec
 - [ ] Requirements — define acceptance criteria
 - [ ] Design — architecture, component boundaries, data models
 - [ ] Create implementation plan from requirements + design
@@ -89,16 +89,16 @@ Feature with moderate complexity. Requirements may need clarification. Multiple 
 Note: critique and validation are embedded between implementation phases, not deferred to the end. Phase 1 (types) is low-risk and doesn't need its own review, but critique catches issues before Phase 3 builds on them. Validation happens after integration, when all the pieces come together.
 
 ### Cycle plan
-- **Cycle 1**: Spawn `sisyphus:problem` for problem exploration. Yield. (Human iterates between cycles.)
-- **Cycle 2**: Spawn `sisyphus:spec` for combined design + requirements. Yield. (Human iterates inside the spec session.)
-- **Cycle 3**: Spawn `sisyphus:plan` for plan. Yield.
-- **Cycle 4**: Spawn `sisyphus:review-plan` for review. If fail, respawn plan with issues. Yield.
-- **Cycle 5**: Spawn `sisyphus:implement` for Phase 1. Yield.
-- **Cycle 6**: Spawn `sisyphus:implement` for Phase 2. Phase 1 is types — low risk, doesn't need its own validation. Yield.
-- **Cycle 7**: Spawn `sisyphus:review` for critique of phases 1-2. This is the checkpoint before integration builds on top. Yield.
-- **Cycle 8**: Address critique findings + spawn `sisyphus:implement` for Phase 3. Yield.
-- **Cycle 9**: `sisyphus yield --mode validation` for e2e smoketest. Validation mode proves the feature works — operator for UI, evidence for every claim.
-- **Cycle 10**: Address validation failures (back to `--mode implementation`) or complete.
+- **Cycle 0** (conditional): If the problem is nebulous — multiple valid framings, unclear what "done" looks like — spawn `sisyphus:problem` for interactive exploration. Yield `--mode discovery`. Skip if goal is clear and acceptance criteria are obvious.
+- **Cycle 1**: Spawn `sisyphus:spec` for combined design + requirements. Yield. (Human iterates inside the spec session.)
+- **Cycle 2**: Spawn `sisyphus:plan` for plan. Yield.
+- **Cycle 3**: Spawn `sisyphus:review-plan` for review. If fail, respawn plan with issues. Yield.
+- **Cycle 4**: Spawn `sisyphus:implement` for Phase 1. Yield.
+- **Cycle 5**: Spawn `sisyphus:implement` for Phase 2. Phase 1 is types — low risk, doesn't need its own validation. Yield.
+- **Cycle 6**: Spawn `sisyphus:review` for critique of phases 1-2. This is the checkpoint before integration builds on top. Yield.
+- **Cycle 7**: Address critique findings + spawn `sisyphus:implement` for Phase 3. Yield.
+- **Cycle 8**: `sisyphus yield --mode validation` for e2e smoketest. Validation mode proves the feature works — operator for UI, evidence for every claim.
+- **Cycle 9**: Address validation failures (back to `--mode implementation`) or complete.
 
 ### Failure modes
 - **Spec needs human input**: Mark session as needing human review. Orchestrator notes open questions.
@@ -121,7 +121,7 @@ Cross-cutting feature, multiple domains, needs team coordination. Uses **progres
 ## Feature: [description]
 
 ### Requirements & Design
-- [ ] Problem exploration
+- [ ] (conditional) Problem exploration — if goal is nebulous
 - [ ] Requirements
 - [ ] Design
 
@@ -144,9 +144,9 @@ See context/plan-stage-N-{name}.md for detail plan.
 Note: verification checkpoints are embedded in the stage outline, not deferred to a final phase. The level of rigor varies — foundation stages get a light critique, core logic gets critique + validation, integration gets full e2e validation. This is judgment, not formula.
 
 ### Cycle plan
-- **Cycle 1**: Spawn `sisyphus:problem` for problem exploration. Yield.
-- **Cycle 2**: Spawn `sisyphus:spec` for combined design + requirements. Yield. (Human iterates inside the spec session.)
-- **Cycle 3**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Include verification checkpoints between stages based on risk." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
+- **Cycle 0** (conditional): If the problem is nebulous, spawn explore agents for technical landscape (yield `--mode discovery`), then spawn `sisyphus:problem` for interactive problem exploration (yield `--mode discovery`). May take 1-3 discovery cycles. Skip if the goal and scope are already clear.
+- **Cycle 1**: Spawn `sisyphus:spec` for combined design + requirements. Yield. (Human iterates inside the spec session.)
+- **Cycle 2**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Include verification checkpoints between stages based on risk." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
 - **Cycle 4**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). Output to `context/plan-stage-1-{name}.md`. Yield.
 - **Cycle 5**: Spawn `sisyphus:implement` for stage 1. If stage 2 is independent, spawn `sisyphus:plan` to detail-plan stage 2 in parallel. Yield.
 - **Cycle 6**: Spawn `sisyphus:implement` for stage 2 (if detail-planned). Spawn `sisyphus:review` to critique stages 1-2 in parallel — foundation review before core logic builds on it. Detail-plan stage 3 in parallel. Yield.
@@ -209,13 +209,13 @@ PR review, pre-merge check, or periodic quality audit.
 
 - [ ] Review [scope] for issues
 - [ ] (conditional) Fix critical/high issues found
-- [ ] (conditional) Re-review fixes
+- [ ] Verify fixes landed (type-check, tests pass)
 ```
 
 ### Cycle plan
 - **Cycle 1**: Spawn `sisyphus:review` for review. Yield.
 - **Cycle 2**: If critical/high issues, spawn `sisyphus:implement` for fixes. If clean, complete.
-- **Cycle 3**: Spawn `sisyphus:review` for re-review (targeted at fixes only). Complete.
+- **Cycle 3**: Verify fixes landed by reading fix-agent reports + running type-check/tests. Complete. Do **not** spawn a second review pass — review runs once, validation catches regressions.
 
 ### Parallelization
 Review itself parallelizes internally (subagents per concern). Fix cycle is usually serial.

@@ -7,7 +7,7 @@ Sub-agent templates orchestrated by `agents/review.md`. These are **not** top-le
 - **quality.md** — Flags redundant state, parameter sprawl, copy-paste blocks, leaky abstractions, stringly-typed code, unnecessary wrapper nesting, and unnecessary comments (what-comments, change narration, task references)
 - **reuse.md** — Searches for existing utilities/helpers that make new code unnecessary; will not flag without citing an existing alternative at `file:line`
 - **efficiency.md** — Redundant computation, missed concurrency, hot-path bloat, no-op updates, TOCTOU, memory issues, overly broad operations
-- **security.md** — Injection surfaces, auth/authz gaps, data exposure, race conditions (including TOCTOU with exploit paths), unsafe deserialization; always spawned at opus for hotfix/security classifications
+- **security.md** — Injection surfaces, auth/authz gaps, data exposure, race conditions, unsafe deserialization; always spawned at opus for hotfix/security classifications. All findings require a concrete exploit path — exploit path is not an output field, it's the gate; no exploit path = not a finding (applies to every category, not just TOCTOU)
 - **compliance.md** — CLAUDE.md conventions, `.claude/rules/*.md` constraints, requirements conformance (haiku — mechanical rule-matching)
 
 ## Non-Obvious Patterns
@@ -16,7 +16,9 @@ Sub-agent templates orchestrated by `agents/review.md`. These are **not** top-le
 
 **`reuse` citation requirement**: A potential match that the agent can't confirm at `file:line` must be dismissed, not flagged. Incompatibility must be confirmed by reading the existing utility's implementation — inferring mismatch from the consumer side alone is grounds for dismissal.
 
-**Dismissed output format**: All sub-agents record investigated-but-rejected findings as `- **Dismissed**: file:line — reason`. These are sampled by the parent's validation sub-agents to audit dismissal reasoning — the format is load-bearing, not cosmetic.
+**Dismissed output format**: `quality`, `efficiency`, `compliance`, and `reuse` record dismissed findings as `- **Dismissed**: file:line — reason`. `security` is the exception — it produces no dismissed entries (a concern either has a concrete exploit path or it doesn't; there is no "investigated and ruled out" output). The validation wave's dismissal-audit sub-agent skips security for this reason.
+
+**`reuse` dismissed format difference**: `reuse`'s dismissed entry cites `existing-file:line` (the existing utility evaluated) — not `file:line` (the new code). All other sub-agents cite the new code's location. The validation wave parses these differently.
 
 **`quality` reads before framing**: The agent is instructed to form its own assessment of what code *does* before reading comments, commit messages, or naming that frames intent. This prevents anchoring on stated intent when reviewing code with misleading or wrong framing.
 
@@ -35,6 +37,10 @@ Sub-agent templates orchestrated by `agents/review.md`. These are **not** top-le
 **`efficiency` TOCTOU remedy**: The pattern to flag is pre-checking file/resource existence before operating. The prescribed fix is to operate directly and handle the error — not to add more defensive checks. Flags that suggest "add a guard" instead of "remove the pre-check and handle failure" are incorrect outputs.
 
 **Full diff delivery**: `review.md` passes the full diff to each sub-agent, not file paths. Sub-agents that need surrounding context read it themselves.
+
+**Empty report format**: All sub-agents emit an explicit sentence when clean ("No quality concerns — the change is structurally sound." etc.). This sentence, not silence, is the signal the validation wave uses to skip spawning a validator for that sub-agent. A sub-agent that produces no output at all is treated as failed, not clean.
+
+**`security` rate-limiting/CSRF exclusion**: `security.md` explicitly does not flag missing rate limiting or CSRF protection unless the change specifically creates a new surface for them. These are valid security concerns in general but out of scope for diff-scoped review.
 
 **Validation wave**: After gathering sub-agent findings, the parent spawns 1 validation sub-agent per sub-agent that produced findings (bugs/security at opus, everything else at sonnet). Sub-agent output that doesn't include dismissed entries cannot be audited — omitting them breaks the validation loop.
 

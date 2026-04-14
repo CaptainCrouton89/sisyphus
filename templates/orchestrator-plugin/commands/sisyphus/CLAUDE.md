@@ -9,3 +9,15 @@ Outputs land at `context/design.md`, `context/design.json`, `context/requirement
 ## `strategize` — Session Must Be Active
 
 If `sisyphus status` shows the session completed, run `sisyphus continue` before yielding. Yielding from a completed session is a no-op.
+
+`strategy.md` is **annotated, not rewritten** — the strategy skill adds pivot metadata (what changed, new focus, which artifacts still apply) while preserving the existing document. Rewriting loses accumulated session context.
+
+Always yields `--mode discovery` regardless of which mode was active when strategize was called. The yield requires `--prompt` with a concise description of the new direction — the fresh orchestrator uses this as its initial orientation before reading the annotated strategy.
+
+## `scratch` — Fire-and-Forget Session
+
+Opens a standalone Claude Code session (`claude --dangerously-skip-permissions`) in a new tmux window in the **home session** — not tracked, not referenced in the roadmap, not waited on. Pass context file paths as references; the scratch session has no awareness of the current session otherwise.
+
+## `problem` — Update Strategy Before Spawning
+
+If the current `strategy.md` has no problem exploration stage, add one before spawning `sisyphus:problem`. The agent saves findings to `context/problem.md`; stay in discovery mode until that file exists.

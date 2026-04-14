@@ -3,8 +3,18 @@
 ## Text Formatting
 
 - `wrapText()` calls `cleanMarkdown` internally — don't pre-clean or emoji normalization doubles
+- `truncate()` also normalizes emoji independently — same double-normalize risk; don't pre-clean before calling it
 - `Seg.bg` is raw ANSI format (`'48;2;R;G;B'`), not a color name — passing a name silently emits a broken escape sequence
 - `messageSourceLabel(source, agentId?)` throws if `source === 'agent'` and `agentId` is undefined
+- `ansiColor()` with an unrecognized color name: returns plain text when `bold=false`; still applies bold when `bold=true` — not fully "uncolored" in the bold case
+- **`stripMarkdown` vs `cleanMarkdown`**: `stripMarkdown` collapses all newlines to spaces (single-line extraction); `cleanMarkdown` preserves newlines (multi-line display). Using `stripMarkdown` for panel rendering drops line structure; using `cleanMarkdown` for single-line summaries embeds literal `\n`.
+- **`truncate()` word-break threshold**: only breaks at a word boundary when `lastSpace > max * 0.4` — if the last space falls in the first 40% of `max`, it hard-character-truncates instead
+- **`agentDisplayName()`** falls back to `agentType` (not `id`) when `agent.name === agent.id` — an agent whose name matches its own ID renders as its type string
+- **`wrapText()` word-break vs `truncate()` word-break**: `wrapText` breaks at any `lastSpace > lineStart` (no minimum threshold); `truncate` only word-breaks when `cut > max * 0.4`. Same visual intent, different guard — a narrow `wrapText` column breaks more aggressively than `truncate` at the same width.
+- **`extractFirstSentence()`** skips lines starting with `#`, `---`, ` ``` `, or `|`, and any line shorter than 5 chars after stripping. Sentence boundary requires `periodIdx > 10` — fragments under 10 chars before a period are not split. Falls back to `stripMarkdown(fullText)` (not just the first line) if no qualifying line exists, then `truncate()`.
+- **`durationColor()`** accepts either `(startIso, endIso?)` or `(totalMs: number)` — dual signature. Returns `''` (empty string, not `undefined`) under 10 min; `'yellow'` 10–30 min; `'red'` above.
+- **`agentTypeColor()`** uses `includes()` in order: `research → implement|code → review|test → plan`. `'code-review'` matches `code` (green) before `review` (magenta). Returns `undefined` (not `''`) for no match — callers doing `color || 'white'` are safe; callers checking `if (color)` are safe; callers diffing against `''` are not.
+- **`stripFrontmatter()`** silently returns the original content unchanged if no closing `\n---` is found — partial frontmatter blocks are not stripped.
 
 ## Tree Building
 

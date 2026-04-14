@@ -93,19 +93,14 @@ sisyphus yield --mode planning --prompt "Validation revealed [architectural issu
 sisyphus restart-agent <agentId>                         # respawn a failed/killed validation agent
 ```
 
-## Completion Gate
+## Transition to Completion
 
-When all validation passes, **do not call `sisyphus complete` directly.** Yield to completion mode for user sign-off:
+When all validation passes, yield to completion mode for user sign-off:
 
 ```bash
 sisyphus yield --mode completion --prompt "Validation passed — all recipe steps verified. Ready for user review."
 ```
 
-Only yield to completion when:
-- Every recipe step has been executed (not skipped, not assumed)
-- Every step has evidence of success in the validation report
-- The evidence actually matches the success criteria from the recipe
+Only yield when every recipe step has been executed with evidence of success. If the recipe was updated during validation, re-validate against the updated version.
 
-If the recipe was updated during validation, re-validate against the updated version. Completion means the current recipe passes, not that an earlier draft would have.
-
-Before transitioning, step back: does the validated behavior actually satisfy the original goal? It's possible to pass every recipe step and still miss the point. The recipe is a tool, not a substitute for judgment.
+Before transitioning, step back: does the validated behavior actually satisfy the original goal? The recipe is a tool, not a substitute for judgment.

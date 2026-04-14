@@ -43,12 +43,12 @@
 
 ## Review App
 
-- **`reqIndex` source depends on `bucket`**: `bucket === 'requirements'` -> `pendingRequirements(group)`; `bucket === 'safeAssumptions'` -> `pendingSafeAssumptions(group)`. Off-by-one trap when correlating by index to `group.requirements` or `group.safeAssumptions`.
-- **`bucket === 'safeAssumptions'` post-action nav returns to `group-intro`**, not `advanceItem` — applies to both confirm actions and `n` approve. Normal requirements advance to the next item.
+- **`reqIndex` is a raw index** into `group.requirements` or `group.safeAssumptions` (selected by `bucket`). Navigation keys `n`/`p` walk the raw array sequentially (reaching approved items is intentional). Action keys (`1`, approve+enter, `advanceItem`) skip to the next *pending* item via `nextPendingIndex`. Digit keys from `group-intro` into SA items map from the pending-list position to raw index via `indexOf`.
+- **`bucket === 'safeAssumptions'` post-action nav returns to `group-intro`**, not `advanceItem` — applies to confirm actions (`1`, approve+enter). `n` walks raw index regardless of bucket. Normal requirements actions advance to the next pending item.
 - **`safeAssumptionsExpanded`** is on `ReviewState`; most nav helpers reset it to `false`. Exceptions: (1) digit `1-9` from `group-intro` into SA item-review, (2) `p` from SA-bucket `item-review` back to `group-intro` (`if (phase.bucket !== 'safeAssumptions') state.safeAssumptionsExpanded = false`). New nav paths not matching either exception must reset manually or expand state bleeds into the next group.
 - **`questionIndex` in `group-questions` indexes `filter(q => !q.response)`**, not raw `openQuestions` — same trap. Adding a pre-answered question shifts live indices.
 - **`actionCount = 4` is hardcoded** in the `item-review` input handler (0=approve&next, 1=approve-with-comment, 2=comment, 3=bounce-to-design) — `getDesignActions` is dynamic but review's action count is not. Adding a 5th action requires updating this constant too.
-- **`n` in `item-review` approves and advances** — same as `1`. Counted by `totalReviewed` and removed from pending. Items truly never visited (abandoned session) are still detected as skipped via the `!reviewAction && status !== 'approved'` filter in `buildReviewFeedback`.
+- **`n` in `item-review` is pure navigation** — advances to the next raw item without approving (contrast with `1` which approves and skips to next pending). Differs from design-app where `n` also skips without recording. At end-of-bucket: SA bucket returns to `group-intro`; requirements bucket calls `startGroupQuestions`. Same destination as approve actions — `n` is not exempt from the SA→group-intro rule.
 - **Adding an action**: append at the end of the actions array; never insert. Update the `actionCount` literal in the `item-review` switch. Update the index->semantic comment block above the array.
 - **`1`-`4` keys in `item-review` execute actions directly** without cursor navigation (1=approve&next, 2=approve+comment, 3=comment, 4/b=bounce-to-design). Design-app digit keys open alternative comment prompts instead — same keystroke, different semantics.
 - **Digit keys `1-9` in `group-intro`** navigate into individual SA items only when `safeAssumptionsExpanded === true`; silently ignored when collapsed.
@@ -56,10 +56,12 @@
 - **Approve must set both `reviewAction` and `status`**: `pendingRequirements`/`pendingSafeAssumptions` filter on `status`; setting only `reviewAction` leaves the item in the pending list.
 - **`totalReviewed` and `pendingRequirements` can disagree on the same item**: `totalReviewed` counts `reviewAction !== undefined || status === 'approved'`; `pendingRequirements` filters `status !== 'approved'`. A bounced/commented item increments the progress count while remaining in the pending queue.
 - **`comment` inputMode allows empty submit; `custom-answer` does not**: in `comment` mode, pressing enter on empty buffer still sets `reviewAction` and stamps `completedAt` — `userComment` is simply omitted. In `custom-answer` mode, empty submit is a silent no-op (no state change, no advance). A bounced/commented item can legitimately have no `userComment` field.
+- **`comment` inputBuffer is pre-filled with existing `userComment`**: entering any comment mode loads `req.userComment || ''` into the buffer, enabling in-place editing. However, an empty-buffer submit does NOT clear an existing comment — `if (text) req.userComment = text` only writes when truthy. There is no TUI path to delete a comment once set.
+- **`stampStarted` is idempotent in review-app** (`if (!item.startedAt)`); `p` in `item-review` stamps the previous item but only if it hasn't been started. `stampCompleted` always overwrites. Contrast with design-app's `p` which always re-stamps `startedAt`, resetting the timer even on already-started items.
 - **`resolveEarsKeyword` precedence**: `when > while > if > where` (first match wins). Multiple set fields on one `EarsClause` silently drops all but the first.
 - **`RequirementsMeta` field ownership**: TUI writes only `reviewStartedAt` and `reviewCompletedAt`. `stage` and `bounceIterations` are spec-lead-owned — TUI must not write them. `stage` absence means stage 1 (no `'stage-1-*'` literal exists). `bounceIterations` is a scalar total count (not a per-item map) and never decrements.
 - **`safeAssumptionsApproved`** returns `true` when `group.safeAssumptions` is `undefined` or `[]` — groups with no SA field silently pass any SA completion gate.
-- **`p` from `group-questions` at `questionIndex === 0`** navigates to the last item in `pendingRequirements(group)` as `item-review`, not to `group-intro` — unless there are no pending requirements, in which case it goes to `group-intro`. Assuming "back goes to group-intro" breaks this path.
+- **`p` from `group-questions` at `questionIndex === 0`** navigates to the last item in `group.requirements` (raw index) as `item-review`, not to `group-intro` — unless there are no requirements at all, in which case it goes to `group-intro`. Assuming "back goes to group-intro" breaks this path.
 - **`selectedOption` in `group-questions` ranges `[0, q.options.length]`** (same inclusive-range trap as design-app `section-questions`). The last slot is always the synthetic "custom answer"; `q.options.length` varies per question. `enter` at the last slot opens inline `custom-answer` input instead of committing.
 - **`OpenQuestion.selectedOption`** is written to the JSON on prefilled-answer confirm (`q.selectedOption = phase.selectedOption`). Re-launching restores cursor position — it is not ephemeral UI state.
 
@@ -67,11 +69,13 @@
 
 - **Pre-review snapshot** (`{file}.pre-review.json`) is created once at startup via `existsSync` guard. Re-launching after a partial session does **not** re-snapshot — delete the `.pre-review.json` manually to reset the baseline.
 - **Feedback files** (`design-feedback.md` / `review-feedback.md`) are written to `dirname(filePath)` and printed to stdout **only on clean exit** (`q` or Ctrl-C). A killed process produces no feedback file.
+- **`final` phase `q` label is misleading**: the render says "Press q to exit without saving" but `q` is caught by the global handler before the `final` switch case, routing through `startReviewApp`'s exit path which unconditionally stamps `reviewCompletedAt`, calls `saveData`, and writes the feedback file. `q` in `final` saves identically to `enter`.
 - **`reviewStartedAt` is overwritten on every launch**; `reviewCompletedAt` is stamped only on clean exit. A session restarted after a crash will show the restart time as start — total review duration in the feedback will be wrong.
 
 ## Standalone App Renderer (design-app, review-app)
 
 - **`flush` uses synchronized output** (`\x1b[?2026h`/`\x1b[?2026l`) to batch all terminal writes into one atomic update. `prevFrame` is module-level per file — two concurrent render loops in the same process would corrupt each other's line diff.
+- **`renderFooter` is called twice per frame in review-app**: first provisionally (no overflow arg) to measure `footerH`, then again with `{ pct }` if `maxScroll > 0`. Footer line count **must not** change between these two calls — a line that only appears when `overflow` is set would miscalculate `availH` and cause content to overflow by exactly that many lines.
 
 ## Input
 

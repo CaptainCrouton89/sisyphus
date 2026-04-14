@@ -1,89 +1,66 @@
 # templates/
 
+## Template Structure Rules
+
+Before editing any orchestrator template, read `.claude/rules/orchestrator-template-structure.md`. It defines what belongs in `orchestrator-base.md` vs mode templates, and the deduplication contract between them — violating it causes the orchestrator to see contradictory or repeated guidance.
+
+`orchestrator-base.md` is always prepended to the mode template. The orchestrator sees one continuous prompt and has no awareness of where the boundary is. "Above" is a valid reference; "the base prompt" is not.
+
 ## Template Placeholders
 
-- `agent-suffix.md` / `agent-plugin/*.md` / `orchestrator-plugin/*.md`: `{{SESSION_ID}}`, `{{INSTRUCTION}}`, `{{CONTEXT_DIR}}` — substituted at **spawn time**. `{{CONTEXT_DIR}}` becomes an `@`-reference so the agent reads context files at startup.
-- `orchestrator-base.md`: `{{ORCHESTRATOR_MODES}}`, `{{AGENT_TYPES}}` — injected at **template render time** (before the orchestrator pane launches), not at spawn time.
+Two substitution timings — mixing them up causes silent failures:
 
-## orchestrator-completion.md
+- `{{SESSION_ID}}`, `{{INSTRUCTION}}`, `{{CONTEXT_DIR}}` — substituted at **spawn time** (when `sisyphus spawn` runs). `{{CONTEXT_DIR}}` becomes an `@`-reference, causing the agent to read context files at startup.
+- `{{ORCHESTRATOR_MODES}}`, `{{AGENT_TYPES}}` — substituted at **template render time** (before the orchestrator pane launches). Only valid in `orchestrator-base.md`; `agent-plugin/*.md` and `orchestrator-plugin/*.md` support the spawn-time set only.
 
-- **Never yield while waiting for user input** — yield kills the process and respawns a fresh instance with no memory. Ask, then stop.
-- **Never call `sisyphus complete` until the user explicitly confirms** — "looks good", "ship it", "approved", or equivalent.
+## `sisyphus:problem` Agent
+
+Spawned from `orchestrator-discovery.md` only when the problem is nebulous — multiple valid framings, "done" undefined. Don't spawn for explicit goals, bug fixes, mechanical refactors, or questions you can ask yourself. Produces `context/problem.md`. `strategy.md` is generated via the **strategy skill** (invoked by the orchestrator) — there is no `orchestrator-strategy.md` template.
 
 ## `sisyphus report` vs `sisyphus submit`
 
-- **`sisyphus report`**: non-terminal — agent keeps running; for mid-task flags (blockers, unexpected complexity)
-- **`sisyphus submit`**: terminal — pane closes immediately; final completion only
+These appear in agent templates, not orchestrator templates — the orchestrator uses `yield`/`complete`:
 
-## digest.json
+- **`sisyphus report`**: non-terminal — agent keeps running; use for mid-task flags
+- **`sisyphus submit`**: terminal — pane closes immediately; use only for final completion
 
-4-field JSON at `$SISYPHUS_SESSION_DIR/digest.json`; displayed on TUI dashboard right panel. Update every cycle before yielding. TUI silently ignores malformed files.
+Using `submit` mid-task loses context permanently; using `report` for final completion leaves an idle pane consuming a slot.
 
-```json
-{
-  "recentWork": "one sentence — what was just completed",
-  "unusualEvents": ["array — agent crashes, autonomous decisions, scope changes; [] if nothing"],
-  "currentActivity": "one sentence — what's happening now",
-  "whatsNext": "one sentence — next predicted step"
-}
-```
+## Cross-Template File Contracts
 
-## roadmap.md
+Files written in one mode and read in others — name/structure changes require updating all consumers:
 
-Exactly four sections: **Current Stage** / **Exit Criteria** / **Active Context** / **Next Steps**. Nothing else belongs there.
+- **`context/e2e-recipe.md`**: written during planning, self-verification reference for impl agents, executed step-by-step by validation agents. Must be concrete and executable — abstract descriptions break validation agents.
+- **`context/` naming conventions**: `plan-stage-N-*.md`, `explore-*.md`, `requirements-*.md`. Agent instructions reference these names; renaming requires updating spawn instructions across templates.
 
-Delete completed items entirely — no `[done]` markers, no check-offs. Completed work goes in the cycle log, not the roadmap.
+## Implementation: One-Review-Pass, `/simplify`, and Cadence
 
-## Cycle Logs
+`orchestrator-impl.md` prohibits a second review after fix agents land — fresh reviewers anchor on new code and produce noise; real regressions surface in e2e validation. Fix agents invoke `/simplify` before reporting (the orchestrator instructs this explicitly in spawn instructions).
 
-Write-only per cycle. The orchestrator never reads its own old logs — context docs and agent reports are the working memory. Logs exist for human audit only.
+Don't let more than 2–3 stages complete without e2e validation — unverified stages compound debugging cost. `sisyphus rollback <sessionId> <cycle>` rewinds state to a prior cycle boundary (impl mode only).
 
-## Context File Resolution
+Spawn one plan lead per feature. Pre-splitting into domain-specific plan agents skips cross-domain synthesis (conflict resolution, gap detection). Only spawn multiple leads for features with zero shared files.
 
-When a question is answered: delete it from its listing section, then update the topical section to incorporate the answer as settled fact. Never annotate in place or create addendum/decisions files. Document should read as if the answer was always known. Applies universally: spec outputs, design docs, any context file.
+## Validation: Evidence Standard and Mode Constraints
 
-## goal.md
+**`sisyphus:operator` is required (not optional) for anything user-facing.** It uses `capture` for browser automation; type-checking cannot substitute.
 
-Update when spec clarifies the real goal — the starting prompt is often vague. goal.md must reflect the current desired end state, not the fossilized original prompt.
+Validation reports require captured evidence (command output, screenshots, HTTP responses). "Looks correct" / "should pass" / "appears to work" are not evidence — respawn with instructions to capture results.
 
-## Phase Transitions
+**Do not attempt fixes in validation mode** beyond trivial issues (missed import, config typo). Fixes requiring design decisions or touching multiple files → `yield --mode implementation`.
 
-`sisyphus yield --mode <phase>` loads phase guidance for the next cycle. Known phases: `strategy`, `planning`, `implementation`, `validation`. Re-enter `--mode strategy` when the goal fundamentally shifts or the current approach is wrong — not just at session start.
+## Completion Mode: Feedback Triage and `termrender`
 
-## `sisyphus:spec` Agent
+User responses after summary follow a fixed triage — **Minor** (typo, cosmetic): fix in pane, re-present, confirm again. **Moderate** (bug, edge case): accumulate all items, then `yield --mode implementation`. **Major** (scope expansion, new feature): update `goal.md` + `strategy.md`, then `yield --mode discovery`.
 
-Handles product discovery **and** technical design in one session. Don't split into separate agents — synthesis of both is the point.
+Never call `sisyphus complete` until the user explicitly confirms. If the conversation runs long, yield back to completion mode with a progress summary.
 
-**Skip when:** pure bug fix with clear repro, mechanical refactor with no behavioral change, or starting prompt already has explicit acceptance criteria.
+`orchestrator-completion.md` calls `termrender --tmux` directly — not `sisyphus present`. Both render markdown in a tmux split, but completion uses the lower-level form because the orchestrator is already interactive.
 
-## e2e-recipe.md
+## Planning-Mode CLI Commands
 
-Write to `context/e2e-recipe.md` before yielding to implementation. Ask the user if no concrete verification method is determinable — don't proceed without it.
+Only in `orchestrator-planning.md`:
 
-## Plan Lead
-
-Spawn **one plan lead per feature**. Pass inputs (requirements, design, context docs), not a pre-made structure. Pre-splitting (e.g. "backend plan" + "frontend plan") bypasses cross-domain conflict resolution. Split only for features with genuinely no shared files or integration points.
-
-## Fix Agents
-
-Pass the reviewer report path and triage notes — don't rewrite findings as line-by-line instructions. Exception: architectural constraints the agent wouldn't infer (specific method names, existing service locations).
-
-## Critique / Backtrack Limits
-
-- Critique rounds cap at 3 per stage — if more are needed, spawn a redesign.
-- **Backtrack to planning when:** 2+ agents hit the same unexpected complexity, a dependency invalidates the approach, or fix agents keep patching the same area across cycles.
-
-## Implementation State Recovery
-
-- `sisyphus restart-agent <agentId>` — respawn a killed/failed agent in a new pane (preserves session)
-- `sisyphus rollback <sessionId> <cycle>` — destructive; rewinds to a prior cycle boundary. For discarding an entire cycle, not individual agent failures.
-
-## Planning CLI
-
-```bash
-sisyphus requirements <file> --wait              # launch requirements TUI, block until done, returns feedback to stdout
-sisyphus design <file> --wait                    # launch design TUI, block until done, returns feedback to stdout
-sisyphus requirements --export --session-id <id> # render requirements.json → requirements.md (no LLM tokens)
-```
-
-`--wait` implies `--pane` — your pane stays visible; no polling needed.
+- `sisyphus requirements <file> --wait` — opens requirements review TUI, **blocks** until user finishes, prints feedback to stdout. Without `--wait`, the TUI opens but the orchestrator continues without the user's feedback.
+- `sisyphus design <file> --wait` — same for design documents
+- `sisyphus requirements --export --session-id <id>` — renders `requirements.json` → markdown with no LLM tokens

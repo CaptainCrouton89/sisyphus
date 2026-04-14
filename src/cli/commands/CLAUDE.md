@@ -88,6 +88,14 @@
 
 **`reviewAction: 'bounce-to-design'`** (requirements only): Design items use `agree | pick-alt | comment` — writing `bounce-to-design` into a design item is a schema violation.
 
+## yield.ts
+
+**No orchestrator identity check:** The parent CLAUDE.md states `yield` checks `SISYPHUS_AGENT_ID === 'orchestrator'` — it does not. The only guard is `assertTmux()` (checks `$TMUX` env, not agent identity). Any agent inside tmux can call `sisyphus yield`; `agentId: 'orchestrator'` is hardcoded in the request payload unconditionally.
+
+**stdin consumed only when `--prompt` absent:** `opts.prompt ?? await readStdin() ?? undefined` — stdin is not read if `--prompt` is provided. Piping to a call that includes `--prompt` silently discards stdin.
+
+**`--mode` has no CLI validation:** The five modes (`discovery`, `planning`, `implementation`, `validation`, `completion`) are documented in help text but not enforced here — any string is forwarded to the daemon as-is. Validation (or silent ignore) happens daemon-side.
+
 ## history.ts
 
 **`INTERACTIVE_AGENT_TYPES` is a hardcoded set:** `sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec` have their `activeMs` bucketed as interactive (TUI wait time), not compute, in both the detail view and `--stats`. New TUI-based agent types must be added here or their time inflates compute averages.
