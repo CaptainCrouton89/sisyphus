@@ -9,6 +9,10 @@ import { exec, execSafe, EXEC_ENV } from '../../shared/exec.js';
 
 
 export function getWindowId(): string {
+  const pane = process.env['TMUX_PANE'];
+  if (pane) {
+    return exec(`tmux display-message -t ${shellQuote(pane)} -p "#{window_id}"`);
+  }
   return exec('tmux display-message -p "#{window_id}"');
 }
 
@@ -38,7 +42,16 @@ export function listAllWindowIds(): Set<string> {
  * Called on TUI startup so M-S (sisyphus-home) can find the dashboard window.
  */
 export function registerDashboardWindow(): void {
-  execSafe(`tmux set-option @sisyphus_dashboard ${getWindowId()}`);
+  const wid = getWindowId();
+  const pane = process.env['TMUX_PANE'];
+  if (pane) {
+    const session = execSafe(`tmux display-message -t ${shellQuote(pane)} -p "#{session_id}"`);
+    if (session) {
+      execSafe(`tmux set-option -t ${shellQuote(session)} @sisyphus_dashboard ${wid}`);
+      return;
+    }
+  }
+  execSafe(`tmux set-option @sisyphus_dashboard ${wid}`);
 }
 
 let companionPaneId: string | null = null;
