@@ -153,6 +153,19 @@ function sectionDots(current: number, total: number): string {
   return s;
 }
 
+/** Get all items (not just pending) for a bucket */
+function bucketItems(group: RequirementsGroup, bucket: 'requirements' | 'safeAssumptions'): Requirement[] {
+  return bucket === 'safeAssumptions' ? (group.safeAssumptions ?? []) : group.requirements;
+}
+
+/** Find raw index of next pending item after fromRaw (exclusive). Returns -1 if none. */
+function nextPendingIndex(items: Requirement[], fromRaw: number): number {
+  for (let i = fromRaw + 1; i < items.length; i++) {
+    if (items[i]!.status !== 'approved') return i;
+  }
+  return -1;
+}
+
 // ─── File I/O ────────────────────────────────────────────────────────────────
 
 function saveData(state: ReviewState): void {
@@ -431,8 +444,8 @@ function renderGroupIntro(state: ReviewState, groupIndex: number): string[] {
 function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: number, expanded: boolean, selectedAction: number, bucket: 'requirements' | 'safeAssumptions'): string[] {
   const { data, cols } = state;
   const group = data.groups[groupIndex]!;
-  const pending = bucket === 'safeAssumptions' ? pendingSafeAssumptions(group) : pendingRequirements(group);
-  const req = pending[reqIndex];
+  const items = bucketItems(group, bucket);
+  const req = items[reqIndex];
   if (!req) return ['  No items to review.'];
 
   const cw = Math.min(MAX_CONTENT_WIDTH, cols - 4);
@@ -443,9 +456,10 @@ function renderItemReview(state: ReviewState, groupIndex: number, reqIndex: numb
 
   // Header: section + item progress
   const itemLabel = bucket === 'safeAssumptions' ? 'Safe assumption' : 'Item';
+  const reviewed = items.filter(r => r.status === 'approved').length;
   lines.push('');
   lines.push(`${m}  ${sectionDots(groupIndex, data.groups.length)} ${DIM}${group.name}${RESET}`);
-  lines.push(`${m}  ${FG_GRAY}${itemLabel} ${reqIndex + 1} of ${pending.length}${RESET}  ${progressBar(reqIndex, pending.length, 20)}`);
+  lines.push(`${m}  ${FG_GRAY}${itemLabel} ${reqIndex + 1} of ${items.length}${RESET}  ${progressBar(reviewed, items.length, 20)}`);
   lines.push('');
 
   // Requirement title
@@ -827,10 +841,10 @@ function advanceToNextGroup(state: ReviewState, currentGroupIndex: number): void
 
 function startGroupReview(state: ReviewState, groupIndex: number): void {
   const group = state.data.groups[groupIndex]!;
-  const pending = pendingRequirements(group);
-  if (pending.length > 0) {
-    stampStarted(pending[0]!);
-    state.phase = { kind: 'item-review', groupIndex, reqIndex: 0, expanded: false, selectedAction: 0, bucket: 'requirements' };
+  const firstPending = nextPendingIndex(group.requirements, -1);
+  if (firstPending >= 0) {
+    stampStarted(group.requirements[firstPending]!);
+    state.phase = { kind: 'item-review', groupIndex, reqIndex: firstPending, expanded: false, selectedAction: 0, bucket: 'requirements' };
     state.safeAssumptionsExpanded = false;
   } else {
     // No pending items, go to questions or next group
@@ -841,10 +855,10 @@ function startGroupReview(state: ReviewState, groupIndex: number): void {
 
 function advanceItem(state: ReviewState, groupIndex: number, reqIndex: number): void {
   const group = state.data.groups[groupIndex]!;
-  const pending = pendingRequirements(group);
-  if (reqIndex + 1 < pending.length) {
-    stampStarted(pending[reqIndex + 1]!);
-    state.phase = { kind: 'item-review', groupIndex, reqIndex: reqIndex + 1, expanded: false, selectedAction: 0, bucket: 'requirements' };
+  const next = nextPendingIndex(group.requirements, reqIndex);
+  if (next >= 0) {
+    stampStarted(group.requirements[next]!);
+    state.phase = { kind: 'item-review', groupIndex, reqIndex: next, expanded: false, selectedAction: 0, bucket: 'requirements' };
     state.safeAssumptionsExpanded = false;
   } else {
     startGroupQuestions(state, groupIndex);
@@ -882,10 +896,8 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
       const text = state.inputBuffer.trim();
       if (state.inputMode.kind === 'comment' && phase.kind === 'item-review') {
         const group = state.data.groups[phase.groupIndex]!;
-        const pending = phase.bucket === 'safeAssumptions'
-          ? pendingSafeAssumptions(group)
-          : pendingRequirements(group);
-        const req = pending[phase.reqIndex];
+        const items = bucketItems(group, phase.bucket);
+        const req = items[phase.reqIndex];
         if (req) {
           req.reviewAction = state.inputMode.action;
           if (text) req.userComment = text;
@@ -999,10 +1011,13 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         if (state.safeAssumptionsExpanded && num >= 1 && num <= 9) {
           const pendingSA = pendingSafeAssumptions(group);
           if (num <= pendingSA.length) {
+            const targetItem = pendingSA[num - 1]!;
+            const sa = group.safeAssumptions ?? [];
+            const rawIndex = sa.indexOf(targetItem);
             state.phase = {
               kind: 'item-review',
               groupIndex: phase.groupIndex,
-              reqIndex: num - 1,
+              reqIndex: rawIndex,
               expanded: false,
               selectedAction: 0,
               bucket: 'safeAssumptions',
@@ -1016,10 +1031,8 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
 
     case 'item-review': {
       const group = state.data.groups[phase.groupIndex]!;
-      const pending = phase.bucket === 'safeAssumptions'
-        ? pendingSafeAssumptions(group)
-        : pendingRequirements(group);
-      const req = pending[phase.reqIndex];
+      const items = bucketItems(group, phase.bucket);
+      const req = items[phase.reqIndex];
       if (!req) break;
 
       const actionCount = 4;
@@ -1081,10 +1094,7 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         state.inputBuffer = req.userComment || '';
       } else if (input === 'p') {
         if (phase.reqIndex > 0) {
-          const prevPending = phase.bucket === 'safeAssumptions'
-            ? pendingSafeAssumptions(group)
-            : pendingRequirements(group);
-          const prevReq = prevPending[phase.reqIndex - 1];
+          const prevReq = items[phase.reqIndex - 1];
           if (prevReq) stampStarted(prevReq);
           state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex - 1, expanded: false, selectedAction: 0, bucket: phase.bucket };
           state.scroll = 0;
@@ -1094,16 +1104,15 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
           state.scroll = 0;
         }
       } else if (input === 'n') {
-        // Skip = approve and advance (same as '1')
-        req.reviewAction = 'approve';
-        req.status = 'approved';
-        stampCompleted(req);
-        state.dirty = true;
-        saveData(state);
-        if (phase.bucket === 'safeAssumptions') {
+        // Next item (raw index, regardless of approval status)
+        if (phase.reqIndex + 1 < items.length) {
+          state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: phase.reqIndex + 1, expanded: false, selectedAction: 0, bucket: phase.bucket };
+          state.scroll = 0;
+        } else if (phase.bucket === 'safeAssumptions') {
           state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
+          state.scroll = 0;
         } else {
-          advanceItem(state, phase.groupIndex, phase.reqIndex);
+          startGroupQuestions(state, phase.groupIndex);
         }
       }
       break;
@@ -1127,10 +1136,9 @@ function handleInput(state: ReviewState, input: string, key: Key): boolean {
         if (phase.questionIndex > 0) {
           state.phase = { ...phase, questionIndex: phase.questionIndex - 1, selectedOption: 0 };
         } else {
-          // Back to last item in this group (or group intro if no pending items)
-          const pending = pendingRequirements(group);
-          if (pending.length > 0) {
-            state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: pending.length - 1, expanded: false, selectedAction: 0, bucket: 'requirements' };
+          // Back to last item in this group (or group intro if no items)
+          if (group.requirements.length > 0) {
+            state.phase = { kind: 'item-review', groupIndex: phase.groupIndex, reqIndex: group.requirements.length - 1, expanded: false, selectedAction: 0, bucket: 'requirements' };
           } else {
             state.phase = { kind: 'group-intro', groupIndex: phase.groupIndex };
           }
