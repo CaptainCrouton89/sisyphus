@@ -1,1 +1,0 @@
-Fixed dead code in getBaseForm() in src/shared/companion-render.ts line 26: changed fallback return from 'ᕦ(FACE)ᕤ {BOULDER}' to '♛ᕦ(FACE)ᕤ {BOULDER}', giving level 20+ a distinct crowned form. Updated test in src/__tests__/companion-render.test.ts line 65-69 to assert ♛ is present in the level 20 form. All 236 tests pass.

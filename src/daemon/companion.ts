@@ -676,7 +676,7 @@ export function onSessionStart(companion: CompanionState, cwd: string): void {
  * Compute wisdom points earned for a session. Rewards:
  * - Clean agent execution: high completion rate without restarts
  * - Good parallelization: more agents per orchestrator cycle
- * - Orchestration variety: using different modes (strategy, implementation, validation, completion)
+ * - Orchestration variety: using different modes (discovery, implementation, validation, completion)
  *
  * Returns 0-3 points per session.
  */

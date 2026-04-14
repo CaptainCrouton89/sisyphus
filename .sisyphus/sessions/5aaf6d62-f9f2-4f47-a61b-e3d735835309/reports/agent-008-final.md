@@ -1,1 +1,0 @@
-TUI companion integration complete

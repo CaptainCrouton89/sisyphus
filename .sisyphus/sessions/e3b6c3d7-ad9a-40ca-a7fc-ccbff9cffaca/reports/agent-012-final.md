@@ -1,1 +1,0 @@
-Created .github/workflows/integration-tests.yml — two jobs: linux-docker (ubuntu-latest, runs test/integration/run.sh via Docker) and macos (macos-latest, pack+global install, Swift build, .app verify, doctor smoke test). No design surprises.

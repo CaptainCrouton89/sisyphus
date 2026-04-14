@@ -1,1 +1,0 @@
-Fixed wanderer achievement checker in src/daemon/companion.ts (lines 319-327) to use c.dailyRepos instead of reconstructing counts from repo.lastSeen. Updated two wanderer tests in src/__tests__/companion.test.ts to use dailyRepos. All 236 tests pass.

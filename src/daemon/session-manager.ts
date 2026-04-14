@@ -273,7 +273,7 @@ It is the other session's responsibility. You do not need to monitor it.
 3. Update roadmap.md with your work plan
 4. Begin delegating work to agents`;
 
-  await orchestrator.spawnOrchestrator(cloneId, cwd, windowId, orientationMessage, 'strategy');
+  await orchestrator.spawnOrchestrator(cloneId, cwd, windowId, orientationMessage, 'discovery');
   updateTrackedWindow(cloneId, windowId);
   tmux.killPane(initialPaneId);
 

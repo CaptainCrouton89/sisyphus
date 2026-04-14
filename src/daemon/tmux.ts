@@ -221,7 +221,7 @@ export interface PaneMeta {
   role: string;      // "orch" or agent paneLabel (e.g. "impl", "review-plan")
   session: string;   // session name or truncated UUID
   cycle: string;     // e.g. "c3"
-  mode?: string;     // orchestrator mode (e.g. "strategy", "implementation")
+  mode?: string;     // orchestrator mode (e.g. "discovery", "implementation")
 }
 
 export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta): void {

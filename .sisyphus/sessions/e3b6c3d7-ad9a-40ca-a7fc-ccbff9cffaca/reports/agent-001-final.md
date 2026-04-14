@@ -1,1 +1,0 @@
-Findings saved to context/explore-nodepty-docker.md. Key result: node-pty has NO Linux prebuilds — always compiles from source via node-gyp on Linux. Use node:22 (has build tools) or node:22-slim + python3/make/g++. Avoid Alpine (musl lacks libutil). See file for full details.

@@ -48,8 +48,6 @@ After presenting the report, ask the user directly:
 
 Then **stop and wait.** The user will respond in the tmux pane.
 
-**NEVER yield while waiting for user input.** Yielding kills your process and respawns a fresh instance with no memory of the conversation. This is the same rule as all other user-interaction points — ask and wait.
-
 **NEVER call `sisyphus complete` until the user explicitly confirms.**
 
 ## Handle Feedback
@@ -76,11 +74,11 @@ Don't yield after each individual item — collect them, then yield once.
 These change the goal itself:
 
 1. Update goal.md with the revised scope
-2. Update strategy.md with the new direction
-3. Yield to strategy mode:
+2. Invoke the **strategy skill** to revise strategy.md with the new direction
+3. Yield to discovery mode:
 
 ```bash
-sisyphus yield --mode strategy --prompt "User requested significant scope change: [summary]. Goal and strategy updated."
+sisyphus yield --mode discovery --prompt "User requested significant scope change: [summary]. Goal and strategy updated — re-evaluate approach."
 ```
 
 ## Context Management

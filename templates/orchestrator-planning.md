@@ -1,6 +1,6 @@
 ---
 name: planning
-description: Deep exploration, spec alignment and detailed roadmap creation. Use after strategy is established and before implementation begins.
+description: Deep exploration, spec alignment and detailed roadmap creation. Use after discovery is complete and before implementation begins.
 ---
 
 # Planning Phase
@@ -37,8 +37,6 @@ Spec is the combined product discovery + technical design stage. Spawning a spec
 - Tasks where the user has already provided explicit, detailed acceptance criteria in their starting prompt
 
 If you're unsure, spawn the spec agent. The cost of a short spec conversation is low. The cost of building the wrong thing is an entire wasted implementation cycle.
-
-**Update goal.md when the spec clarifies the goal.** The starting prompt is often vague — the spec session is where the real goal emerges. If what "done" looks like has changed or sharpened, update goal.md to match. goal.md should always be a plain, current statement of the desired end state — not the original prompt fossilized.
 
 **Spec refinement is iterative.** The spec agent works with the user, but the process doesn't end when documents are saved:
 - Have agents review requirements for feasibility (can this actually work given the codebase?)

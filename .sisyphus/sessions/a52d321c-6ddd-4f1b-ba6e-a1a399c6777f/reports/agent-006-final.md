@@ -1,3 +1,0 @@
-Extracted shared callHaiku into src/daemon/haiku.ts with unified COOLDOWN_MS/disabledUntil. Updated companion-commentary.ts and summarize.ts to import from haiku.ts. Both files stripped of local callHaiku/disabledUntil/COOLDOWN_MS. Build passes clean.
-
-One note: summarizeReport now has a redundant double-null-check (text is already non-empty from callHaiku's trim-or-null guarantee), but it's harmless and I left it to minimize diff.

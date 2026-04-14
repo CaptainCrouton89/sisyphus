@@ -471,7 +471,7 @@ describe('onSessionComplete', () => {
     onSessionComplete(c, makeSession({
       agents,
       orchestratorCycles: [
-        { cycle: 1, mode: 'strategy', timestamp: new Date().toISOString() } as OrchestratorCycle,
+        { cycle: 1, mode: 'discovery', timestamp: new Date().toISOString() } as OrchestratorCycle,
         { cycle: 2, mode: 'implementation', timestamp: new Date().toISOString() } as OrchestratorCycle,
       ],
     }));
@@ -492,7 +492,7 @@ describe('onSessionComplete', () => {
     onSessionComplete(c, makeSession({
       agents,
       orchestratorCycles: [
-        { cycle: 1, mode: 'strategy', timestamp: new Date().toISOString() } as OrchestratorCycle,
+        { cycle: 1, mode: 'discovery', timestamp: new Date().toISOString() } as OrchestratorCycle,
         { cycle: 2, mode: 'implementation', timestamp: new Date().toISOString() } as OrchestratorCycle,
       ],
     }));

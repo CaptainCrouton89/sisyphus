@@ -112,7 +112,7 @@ function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): s
   const base = readFileSync(basePath, 'utf-8');
 
   const modes = discoverOrchestratorModes();
-  const selected = modes.find(m => m.name === mode) ?? modes.find(m => m.name === 'strategy');
+  const selected = modes.find(m => m.name === mode) ?? modes.find(m => m.name === 'discovery');
 
   if (!selected) {
     throw new Error(`Unknown orchestrator mode '${mode}' and no fallback found. Available: ${modes.map(m => m.name).join(', ')}`);
@@ -318,7 +318,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   // Read mode and nextPrompt from last completed cycle
   const lastCycle = [...session.orchestratorCycles].reverse().find(c => c.completedAt);
-  const mode = forceMode ?? (lastCycle?.mode ?? 'strategy');
+  const mode = forceMode ?? (lastCycle?.mode ?? 'discovery');
 
   const basePrompt = loadOrchestratorPrompt(cwd, sessionId, mode);
   const formattedState = formatStateForOrchestrator(session, mode);
