@@ -20,10 +20,7 @@ If the plan has stages that share no file dependencies, run them in parallel fro
 3. **Critique and refine it** — spawn review agents, fix what they find.
 4. **Validate it** — verify the stage actually works end-to-end.
 
-Not every stage needs every step:
-- Types/interfaces → implementation only (consumers surface type errors)
-- Core business logic → implementation + critique minimum
-- Integration/critical path → full loop including validation
+Not every stage needs every step — use the rigor calibration table above to decide.
 
 **When multiple stages have completed without any critique or validation, stop implementing and catch up on verification.** Don't let unverified work compound.
 
@@ -93,18 +90,15 @@ When you see these reports, investigate before pushing forward. If the smell sug
 
 <critique-refinement>
 
-## Critique Cycle
+## Critique Pass
 
 After implementation agents report, assess whether the stage needs critique before advancing. The failure mode is not "sometimes skipping review" — it's implementing six stages in a row without any.
 
-When a stage warrants critique, spawn review agents in parallel, each attacking a different dimension:
-- **Code reuse** — existing utilities, helpers, patterns the new code duplicates
-- **Code quality** — hacky patterns, redundant state, parameter sprawl, copy-paste, leaky abstractions
-- **Efficiency** — redundant computations, N+1 patterns, missed concurrency, unbounded data structures
+When a stage warrants critique, spawn a `sisyphus:review` agent. It will run parallel sub-reviewers across the relevant dimensions (reuse, quality, efficiency, and security/compliance when appropriate), validate their findings, and return a single consolidated report. Give it the full diff and relevant context files. It reports problems — it does not fix.
 
-Give each reviewer the full diff and relevant context files. They report problems — they don't fix.
+A clean report ("No concerns") is a valid and common outcome. When you get one, advance. Do not spawn another reviewer to double-check — one careful pass is the contract.
 
-## Refine Cycle
+## Refine Pass
 
 Aggregate reviewer findings. Spawn fix agents and **point them at the review report** — don't rewrite findings as line-by-line instructions. You triage (skip false positives, note architectural constraints) — they implement.
 
@@ -115,7 +109,22 @@ sisyphus spawn --name "fix-review-issues" --agent-type sisyphus:implement \
 
 Fix agents should use `/simplify` to review their own changes before reporting.
 
-Re-review after fixes. Stop when reviewers return only stylistic nits. If 3+ rounds are needed, the approach — not the patches — needs rethinking.
+## One Review Pass Per Stage
+
+**Do not spawn a second review after fix agents land.** The review pass runs once per stage. After fixes, verify they landed by reading the fix agents' reports and checking that type-check / tests pass — not by spawning another reviewer to re-scan the same surface.
+
+This is a deliberate choice, not an oversight. Re-reviewing has two failure modes that compound:
+
+1. A fresh reviewer scanning edited code will anchor on the new code and produce fresh findings, most of which are noise — the tier structure has no "nit" category and the model feels implicit pressure to return something.
+2. When fix agents do introduce real regressions, they typically show up in validation (type-check failures, test failures, e2e failures) rather than in static review. Validation catches the real problems; re-review mostly catches phantoms.
+
+If the fix agent's own report flags that it hit unexpected complexity or introduced something it wasn't comfortable with, address that specifically — read the code, decide, don't spawn another reviewer. If the single review pass surfaces findings that suggest an architectural problem rather than code-level issues, backtrack to planning instead of patching:
+
+```bash
+sisyphus yield --mode planning --prompt "Review surfaced architectural issue: [summary]. Needs replan, not fixes."
+```
+
+Real regressions from fix agents are caught by e2e validation (next step), not by a second review pass.
 
 </critique-refinement>
 
