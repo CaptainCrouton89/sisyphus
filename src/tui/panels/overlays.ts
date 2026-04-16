@@ -16,7 +16,7 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const LEADER_WIDTH = 26;
-const LEADER_HEIGHT = 20; // 18 content lines + 2 border lines
+const LEADER_HEIGHT = 22; // 20 content lines + 2 border lines
 const COPY_HEIGHT = 9;    // 7 content lines + 2 border lines
 const HELP_WIDTH = 62;
 const COMPANION_WIDTH = 52;
@@ -45,6 +45,8 @@ export function renderLeaderOverlay(buf: FrameBuffer, rows: number, cols: number
     '  d  delete session'.padEnd(innerWidth),
     '  l  daemon logs'.padEnd(innerWidth),
     '  o  open session dir'.padEnd(innerWidth),
+    '  s  open strategy'.padEnd(innerWidth),
+    '  r  open roadmap'.padEnd(innerWidth),
     '  a  spawn agent'.padEnd(innerWidth),
     '  m  message agent'.padEnd(innerWidth),
     '  /  search'.padEnd(innerWidth),
@@ -106,6 +108,7 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
     helpRow('  space → y  copy submenu', '  space → d  delete session', innerWidth),
     helpRow('  space → j  jump to pane', '  space → k  kill', innerWidth),
     helpRow('  space → q  quit', '  space → o  open dir', innerWidth),
+    helpRow('  space → s  strategy', '  space → r  roadmap', innerWidth),
     helpRow('  space → l  tail logs', '  space → /  search', innerWidth),
     helpRow('  space → a  spawn agent', '  space → m  msg agent', innerWidth),
     helpRow('  space → ?  help', '  space → 1-9  jump', innerWidth),

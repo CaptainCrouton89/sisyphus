@@ -29,6 +29,8 @@ export type LeaderAction =
   | { type: 'delete-session' }
   | { type: 'open-logs' }
   | { type: 'open-session-dir' }
+  | { type: 'open-strategy' }
+  | { type: 'open-roadmap' }
   | { type: 'search' }
   | { type: 'jump-to-session'; index: number }
   | { type: 'spawn-agent' }
@@ -450,6 +452,28 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       break;
     }
 
+    case 'open-strategy': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        actions.openEditorPopup(state.cwd, editor, strategyPath(state.cwd, selectedSessionId));
+      } catch {
+        notify(state, 'Failed to open strategy');
+      }
+      break;
+    }
+
+    case 'open-roadmap': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        actions.openEditorPopup(state.cwd, editor, roadmapPath(state.cwd, selectedSessionId));
+      } catch {
+        notify(state, 'Failed to open roadmap');
+      }
+      break;
+    }
+
     case 'search': {
       state.mode = 'search';
       state.searchText = '';
@@ -586,6 +610,8 @@ function handleLeaderKey(input: string, key: Key, state: AppState, actions: Inpu
     if (input === 'd') { handleLeaderAction({ type: 'delete-session' }, state, actions); return; }
     if (input === 'l') { handleLeaderAction({ type: 'open-logs' }, state, actions); return; }
     if (input === 'o') { handleLeaderAction({ type: 'open-session-dir' }, state, actions); return; }
+    if (input === 's') { handleLeaderAction({ type: 'open-strategy' }, state, actions); return; }
+    if (input === 'r') { handleLeaderAction({ type: 'open-roadmap' }, state, actions); return; }
     if (input === '/') { handleLeaderAction({ type: 'search' }, state, actions); return; }
     if (input === 'a') { handleLeaderAction({ type: 'spawn-agent' }, state, actions); return; }
     if (input === 'm') { handleLeaderAction({ type: 'message-agent' }, state, actions); return; }
