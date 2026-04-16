@@ -1,7 +1,8 @@
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getMoodFace, getMoodTmuxColor } from '../shared/companion-render.js';
+import type { FeedbackRating } from '../shared/companion-types.js';
 import { loadCompanion } from './companion.js';
 import { loadConfig } from '../shared/config.js';
 import { execSafe } from '../shared/exec.js';
@@ -12,6 +13,7 @@ const INNER_WIDTH = POPUP_WIDTH - 6; // 2 border + 2 padding each side
 const POPUP_DURATION = 15;
 const POPUP_TMP_PREFIX = join(tmpdir(), 'sisyphus-popup');
 const POPUP_SCRIPT = join(tmpdir(), 'sisyphus-popup.sh');
+const POPUP_RESULT_PREFIX = join(tmpdir(), 'sisyphus-popup-result');
 
 export interface PopupPage {
   text: string;
@@ -35,17 +37,17 @@ function wrapText(text: string, width: number): string[] {
 }
 
 /** Show a single commentary popup (convenience wrapper). */
-export function showCommentaryPopup(text: string): void {
-  showCommentaryPopupQueue([{ text }]);
+export function showCommentaryPopup(text: string): { rating: FeedbackRating; comment?: string } | null {
+  return showCommentaryPopupQueue([{ text }]);
 }
 
 /** Show one or more popup pages in sequence. Enter advances; last Enter closes. */
-export function showCommentaryPopupQueue(pages: PopupPage[]): void {
-  if (pages.length === 0) return;
+export function showCommentaryPopupQueue(pages: PopupPage[]): { rating: FeedbackRating; comment?: string } | null {
+  if (pages.length === 0) return null;
 
   try {
     const config = loadConfig(process.cwd());
-    if (config.companionPopup === false) return;
+    if (config.companionPopup === false) return null;
 
     const companion = loadCompanion();
     const intensity = companion.debugMood?.scores[companion.mood] ?? 0;
@@ -59,7 +61,7 @@ export function showCommentaryPopupQueue(pages: PopupPage[]): void {
     for (let i = 0; i < pages.length; i++) {
       const lines = wrapText(pages[i].text, INNER_WIDTH);
       const isLast = i === pages.length - 1;
-      const hint = isLast ? '[enter to close]' : '[enter: next]';
+      const hint = isLast ? '[0:ok 1:good 2:bad 3:whip]' : '[enter:next  0-3:rate]';
       const hintPad = Math.max(0, Math.floor((INNER_WIDTH - hint.length) / 2));
       const hintLine = ' '.repeat(hintPad + 2) + hint;
       const content = '\n\n' + lines.map(l => `  ${l}`).join('\n') + '\n\n' + hintLine + '\n';
@@ -74,6 +76,7 @@ export function showCommentaryPopupQueue(pages: PopupPage[]): void {
     const script = `#!/bin/sh
 printf '\\033[?25l'
 stty -echo 2>/dev/null
+RESULT_FILE=${shellQuote(POPUP_RESULT_PREFIX)}
 PAGE=0
 TOTAL=${pages.length}
 
@@ -84,20 +87,40 @@ show_page() {
 
 show_page
 while IFS= read -r -n1 -t ${POPUP_DURATION} k; do
-  if [ -z "$k" ]; then
-    PAGE=$((PAGE + 1))
-    if [ $PAGE -ge $TOTAL ]; then
+  case "$k" in
+    0) printf 'neutral' > "$RESULT_FILE"; break ;;
+    1) printf 'good' > "$RESULT_FILE"; break ;;
+    2) printf 'bad' > "$RESULT_FILE"; break ;;
+    3) printf 'whip' > "$RESULT_FILE"; break ;;
+    c|C)
+      stty echo
+      printf '\\033[2J\\033[H> '
+      IFS= read -r -t 30 line
+      printf 'comment:%s' "$line" > "$RESULT_FILE"
       break
-    fi
-    show_page
-  fi
+      ;;
+    '')
+      PAGE=$((PAGE + 1))
+      if [ $PAGE -ge $TOTAL ]; then
+        printf 'neutral' > "$RESULT_FILE"
+        break
+      fi
+      show_page
+      ;;
+  esac
 done
+if [ ! -f "$RESULT_FILE" ]; then
+  printf 'neutral' > "$RESULT_FILE"
+fi
 `;
     writeFileSync(POPUP_SCRIPT, script, { mode: 0o755 });
 
+    // Delete stale result file before running popups
+    try { unlinkSync(POPUP_RESULT_PREFIX); } catch { /* ignore */ }
+
     // Daemon runs outside tmux — target each attached client
     const clientsRaw = execSafe('tmux list-clients -F "#{client_name} #{client_width}"');
-    if (!clientsRaw) return;
+    if (!clientsRaw) return null;
     for (const line of clientsRaw.split('\n').filter(Boolean)) {
       const lastSpace = line.lastIndexOf(' ');
       const client = line.slice(0, lastSpace);
@@ -116,5 +139,23 @@ done
       ].join(' ');
       execSafe(`tmux display-popup ${args}`);
     }
+
+    // Read feedback written by the last client's popup
+    let raw: string;
+    try {
+      raw = readFileSync(POPUP_RESULT_PREFIX, 'utf8').trim();
+    } catch {
+      return null;
+    } finally {
+      try { unlinkSync(POPUP_RESULT_PREFIX); } catch { /* ignore */ }
+    }
+
+    if (raw.startsWith('comment:')) {
+      return { rating: 'comment', comment: raw.slice('comment:'.length) };
+    }
+    const validRatings: FeedbackRating[] = ['neutral', 'good', 'bad', 'whip'];
+    const rating = validRatings.includes(raw as FeedbackRating) ? (raw as FeedbackRating) : 'neutral';
+    return { rating };
   } catch { /* non-fatal */ }
+  return null;
 }

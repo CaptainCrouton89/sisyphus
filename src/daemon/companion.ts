@@ -9,6 +9,8 @@ import type {
   CompanionBaselines,
   CompanionState,
   CompanionStats,
+  FeedbackEntry,
+  FeedbackRating,
   LastCommentary,
   Mood,
   MoodSignals,
@@ -113,6 +115,7 @@ export function loadCompanion(): CompanionState {
   if (state.baselines == null) state.baselines = defaultBaselines();
   if (state.baselines.recentAgentThroughput == null) state.baselines.recentAgentThroughput = emptyStats();
   if (state.commentaryHistory == null) state.commentaryHistory = [];
+  if (state.feedbackHistory == null) state.feedbackHistory = [];
   return state;
 }
 
@@ -125,7 +128,8 @@ export function saveCompanion(state: CompanionState): void {
   renameSync(tmp, path);
 }
 
-const MAX_COMMENTARY_HISTORY = 30;
+const MAX_COMMENTARY_HISTORY = 1000;
+const MAX_FEEDBACK_HISTORY = 1000;
 
 /**
  * Push a commentary entry to lastCommentary + commentaryHistory ring buffer.
@@ -138,6 +142,25 @@ export function recordCommentary(companion: CompanionState, text: string, event:
   companion.commentaryHistory.push(entry);
   if (companion.commentaryHistory.length > MAX_COMMENTARY_HISTORY) {
     companion.commentaryHistory = companion.commentaryHistory.slice(-MAX_COMMENTARY_HISTORY);
+  }
+}
+
+/**
+ * Push a feedback entry to feedbackHistory ring buffer.
+ * Mutates the companion in-place; caller must saveCompanion() afterward.
+ */
+export function recordFeedback(
+  companion: CompanionState,
+  text: string,
+  rating: FeedbackRating,
+  event: CommentaryEvent,
+  comment?: string,
+): void {
+  const entry: FeedbackEntry = { commentaryText: text, rating, event, timestamp: new Date().toISOString(), ...(comment != null ? { comment } : {}) };
+  if (!companion.feedbackHistory) companion.feedbackHistory = [];
+  companion.feedbackHistory.push(entry);
+  if (companion.feedbackHistory.length > MAX_FEEDBACK_HISTORY) {
+    companion.feedbackHistory = companion.feedbackHistory.slice(-MAX_FEEDBACK_HISTORY);
   }
 }
 
@@ -176,6 +199,7 @@ export function createDefaultCompanion(): CompanionState {
     recentCompletions: [],
     spinnerVerbIndex: 0,
     baselines: defaultBaselines(),
+    feedbackHistory: [],
   };
 }
 
@@ -374,6 +398,28 @@ export function computeMood(companion: CompanionState, session?: Session, signal
   // Consecutive days — grows slowly from day 3, caps at +20 around day 9
   const consecutiveDays = companion.consecutiveDaysActive ?? 0;
   if (consecutiveDays >= 3) scores.existential += Math.min(20, (consecutiveDays - 2) * 3);
+
+  // User feedback adjustments
+  const goodRatings = signals.recentFeedbackGood ?? 0;
+  const badRatings = signals.recentFeedbackBad ?? 0;
+  const whipRatings = signals.recentFeedbackWhip ?? 0;
+  if (goodRatings > 0) {
+    scores.happy += goodRatings * 20;
+    scores.excited += goodRatings * 8;
+    scores.frustrated = Math.max(0, scores.frustrated - goodRatings * 10);
+  }
+  if (badRatings > 0) {
+    scores.happy = Math.max(0, scores.happy - badRatings * 15);
+    scores.frustrated += badRatings * 20;
+    scores.zen = Math.max(0, scores.zen - badRatings * 10);
+  }
+  if (whipRatings > 0) {
+    scores.happy = Math.max(0, scores.happy - whipRatings * 15);
+    scores.sleepy = Math.max(0, scores.sleepy - whipRatings * 15);
+    scores.zen = Math.max(0, scores.zen - whipRatings * 15);
+    scores.frustrated = Math.max(0, scores.frustrated - whipRatings * 8);
+    scores.existential += whipRatings * 25;
+  }
 
   const moodOrder: Mood[] = ['happy', 'grinding', 'frustrated', 'zen', 'sleepy', 'excited', 'existential'];
   let best: Mood = 'grinding';

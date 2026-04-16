@@ -15,7 +15,7 @@ import { generateSessionName, generateSentiment } from './summarize.js';
 import { registerSessionTmux } from './server.js';
 import { respawningSessions } from './respawn-guard.js';
 import { recomputeDots, markSessionCompleted } from './status-dots.js';
-import { loadCompanion, saveCompanion, recordCommentary, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain, computeWisdomGain, captureObservationContext, runPostSessionObservations } from './companion.js';
+import { loadCompanion, saveCompanion, recordCommentary, recordFeedback, onSessionStart, onSessionComplete, onAgentSpawned, onAgentCrashed, getTitle, ACHIEVEMENTS, computeStrengthGain, computeWisdomGain, captureObservationContext, runPostSessionObservations } from './companion.js';
 import { buildMemoryContext } from './companion-memory.js';
 import { SPINNER_VERBS } from '../shared/companion-render.js';
 import { generateCommentary, generateNickname } from './companion-commentary.js';
@@ -97,15 +97,23 @@ function fireHaikuNaming(
   });
 }
 
-function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false, repo?: string): void {
+function fireCommentary(event: CommentaryEvent, companion: CompanionState, context?: string, flash = false, repo?: string, sessionId?: string): void {
   const memoryCtx = buildMemoryContext(repo);
   generateCommentary(event, companion, context, memoryCtx).then(text => {
     if (text) {
       try {
         const c = loadCompanion();
         recordCommentary(c, text, event);
+        if (flash) {
+          const feedback = showCommentaryPopup(text);
+          if (feedback) {
+            recordFeedback(c, text, feedback.rating, event, feedback.comment);
+            if (sessionId) {
+              emitHistoryEvent(sessionId, 'popup-feedback', { commentaryText: text, rating: feedback.rating, comment: feedback.comment, event, mood: c.mood });
+            }
+          }
+        }
         saveCompanion(c);
-        if (flash) showCommentaryPopup(text);
       } catch { /* non-fatal */ }
     }
   }).catch(() => {});
@@ -118,6 +126,7 @@ function fireCommentary(event: CommentaryEvent, companion: CompanionState, conte
 function fireCompletionCommentary(
   events: Array<{ event: CommentaryEvent; companion: CompanionState; context?: string; popupTitle?: string }>,
   memoryCtx?: string,
+  sessionId?: string,
 ): void {
   if (events.length === 0) return;
   Promise.all(
@@ -126,18 +135,30 @@ function fireCompletionCommentary(
     )
   ).then(results => {
     const pages: PopupPage[] = [];
-    for (let i = 0; i < results.length; i++) {
-      const text = results[i];
-      if (!text) continue;
-      try {
-        const c = loadCompanion();
+    let primaryText: string | null = null;
+    try {
+      const c = loadCompanion();
+      for (let i = 0; i < results.length; i++) {
+        const text = results[i];
+        if (!text) continue;
         recordCommentary(c, text, events[i].event);
-        saveCompanion(c);
-      } catch { /* non-fatal */ }
-      pages.push({ text, title: events[i].popupTitle });
-    }
+        if (primaryText === null) primaryText = text;
+        pages.push({ text, title: events[i].popupTitle });
+      }
+      saveCompanion(c);
+    } catch { /* non-fatal */ }
     if (pages.length > 0) {
-      showCommentaryPopupQueue(pages);
+      const feedback = showCommentaryPopupQueue(pages);
+      if (feedback && primaryText !== null) {
+        try {
+          const c = loadCompanion();
+          recordFeedback(c, primaryText, feedback.rating, events[0].event, feedback.comment);
+          saveCompanion(c);
+          if (sessionId) {
+            emitHistoryEvent(sessionId, 'popup-feedback', { commentaryText: primaryText, rating: feedback.rating, comment: feedback.comment, event: events[0].event, mood: c.mood });
+          }
+        } catch { /* non-fatal */ }
+      }
     }
   }).catch(() => {});
 }
@@ -202,7 +223,7 @@ export async function startSession(task: string, cwd: string, context?: string, 
     const companion = loadCompanion();
     onSessionStart(companion, cwd);
     saveCompanion(companion);
-    fireCommentary('session-start', companion, task, false, cwd);
+    fireCommentary('session-start', companion, task, false, cwd, sessionId);
   } catch { /* companion errors are non-fatal */ }
 
   return { ...state.getSession(cwd, sessionId), tmuxSessionName: tmuxName };
@@ -295,7 +316,7 @@ It is the other session's responsibility. You do not need to monitor it.
     const companion = loadCompanion();
     onSessionStart(companion, cwd);
     saveCompanion(companion);
-    fireCommentary('session-start', companion, goal, false, cwd);
+    fireCommentary('session-start', companion, goal, false, cwd, cloneId);
   } catch { /* companion errors are non-fatal */ }
 
   // 10. Return
@@ -573,7 +594,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         if (log) cycleCtx += `\nCycle log: ${truncate(log, 200)}`;
       }
     } catch { /* best-effort */ }
-    fireCommentary('cycle-boundary', companion, cycleCtx, true, session.cwd);
+    fireCommentary('cycle-boundary', companion, cycleCtx, true, session.cwd, sessionId);
   } catch { /* non-fatal */ }
 
   // Respawn on next tick — agents already finished, no delay needed
@@ -875,7 +896,7 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
     // Memory reflects the previous state of the repo — observations from this session are not yet persisted.
     const memoryCtx = buildMemoryContext(completedSession.cwd);
 
-    fireCompletionCommentary(completionEvents, memoryCtx);
+    fireCompletionCommentary(completionEvents, memoryCtx, sessionId);
   } catch { /* companion errors are non-fatal */ }
 
   switchToHomeSession(session);
@@ -1092,7 +1113,7 @@ export async function handlePaneExited(
       let crashCtx = `${agent.name} (${typeLabel}) crashed: ${truncate(agent.instruction, 120)}`;
       const running = freshSession.agents.filter(a => a.status === 'running').length;
       crashCtx += `\n${running}/${freshSession.agents.length} agents still running`;
-      fireCommentary('agent-crash', companion, crashCtx, false, session.cwd);
+      fireCommentary('agent-crash', companion, crashCtx, false, session.cwd, sessionId);
     } catch { /* companion errors are non-fatal */ }
 
     if (allDone) {

@@ -7,6 +7,7 @@ import type { CompanionState, CompanionMemoryState, ObservationCategory, Observa
 import { MemoryStoreParseError } from '../../shared/companion-types.js';
 import { createBadgeGallery, renderBadgeCard } from '../../shared/companion-badges.js';
 import { loadMemoryStrict, sanitizeForDisplay } from '../../daemon/companion-memory.js';
+import { showCommentaryPopup } from '../../daemon/companion-popup.js';
 
 const CATEGORY_LABELS: Record<string, string> = {
   milestone: 'Milestone',
@@ -195,5 +196,23 @@ export function registerCompanion(program: Command): void {
     .option('--repo <path>', 'Filter observations by repo path')
     .action(async (opts: { repo?: string }) => {
       await runCompanionMemory(opts);
+    });
+
+  companion
+    .command('popup-test')
+    .description('Show a test commentary popup to validate feedback key handling')
+    .option('--text <text>', 'Custom popup text', 'Cycle complete. Everything went exactly as planned. Nothing suspicious here.')
+    .action((opts: { text: string }) => {
+      const feedback = showCommentaryPopup(opts.text);
+      if (feedback === null) {
+        console.error('No feedback received (popup suppressed or not in tmux).');
+        process.exitCode = 1;
+        return;
+      }
+      if (feedback.rating === 'comment' && feedback.comment !== undefined) {
+        console.log(`rating: comment  "${feedback.comment}"`);
+      } else {
+        console.log(`rating: ${feedback.rating}${feedback.comment !== undefined ? `  comment: ${feedback.comment}` : ''}`);
+      }
     });
 }

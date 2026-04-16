@@ -4,11 +4,20 @@ import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
 import { respawningSessions } from './respawn-guard.js';
 import type { Session } from '../shared/types.js';
-import { loadCompanion, saveCompanion, recordCommentary, computeMood } from './companion.js';
+import { loadCompanion, saveCompanion, recordCommentary, recordFeedback, computeMood } from './companion.js';
 import { generateCommentary } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
-import type { MoodSignals } from '../shared/companion-types.js';
+import type { MoodSignals, FeedbackEntry } from '../shared/companion-types.js';
 import { emitHistoryEvent } from './history.js';
+
+function buildFeedbackSignals(history: FeedbackEntry[]): Pick<MoodSignals, 'recentFeedbackGood' | 'recentFeedbackBad' | 'recentFeedbackWhip'> {
+  const recent = history.slice(-5);
+  return {
+    recentFeedbackGood: recent.filter(e => e.rating === 'good').length,
+    recentFeedbackBad: recent.filter(e => e.rating === 'bad').length,
+    recentFeedbackWhip: recent.filter(e => e.rating === 'whip').length,
+  };
+}
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
 type DotsCallback = () => void;
@@ -325,6 +334,7 @@ async function pollAllSessions(): Promise<void> {
       restartedAgentCount: totalRestartedAgents,
       lostAgentCount: totalLostAgents,
       killedAgentCount: totalKilledAgents,
+      ...buildFeedbackSignals(companion.feedbackHistory ?? []),
     };
 
     // Sync agent counts (computed above from tracked sessions — single source of truth)
@@ -367,8 +377,15 @@ async function pollAllSessions(): Promise<void> {
           try {
             const c = loadCompanion();
             recordCommentary(c, text, 'late-night');
+            const feedback = showCommentaryPopup(text);
+            if (feedback) {
+              recordFeedback(c, text, feedback.rating, 'late-night', feedback.comment);
+              const sid = trackedSessions.keys().next().value;
+              if (sid) {
+                emitHistoryEvent(sid, 'popup-feedback', { commentaryText: text, rating: feedback.rating, comment: feedback.comment, event: 'late-night', mood: c.mood });
+              }
+            }
             saveCompanion(c);
-            showCommentaryPopup(text);
           } catch { /* non-fatal */ }
         }
       }).catch(() => {});

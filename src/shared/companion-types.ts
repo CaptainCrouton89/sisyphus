@@ -44,6 +44,16 @@ export type Mood = 'happy' | 'grinding' | 'frustrated' | 'zen' | 'sleepy' | 'exc
 
 export type CompanionField = 'face' | 'boulder' | 'title' | 'commentary' | 'mood' | 'level' | 'stats' | 'achievements' | 'verb' | 'hobby';
 
+export type FeedbackRating = 'neutral' | 'good' | 'bad' | 'whip' | 'comment';
+
+export interface FeedbackEntry {
+  commentaryText: string;
+  rating: FeedbackRating;
+  comment?: string;
+  event: CommentaryEvent;
+  timestamp: string; // ISO timestamp
+}
+
 export type CommentaryEvent =
   | 'session-start'
   | 'cycle-boundary'
@@ -201,6 +211,7 @@ export interface CompanionState {
   repos: Record<string, RepoMemory>;  // keyed by absolute cwd path
   lastCommentary: LastCommentary | null;
   commentaryHistory: LastCommentary[];  // ring buffer of last 30 commentaries for anti-repetition
+  feedbackHistory: FeedbackEntry[];    // ring buffer of last 30 user feedback entries
   // Lifetime counters (redundant with derivable stats but kept for fast achievement checks)
   sessionsCompleted: number;
   sessionsCrashed: number;
@@ -264,6 +275,10 @@ export interface MoodSignals {
   restartedAgentCount?: number;     // total agents restarted across tracked active sessions
   lostAgentCount?: number;          // total agents with status 'lost' across tracked active sessions
   killedAgentCount?: number;        // total agents explicitly killed across tracked active sessions
+  // User feedback signals (counts from last 5 feedbackHistory entries)
+  recentFeedbackGood?: number;      // good ratings in last 5
+  recentFeedbackBad?: number;       // bad ratings in last 5
+  recentFeedbackWhip?: number;      // whip ratings in last 5
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [

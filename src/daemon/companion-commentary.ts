@@ -1,6 +1,6 @@
 import { basename } from 'node:path';
 import { z } from 'zod';
-import type { CompanionState, CompanionStats, CommentaryEvent, LastCommentary, RepoMemory } from '../shared/companion-types.js';
+import type { CompanionState, CompanionStats, CommentaryEvent, LastCommentary, RepoMemory, FeedbackEntry } from '../shared/companion-types.js';
 import { callHaiku, callHaikuStructured } from './haiku.js';
 import { getRecentSentiments } from './history.js';
 
@@ -467,6 +467,18 @@ Do NOT reuse any of these opening patterns.${openerWarning}
 </previous_commentary>`;
 }
 
+function buildFeedbackContext(feedbackHistory: FeedbackEntry[]): string {
+  if (!feedbackHistory || feedbackHistory.length === 0) return '';
+  const recent = feedbackHistory.slice(-5);
+  const lines = recent.map(entry => {
+    if (entry.rating === 'comment') {
+      return `- "${entry.commentaryText}" → user commented: "${entry.comment}"`;
+    }
+    return `- "${entry.commentaryText}" → ${entry.rating}`;
+  }).join('\n');
+  return `\nRecent user feedback on your commentary:\n${lines}`;
+}
+
 // --- Personality descriptors: 10 tiers per stat, scaling up ---
 // The AI never sees raw numbers — just personality descriptions shaped by thresholds.
 
@@ -607,6 +619,7 @@ export async function generateCommentary(
   const { mood, level, title, stats } = companion;
   const timeModifier = timeOfDayModifier();
   const sentimentCtx = buildSentimentContext();
+  const feedbackCtx = buildFeedbackContext(companion.feedbackHistory ?? []);
   const moodBreakdown = buildMoodBreakdown(companion);
   const historyCtx = buildHistoryContext(companion.commentaryHistory ?? []);
   const voiceConstraint = pickVoiceConstraint();
@@ -673,7 +686,7 @@ Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric
 Mood: ${mood}
 Level: ${level} (${title})
 Tone: ${timeModifier}
-${sentimentCtx}
+${sentimentCtx}${feedbackCtx}
 </state>
 ${moodBreakdown}${memoryCtx ? memoryCtx : ''}
 

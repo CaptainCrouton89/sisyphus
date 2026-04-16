@@ -19,7 +19,8 @@ export type HistoryEventType =
   | 'session-resumed'
   | 'session-continued'
   | 'session-cloned'
-  | 'cloned-from';
+  | 'cloned-from'
+  | 'popup-feedback';
 
 export interface HistoryEvent {
   ts: string;
