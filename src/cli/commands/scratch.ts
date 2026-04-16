@@ -65,7 +65,7 @@ function openScratchWindow(tmuxSession: string, cwd: string, prompt: string): vo
 
   let cmd = 'claude --dangerously-skip-permissions';
   if (prompt) {
-    cmd += ` --prompt ${shellQuote(prompt)}`;
+    cmd += ` -p ${shellQuote(prompt)}`;
   }
 
   execSync(

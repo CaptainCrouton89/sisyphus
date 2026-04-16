@@ -30,7 +30,7 @@
 
 **Home session lookup via live tmux option, not manifest:** `findHomeSession` reads `@sisyphus_cwd` from each non-`ssyph_*` session at call time. Falls back silently to the current tmux session if no match found — no warning is printed. CWD trailing slashes are stripped before matching, so `@sisyphus_cwd` must be stored without trailing slash (which `start.ts` ensures).
 
-**Prompt is positional args joined with a space:** `sisyphus scratch foo bar` becomes `--prompt "foo bar"`. No prompt omits the flag entirely (non-interactive claude session).
+**Prompt is positional args joined with a space:** `sisyphus scratch foo bar` becomes `-p "foo bar"`. No prompt omits the flag entirely (non-interactive claude session).
 
 ## companion.ts
 
@@ -92,7 +92,7 @@
 
 **No orchestrator identity check:** The parent CLAUDE.md states `yield` checks `SISYPHUS_AGENT_ID === 'orchestrator'` — it does not. The only guard is `assertTmux()` (checks `$TMUX` env, not agent identity). Any agent inside tmux can call `sisyphus yield`; `agentId: 'orchestrator'` is hardcoded in the request payload unconditionally.
 
-**stdin consumed only when `--prompt` absent:** `opts.prompt ?? await readStdin() ?? undefined` — stdin is not read if `--prompt` is provided. Piping to a call that includes `--prompt` silently discards stdin.
+**stdin consumed only when `--prompt` absent:** `opts.prompt ?? await readStdin() ?? undefined` — stdin is not read if `--prompt` is provided. Piping to a call that includes `-p` silently discards stdin.
 
 **`--mode` has no CLI validation:** The five modes (`discovery`, `planning`, `implementation`, `validation`, `completion`) are documented in help text but not enforced here — any string is forwarded to the daemon as-is. Validation (or silent ignore) happens daemon-side.
 
