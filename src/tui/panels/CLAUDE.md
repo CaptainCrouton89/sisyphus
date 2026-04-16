@@ -27,8 +27,11 @@
 
 ## Overlays
 
-- **Three companion overlay pages** (`profile`/`badges`/`help`): Tab cycles `profile ↔ badges`; `?` jumps to `help`. `help` is not in the Tab cycle.
+- **Three companion overlay pages** (`profile`/`badges`/`help`): Tab cycles `profile ↔ badges`; `?` jumps to `help`. `help` is not in the Tab cycle. Tab while on `help` returns to `_prevPage` (whichever of `profile`/`badges` was active before `?`), not always `profile`.
+- **`_gallery` lazy-init, never refreshed mid-session**: `createBadgeGallery` runs once when `_gallery` is `null`. Achievements earned while the overlay is open won't appear until `closeBadgeGallery()` is called. `closeBadgeGallery()` is also the only path that resets `_page`, `_prevPage`, `_gallery`, and `_badgeScroll` together — call it on overlay close, not just on explicit badge-page exit.
+- **`_badgeScroll` persists across profile↔badges tab switches** — only `closeBadgeGallery()` zeroes it. Re-entering the badges page mid-session retains the previous scroll position.
 - **`wrapText` in overlays assumes plain text** — ANSI sequences in commentary break word-wrap.
+- **`endurance` stat is stored in milliseconds**; rendered as hours (`/ 3_600_000`). The stat bar maxes at 500h — bar saturates well before `stats.endurance` hits its real ceiling.
 - **`computeLevelProgress` imported from `daemon/companion.js`** — the only panel with a direct daemon-layer import; level scaling changes require updating that file.
 
 ## Detail Panel
