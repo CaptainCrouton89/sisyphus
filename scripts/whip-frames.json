@@ -1,0 +1,611 @@
+{
+  "width": 32,
+  "height": 12,
+  "duration": 0.04,
+  "shoulder": [
+    0,
+    7
+  ],
+  "arm_length": [
+    4.0,
+    4.0
+  ],
+  "arm_thickness": 2,
+  "whip_thickness": 1,
+  "hand_glyph": "/",
+  "header": "Whip crack animation \u2014 generated from whip-frames.json.\nEdit JSON waypoints, regenerate with:\n  python3 scripts/whip-render.py scripts/whip-frames.json --emit bash -o scripts/test-whip-animation.sh\n\nConvention: ALL frames use 0.04s. Speed encoded as distance per frame.\n\nArm is shoulder \u2192 elbow \u2192 hand (two explicit segments). Specify elbow per\nframe for direct artistic control \u2014 IK is a fallback only.",
+  "frames": [
+    {
+      "id": "F01 REST \u2014 hold",
+      "handle": [
+        2,
+        9
+      ],
+      "path": [
+        [
+          5,
+          10
+        ],
+        [
+          12,
+          10
+        ],
+        [
+          20,
+          10
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F02 PULL \u2014 near-end of whip lifts",
+      "handle": [
+        2,
+        9
+      ],
+      "path": [
+        [
+          5,
+          9
+        ],
+        [
+          12,
+          10
+        ],
+        [
+          20,
+          10
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F03 PULL \u2014 hand rises 1",
+      "handle": [
+        2,
+        8
+      ],
+      "path": [
+        [
+          5,
+          8
+        ],
+        [
+          12,
+          9
+        ],
+        [
+          20,
+          10
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F04 PULL \u2014 whip midbody lifting",
+      "handle": [
+        2,
+        8
+      ],
+      "path": [
+        [
+          5,
+          7
+        ],
+        [
+          12,
+          8
+        ],
+        [
+          20,
+          9
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F05 PULL \u2014 hand row 7",
+      "handle": [
+        2,
+        7
+      ],
+      "path": [
+        [
+          5,
+          6
+        ],
+        [
+          12,
+          7
+        ],
+        [
+          20,
+          9
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F06 PULL \u2014 hand row 6",
+      "handle": [
+        2,
+        6
+      ],
+      "path": [
+        [
+          5,
+          5
+        ],
+        [
+          12,
+          6
+        ],
+        [
+          20,
+          8
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F07 PULL \u2014 hand row 5",
+      "handle": [
+        2,
+        5
+      ],
+      "path": [
+        [
+          5,
+          4
+        ],
+        [
+          12,
+          5
+        ],
+        [
+          20,
+          7
+        ],
+        [
+          28,
+          9
+        ]
+      ]
+    },
+    {
+      "id": "F08 PULL \u2014 hand holds, whip rising",
+      "handle": [
+        2,
+        5
+      ],
+      "path": [
+        [
+          5,
+          4
+        ],
+        [
+          12,
+          3
+        ],
+        [
+          20,
+          4
+        ],
+        [
+          26,
+          6
+        ],
+        [
+          27,
+          9
+        ]
+      ]
+    },
+    {
+      "id": "F09 WINDUP \u2014 whip arcing up over",
+      "handle": [
+        2,
+        5
+      ],
+      "path": [
+        [
+          5,
+          4
+        ],
+        [
+          10,
+          2
+        ],
+        [
+          16,
+          1
+        ],
+        [
+          22,
+          2
+        ],
+        [
+          25,
+          4
+        ],
+        [
+          24,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "F10 WINDUP \u2014 whip curling back",
+      "handle": [
+        3,
+        5
+      ],
+      "path": [
+        [
+          6,
+          4
+        ],
+        [
+          10,
+          2
+        ],
+        [
+          14,
+          1
+        ],
+        [
+          18,
+          0
+        ],
+        [
+          20,
+          1
+        ],
+        [
+          20,
+          3
+        ],
+        [
+          18,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "F11 PEAK \u2014 whip curled, tip trailing behind",
+      "handle": [
+        3,
+        5
+      ],
+      "path": [
+        [
+          6,
+          4
+        ],
+        [
+          10,
+          2
+        ],
+        [
+          14,
+          1
+        ],
+        [
+          18,
+          0
+        ],
+        [
+          20,
+          1
+        ],
+        [
+          18,
+          2
+        ],
+        [
+          12,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "F12 PEAK \u2014 snake-back hold",
+      "handle": [
+        3,
+        5
+      ],
+      "path": [
+        [
+          6,
+          4
+        ],
+        [
+          10,
+          2
+        ],
+        [
+          14,
+          1
+        ],
+        [
+          18,
+          0
+        ],
+        [
+          20,
+          1
+        ],
+        [
+          18,
+          2
+        ],
+        [
+          12,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "F13 SNAP \u2014 FAST, hand jumps to crack position",
+      "handle": [
+        8,
+        8
+      ],
+      "path": [
+        [
+          14,
+          7
+        ],
+        [
+          22,
+          7
+        ],
+        [
+          30,
+          7
+        ]
+      ]
+    },
+    {
+      "id": "F14 CRACK",
+      "handle": [
+        8,
+        8
+      ],
+      "path": [
+        [
+          14,
+          7
+        ],
+        [
+          22,
+          7
+        ],
+        [
+          28,
+          7
+        ]
+      ],
+      "glyphs": [
+        {
+          "at": [
+            27,
+            6
+          ],
+          "rows": [
+            "\\|/",
+            "-*-",
+            "/|\\"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F15 SHOCKWAVE",
+      "handle": [
+        7,
+        8
+      ],
+      "path": [
+        [
+          11,
+          8
+        ],
+        [
+          18,
+          8
+        ],
+        [
+          24,
+          8
+        ]
+      ],
+      "glyphs": [
+        {
+          "at": [
+            27,
+            8
+          ],
+          "rows": [
+            "',.",
+            ". ."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F16 RECOIL",
+      "handle": [
+        5,
+        9
+      ],
+      "path": [
+        [
+          9,
+          9
+        ],
+        [
+          16,
+          10
+        ],
+        [
+          22,
+          10
+        ],
+        [
+          26,
+          10
+        ]
+      ],
+      "glyphs": [
+        {
+          "at": [
+            28,
+            10
+          ],
+          "rows": [
+            ". ."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F17 SETTLING",
+      "handle": [
+        3,
+        9
+      ],
+      "path": [
+        [
+          7,
+          10
+        ],
+        [
+          16,
+          10
+        ],
+        [
+          26,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F18 near REST",
+      "handle": [
+        2,
+        9
+      ],
+      "path": [
+        [
+          5,
+          10
+        ],
+        [
+          14,
+          10
+        ],
+        [
+          22,
+          10
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F19 REST",
+      "handle": [
+        2,
+        9
+      ],
+      "path": [
+        [
+          5,
+          10
+        ],
+        [
+          12,
+          10
+        ],
+        [
+          20,
+          10
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "F20 REST \u2014 hold",
+      "handle": [
+        2,
+        9
+      ],
+      "path": [
+        [
+          5,
+          10
+        ],
+        [
+          12,
+          10
+        ],
+        [
+          20,
+          10
+        ],
+        [
+          28,
+          10
+        ]
+      ]
+    }
+  ]
+}
