@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { exportSessionToZip } from '../cli/commands/export.js';
 import type { Key } from './terminal.js';
 import { setRawBypass } from './terminal.js';
 import {
@@ -40,6 +41,7 @@ export type LeaderAction =
   | { type: 'companion-debug' }
   | { type: 'shell-command' }
   | { type: 'jump-to-pane' }
+  | { type: 'export-session' }
   | { type: 'kill' }
   | { type: 'quit' }
   | { type: 'dismiss' };
@@ -576,6 +578,17 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       break;
     }
 
+    case 'export-session': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      try {
+        const outputPath = exportSessionToZip(selectedSessionId, state.cwd);
+        notify(state, `Exported to ${outputPath}`);
+      } catch (err) {
+        notify(state, `Export failed: ${(err as Error).message}`);
+      }
+      break;
+    }
+
     case 'kill': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       const node = nodes[state.cursorIndex];
@@ -619,6 +632,7 @@ function handleLeaderKey(input: string, key: Key, state: AppState, actions: Inpu
     if (input === 'c') { handleLeaderAction({ type: 'companion-overlay' }, state, actions); return; }
     if (input === 'D') { handleLeaderAction({ type: 'companion-debug' }, state, actions); return; }
     if (input === '!') { handleLeaderAction({ type: 'shell-command' }, state, actions); return; }
+    if (input === 'E') { handleLeaderAction({ type: 'export-session' }, state, actions); return; }
     if (input === 'j') { handleLeaderAction({ type: 'jump-to-pane' }, state, actions); return; }
     if (input === 'k') { handleLeaderAction({ type: 'kill' }, state, actions); return; }
     if (input === 'q') { handleLeaderAction({ type: 'quit' }, state, actions); return; }

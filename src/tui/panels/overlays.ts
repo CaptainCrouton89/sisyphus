@@ -16,7 +16,7 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const LEADER_WIDTH = 26;
-const LEADER_HEIGHT = 22; // 20 content lines + 2 border lines
+const LEADER_HEIGHT = 23; // 21 content lines + 2 border lines
 const COPY_HEIGHT = 9;    // 7 content lines + 2 border lines
 const HELP_WIDTH = 62;
 const COMPANION_WIDTH = 52;
@@ -53,6 +53,7 @@ export function renderLeaderOverlay(buf: FrameBuffer, rows: number, cols: number
     '  !  shell command'.padEnd(innerWidth),
     '  j  jump to pane'.padEnd(innerWidth),
     '  k  kill session/agent'.padEnd(innerWidth),
+    '  E  export session'.padEnd(innerWidth),
     '  c  companion overlay'.padEnd(innerWidth),
     '  q  quit'.padEnd(innerWidth),
     '  ?  help'.padEnd(innerWidth),
@@ -111,7 +112,8 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
     helpRow('  space → s  strategy', '  space → r  roadmap', innerWidth),
     helpRow('  space → l  tail logs', '  space → /  search', innerWidth),
     helpRow('  space → a  spawn agent', '  space → m  msg agent', innerWidth),
-    helpRow('  space → ?  help', '  space → 1-9  jump', innerWidth),
+    helpRow('  space → E  export session', '  space → 1-9  jump', innerWidth),
+    helpRow('  space → ?  help', '', innerWidth),
     ' '.padEnd(innerWidth),
     helpRow('  y → p  session path', '  y → C  LLM context', innerWidth),
     helpRow('  y → l  logs content', '  y → s  session ID', innerWidth),

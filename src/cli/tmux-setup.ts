@@ -62,6 +62,10 @@ export function restartAgentScriptPath(): string {
   return scriptPath('sisyphus-restart-agent-popup');
 }
 
+export function exportSessionScriptPath(): string {
+  return scriptPath('sisyphus-export-session');
+}
+
 export function openRoadmapScriptPath(): string {
   return scriptPath('sisyphus-open-roadmap');
 }
@@ -306,6 +310,7 @@ cat <<'EOF'
     t   Session status
     p   Open roadmap
     S   Open strategy
+    e   Export session
 
   --- Management --------------------
     k   Kill session
@@ -426,6 +431,16 @@ file="$cwd/.sisyphus/sessions/$session_id/strategy.md"
 exec \${EDITOR:-nvim} "$file"
 `;
 
+const EXPORT_SESSION_SCRIPT = `#!/bin/bash
+# Export session data as zip to ~/Downloads
+${SESSION_RESOLVE}
+
+echo "Exporting session \${session_id:0:8}..."
+sisyphus export "$session_id" --cwd "$cwd"
+echo ""
+read -n 1 -s -r -p "Press a key to close."
+`;
+
 const RESTART_AGENT_SCRIPT = `#!/bin/bash
 # Restart a failed/lost agent
 ${SESSION_RESOLVE}
@@ -466,6 +481,7 @@ function installAllScripts(): void {
   installScript('sisyphus-restart-agent-popup', RESTART_AGENT_SCRIPT);
   installScript('sisyphus-open-roadmap', OPEN_ROADMAP_SCRIPT);
   installScript('sisyphus-open-strategy', OPEN_STRATEGY_SCRIPT);
+  installScript('sisyphus-export-session', EXPORT_SESSION_SCRIPT);
 }
 
 export function getExistingBinding(key: string, table: string = 'root'): string | null {
@@ -534,6 +550,8 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     `bind-key -T ${KEY_TABLE} r display-popup -E -w 70% -h 50% -d "#{pane_current_path}" ${restartAgentScriptPath()}`,
     `bind-key -T ${KEY_TABLE} p display-popup ${popupOpts} -d "#{pane_current_path}" ${openRoadmapScriptPath()}`,
     `bind-key -T ${KEY_TABLE} S display-popup ${popupOpts} -d "#{pane_current_path}" ${openStrategyScriptPath()}`,
+    // Export
+    `bind-key -T ${KEY_TABLE} e display-popup -E -w 60 -h 8 -T ' Export Session ' -d "#{pane_current_path}" ${exportSessionScriptPath()}`,
     // prefix-x smart kill
     `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`,
   ];
@@ -620,7 +638,7 @@ export function removeTmuxKeybind(): void {
     'sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg',
     'sisyphus-kill-session', 'sisyphus-delete-session', 'sisyphus-help', 'sisyphus-status-popup',
     'sisyphus-pick-session', 'sisyphus-continue-session', 'sisyphus-restart-agent-popup',
-    'sisyphus-open-roadmap', 'sisyphus-open-strategy',
+    'sisyphus-open-roadmap', 'sisyphus-open-strategy', 'sisyphus-export-session',
   ];
   for (const name of scripts) {
     const path = scriptPath(name);
