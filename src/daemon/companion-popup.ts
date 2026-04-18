@@ -1,6 +1,6 @@
-import { writeFileSync, readFileSync, unlinkSync } from 'node:fs';
+import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { getMoodFace, getMoodTmuxColor } from '../shared/companion-render.js';
 import type { FeedbackRating } from '../shared/companion-types.js';
 import { loadCompanion } from './companion.js';
@@ -14,6 +14,8 @@ const POPUP_DURATION = 15;
 const POPUP_TMP_PREFIX = join(tmpdir(), 'sisyphus-popup');
 const POPUP_SCRIPT = join(tmpdir(), 'sisyphus-popup.sh');
 const POPUP_RESULT_PREFIX = join(tmpdir(), 'sisyphus-popup-result');
+const WHIP_ANIMATION_PATH = resolve(import.meta.dirname, '../templates/whip-animation.sh');
+const WHIP_ANIMATION_ROWS = 12; // canvas height baked into whip-frames.json
 
 export interface PopupPage {
   text: string;
@@ -71,6 +73,12 @@ export function showCommentaryPopupQueue(pages: PopupPage[]): { rating: Feedback
       writeFileSync(`${POPUP_TMP_PREFIX}-${i}.txt`, content);
     }
 
+    // Popup must fit the whip animation's 12-row canvas (+2 for border) since '3:whip' is always available.
+    const whipAvailable = existsSync(WHIP_ANIMATION_PATH);
+    if (whipAvailable && maxContentHeight < WHIP_ANIMATION_ROWS + 2) {
+      maxContentHeight = WHIP_ANIMATION_ROWS + 2;
+    }
+
     const initialTitle = pages[0].title ?? defaultTitle;
 
     const script = `#!/bin/sh
@@ -91,7 +99,9 @@ while IFS= read -r -n1 -t ${POPUP_DURATION} k; do
     0) printf 'neutral' > "$RESULT_FILE"; break ;;
     1) printf 'good' > "$RESULT_FILE"; break ;;
     2) printf 'bad' > "$RESULT_FILE"; break ;;
-    3) printf 'whip' > "$RESULT_FILE"; break ;;
+    3) printf 'whip' > "$RESULT_FILE"
+       ${whipAvailable ? `bash ${shellQuote(WHIP_ANIMATION_PATH)}` : ':'}
+       break ;;
     c|C)
       stty echo
       printf '\\033[2J\\033[H> '
