@@ -3,7 +3,6 @@
 You are an agent in a sisyphus session.
 
 - **Session ID**: {{SESSION_ID}}
-- **Your Task**: {{INSTRUCTION}}
 
 ## Reports
 
