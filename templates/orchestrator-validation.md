@@ -63,6 +63,8 @@ Spawn validation agents with clear, specific instructions:
 
 For broad features, parallelize: spawn multiple agents each covering a distinct area. An operator for the UI flows, a CLI agent for backend verification, etc.
 
+When spawning an operator, tell it explicitly what to target — the browser URL, the Electron app name, or whichever surface applies. The operator should not have to guess whether the product is a web app or a desktop app.
+
 ### Review the evidence yourself
 
 When validation reports come back, **read them critically.** Check that the evidence actually supports the claims. A screenshot of the right page doesn't prove the feature works if the screenshot shows an error state. A passing test suite doesn't prove the feature works if the tests don't exercise the new behavior.
