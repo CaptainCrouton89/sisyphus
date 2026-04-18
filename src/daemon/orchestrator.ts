@@ -395,11 +395,13 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   const pluginPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);
-  const effort = config.orchestratorEffort ?? 'high';
+  const effort = config.orchestratorEffort ?? 'xhigh';
+  const model = config.model;
+  const modelFlag = model ? ` --model ${shellQuote(model)}` : '';
   const requiredPluginDirs = resolveRequiredPluginDirs(cwd);
   const extraPluginFlags = requiredPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
   const claudeSessionId = randomUUID();
-  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name "ssph:orch ${session.name ?? sessionId.slice(0, 8)} c${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
+  const claudeCmd = `claude --dangerously-skip-permissions --disallowed-tools "Agent" --effort ${effort}${modelFlag} --session-id "${claudeSessionId}" --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name "ssph:orch ${session.name ?? sessionId.slice(0, 8)} c${cycleNum}" --system-prompt "$(cat '${promptFilePath}')" "$(cat '${userPromptFilePath}')"`;
 
   const paneId = tmux.createPane(windowId, cwd, 'left');
 
@@ -430,7 +432,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   ]);
   tmux.sendKeys(paneId, `bash '${scriptPath}'`);
 
-  const resumeArgs = `--dangerously-skip-permissions --disallowed-tools "Task,Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
+  const resumeArgs = `--dangerously-skip-permissions --disallowed-tools "Agent" --effort ${effort} --settings "${settingsPath}" --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
   const resumeEnv = `${envExports} && ${notifyEnvExports}`;
 
   // Compute inter-cycle gap from previous cycle's completedAt

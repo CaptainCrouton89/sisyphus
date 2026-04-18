@@ -3,7 +3,7 @@ name: problem
 description: Problem explorer — collaboratively explores the problem space with the user through generative brainstorming, multi-perspective thinking, and assumption challenging. Produces a thinking document that captures understanding before any solution work begins.
 model: opus
 color: cyan
-effort: max
+effort: xhigh
 interactive: true
 systemPrompt: replace
 plugins:

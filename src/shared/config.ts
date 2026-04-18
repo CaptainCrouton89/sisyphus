@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { globalConfigPath, projectConfigPath } from './paths.js';
 import type { StatusBarConfig } from './types.js';
 
-export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface NotificationConfig {
   enabled?: boolean;
@@ -31,8 +31,9 @@ export interface Config {
 }
 
 const DEFAULT_CONFIG: Config = {
+  model: 'claude-opus-4-7[1m]',
   pollIntervalMs: 5000,
-  orchestratorEffort: 'high',
+  orchestratorEffort: 'xhigh',
   agentEffort: 'medium',
   notifications: {
     enabled: true,

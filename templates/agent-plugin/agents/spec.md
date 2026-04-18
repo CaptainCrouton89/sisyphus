@@ -3,7 +3,7 @@ name: spec
 description: Interactive spec collaborator — runs a three-stage shape→requirements→deepen flow with the user, dispatching engineer + requirements-writer subagents to produce design.md, design.json, requirements.json, and (via script) requirements.md.
 model: opus
 color: cyan
-effort: high
+effort: xhigh
 interactive: true
 systemPrompt: append
 plugins:

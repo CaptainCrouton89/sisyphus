@@ -3,7 +3,7 @@ name: plan
 description: Plan lead — turns finalized requirements and design into a concrete implementation plan. For large features, delegates sub-plans to specialist agents and synthesizes the result. Produces phased task breakdowns with dependency graphs ready for parallel execution.
 model: opus
 color: yellow
-effort: max
+effort: xhigh
 interactive: true
 systemPrompt: append
 plugins:

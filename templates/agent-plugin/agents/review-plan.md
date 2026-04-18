@@ -3,7 +3,7 @@ name: review-plan
 description: Use after a plan has been written to verify it fully covers the requirements and design. Spawns parallel sub-agent reviewers for security, requirements coverage, code smells, and pattern consistency — acts as a gate before handing a plan off to implementation agents.
 model: opus
 color: orange
-effort: max
+effort: xhigh
 systemPrompt: append
 ---
 

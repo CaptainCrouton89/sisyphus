@@ -40,8 +40,8 @@ export function registerInit(program: Command): void {
 
       console.log('');
       console.log('Configuration options (add to .sisyphus/config.json):');
-      console.log('  orchestratorEffort  — "low" | "medium" | "high" | "max" (default: "high")');
-      console.log('  agentEffort         — "low" | "medium" | "high" | "max" (default: "medium")');
+      console.log('  orchestratorEffort  — "low" | "medium" | "high" | "xhigh" | "max" (default: "xhigh")');
+      console.log('  agentEffort         — "low" | "medium" | "high" | "xhigh" | "max" (default: "medium")');
       console.log('  pollIntervalMs      — Daemon poll interval in ms (default: 5000)');
       console.log('  autoUpdate          — Auto-update daemon on restart (default: true)');
       console.log('  notifications       — { enabled: boolean, sound: string } (default: enabled, Hero.aiff)');
