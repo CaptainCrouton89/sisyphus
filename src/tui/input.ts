@@ -871,7 +871,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
     try {
       const label = session.name ?? state.selectedSessionId!.slice(0, 8);
-      const sessionName = actions.openClaudeResumeSession(state.cwd, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs);
+      const sessionName = actions.openClaudeResumeSession(state.cwd, state.selectedSessionId, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs);
       actions.switchToSession(sessionName);
     } catch {
       notify(state, 'Failed to open Claude session');

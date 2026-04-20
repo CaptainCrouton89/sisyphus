@@ -171,11 +171,14 @@ export function openClaudeResumePopup(cwd: string, claudeSessionId: string, resu
   );
 }
 
-export function openClaudeResumeSession(cwd: string, claudeSessionId: string, sessionLabel: string, resumeEnv?: string, resumeArgs?: string): string {
+export function openClaudeResumeSession(cwd: string, sessionId: string, claudeSessionId: string, sessionLabel: string, resumeEnv?: string, resumeArgs?: string): string {
   const sessionName = tmuxSessionName(cwd, sessionLabel);
   // If session already exists, reattach to it
   const existing = execSafe('tmux list-sessions -F "#{session_name}"');
   if (existing?.split('\n').some(line => line === sessionName)) {
+    // Re-stamp bindings in case the session was created before we set them
+    execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
+    execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_session_id ${shellQuote(sessionId)}`);
     return sessionName;
   }
   const pathEnv = augmentedPath();
@@ -186,6 +189,7 @@ export function openClaudeResumeSession(cwd: string, claudeSessionId: string, se
   const cmd = `${envPrefix}PATH=${shellQuote(pathEnv)} claude ${args}`;
   exec(`tmux new-session -d -s ${shellQuote(sessionName)} -n main -c ${shellQuote(cwd)} ${shellQuote(cmd)}`);
   execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
+  execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_session_id ${shellQuote(sessionId)}`);
   // Match session defaults from daemon tmux.ts configureSessionDefaults
   const paneTarget = `${sessionName}:`;
   execSafe(`tmux set -w -t ${shellQuote(paneTarget)} pane-border-status top`);

@@ -4,7 +4,7 @@ import type { Command } from 'commander';
 import { sessionsManifestPath } from '../../shared/paths.js';
 
 interface ManifestEntry {
-  type: 'S' | 'H';
+  type: 'S' | 'H' | 'O';
   tmuxName: string;
   cwd: string;
   phase: string | null;
