@@ -1,12 +1,10 @@
 - **`@sisyphus_cwd` trailing slash (scratch.ts):** `findHomeSession` strips trailing slashes before matching — `start.ts` stores without trailing slash; a path stored with one silently finds no home session.
 - **companion `--repo` is exact path match:** `obs.repo === repo` — passing a basename silently matches nothing; display uses basename regardless.
 - **Observations outside `CATEGORY_ORDER` silently dropped (companion):** `grouped.get(obs.category)?.push(...)` is a no-op for unknown categories. Only `session-sentiments`, `repo-impressions`, `user-patterns`, `notable-moments` ever render.
-- **`@sisyphus_cwd` session tag (start.ts):** Set before `openDashboardWindow` — dashboard failure doesn't prevent the tag write. Without it, `sessions-manifest.ts` cannot discover this as a home session.
 
 ## review.ts
 - **`--wait` consumes feedback file:** Reads then deletes (`unlinkSync`) — one-shot. Filenames differ by command: `requirements --wait` reads `review-feedback.md`; `design --wait` reads `design-feedback.md`.
 - **History events require both `--wait` and a resolved `sessionId`:** Auto-detected sessions (no flag, no env) silently produce no history events even with `--wait`.
-- **Binary co-location constraint:** TUI binary resolved via `join(import.meta.dirname, binaryName)` — running the CLI from source with `tsx` fails (`review.js`/`design.js` only exist in `dist/`).
 - **`--export` hand-edit guard:** Byte-for-byte comparison; any whitespace difference blocks write. `--force` renames existing to `.bak` then atomic-writes.
 - **`meta.bounceIterations` schema (requirements only):** Global integer — previously `Record<sectionId, integer>`; writing a keyed object is a schema violation. `meta.nextSectionId` removed. Design schema has no `bounceIterations` or `stage` fields.
 - **`safeAssumptions` constraints:** Cap is 9 per group (TUI 1-9 key affordance; exceeding 9 silently truncates keyboard access). IDs must be unique across **all** groups and `safeAssumptions` arrays in the file.

@@ -1,5 +1,3 @@
-- `operator.md` — Spawns sub-agents via **Task tool** (not Agent tool) — the only parent agent that does this
-
 ## `systemPrompt: replace`
 
 Agents using `replace` must include a "Baseline Behaviors" block — without it, `replace` strips load-bearing defaults (tool use, scope limits, hooks, destructive-action posture). **Subagent caveat**: `systemPrompt` is only honored for parent agents via the daemon (`src/daemon/agent.ts:240`); in `review/`, `review-plan/`, `spec/`, `research-lead/`, `problem/`, the field is silently ignored — those bodies are consumed as Agent-tool subagent prompts regardless.
@@ -14,5 +12,3 @@ Outer directives need more colons than inner: `::::columns` > `:::col` > `:::`. 
 - Design uses `"agree"` not `"approve"`; `"pick-alt"` → read `selectedAlternative` and revise
 - Read both `openQuestions[].response`+`selectedOption` (group-level) AND `questions[].response` (per-requirement inline) — separate fields
 - `startedAt`/`completedAt` and `meta.reviewStartedAt`/`meta.reviewCompletedAt` — TUI-owned, never write them
-
-- `test-spec` submits `{ "testsNeeded": false }` for mechanical changes — downstream validators check this field to skip verification, not the markdown content
