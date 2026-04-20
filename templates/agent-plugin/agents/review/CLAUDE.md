@@ -9,6 +9,7 @@ Sub-agent templates orchestrated by `agents/review.md`. These are **not** top-le
 - **efficiency.md** — Redundant computation, missed concurrency, hot-path bloat, no-op updates, TOCTOU, memory issues, overly broad operations
 - **security.md** — Injection surfaces, auth/authz gaps, data exposure, race conditions, unsafe deserialization; always spawned at opus for hotfix/security classifications. All findings require a concrete exploit path — exploit path is not an output field, it's the gate; no exploit path = not a finding (applies to every category, not just TOCTOU)
 - **compliance.md** — CLAUDE.md conventions, `.claude/rules/*.md` constraints, requirements conformance (haiku — mechanical rule-matching)
+- **tests.md** — Implementation-mirroring assertions, mocked-to-tautology, call-sequence without contract, private/internal testing, trivially-true assertions, snapshots capturing implementation detail. Scoped to test files in the diff; returns "No test changes — nothing to review." when none are present
 
 ## Non-Obvious Patterns
 
@@ -41,6 +42,12 @@ Sub-agent templates orchestrated by `agents/review.md`. These are **not** top-le
 **Empty report format**: All sub-agents emit an explicit sentence when clean ("No quality concerns — the change is structurally sound." etc.). This sentence, not silence, is the signal the validation wave uses to skip spawning a validator for that sub-agent. A sub-agent that produces no output at all is treated as failed, not clean.
 
 **`security` rate-limiting/CSRF exclusion**: `security.md` explicitly does not flag missing rate limiting or CSRF protection unless the change specifically creates a new surface for them. These are valid security concerns in general but out of scope for diff-scoped review.
+
+**`tests` counterfactual requirement**: Each finding must include a **Counterfactual** field — either what broken implementation would leave the test passing, or what correct refactor would incorrectly break it. A coupling suspicion without a named counterfactual must be dismissed, not flagged. This is stricter than `quality`/`efficiency`'s evidence bar and mirrors `security`'s exploit-path gate.
+
+**`tests` no-test-files short-circuit**: If the diff contains no test files, the sub-agent emits "No test changes — nothing to review." and exits without investigation. This is distinct from a clean review — the coordinator should not treat absent tests as a finding (coverage gaps are out of scope for this sub-agent). The coordinator should skip spawning `tests` entirely when no test files are in the diff to save a roundtrip.
+
+**`tests` coverage-gap exclusion**: Missing tests for new behavior are explicitly out of scope. `tests` reviews the quality of tests that exist in the diff; it does not flag what isn't tested. If coverage is a project-level concern, it belongs in `compliance` via a documented rule, not here.
 
 **Validation wave**: After gathering sub-agent findings, the parent spawns 1 validation sub-agent per sub-agent that produced findings (bugs/security at opus, everything else at sonnet). Sub-agent output that doesn't include dismissed entries cannot be audited — omitting them breaks the validation loop.
 

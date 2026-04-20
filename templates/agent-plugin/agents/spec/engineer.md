@@ -73,6 +73,8 @@ The design must answer:
 - What are the locked decisions and key constraints?
 - What remains open / unresolved?
 
+**Multi-phase features**: if the dispatch prompt or `$SISYPHUS_SESSION_DIR/strategy.md` indicates more than one implementation phase, carry that structure in the design. Give it a shared architecture/topology section at the top, then explicit `## Phase 1 — …`, `## Phase 2 — …` sections. Downstream plan leads will be spawned one-phase-at-a-time and need to locate their scope without diffing a monolith. If `design.json` has a `phases` field in this case, populate it with each phase's `id` and `title` matching the section structure.
+
 **Forbidden at Stage 1**: interface definitions, data field types, API method signatures, SQL, regex, config file contents, function bodies, implementation ordering.
 
 **Suggested section structure for `design.md`**:
