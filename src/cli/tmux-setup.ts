@@ -162,6 +162,13 @@ fi
 if [ -n "$HOME_DWID" ] && ! tmux list-panes -t "$HOME_DWID" >/dev/null 2>&1; then
   HOME_DWID=""
 fi
+# Reconcile: if option is unset/stale, scan home session for an existing TUI window
+# (pane running 'node'). This prevents duplicate dashboards when the option drifts.
+if [ -z "$HOME_DWID" ]; then
+  HOME_DWID=$(tmux list-windows -t "$HOME_SESSION" -F '#{window_id} #{pane_current_command}' 2>/dev/null \
+    | awk '$2=="node"{print $1; exit}')
+  [ -n "$HOME_DWID" ] && tmux set-option -t "$HOME_SESSION" @sisyphus_dashboard "$HOME_DWID"
+fi
 if [ -z "$HOME_DWID" ]; then
   # Reopen dashboard: create window, launch TUI, update option
   home_cwd=$(tmux show-options -t "$HOME_SESSION" -v @sisyphus_cwd 2>/dev/null)
