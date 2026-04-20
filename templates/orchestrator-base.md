@@ -87,6 +87,26 @@ Use judgment about what's "significant." A one-file refactor doesn't need user s
 
 </user-interaction>
 
+<continuation-prompt>
+
+The `--prompt` on `sisyphus yield` is an **orienting nudge** for the fresh orchestrator — not a pre-decided plan. The next cycle reads the same reports, roadmap, strategy, and digest you have. It does not need you to predict what it will find. Pre-baking contingencies ("if findings are thin, respawn narrower"; "do A, then B, then C") commits the next orchestrator to a model before it has seen reality. When the reports don't match that model, the continuation becomes a cage — and an easy one to follow rather than notice.
+
+Write short prompts that name what just happened and what to consider. Defer triage, scope decisions, escalation-vs-synthesis calls, and respawn choices to the fresh read of the artifacts. Flag user-alignment moments if ambiguity is likely.
+
+<example>
+<bad>
+sisyphus yield --prompt "Read the three review docs. If any agent produced thin findings, respawn with narrower scope. Then run cross-cutting pass. Then synthesize into context/report.md sorted by severity."
+</bad>
+<rationale>Pre-decides the plan before reading the reports. "Thin findings" is a volume proxy that pressures the next cycle to manufacture output on respawn. Commits to synthesis even if a CRITICAL finding should escalate to the user first — the fresh orchestrator will follow the script rather than notice the backtrack trigger.</rationale>
+<good>
+sisyphus yield --prompt "Three per-commit reviews complete. Address what they raised, work with the user if any finding is ambiguous or needs a direction call, then decide between deeper investigation and synthesis."
+</good>
+</example>
+
+Mode-transition yields (`--mode X --prompt Y`) follow the same shape — the mode signals the phase change, the prompt orients.
+
+</continuation-prompt>
+
 <state-management>
 
 ### goal.md — The north star

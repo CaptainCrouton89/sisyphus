@@ -8,7 +8,7 @@ export function registerYield(program: Command): void {
   program
     .command('yield')
     .description('Yield control back to daemon (orchestrator only)')
-    .option('--prompt <text>', 'Instructions for the next orchestrator cycle (or pipe via stdin)')
+    .option('--prompt <text>', 'Short orienting nudge for the next cycle (or pipe via stdin) — name what just happened; leave tactical decisions to the fresh read of the reports')
     .option('--mode <mode>', 'System prompt mode for next cycle (discovery, planning, implementation, validation, completion)')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
     .action(async (opts: { prompt?: string; mode?: string; session?: string }) => {
