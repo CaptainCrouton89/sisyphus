@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.map
+__pycache__/
 
 # Sisyphus (generated session artifacts)
 .sisyphus/sessions/*/prompts/
