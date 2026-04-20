@@ -251,12 +251,6 @@ export function setPaneStyle(paneTarget: string, color: string, meta: PaneMeta):
   ].join('');
 
   execSafe(`tmux set -p -t ${t(paneTarget)} pane-border-format ${shellQuote(fmt)}`);
-  // Store color as a per-pane user variable. The window-level border styles use a
-  // format string that resolves #{@pane_color} per-pane at render time, giving each
-  // pane its own border color (pane-border-style itself is window-level / last-write-wins).
-  execSafe(`tmux set -p -t ${t(paneTarget)} @pane_color "${color}"`);
-  execSafe(`tmux set -w -t ${t(paneTarget)} pane-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
-  execSafe(`tmux set -w -t ${t(paneTarget)} pane-active-border-style "fg=#{?#{@pane_color},#{@pane_color},default}"`);
 }
 
 /**
