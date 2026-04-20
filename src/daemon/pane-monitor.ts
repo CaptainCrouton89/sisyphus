@@ -11,7 +11,8 @@ import type { MoodSignals, FeedbackEntry } from '../shared/companion-types.js';
 import { emitHistoryEvent } from './history.js';
 
 function buildFeedbackSignals(history: FeedbackEntry[]): Pick<MoodSignals, 'recentFeedbackGood' | 'recentFeedbackBad' | 'recentFeedbackWhip'> {
-  const recent = history.slice(-5);
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  const recent = history.filter(e => new Date(e.timestamp).getTime() >= cutoff).slice(-5);
   return {
     recentFeedbackGood: recent.filter(e => e.rating === 'good').length,
     recentFeedbackBad: recent.filter(e => e.rating === 'bad').length,
