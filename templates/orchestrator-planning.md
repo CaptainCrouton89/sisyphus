@@ -48,7 +48,7 @@ If you're unsure, spawn the spec agent. The cost of a short spec conversation is
 
 Once you have context docs and aligned spec outputs (requirements + design), revisit the roadmap — this is the first point where you understand real scope. Roadmap refinement means updating the four canonical sections: current stage, exit criteria, active context references, and next steps. Decisions from exploration and spec work fold into context documents — not the roadmap.
 
-Spawn **one plan lead** per feature. Point it at inputs (requirements, design, context docs) — not a pre-made structure. The plan lead handles its own decomposition: it assesses scope, delegates sub-plans if needed, runs adversarial reviews, and delivers a synthesized master plan. **Delegate outcomes, not implementations** — tell the plan lead what needs planning and why, not how to structure the plan.
+Spawn **one plan lead** per feature (or per phase — see phase-scoped planning below). Point it at inputs (requirements, design, context docs) — not a pre-made structure. The plan lead handles its own decomposition: it assesses scope, delegates sub-plans if needed, runs adversarial reviews, and delivers a synthesized master plan. **Delegate outcomes, not implementations** — tell the plan lead what needs planning and why, not how to structure the plan.
 
 **Don't split planning yourself.** If the orchestrator pre-splits into "backend plan agent" and "frontend plan agent," the plan lead's synthesis step — resolving cross-domain conflicts, finding gaps, stress-testing edge cases — never happens.
 
@@ -56,16 +56,44 @@ Spawn **one plan lead** per feature. Point it at inputs (requirements, design, c
 
 </plan-delegation>
 
+<phase-scoped-planning>
+
+## Plan One Phase at a Time for Multi-Phase Features
+
+Count the implementation phases in `strategy.md`.
+
+- **One phase:** spawn the plan lead with the full feature scope.
+- **More than one phase:** spawn the plan lead for the next phase only. What you learn implementing Phase N informs Phase N+1 before it's committed to paper.
+
+The cycle shape:
+
+```
+plan phase 1 → implement phase 1 → validate phase 1 → plan phase 2 → implement phase 2 → validate phase 2 → ...
+```
+
+After a phase's implementation passes e2e validation, yield back to planning mode for the next phase:
+
+```bash
+sisyphus yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."
+```
+
+When spawning the phase-scoped plan lead, name in the prompt:
+- Which phase from `strategy.md` is in scope
+- Which design document or phase-section applies
+- That later phases are out of scope
+
+Plans save as `context/plan-{topic}.md` (or `plan-phase-N-{topic}.md` when the phase identifier helps discoverability). Sub-plans follow the same prefix.
+
+</phase-scoped-planning>
+
 <progressive-development>
 
 Not all tasks need the same process depth.
 
 - **Small task** (1-3 files, single domain): Skip phases — roadmap is a short checklist (diagnose, fix, validate). Single plan agent, single implement agent.
-- **Large task** (3+ stages, multiple domains): Full phased development. The roadmap tracks phases, each producing artifacts in `context/`.
+- **Large task** (3+ stages, multiple domains): Full phased development. The roadmap tracks phases; each phase is planned, implemented, and validated before the next is planned (see phase-scoped planning above).
 
 Signs you need phased development: multiple unfamiliar subsystems, the task spans different concerns (backend, frontend, IPC), or the spec has more than 3 distinct work areas.
-
-Implementation stages are context artifacts — saved to `context/plan-stage-N-*.md`. Detail-plan one stage at a time; what you learn implementing stage N informs stage N+1.
 
 </progressive-development>
 
