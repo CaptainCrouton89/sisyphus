@@ -1,5 +1,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { Command } from 'commander';
 import { daemonLogPath, daemonPidPath, globalDir, socketPath } from '../../shared/paths.js';
 import { isInstalled } from '../install.js';
@@ -265,6 +267,34 @@ function checkNvim(): Check {
   }
 }
 
+async function checkNodePty(): Promise<Check> {
+  try {
+    await import('node-pty');
+    return { name: 'node-pty', status: 'ok', detail: 'Loadable' };
+  } catch {
+    return {
+      name: 'node-pty',
+      status: 'warn',
+      detail: 'Cannot load (nvim editor in dashboard will not work)',
+      fix: 'npm rebuild node-pty — or reinstall: npm install -g sisyphi',
+    };
+  }
+}
+
+function checkNotifyBinary(): Check | null {
+  if (process.platform !== 'darwin') return null;
+  const binary = join(homedir(), '.sisyphus', 'SisyphusNotify.app', 'Contents', 'MacOS', 'sisyphus-notify');
+  if (existsSync(binary)) {
+    return { name: 'Notifications', status: 'ok', detail: 'SisyphusNotify.app built' };
+  }
+  return {
+    name: 'Notifications',
+    status: 'warn',
+    detail: 'SisyphusNotify.app not built (click-to-switch unavailable)',
+    fix: 'Requires Xcode CLI tools: xcode-select --install, then reinstall sisyphus',
+  };
+}
+
 const SYMBOLS = { ok: '\u2713', warn: '!', fail: '\u2717' } as const;
 
 export function registerDoctor(program: Command): void {
@@ -273,6 +303,8 @@ export function registerDoctor(program: Command): void {
     .description('Check sisyphus installation health')
     .action(async () => {
       const itermCheck = checkItermRightOptionKey();
+      const notifyCheck = checkNotifyBinary();
+      const nodePtyCheck = await checkNodePty();
       const checks: Check[] = [
         checkNodeVersion(),
         checkClaudeCli(),
@@ -288,6 +320,8 @@ export function registerDoctor(program: Command): void {
         checkTmuxKeybind(),
         checkBeginCommand(),
         checkNvim(),
+        nodePtyCheck,
+        ...(notifyCheck ? [notifyCheck] : []),
         checkTermrender(),
       ];
 
