@@ -136,6 +136,17 @@ function createAgentPlugin(
     copyFileSync(`${srcHooks}/${hookScript}`, `${base}/hooks/${hookScript}`);
   }
 
+  // Plan agent gets an additional PreToolUse gate on `sisyphus submit`
+  // that blocks submission when context/plan-*.md files violate the
+  // 200-line master-plan limit.
+  if (normalizedType === 'plan') {
+    (hooksConfig.PreToolUse as unknown[]).push({
+      matcher: 'Bash',
+      hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-validate.sh' }],
+    });
+    copyFileSync(`${srcHooks}/plan-validate.sh`, `${base}/hooks/plan-validate.sh`);
+  }
+
   writeFileSync(`${base}/hooks/hooks.json`, JSON.stringify({ hooks: hooksConfig }, null, 2), 'utf-8');
 
   return base;
