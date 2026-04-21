@@ -10,17 +10,12 @@
 - `sessionsManifestPath()` (JSON) and `sessionsManifestTsvPath()` (TSV) are both maintained — JSON is canonical, TSV for external tooling. Updating one without the other leaves them out of sync.
 - `tmuxSessionDisplayName()` strips `ssyph_{basename(cwd)}_` prefix; `isSisyphusSession` checks the raw name. Use display name only for UI output.
 
-## Config
-
-- `statusBar` deep-merges `colors` and `segments` sub-objects independently; all other top-level fields shallow-merge (last wins).
-
 ## Types
 
 - `companionCredited*` sentinels prevent double-counting on re-complete. Adding a new companion stat requires a matching credited sentinel or it double-counts every re-completion.
 - `Session.tmuxSessionId` (`$N` format) is stable across renames; prefer over `tmuxSessionName` for exact-match targeting.
 - `update-segment` only updates `content`, not `side`/`priority`/`bg`.
 - `AgentStatus 'lost'` ≠ `'crashed'`: `'lost'` means the tmux pane vanished (daemon restart, session resume with pane gone); `'crashed'` means process exited non-zero. Filtering only `'crashed'` misses silently-disappeared agents.
-- `Agent.resumeEnv`/`resumeArgs` and `OrchestratorCycle.resumeEnv`/`resumeArgs` store the exact env exports + CLI flags used to spawn the process — written for pane recovery, not display.
 - `OrchestratorCycle.interCycleGapMs` is undefined on cycle 1 (no previous cycle); from cycle 2+ it measures wall time from the previous cycle's `completedAt` to the current spawn, including daemon poll delay and any user pause.
 
 ## Companion Memory
@@ -48,7 +43,6 @@
 ## Companion Render
 
 - `getBaseForm` placeholder asymmetry: bare `FACE` (no braces) vs `{BOULDER}` (with braces). A face string containing `{BOULDER}` corrupts output.
-- `'hobby'` is deterministic: `(getHours() + companion.level) % IDLE_HOBBIES.length` — same hour + level always yields the same hobby.
 - Color drops silently on narrow `maxWidth` — truncates `facePart` out of the replace target, returning uncolored output with no error.
 
 ## History
