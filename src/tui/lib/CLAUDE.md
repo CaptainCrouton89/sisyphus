@@ -41,7 +41,7 @@
 - `openCompanionPane` **focuses** existing pane rather than returning silently — pressing `c` always moves terminal focus to the companion pane
 - Terminal editor detection uses hardcoded `TERMINAL_EDITORS` set — adding a new terminal editor requires updating it
 - `resumeEnv` is a raw shell command fragment (`"export FOO=bar"`), not a variable name
-- `openClaudeResumeSession` idempotent via exact name match — external rename causes a new session instead of reattach
+- `openClaudeResumeSession` idempotent via exact name match — external rename causes a new session instead of reattach. On both create and reattach it applies the full orchestrator pane style (title + `@pane_*` vars + `pane-border-format`), mirroring daemon's `setPaneStyle` — color hardcoded to `yellow` (must track `daemon/colors.ts` `ORCHESTRATOR_COLOR`). `--system-prompt` is NOT in `resumeArgs`; the original prompt is restored by Claude's own `--resume` from its saved transcript.
 - Window option flags target `${sessionName}:` (colon suffix) — bare session name silently fails
 
 ## Neovim Bridge

@@ -845,13 +845,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'w') {
     if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
 
-    // Paused session — tell user to resume regardless of window state
-    if (session.status === 'paused') {
-      notify(state, 'Session paused — press R to resume');
-      return;
-    }
-
-    // If window is alive, switch to it directly
+    // If the session's own tmux window is alive, switch to it directly
     if (session.status !== 'completed' && state.paneAlive && session.tmuxWindowId) {
       const switchTarget = session.tmuxSessionId ?? session.tmuxSessionName;
       if (switchTarget) actions.switchToSession(switchTarget);
@@ -859,19 +853,15 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
       return;
     }
 
-    // Window is dead on an active session — tell user to resume
-    if (session.status !== 'completed') {
-      notify(state, 'Window dead — press R to resume session');
-      return;
-    }
-
-    // Completed session — resume the last orchestrator Claude session for review
+    // Window is gone (paused, completed, or active-but-dead) — resume the last
+    // orchestrator Claude session in a fresh tmux session for review/continuation.
+    // Does not touch sisyphus state; use R to respawn the orchestrator.
     const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
     const claudeSessionId = lastCycle?.claudeSessionId;
     if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
     try {
       const label = session.name ?? state.selectedSessionId!.slice(0, 8);
-      const sessionName = actions.openClaudeResumeSession(state.cwd, state.selectedSessionId, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs);
+      const sessionName = actions.openClaudeResumeSession(state.cwd, state.selectedSessionId, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs, lastCycle.cycle, lastCycle.mode);
       actions.switchToSession(sessionName);
     } catch {
       notify(state, 'Failed to open Claude session');

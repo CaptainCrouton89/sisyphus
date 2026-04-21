@@ -171,23 +171,29 @@ export function openClaudeResumePopup(cwd: string, claudeSessionId: string, resu
   );
 }
 
-export function openClaudeResumeSession(cwd: string, sessionId: string, claudeSessionId: string, sessionLabel: string, resumeEnv?: string, resumeArgs?: string): string {
+export function openClaudeResumeSession(cwd: string, sessionId: string, claudeSessionId: string, sessionLabel: string, resumeEnv?: string, resumeArgs?: string, cycleNum?: number, mode?: string): string {
   const sessionName = tmuxSessionName(cwd, sessionLabel);
-  // If session already exists, reattach to it
+  const cycleLabel = cycleNum != null ? `c${cycleNum}` : '';
+  const paneTitle = cycleLabel ? `ssph:orch ${sessionLabel} ${cycleLabel}` : `ssph:orch ${sessionLabel}`;
+
+  // If session already exists, reattach — re-stamp bindings + pane style in case it predates them
   const existing = execSafe('tmux list-sessions -F "#{session_name}"');
   if (existing?.split('\n').some(line => line === sessionName)) {
-    // Re-stamp bindings in case the session was created before we set them
     execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
     execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_session_id ${shellQuote(sessionId)}`);
+    const firstPaneId = execSafe(`tmux list-panes -t ${shellQuote(sessionName)} -F '#{pane_id}'`)?.split('\n')[0];
+    if (firstPaneId) applyOrchestratorPaneStyle(firstPaneId, paneTitle, sessionLabel, cycleLabel, mode);
     return sessionName;
   }
+
   const pathEnv = augmentedPath();
   const envPrefix = resumeEnv ? `${resumeEnv} && ` : '';
   const args = resumeArgs
     ? `${resumeArgs} --resume ${shellQuote(claudeSessionId)}`
     : `--resume ${shellQuote(claudeSessionId)}`;
   const cmd = `${envPrefix}PATH=${shellQuote(pathEnv)} claude ${args}`;
-  exec(`tmux new-session -d -s ${shellQuote(sessionName)} -n main -c ${shellQuote(cwd)} ${shellQuote(cmd)}`);
+  // -P -F captures the new session's first pane ID so we can style it directly.
+  const firstPaneId = exec(`tmux new-session -d -s ${shellQuote(sessionName)} -n main -c ${shellQuote(cwd)} -P -F '#{pane_id}' ${shellQuote(cmd)}`).trim();
   execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
   execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_session_id ${shellQuote(sessionId)}`);
   // Match session defaults from daemon tmux.ts configureSessionDefaults
@@ -195,8 +201,35 @@ export function openClaudeResumeSession(cwd: string, sessionId: string, claudeSe
   execSafe(`tmux set -w -t ${shellQuote(paneTarget)} pane-border-status top`);
   execSafe(`tmux set -w -t ${shellQuote(paneTarget)} allow-rename off`);
   execSafe(`tmux set -w -t ${shellQuote(paneTarget)} automatic-rename off`);
-  execSafe(`tmux select-pane -t ${shellQuote(paneTarget)} -T ${shellQuote(`ssph:orch ${sessionLabel}`)}`);
+  if (firstPaneId) applyOrchestratorPaneStyle(firstPaneId, paneTitle, sessionLabel, cycleLabel, mode);
   return sessionName;
+}
+
+/**
+ * Mirror daemon's setPaneStyle for an orchestrator pane — sets pane title,
+ * per-pane metadata vars (@pane_role/session/cycle/mode), and pane-border-format
+ * so the new tmux session shows the same badge as a live orchestrator pane.
+ */
+function applyOrchestratorPaneStyle(paneId: string, title: string, sessionLabel: string, cycleLabel: string, mode?: string): void {
+  const color = 'yellow'; // matches daemon/colors.ts ORCHESTRATOR_COLOR
+  execSafe(`tmux select-pane -t ${shellQuote(paneId)} -T ${shellQuote(title)}`);
+  execSafe(`tmux set -p -t ${shellQuote(paneId)} @pane_role ${shellQuote('orch')}`);
+  execSafe(`tmux set -p -t ${shellQuote(paneId)} @pane_session ${shellQuote(sessionLabel)}`);
+  if (cycleLabel) execSafe(`tmux set -p -t ${shellQuote(paneId)} @pane_cycle ${shellQuote(cycleLabel)}`);
+  if (mode) execSafe(`tmux set -p -t ${shellQuote(paneId)} @pane_mode ${shellQuote(mode)}`);
+  const gitBranch = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null)`;
+  const branchSuffix = `#(cd #{pane_current_path} && git branch --show-current 2>/dev/null | grep -q . && echo ' |') ${gitBranch}`;
+  const homePath = `#(echo '#{pane_current_path}' | sed "s|^$HOME|~|")`;
+  const modeSegment = `#{?#{@pane_mode}, #[fg=${color}\\,italics]#{@pane_mode}#[default],}`;
+  const fmt = [
+    `#[bg=${color},fg=black,bold] #{@pane_role} #[default]`,
+    ` #[fg=${color},bold]#{@pane_session}`,
+    modeSegment,
+    ` #[default,dim]#{@pane_cycle}`,
+    `  ${homePath}${branchSuffix}`,
+    `#[default]`,
+  ].join('');
+  execSafe(`tmux set -p -t ${shellQuote(paneId)} pane-border-format ${shellQuote(fmt)}`);
 }
 
 export function openEditorPopup(cwd: string, editor: string, filePath: string, size?: { w: string; h: string }): void {
