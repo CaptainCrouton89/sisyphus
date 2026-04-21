@@ -312,7 +312,22 @@ export function isAutopsyCommandInstalled(): boolean {
 }
 
 export function installAutopsyCommand(srcOverride?: string): CommandInfo {
-  return installSlashCommand('autopsy', srcOverride);
+  const result = installSlashCommand('autopsy', srcOverride);
+  installAutopsyReference();
+  return result;
+}
+
+function installAutopsyReference(): void {
+  const dest = join(homedir(), '.claude', 'commands', 'sisyphus', 'autopsy-reference.md');
+  if (existsSync(dest)) return;
+  const src = join(dirname(fileURLToPath(import.meta.url)), 'templates', 'autopsy-reference.md');
+  if (!existsSync(src)) return;
+  try {
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, readFileSync(src, 'utf-8'), 'utf8');
+  } catch {
+    // non-fatal — command still works, just without the bundled mental-model ref
+  }
 }
 
 export function isTermrenderAvailable(): boolean {
