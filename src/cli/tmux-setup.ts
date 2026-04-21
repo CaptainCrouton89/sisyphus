@@ -421,21 +421,21 @@ sleep 1
 `;
 
 const OPEN_ROADMAP_SCRIPT = `#!/bin/bash
-# Open roadmap.md for the current session in $EDITOR
+# Open roadmap.md for the current session in nvim
 ${SESSION_RESOLVE}
 
 file="$cwd/.sisyphus/sessions/$session_id/roadmap.md"
 [ ! -f "$file" ] && { tmux display-message "No roadmap.md for this session"; exit 0; }
-exec \${EDITOR:-nvim} "$file"
+exec nvim "$file"
 `;
 
 const OPEN_STRATEGY_SCRIPT = `#!/bin/bash
-# Open strategy.md for the current session in $EDITOR
+# Open strategy.md for the current session in nvim
 ${SESSION_RESOLVE}
 
 file="$cwd/.sisyphus/sessions/$session_id/strategy.md"
 [ ! -f "$file" ] && { tmux display-message "No strategy.md for this session"; exit 0; }
-exec \${EDITOR:-nvim} "$file"
+exec nvim "$file"
 `;
 
 const EXPORT_SESSION_SCRIPT = `#!/bin/bash
@@ -555,8 +555,8 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     // Session actions
     `bind-key -T ${KEY_TABLE} c display-popup -E -w 50 -h 5 -S 'fg=yellow' -T ' Continue Session ' -d "#{pane_current_path}" ${continueSessionScriptPath()}`,
     `bind-key -T ${KEY_TABLE} r display-popup -E -w 70% -h 50% -d "#{pane_current_path}" ${restartAgentScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} p display-popup ${popupOpts} -d "#{pane_current_path}" ${openRoadmapScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} S display-popup ${popupOpts} -d "#{pane_current_path}" ${openStrategyScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} p display-popup -E -w 95% -h 95% -d "#{pane_current_path}" ${openRoadmapScriptPath()}`,
+    `bind-key -T ${KEY_TABLE} S display-popup -E -w 95% -h 95% -d "#{pane_current_path}" ${openStrategyScriptPath()}`,
     // Export
     `bind-key -T ${KEY_TABLE} e display-popup -E -w 60 -h 8 -T ' Export Session ' -d "#{pane_current_path}" ${exportSessionScriptPath()}`,
     // prefix-x smart kill
