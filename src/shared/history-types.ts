@@ -75,7 +75,7 @@ export interface SessionSummary {
   model: string | null;
   status: string;
   startedAt: string;
-  completedAt: string;
+  completedAt: string | null;
   activeMs: number;
   wallClockMs: number | null;
   agentCount: number;

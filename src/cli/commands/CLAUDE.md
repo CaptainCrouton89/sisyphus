@@ -13,4 +13,3 @@
 
 - **yield.ts — No orchestrator identity check:** Parent CLAUDE.md states `yield` checks `SISYPHUS_AGENT_ID === 'orchestrator'` — it does not. Only `assertTmux()` runs; `agentId: 'orchestrator'` is hardcoded unconditionally.
 - **`INTERACTIVE_AGENT_TYPES` hardcoded (history.ts):** `sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec` — new TUI agent types must be added here or their time inflates compute averages.
-- **`findSession` substring ambiguity (history.ts):** Resolution ends with name `includes` substring — first result in newest-first sort wins silently when multiple sessions match.

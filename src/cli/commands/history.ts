@@ -1,10 +1,11 @@
 import type { Command } from 'commander';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { historyBaseDir, historySessionDir, historyEventsPath, historySessionSummaryPath } from '../../shared/paths.js';
+import { historyBaseDir, historySessionDir, historyEventsPath, historySessionSummaryPath, statePath } from '../../shared/paths.js';
 import { formatDuration, statusColor } from '../../shared/format.js';
 import type { SessionSummary, SessionSummaryAgent } from '../../shared/history-types.js';
 import type { HistoryEvent } from '../../shared/history-types.js';
+import type { Session } from '../../shared/types.js';
 
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
@@ -52,15 +53,112 @@ function loadAllSummaries(): Array<{ id: string; summary: SessionSummary }> {
   const results: Array<{ id: string; summary: SessionSummary }> = [];
   for (const name of readdirSync(base)) {
     const summaryPath = historySessionSummaryPath(name);
-    if (!existsSync(summaryPath)) continue;
-    try {
-      const raw = readFileSync(summaryPath, 'utf-8');
-      results.push({ id: name, summary: JSON.parse(raw) as SessionSummary });
-    } catch { continue; }
+    if (existsSync(summaryPath)) {
+      try {
+        const raw = readFileSync(summaryPath, 'utf-8');
+        results.push({ id: name, summary: JSON.parse(raw) as SessionSummary });
+        continue;
+      } catch { /* fall through to live rebuild */ }
+    }
+    // No session.json — synthesize from live state if session is still in-flight
+    const live = buildLiveSummary(name);
+    if (live) results.push({ id: name, summary: live });
   }
   // Newest first
   results.sort((a, b) => new Date(b.summary.startedAt).getTime() - new Date(a.summary.startedAt).getTime());
   return results;
+}
+
+/**
+ * Synthesize a SessionSummary on demand for an in-flight session (no `session.json` yet).
+ * Reads the session's `cwd` from the first `session-start` event, then reads live
+ * `state.json` and maps it to the same shape `writeSessionSummary` produces.
+ * Fields that are only finalized at completion are marked null/empty.
+ * Returns null if events or live state can't be read.
+ */
+function buildLiveSummary(sessionId: string): SessionSummary | null {
+  const eventsPath = historyEventsPath(sessionId);
+  if (!existsSync(eventsPath)) return null;
+
+  // Extract cwd from the session-start event (only place it's recorded in the history dir)
+  let cwd: string | null = null;
+  try {
+    const lines = readFileSync(eventsPath, 'utf-8').split('\n');
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const ev = JSON.parse(line) as HistoryEvent;
+        if (ev.event === 'session-start' && typeof ev.data.cwd === 'string') {
+          cwd = ev.data.cwd;
+          break;
+        }
+      } catch { continue; }
+    }
+  } catch { return null; }
+  if (!cwd) return null;
+
+  const sPath = statePath(cwd, sessionId);
+  if (!existsSync(sPath)) return null;
+
+  let session: Session;
+  try {
+    session = JSON.parse(readFileSync(sPath, 'utf-8')) as Session;
+  } catch { return null; }
+
+  // Live wall clock: created → now. activeMs is already flushed periodically by the daemon;
+  // both may lag the true live value by one poll interval (~seconds), acceptable for a read-only view.
+  const liveWallClockMs = Date.now() - new Date(session.createdAt).getTime();
+
+  return {
+    sessionId: session.id,
+    name: session.name ?? null,
+    task: session.task,
+    cwd: session.cwd,
+    model: session.model ?? null,
+    status: session.status,
+    startedAt: session.createdAt,
+    completedAt: session.completedAt ?? null,
+    activeMs: session.activeMs,
+    wallClockMs: session.wallClockMs ?? liveWallClockMs,
+    agentCount: session.agents.length,
+    crashCount: session.agents.filter(a => a.status === 'crashed').length,
+    lostCount: session.agents.filter(a => a.status === 'lost').length,
+    killedAgentCount: session.agents.filter(a => a.status === 'killed').length,
+    rollbackCount: session.rollbackCount ?? 0,
+    efficiency: liveWallClockMs > 0 ? session.activeMs / liveWallClockMs : null,
+    cycleCount: session.orchestratorCycles.length,
+    context: session.context ?? null,
+    completionReport: session.completionReport ?? null,
+    agents: session.agents.map(a => ({
+      id: a.id,
+      name: a.name,
+      nickname: a.nickname ?? null,
+      agentType: a.agentType,
+      status: a.status,
+      activeMs: a.activeMs,
+      spawnedAt: a.spawnedAt,
+      completedAt: a.completedAt,
+      restartCount: a.restartCount ?? 0,
+    })),
+    cycles: session.orchestratorCycles.map(c => ({
+      cycle: c.cycle,
+      mode: c.mode ?? null,
+      agentsSpawned: c.agentsSpawned.length,
+      activeMs: c.activeMs,
+      startedAt: c.timestamp,
+      completedAt: c.completedAt ?? null,
+    })),
+    messages: session.messages.map(m => ({
+      id: m.id,
+      source: typeof m.source === 'string' ? m.source : m.source.type,
+      content: m.content,
+      timestamp: m.timestamp,
+    })),
+    finalMoodSignals: null,
+    achievements: [],
+    xpGained: 0,
+    sentiment: null,
+  };
 }
 
 function loadEvents(sessionId: string): HistoryEvent[] {
@@ -82,7 +180,12 @@ function findSession(idOrName: string): { id: string; summary: SessionSummary } 
       return { id: idOrName, summary: JSON.parse(readFileSync(summaryPath, 'utf-8')) as SessionSummary };
     } catch { /* fall through */ }
   }
-  // Search by name or partial ID
+  // Exact-ID path with no session.json — try live rebuild before falling back to search
+  if (existsSync(historySessionDir(idOrName))) {
+    const live = buildLiveSummary(idOrName);
+    if (live) return { id: idOrName, summary: live };
+  }
+  // Search by name or partial ID (loadAllSummaries handles live rebuild for in-flight sessions)
   const all = loadAllSummaries();
   return all.find(s =>
     s.id.startsWith(idOrName) ||
@@ -225,12 +328,14 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
   }
 
   // Detail view
-  console.log(`${BOLD}${s.name ?? s.sessionId.slice(0, 8)}${RESET}  ${fmtStatus(s.status)}`);
+  const inProgress = s.completedAt == null;
+  const inProgressTag = inProgress ? `  ${c('yellow', '(in progress)')}` : '';
+  console.log(`${BOLD}${s.name ?? s.sessionId.slice(0, 8)}${RESET}  ${fmtStatus(s.status)}${inProgressTag}`);
   console.log(`${DIM}ID:${RESET} ${s.sessionId}`);
   console.log(`${DIM}Project:${RESET} ${s.cwd}`);
   console.log(`${DIM}Model:${RESET} ${s.model ?? 'default'}`);
   console.log(`${DIM}Started:${RESET} ${fmtDate(s.startedAt)}`);
-  console.log(`${DIM}Ended:${RESET} ${fmtDate(s.completedAt)}`);
+  console.log(`${DIM}Ended:${RESET} ${s.completedAt ? fmtDate(s.completedAt) : c('gray', '— still running')}`);
   const { computeMs, interactiveMs } = splitAgentTime(s.agents);
   const wallStr = s.wallClockMs ? formatDuration(s.wallClockMs) : '—';
   console.log(`${DIM}Active:${RESET} ${formatDuration(s.activeMs)}  ${DIM}Wall:${RESET} ${wallStr}`);
@@ -377,7 +482,9 @@ function formatEventData(e: HistoryEvent): string {
 }
 
 function showStats(opts: { cwd?: string; since?: string; json: boolean }): void {
-  let sessions = loadAllSummaries();
+  // Exclude in-flight sessions — their activeMs/wallClockMs are live snapshots that
+  // would skew aggregate averages, efficiency, and percentiles.
+  let sessions = loadAllSummaries().filter(s => s.summary.completedAt != null);
 
   if (opts.cwd) {
     const abs = resolve(opts.cwd);
