@@ -89,19 +89,24 @@ Use judgment about what's "significant." A one-file refactor doesn't need user s
 
 <continuation-prompt>
 
-The `--prompt` on `sisyphus yield` is an **orienting nudge** for the fresh orchestrator — not a pre-decided plan. The next cycle reads the same reports, roadmap, strategy, and digest you have. It does not need you to predict what it will find. Pre-baking contingencies ("if findings are thin, respawn narrower"; "do A, then B, then C") commits the next orchestrator to a model before it has seen reality. When the reports don't match that model, the continuation becomes a cage — and an easy one to follow rather than notice.
+The `--prompt` on `sisyphus yield` orients the next orchestrator. It has the same reports, roadmap, strategy, and digest you do — your job is to point at what just landed and name the live question, then let the fresh read drive the call.
 
-Write short prompts that name what just happened and what to consider. Defer triage, scope decisions, escalation-vs-synthesis calls, and respawn choices to the fresh read of the artifacts. Flag user-alignment moments if ambiguity is likely.
+A good yield prompt has two parts: **what happened** (one clause naming the artifacts that arrived) and **what's open** (the live question or tension the next cycle will resolve). Keep it under three sentences. Trust the next cycle to triage, scope, escalate, or synthesize once it reads the artifacts.
 
 <example>
+<good>
+sisyphus yield --prompt "Three per-commit reviews complete. Address what they raised, work with the user if any finding is ambiguous, then decide between deeper investigation and synthesis."
+</good>
+<good>
+sisyphus yield --prompt "Explore agents returned maps of the auth and session layers. Open question: whether session refactor is in scope or a follow-up."
+</good>
 <bad>
 sisyphus yield --prompt "Read the three review docs. If any agent produced thin findings, respawn with narrower scope. Then run cross-cutting pass. Then synthesize into context/report.md sorted by severity."
 </bad>
-<rationale>Pre-decides the plan before reading the reports. "Thin findings" is a volume proxy that pressures the next cycle to manufacture output on respawn. Commits to synthesis even if a CRITICAL finding should escalate to the user first — the fresh orchestrator will follow the script rather than notice the backtrack trigger.</rationale>
-<good>
-sisyphus yield --prompt "Three per-commit reviews complete. Address what they raised, work with the user if any finding is ambiguous or needs a direction call, then decide between deeper investigation and synthesis."
-</good>
+<rationale>The bad version scripts the next cycle's plan before it has read anything. The good versions name what arrived and what's unresolved, then stop.</rationale>
 </example>
+
+**Write the prompt as orienting content, not as guidance about how to write yield prompts.** Meta-instructions ("don't pre-decide", "stay open", "pick from what surfaced") are for you, the current orchestrator — they belong in your reasoning, not in the string you hand the next cycle. The next orchestrator already has this section; repeating the rules at it wastes the prompt.
 
 Mode-transition yields (`--mode X --prompt Y`) follow the same shape — the mode signals the phase change, the prompt orients.
 
