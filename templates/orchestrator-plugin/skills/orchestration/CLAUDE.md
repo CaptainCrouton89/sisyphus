@@ -24,7 +24,7 @@ Checkpoints in `task-patterns.md` are placed based on "how much subsequent work 
 
 For 10+ file features, the cycle-2 plan agent must be instructed to produce a **high-level stage outline only** — stage names, one-sentence descriptions, dependency arrows, and cycle estimates. Requesting file-level implementation detail at this stage is wrong: early stages will invalidate later detail plans before they're used.
 
-Detail plans are generated progressively: spawn a `sisyphus:plan` agent to detail-plan stage N into `context/plan-stage-N-{name}.md` *while simultaneously implementing* stage N-1. The overlap is intentional — detail-planning the next stage runs as a parallel agent alongside the current implementation, not as a separate preceding cycle.
+Detail plans are generated progressively: spawn a `sisyphus:plan` agent to detail-plan stage N (the agent saves its plan under `context/{plan-lead-agent-id}/plan-stage-N-{name}.md` — read the exact path from its submission report) *while simultaneously implementing* stage N-1. The overlap is intentional — detail-planning the next stage runs as a parallel agent alongside the current implementation, not as a separate preceding cycle.
 
 If a stage is still too large for a single detail-plan agent to handle well, break it into sub-stages in the high-level outline and detail-plan each sub-stage individually. Do not widen the plan agent's scope — the outline is the unit of adjustment.
 

@@ -326,9 +326,24 @@ export function startApp(state: AppState, cleanup: () => void): void {
         try {
           const cd = contextDir(state.cwd, state.selectedSessionId);
           if (existsSync(cd)) {
-            contextFiles = readdirSync(cd)
-              .filter((f) => !f.startsWith('.'))
-              .sort();
+            const entries = readdirSync(cd, { withFileTypes: true })
+              .filter((e) => !e.name.startsWith('.'));
+            const flat: string[] = [];
+            for (const e of entries) {
+              if (e.isDirectory()) {
+                try {
+                  const sub = readdirSync(join(cd, e.name))
+                    .filter((f) => !f.startsWith('.'))
+                    .map((f) => `${e.name}/${f}`);
+                  flat.push(...sub);
+                } catch {
+                  // subdir may be unreadable
+                }
+              } else {
+                flat.push(e.name);
+              }
+            }
+            contextFiles = flat.sort();
           }
         } catch {
           // context dir may not exist yet

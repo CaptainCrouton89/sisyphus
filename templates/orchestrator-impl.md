@@ -143,7 +143,7 @@ If the project lacks validation tooling, **create it** — a smoke-test script, 
 
 **Don't advance past a validated stage until validation passes.** If it fails, log failures, spawn fix agents, re-validate.
 
-**Phase-scoped plans:** if the current plan only covers one phase of a multi-phase feature (the plan-lead convention when `strategy.md` has multiple phases), yield back to planning after this phase's validation passes — not to validation mode:
+**Phase-scoped plans:** if the current plan only covers one phase of a multi-phase feature (the plan-lead convention when `strategy.md` has multiple phases), yield back to planning after this phase's validation passes — not to validation mode. Plan files live under `context/{plan-lead-agent-id}/`; use the paths the plan lead reported when dispatching implement agents.
 
 ```bash
 sisyphus yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."

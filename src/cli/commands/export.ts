@@ -53,7 +53,7 @@ Project-local session data — the orchestrator's working directory.
 - \`explore-*.md\` — Codebase exploration findings (key files, architecture notes)
 - \`requirements*.md/json\` — Feature requirements (structured + human-readable)
 - \`design*.md/json\` — Architecture specs, decision records, diagrams
-- \`plan*.md\` — Implementation plans (tasks, files to touch, dependencies)
+- \`{agent-id}/plan*.md\` — Implementation plans (tasks, files to touch, dependencies) — per plan-lead subdirectory
 - \`e2e-recipe.md\` — End-to-end validation steps
 - \`review-*.md\` — Code review findings (severity-ranked)
 - \`completion-summary.md\` — Final handoff document

@@ -2,6 +2,10 @@
 
 End-to-end examples showing how the orchestrator structures cycles for real scenarios.
 
+### Path conventions in these examples
+
+Plan files live under per-plan-lead subdirectories: `context/{plan-lead-agent-id}/plan-*.md`. These examples elide the subdir (showing `context/plan-rate-limiting.md`) for readability. In a real cycle, the orchestrator reads the exact path from the plan lead's submission report and carries it verbatim into downstream implement, review-plan, and validate agent prompts.
+
 ---
 
 ## Example 1: Fix a Race Condition in WebSocket Reconnection

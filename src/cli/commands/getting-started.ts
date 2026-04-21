@@ -677,6 +677,9 @@ This means research is never repeated. Cycle 1 agents explore and write findings
 context/explore-auth-system.md. Cycle 3 agents read those findings and build on them.
 Knowledge accumulates even though the orchestrator itself is stateless.
 
+Plan lead agents save their plans under context/{agent-id}/ so parallel plan agents
+don't interfere with each other's validation.
+
 ### 5. Two-Layer Planning (Strategy + Roadmap)
 
 The system maintains two documents at different abstraction levels:

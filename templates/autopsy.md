@@ -24,7 +24,8 @@ strategy.md        # completed / current stage / ahead — shape of the work
 roadmap.md         # current stage, exit criteria, next steps (updated every cycle)
 digest.json        # compact summary for orchestrator context
 context/           # agent-written docs: requirements.{json,md}, design.{json,md},
-                   #   plan-stage-N-*.md, e2e-recipe.md, exploration notes, CLAUDE.md
+                   #   e2e-recipe.md, exploration notes, CLAUDE.md
+                   #   {plan-lead-agent-id}/plan-stage-N-*.md (plans live one subdir deep)
 logs/              # cycle-001.md, cycle-002.md, ... — per-cycle orchestrator log
 reports/           # agent-NNN-final.md, agent-NNN-<suffix>.md — what each agent reported
 prompts/           # orchestrator-system-N.md, orchestrator-user-N.md, agent-NNN-system.md,
@@ -87,7 +88,7 @@ sisyphus history --status killed              # filter by terminal status
 
 6. **Read cycle logs.** `logs/cycle-NNN.md` is the orchestrator's per-cycle log. Shows what the orchestrator observed and decided. `cycle-001.md` uses zero-padding; snapshot dirs do not (`snapshots/cycle-1/`) — don't glob them interchangeably.
 
-7. **Read context docs.** `context/requirements.md`, `context/design.md`, `context/plan-stage-*.md`, `context/e2e-recipe.md` — the artifacts agents produced that downstream agents consumed. If implementation went sideways, planning docs are the first place to look for bad assumptions.
+7. **Read context docs.** `context/requirements.md`, `context/design.md`, `context/*/plan-stage-*.md` (plans live one subdir deep per plan-lead agent), `context/e2e-recipe.md` — the artifacts agents produced that downstream agents consumed. If implementation went sideways, planning docs are the first place to look for bad assumptions.
 
 8. **Read the orchestrator's own prompts.** `prompts/orchestrator-system-N.md` and `prompts/orchestrator-user-N.md` for cycle N. Shows exactly what context the stateless orchestrator saw at the start of that cycle. Useful when the orchestrator made a weird call — often it was missing context.
 
@@ -95,7 +96,7 @@ sisyphus history --status killed              # filter by terminal status
 
 - **Stuck in a phase.** Multiple cycles with the same mode in events. Orchestrator can't find the exit criteria. Check `roadmap.md` for current exit criteria; check recent cycle logs for what the orchestrator thought it was waiting on.
 - **Thrashing on the same code.** Repeated fix agents across cycles hitting the same files. Indicates a missed root cause — check the earliest failing agent's report, not the latest.
-- **Bad plan.** Implementation agents hit unexpected complexity. Go back to `context/plan-stage-*.md` — is the plan actually complete? Does it match the design?
+- **Bad plan.** Implementation agents hit unexpected complexity. Go back to `context/*/plan-stage-*.md` (one subdir per plan-lead agent) — is the plan actually complete? Does it match the design?
 - **Rollback loop.** `rollback` events in the timeline. `sisyphus rollback` is destructive — it rewinds to a prior cycle boundary. If there are multiple, the orchestrator gave up and retried repeatedly. Check what changed between the retried cycles.
 - **Killed/crashed agents.** `agent-killed` with a reason; `agent-restarted` means it was respawned. Check the agent's report (if any) and the cycle log around the kill event.
 - **Session resumed mid-work.** `session-resumed` event + non-zero `lostAgentCount` — daemon restarted, some in-flight agents were lost. Look at what phase the session was in when resumed.

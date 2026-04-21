@@ -82,7 +82,7 @@ When spawning the phase-scoped plan lead, name in the prompt:
 - Which design document or phase-section applies
 - That later phases are out of scope
 
-Plans save as `context/plan-{topic}.md` (or `plan-phase-N-{topic}.md` when the phase identifier helps discoverability). Sub-plans follow the same prefix.
+Plans save under the plan lead's own subdirectory: `context/{plan-lead-agent-id}/plan-{topic}.md` (or `plan-phase-N-{topic}.md` when the phase identifier helps discoverability). Sub-plans share the same subdir. The plan lead reports the exact paths in its submission — use those verbatim; don't reconstruct them.
 
 </phase-scoped-planning>
 
@@ -126,7 +126,7 @@ These are review TUIs the spec agent invokes — also usable standalone for insp
 When you have enough understanding, a reviewed plan, and a verification recipe — transition explicitly:
 
 ```bash
-sisyphus yield --mode implementation --prompt "Begin implementation — see roadmap.md and context/plan-implementation.md"
+sisyphus yield --mode implementation --prompt "Begin implementation — see roadmap.md and the plan file path the plan lead reported (under context/{plan-lead-agent-id}/)."
 ```
 
 The `--mode implementation` flag loads implementation-phase guidance for the next cycle.

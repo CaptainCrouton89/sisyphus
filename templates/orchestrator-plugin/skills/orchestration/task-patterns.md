@@ -137,7 +137,7 @@ Cross-cutting feature, multiple domains, needs team coordination. Uses **progres
 6. [final review] — depends on all
 
 ### Current Stage: [whichever is active]
-See context/plan-stage-N-{name}.md for detail plan.
+See context/{plan-lead-agent-id}/plan-stage-N-{name}.md for detail plan. (Path comes from the plan lead's submission report.)
 - [ ] [task-level items from detail plan]
 ```
 
@@ -147,7 +147,7 @@ Note: verification checkpoints are embedded in the stage outline, not deferred t
 - **Cycle 0** (conditional): If the problem is nebulous, spawn explore agents for technical landscape (yield `--mode discovery`), then spawn `sisyphus:problem` for interactive problem exploration (yield `--mode discovery`). May take 1-3 discovery cycles. Skip if the goal and scope are already clear.
 - **Cycle 1**: Spawn `sisyphus:spec` for combined design + requirements. Yield. (Human iterates inside the spec session.)
 - **Cycle 2**: Spawn `sisyphus:plan` for **high-level stage outline only**. Instruction: "Outline stages, dependencies, one-sentence descriptions, cycle estimates. Include verification checkpoints between stages based on risk." Spawn `sisyphus:test-spec` for test properties (parallel). Yield.
-- **Cycle 4**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). Output to `context/plan-stage-1-{name}.md`. Yield.
+- **Cycle 4**: Review outline. Spawn `sisyphus:plan` to **detail-plan stage 1 only** (provide outline as context). The plan agent saves under its own subdir and reports the full path — carry that path forward for the implement cycle. Yield.
 - **Cycle 5**: Spawn `sisyphus:implement` for stage 1. If stage 2 is independent, spawn `sisyphus:plan` to detail-plan stage 2 in parallel. Yield.
 - **Cycle 6**: Spawn `sisyphus:implement` for stage 2 (if detail-planned). Spawn `sisyphus:review` to critique stages 1-2 in parallel — foundation review before core logic builds on it. Detail-plan stage 3 in parallel. Yield.
 - **Cycle 7**: Address critique findings. Spawn `sisyphus:implement` for stage 3. Yield.

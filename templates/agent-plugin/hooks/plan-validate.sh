@@ -8,6 +8,10 @@ if [ -z "$SISYPHUS_SESSION_ID" ] || [ -z "$SISYPHUS_SESSION_DIR" ]; then
   exit 0
 fi
 
+if [ -z "$SISYPHUS_AGENT_ID" ]; then
+  exit 0
+fi
+
 STDIN_JSON=$(cat)
 
 COMMAND=$(echo "$STDIN_JSON" | python3 -c "
@@ -29,9 +33,14 @@ if [ ! -d "$CONTEXT_DIR" ]; then
   exit 0
 fi
 
+AGENT_CONTEXT_DIR="$CONTEXT_DIR/$SISYPHUS_AGENT_ID"
+if [ ! -d "$AGENT_CONTEXT_DIR" ]; then
+  exit 0
+fi
+
 # Collect plan files. shopt -s nullglob so missing matches don't leak the glob.
 shopt -s nullglob
-plan_files=("$CONTEXT_DIR"/plan-*.md)
+plan_files=("$AGENT_CONTEXT_DIR"/plan-*.md)
 shopt -u nullglob
 
 if [ ${#plan_files[@]} -eq 0 ]; then

@@ -239,8 +239,8 @@ Each cycle, before spawning agents, check the context files you're about to refe
 
 Context dir contents are listed in your prompt each cycle. Read files when you need full detail.
 
-- Roadmap items should **reference** context files: `"See context/plan-stage-1-auth.md for detail."`
-- Agents writing requirements, designs, or plans save to context dir with descriptive filenames: `requirements-auth.md`, `design-auth.md`, `plan-stage-1-middleware.md`
+- Roadmap items should **reference** context files: `"See context/{plan-lead-agent-id}/plan-stage-1-auth.md for detail."` Copy the path from the plan lead's submission report; don't reconstruct it.
+- Agents writing requirements and designs save to the context dir with descriptive filenames: `requirements-auth.md`, `design-auth.md`. Plan agents save plans under their own subdirectory `context/{agent-id}/plan-*.md`; treat those paths as authoritative from the plan lead's report.
 - **Implementation plans belong here**, not in roadmap.md
 - The context dir persists across all cycles
 

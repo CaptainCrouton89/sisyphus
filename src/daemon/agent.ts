@@ -184,6 +184,9 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   tmux.setPaneStyle(paneId, color, { role: paneLabel, session: sessionLabel, cycle: `c${cycleNum}` });
 
   const ctxDirRel = relative(paneCwd, contextDir(cwd, sessionId));
+  if (agentType === 'plan') {
+    mkdirSync(join(contextDir(cwd, sessionId), agentId), { recursive: true });
+  }
   const suffix = renderAgentSuffix(sessionId, instruction, ctxDirRel);
   // For typed agents, prepend the agent type body to the system prompt.
   // --agent doesn't resolve from --plugin-dir, so we deliver it via --append-system-prompt.

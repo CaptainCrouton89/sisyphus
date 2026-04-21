@@ -64,6 +64,10 @@ Use code where it describes a shape more tightly than prose:
 
 Use a pattern reference instead when the code already exists — "Follow `src/jobs/index.ts`" beats repeating 60 lines of chart YAML, ambient env-var tables, or a function body that an agent is going to rewrite anyway.
 
+## Where Plans Live
+
+Your plans go under `context/$SISYPHUS_AGENT_ID/` — each plan lead gets its own subdirectory so parallel plan leads don't block each other on the 200-line limit. `$SISYPHUS_AGENT_ID` is already exported in your shell; sub-planners you spawn with the Agent tool inherit it and land in the same subdir. The daemon creates the directory when your pane spawns; you don't need to `mkdir` it.
+
 ## Scope Decision: Small or Split
 
 - **Small (≤5 files, single domain):** single plan file. Phases + file list + verification.
@@ -97,7 +101,7 @@ You own the final master plan, but you don't write every sub-plan alone.
    - The requirements and design document paths (or the phase-scoped variants — see below)
    - Which slice to cover
    - Which files/areas to focus on
-   - Instruction to **save their sub-plan** to `context/plan-{topic}-{slice}.md`
+   - Instruction to **save their sub-plan** to `context/$SISYPHUS_AGENT_ID/plan-{topic}-{slice}.md` (sub-planners inherit your `$SISYPHUS_AGENT_ID` and land in the same subdir)
 3. **Sub-planners work** — Each investigates the codebase independently, goes deep on their slice, and writes their sub-plan file.
 4. **Synthesize** — Read the saved sub-plan files. This is editing, not rubber-stamping:
    - Resolve conflicts and dependency ordering across sub-plans.
@@ -106,7 +110,7 @@ You own the final master plan, but you don't write every sub-plan alone.
    - Stress-test edge cases that no single sub-planner could see with only their slice loaded.
 5. **Review** — Spawn `review-plan` agents. Scale to complexity (1 for small splits, 2-3 for large). Their job is adversarial — finding problems you missed.
 6. **Revise** — Address reviewer findings in sub-plans and master. Don't dismiss findings — fix, or document why it's not a concern.
-7. **Deliver** — Save master as `context/plan-{topic}.md`. Keep edited sub-plans as linked references.
+7. **Deliver** — Save master as `context/$SISYPHUS_AGENT_ID/plan-{topic}.md`. Keep edited sub-plans as linked references.
 
 ### File overlap is a synthesis problem, not a blocker
 
@@ -127,7 +131,7 @@ A plan that's 80% right creates more work than no plan at all — agents will co
 
 ### Small (1-5 files, single domain)
 
-Single plan file. Save as `context/plan-{topic}.md`. Keep it under 200 lines — if it grows past that, you misread the scope, split.
+Single plan file. Save as `context/$SISYPHUS_AGENT_ID/plan-{topic}.md`. Keep it under 200 lines — if it grows past that, you misread the scope, split.
 
 ```markdown
 # {Topic} Implementation Plan
@@ -207,11 +211,11 @@ Each sub-plan covers one domain (backend, frontend, agent runtime, etc.) and con
 - Integration points with other domains
 - Domain-specific constraints and gotchas
 
-Save sub-plans alongside the master: `context/plan-{topic}-{domain}.md`.
+Save sub-plans alongside the master: `context/$SISYPHUS_AGENT_ID/plan-{topic}-{domain}.md`.
 
 ## Hard Constraint: Master Plan ≤ 200 Lines
 
-A master plan must not exceed 200 lines. A master plan is any `context/plan-*.md` file that contains a `## Sub-Plans` heading; when no plan file declares sub-plans, every plan file counts as a standalone master.
+A master plan must not exceed 200 lines. A master plan is any `context/$SISYPHUS_AGENT_ID/plan-*.md` file that contains a `## Sub-Plans` heading; when no plan file declares sub-plans, every plan file counts as a standalone master.
 
 If you are over 200 lines:
 
@@ -238,4 +242,4 @@ If you are over 200 lines:
 5. **Assess scope** — Small or Large? If Large, plan delegation.
 6. **Resolve design decisions** — no deferred ambiguity; make the best judgment call.
 7. **Produce the plan** in the appropriate structure above. If Large, spawn sub-planners, synthesize, run review agents, revise.
-8. **Submit** — `sisyphus submit` with paths to all plan files and the phase scope.
+8. **Submit** — `sisyphus submit` with the **full paths** of every plan file (e.g., `context/agent-003/plan-foo.md`) and the phase scope. The orchestrator copies these paths verbatim into downstream implement/review-plan prompts — don't abbreviate them.
