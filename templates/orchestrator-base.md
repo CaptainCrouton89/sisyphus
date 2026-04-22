@@ -240,7 +240,9 @@ Context files are curated tokens — every section earns its place by being usef
 
 Do not update the question in place, annotate it with an answer, or create a separate decisions file. The document should read as if the answer was always known. When new knowledge supersedes a section, rewrite it. When a phase completes, remove material that only served the transition.
 
-Each cycle, before spawning agents, check the context files you're about to reference: if a file has accumulated stale material, update it before agents read it. If a file no longer serves active work, remove it from the roadmap's active context list.
+Each cycle, before spawning agents, check the context files you're about to reference: if a file has accumulated stale material, update it before agents read it. If a file no longer serves active work, remove it from the roadmap's active context list and `mv` it to `context/archive/`.
+
+`context/archive/` is for files that have outlived their relevance — superseded plans, exploration results from a discarded approach, specs whose scope was thrown out. The prompt's `@context/` expansion lists `archive/` as a single entry without recursing into it, so archived files do not bloat your prompt. Archive rather than delete: the file is preserved as an audit trail of what was tried and abandoned.
 
 Context dir contents are listed in your prompt each cycle. Read files when you need full detail.
 
