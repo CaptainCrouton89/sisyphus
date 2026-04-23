@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
-import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled } from './agent.js';
+import { spawnAgent, restartAgent, resetAgentCounterFromState, clearAgentCounter, handleAgentSubmit, handleAgentReport, handleAgentKilled, gcBgTasks } from './agent.js';
 import { trackSession, untrackSession, updateTrackedWindow, flushTimers, flushCycleTimer, flushAgentTimer, registerAgentTimer, markEventCompletion, markEventCrash, markEventLevelUp } from './pane-monitor.js';
 import { resetColors } from './colors.js';
 import { loadConfig } from '../shared/config.js';
@@ -433,12 +433,15 @@ export async function resumeSession(sessionId: string, cwd: string, message?: st
   } else {
     // Create fresh tmux session with the same name
     const created = tmux.createSession(tmuxName, cwd);
-    tmux.initSessionMeta(created.sessionId, cwd, sessionId);
     windowId = created.windowId;
     tmuxSessId = created.sessionId;
     initialPaneId = created.initialPaneId;
     await state.updateSessionTmux(cwd, sessionId, tmuxName, windowId, tmuxSessId);
   }
+  // Re-stamp @sisyphus_cwd + @sisyphus_session_id on both reuse and create —
+  // tmux options are in-memory and lost whenever the server restarts, so a
+  // reused session post-restart can be missing its stamps.
+  if (tmuxSessId) tmux.initSessionMeta(tmuxSessId, cwd, sessionId);
 
   const previousStatus = session.status;
   let lostAgentCount = 0;
@@ -1015,6 +1018,7 @@ export async function handleKillAgent(sessionId: string, cwd: string, agentId: s
     activeMs: flushedActiveMs,
   });
   emitHistoryEvent(sessionId, 'agent-killed', { agentId, status: 'killed', activeMs: flushedActiveMs, reason: 'killed by user' });
+  gcBgTasks(cwd, sessionId, agentId);
 }
 
 export async function handleRollback(sessionId: string, cwd: string, toCycle: number): Promise<{ sessionId: string; restoredToCycle: number }> {
