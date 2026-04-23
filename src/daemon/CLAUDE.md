@@ -1,8 +1,5 @@
-# src/daemon/
+## Sessions Manifest
 
-## Sessions Manifest (`sessions-manifest.ts`)
-
-- Home sessions queried by name not `$N` — `$` in numeric IDs shell-expands in `execSync`.
 - TSV `#ts:` header is Unix seconds; JSON `updatedAt` is milliseconds — inconsistent across formats. Consumer of JSON: `sisyphus tmux-sessions` (`src/cli/commands/tmux-sessions.ts`).
 
 ## State & Persistence
@@ -11,22 +8,19 @@
 - `continueSession` side effects beyond status flip: clears `session.completedAt`/`completionReport`, clears the last cycle's `completedAt` (mode resolution then treats it as in-progress and skips it), and truncates `roadmap.md` to empty.
 - `restoreSnapshot` always forces `status → 'paused'` and strips `tmuxSessionName`, `tmuxSessionId`, `tmuxWindowId` — caller must re-register tmux state before resuming. This is why `handleRollback` re-pauses and `sisyphus resume` must follow. Also restores `roadmap.md`, `strategy.md`, and `logs/` from snapshot (falls back to `logs.md` for pre-directory snapshots).
 - `context/CLAUDE.md` is overwritten with the seed content after `cloneSessionDir` — any agent-modified version from the source session is discarded.
-- `createCloneState` normalizes any `running` agents from the source to `status: 'killed'` with `killedReason: 'inherited from source session'` — their tmux panes don't exist in the clone's context. Preserves `source.launchConfig` verbatim if present; `configModel`/`configOrchestratorPrompt` args are only used when source has no `launchConfig`.
 - Companion writes use own `loadCompanion()`/`saveCompanion()`, not `state.ts` — concurrent writes possible. Async commentary callbacks must reload fresh immediately before saving; never close over a captured companion reference across an `await`.
 - `companionCredited{Cycles,ActiveMs,Strength,Wisdom}` are written to session state on `handleComplete()` — `onSessionComplete()` reads these to skip already-credited work if the session is continued and completed again. Omitting the write causes double-counting.
 
 ## Respawn & Lifecycle
 
-- `pendingRespawns` has no TTL — if `setImmediate` callback throws after `.add()` but before `.delete()`, session permanently blocked. Recovery: kill + restart.
 - `onAllAgentsDone()` early-returns: (1) `orchestratorDone` not set → guard stays; (2) `status !== 'active'` outside `setImmediate` → clears `respawningSessions`, skips respawn → session stuck (recovery: kill + restart); inside `setImmediate`, `status === 'paused' && respawningSessions.has()` re-activates (pane monitor raced). Creates a cycle snapshot before spawning; `setImmediate` also recreates destroyed tmux windows, registering new IDs before spawning.
 - `orchestratorDone` is checked both in-memory AND from `lastCycle.completedAt` in persisted state — handles daemon restart between yield and agents finishing.
 - `respawningSessions` guard: set in `handleYield()` before killing the orchestrator pane, cleared in `onAllAgentsDone`'s `setImmediate` (or immediately if agents still running) — without it, pane monitor sees 0 panes and pauses mid-transition. If no windowId is resolvable after yield (neither `sessionWindowMap` nor `session.tmuxWindowId`), guard clears without spawning — session stays `active` but no orchestrator runs. Recovery: `sisyphus resume`.
 - Always unregister panes from pane-registry and pane-monitor when killing/completing. `pane-exited` IPC notifications are silently dropped if the pane has no registry entry — orchestrator never learns the agent died.
 - `handleSpawn()` called on a completed session reverts `status` to `'active'` — completion was not terminal. `companionCredited*` fields retain pre-completion values; `onSessionComplete()` skips re-crediting correctly when it completes again. Resolves windowId via `orchestrator.getWindowId(sessionId)` (in-memory only); fails post-restart. Contrast `handleRestartAgent()`, which falls back to `session.tmuxWindowId`.
 - Orchestrator `pane-exited` without yield (crash) branches on agent state: (1) no agents → pause session; (2) agents running → clear `respawningSessions` guard and let them reach `onAllAgentsDone` naturally; (3) agents present but none running → trigger respawn immediately.
-- `allAgentsDone()` counts ALL agents (including `sisyphus spawn` sub-agents) and returns false when `session.agents.length === 0` — an orchestrator with no spawns never triggers `onAllAgentsDone`.
 - `reconnectSession()` does NOT call `resetAgentCounterFromState()` — agent ID collision risk post-reconnect; `resume` and `clone` do call it.
-- `reconnectSession()` vs `resumeSession()`: use `reconnect` when the tmux session still exists by name but its `$N` ID is stale (daemon restarted, tmux server survived) — it re-resolves the `$N` and re-registers without spawning an orchestrator. Use `resume` when the tmux session is gone entirely — it creates a fresh session and spawns a new orchestrator.
+- `reconnectSession()` vs `resumeSession()`: use `reconnect` when the tmux session still exists by name but its `$N` ID is stale (daemon restarted, tmux server survived) — re-resolves `$N`, re-registers, no new orchestrator. Use `resume` when the tmux session is gone — creates a fresh session and spawns a new orchestrator.
 
 ## Session ID Resolution (`server.ts`)
 
@@ -41,8 +35,9 @@
 - Same-named subdirectory adjacent to an agent's `.md` file: its `.md` files (excluding `CLAUDE.md`) become sub-agent definitions in the plugin. The parent agent's own `.md` is NOT copied into `agents/` — doing so would make the parent visible as a Task-tool subagent inside its own pane, enabling recursive self-dispatch. `$SISYPHUS_SESSION_DIR`/`$SISYPHUS_SESSION_ID` substituted at plugin-creation time, not at runtime.
 - `restartAgent()` does NOT persist new `resumeArgs` — `agent.resumeArgs` in state permanently reflects the original spawn's flags. Generates a fresh `claudeSessionId` UUID on each restart — Claude conversation history is NOT carried over; the restarted agent starts a new Claude session.
 - `model: 'opus'` frontmatter resolves to `claude-opus-4-7[1m]` inside `setupAgentPane` at spawn time — compacts at ~800K instead of ~160K (the default context variant). State stores the frontmatter alias (`'opus'`), not the resolved model string; `restartAgent()` re-resolves it on each spawn.
-- Codex agents skip plugin/hooks entirely — no plugin dir, no Stop hook, no UserPromptSubmit. Prompt written to `{agentId}-codex-prompt.md`; model defaults to `codex-mini`. Codex agents can stop without submitting.
-- `register-bg-task.sh` is wired unconditionally as a `PostToolUse` + `Task` matcher hook — records background-Task `agentId`s to `$SISYPHUS_SESSION_DIR/runtime/bg-tasks/<agentId>.txt` for `require-submit.sh` to consume. `gcBgTasks(cwd, sessionId, agentId)` unlinks that file at every agent-completion path (`handleAgentSubmit`, `handleAgentKilled`, `handleKillAgent`, and pre-`restartAgent`); leftover entries emit a `bg-tasks-leftover` history event and a `console.warn`. Adding a new agent-termination path requires calling `gcBgTasks` or the file leaks into the next cycle.
+- `interactive: true` frontmatter skips the Stop/require-submit hook — agents with this flag can stop without submitting. Non-Codex agents without it require `sisyphus submit` before stopping.
+- Codex agents skip plugin/hooks entirely — no plugin dir, no Stop hook, no UserPromptSubmit. Prompt written to `{agentId}-codex-prompt.md`; model defaults to `codex-mini`.
+- Adding a new agent-termination path requires calling `gcBgTasks(cwd, sessionId, agentId)` — `register-bg-task.sh` records background-Task agentIds to `runtime/bg-tasks/<agentId>.txt` and `require-submit.sh` consumes it; leftover entries from an unterminated path leak into the next cycle silently.
 - Non-namespaced agent types resolve project → user-global → bundled only. Installed Claude Code plugins not searched. Use `namespace:name` for installed plugin agents (orchestrator sees bundled types only). `fallbackModel` frontmatter: if primary CLI absent from PATH, `agentConfig.frontmatter.model` is mutated in-place — agent state records the fallback; no separate log entry.
 - `plugins` frontmatter field and `config.requiredPlugins` use `name@marketplace` format. `ensurePluginInstalled()` is **blocking at spawn time** (60s timeout); install failure logs a warning and agent spawns without the plugin. `parseAgentFrontmatter` is regex-based, not YAML — quoted strings, multi-line values, and nested structures are silently ignored; only `skills`/`plugins` support list syntax.
 - Agent report `summary` in state is initially `content.slice(0, 200)`; asynchronously replaced by Haiku summarization. State read immediately after `handleAgentSubmit` may contain truncated text.
@@ -54,24 +49,18 @@
 ## Status Dots (`status-dots.ts`)
 
 - Orchestrator pane for phase detection is derived from `lastCycle.paneId` where `!lastCycle.completedAt` — read from persisted state, not in-memory maps. Phase detection survives daemon restarts.
-- Claude hook state (idle/processing/stopped) is read from `/tmp/claude-tmux-state/{numericPaneId}`. `readClaudeState` strips the `%` prefix from tmux pane IDs before constructing the path.
 - Completed sessions remain in dots for 5 minutes via TTL-based `completedSessions` map. Call `markSessionCompleted()` at completion or the dot disappears immediately.
 
 ## Pane Monitor (`pane-monitor.ts`)
 
-- `hasRecentSessionActivity()` ignores `agent.status` — uses `spawnedAt`/`completedAt` timestamps within a 2-hour window instead. Prevents zombie sessions from inflating mood signals.
 - State is re-read from disk after `handleAgentKilled()` before checking `allAgentsDone` — the kill mutates `session.agents` in persisted state, making the pre-kill in-memory reference stale.
 
 ## Tmux
 
 - `ssyph_` prefix is load-bearing for pane-monitor detection. Session names containing tmux format characters (`#`, `{`, `}`) break status bar compositor silently — no escaping is applied.
-- `sendKeys()` calls `getPaneState()` first (one tmux round-trip). Copy/clock mode → issues `send-keys -X cancel` before the real keys; skipping it silently routes the keys through the copy-mode key table instead of the shell.
 - `getPaneState()` returns `exists: false` on both a missing pane AND a timeout (null from `execSafe`) — `PaneUnavailableError` thrown by `sendKeys()` does not distinguish the two. Use `paneExists()` for a direct existence check.
-- `sessionExistsById()` uses `has-session -t $N` (exact integer match, no prefix-match risk). `$N` IDs go stale after a tmux server restart — `isSessionAlive()` dispatches to `sessionExistsById` when a `$N` is available, otherwise falls back to `sessionNameTaken()`.
-- `resolveSessionId()` uses `list-sessions` not `display-message -t <name>` — `display-message` requires an attached client and fails silently in daemon context.
-- `setPaneStyle()` stores metadata as per-pane tmux user variables (`set -p @pane_role/session/cycle/mode`) and writes a static `pane-border-format` string that references them — variables change per pane, format string is written once per pane. `updatePaneMeta()` updates only the variables without rebuilding the format; calling it on a pane that never had `setPaneStyle()` produces invisible labels.
+- `setPaneStyle()` stores metadata as per-pane tmux user variables and writes a static `pane-border-format` string that references them. `updatePaneMeta()` updates only the variables without rebuilding the format; calling it on a pane that never had `setPaneStyle()` produces invisible labels.
 - `configureSessionDefaults()` is called only inside `createSession()` — windows added to an existing tmux session after creation do not inherit `allow-rename off`, `automatic-rename off`, or layout rebalance hooks. Agents spawned in those windows can overwrite pane/window titles.
-- `updatePaneMeta()` has no transactionality — a mid-call failure leaves a stale mix of old/new variable values. `fireHaikuNaming()` calls it for every live pane; partial failure leaves some panes with the old session name and some with the new one.
 
 ## Timing
 
@@ -86,25 +75,20 @@
 
 ## Companion
 
-- `lastLateNightCommentary` resets on daemon restart (memory-only 30-min cooldown) — first post-2am poll after restart fires unconditionally.
 - `onSessionComplete()` return value (new achievement IDs) must be inspected — achievement commentary only fires if the array is non-empty.
 - `captureObservationContext` must be called before `onSessionComplete` to snapshot pre-mutation companion state. `runPostSessionObservations` fires after `saveCompanion()` as fire-and-forget; errors are logged but otherwise silent. The memory context passed to `fireCompletionCommentary` reflects the pre-session repo state — observations from this session are not yet persisted.
 - `companion.sessionsCompleted` increments unconditionally in `onSessionComplete` — NOT delta-safe. A continue→re-complete inflates the count, unlike `strength`/`wisdom`/`endurance`/`patience` which use `companionCredited*` deltas.
 - `computeMood()` uses Welford z-scores against `baselines` that only update in `onSessionComplete()` — mood queried during an active session is lagged by one session. Mood selection iterates `['happy', 'grinding', 'frustrated', 'zen', 'sleepy', 'excited', 'existential']` in fixed order; ties resolve positionally. Before 5 samples, each metric uses `COLD_START_DEFAULTS[metric]` independently — metrics warm up at different rates.
-- `computeMood()` called without `MoodSignals` returns time-based only: `existential` 2–6am, `sleepy` 10pm–2am, `zen` otherwise — all companion state and baselines ignored. This path fires whenever no active session is available.
 - `runPostSessionObservations` fires after `saveCompanion()` as fire-and-forget; if two sessions complete concurrently, each observation run loads fresh companion state but may clobber the other's `saveCompanion()` write — the last save wins.
 - `baselines.lastCountedDay` (ISO date string) gates day-boundary Welford commits in `onSessionComplete`: when the calendar day rolls over, the prior day's `pendingDayCount` is written into running stats, then zero-session gap days are backfilled one-by-one. Both `lastCountedDay` and `pendingDayCount` must stay in sync — losing one silently corrupts session-frequency z-scores (gaps collapse into the same day, or never recorded).
 
 ## Orchestrator Prompt Assembly (`orchestrator.ts`)
 
-- Mode resolution: `forceMode` → last *completed* cycle's `mode` → `'discovery'`. The `.reverse().find(c => c.completedAt)` scan skips any in-progress cycle, so an orchestrator that crashed mid-cycle doesn't influence mode.
+- Mode resolution: `forceMode` → last *completed* cycle's `mode` → `'discovery'`. Skips in-progress cycles, so an orchestrator that crashed mid-cycle doesn't influence mode.
 - `.sisyphus/orchestrator.md` (project override) replaces the entire system prompt — `orchestrator-base.md` and mode body are not appended. `{{AGENT_TYPES}}`, `{{ORCHESTRATOR_MODES}}`, and `$SISYPHUS_*` substitutions still apply if placeholders exist.
 - Only `bundled` (`sisyphus:*`) agent types are injected into the orchestrator system prompt — project/user/plugin-discovered types are deliberately hidden.
 - Context section switches on cycle number: cycle 1 inlines `session.context` text; cycles 2+ reference the `context/` directory by `@path`. Files written there by agents during cycle 1 only become visible to the orchestrator at cycle 2. `context/CLAUDE.md` is excluded from this listing — agents still read it as their Claude config, but the orchestrator never sees it.
-- `detectRepos()` scans session root + immediate non-dotfile children only — not recursive. `config.repos` restricts which child dirs are included (root `.` is always included). Nested monorepos and dotfile-prefixed dirs are never auto-discovered; the `## Repositories` section the orchestrator sees depends entirely on this scan.
-- `drainMessages` is called inside `spawnOrchestrator` before the tmux pane is created — messages are consumed even if pane spawn subsequently fails. No retry path.
+- `detectRepos()` scans session root + immediate non-dotfile children only — not recursive. `config.repos` restricts which child dirs are included (root `.` is always included). Nested monorepos and dotfile-prefixed dirs are never auto-discovered.
 - Goal source: `goal.md` file → `session.task`. `updateTask()` is the safe path — updates both within the session lock. Direct `updateSession({task})` skips `goal.md`; orchestrator still reads the old goal on the next cycle.
-- `handleOrchestratorComplete` does not kill the orchestrator pane — only `handleOrchestratorYield` does. The complete path assumes the pane already exited before the IPC hook fires.
 - `resolveOrchestratorPane`: in-memory `sessionOrchestratorPane` → `lastCycle.paneId` from persisted state; `sessionWindowMap` (window ID) has no persisted fallback — layout adjustment in `handleYield` is silently skipped post-restart. `cleanupSessionMaps` must be called on every kill/complete — omitting leaks entries in `sessionWindowMap`, `sessionOrchestratorPane`, and the pane registry.
 - Cycle record is written with `activeMs: 0` at `spawnOrchestrator()` time; incremented only at yield/complete via `flushCycleTimer()`. Reading `lastCycle.activeMs` while the orchestrator is running always returns 0 — use session-level `activeMs` for in-flight timing.
-- `interCycleGapMs` in the cycle record requires `prevCycle.completedAt` — silently omitted (field absent, not 0) if that timestamp is missing from old or corrupted state. Downstream consumers of cycle records must treat its absence as unknown, not zero.
