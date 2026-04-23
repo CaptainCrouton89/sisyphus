@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import * as tmux from '../tmux.js';
 import { readClaudeState, getSisyphusPhases } from '../status-dots.js';
 import { loadCompanion } from '../companion.js';
-import type { CompanionState } from '../../shared/companion-types.js';
 import { execSafe } from '../../shared/exec.js';
 import { shellQuote } from '../../shared/shell.js';
 import type {
@@ -24,43 +23,13 @@ export const STATUS_BAR_BG = '#1d1e21';
 
 const SESSION_ORDER_PATH = join(homedir(), '.config', 'tmux', 'session-order');
 
-let sessionOrderCache: string[] | null = null;
-let sessionOrderCacheTime = 0;
-const SESSION_ORDER_CACHE_TTL = 30_000;
-
 function getSessionOrder(): string[] {
-  const now = Date.now();
-  if (sessionOrderCache && now - sessionOrderCacheTime < SESSION_ORDER_CACHE_TTL) {
-    return sessionOrderCache;
-  }
   try {
-    if (existsSync(SESSION_ORDER_PATH)) {
-      sessionOrderCache = readFileSync(SESSION_ORDER_PATH, 'utf-8')
-        .split('\n')
-        .filter(Boolean);
-    } else {
-      sessionOrderCache = [];
-    }
+    if (!existsSync(SESSION_ORDER_PATH)) return [];
+    return readFileSync(SESSION_ORDER_PATH, 'utf-8').split('\n').filter(Boolean);
   } catch {
-    sessionOrderCache = [];
+    return [];
   }
-  sessionOrderCacheTime = now;
-  return sessionOrderCache;
-}
-
-// ─── Companion cache ───────────────────────────────────────────────────────────
-
-let cachedCompanion: CompanionState | null = null;
-let companionCacheTime = 0;
-const COMPANION_CACHE_TTL = 10_000;
-
-function getCachedCompanion(): CompanionState {
-  const now = Date.now();
-  if (!cachedCompanion || now - companionCacheTime > COMPANION_CACHE_TTL) {
-    cachedCompanion = loadCompanion();
-    companionCacheTime = now;
-  }
-  return cachedCompanion;
 }
 
 // ─── Claude state priority ─────────────────────────────────────────────────────
@@ -106,31 +75,29 @@ function rightArrow(fromBg: string, toBg: string): string {
 
 /**
  * Cross-band boundary arrow for the right side (left-pointing, \uE0B2).
- * If `trailingName` is the active session, renders with ACTIVE_SESSION_BG.
- * Otherwise renders the normal inactive transition.
+ * If `trailingName` equals `currentSession`, the arrow outgoing bg is `activeBg`
+ * so the highlight bleeds through the band boundary. Otherwise uses `prevBg`.
  *
- * Ported from `renderSectionBoundary()` in status-bar.ts.
+ * Resolved at render time — no tmux format conditional.
  */
 function renderSectionBoundary(
   targetBg: string,
   prevBg: string,
   trailingName: string | null,
   activeBg: string,
+  currentSession: string,
 ): string {
-  const inactive = `#[fg=${targetBg}]#[bg=${prevBg}]\uE0B2#[bg=${targetBg}]`;
-  if (!trailingName) return inactive;
-  const active = `#[fg=${targetBg}]#[bg=${activeBg}]\uE0B2#[bg=${targetBg}]`;
-  return `#{?#{==:#{session_name},${trailingName}},${active},${inactive}}`;
+  const fromBg = trailingName === currentSession ? activeBg : prevBg;
+  return `#[fg=${targetBg}]#[bg=${fromBg}]\uE0B2#[bg=${targetBg}]`;
 }
 
 /**
  * Intra-band arrow for a session within a band.
- * The arrow preceding session `name` is colored based on:
- * - If `name` is the active session: arrow uses ACTIVE_SESSION_BG as bg
- * - If `leftNeighborName` is the active session: arrow bg is ACTIVE_SESSION_BG to close the highlight
- * - Otherwise: arrow is invisible (fg=sectionBg)
+ * - `name === currentSession`: arrow opens into the activeBg highlight
+ * - `leftNeighborName === currentSession`: arrow closes the highlight
+ * - otherwise: arrow is invisible (fg=sectionBg over leftBg)
  *
- * Ported from `renderSessionArrow()` in status-bar.ts.
+ * Resolved at render time — no tmux format conditional.
  */
 function renderSessionArrow(
   name: string,
@@ -138,17 +105,15 @@ function renderSessionArrow(
   leftBg: string,
   sectionBg: string,
   activeBg: string,
+  currentSession: string,
 ): string {
-  const active = `#[fg=${activeBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]`;
-  const afterActive = leftNeighborName
-    ? `#[fg=${sectionBg}]#[bg=${activeBg}]\uE0B2#[bg=${sectionBg}]`
-    : `#[fg=${sectionBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]`;
-
-  if (!leftNeighborName) {
-    return `#{?#{==:#{session_name},${name}},${active},${afterActive}}`;
+  if (name === currentSession) {
+    return `#[fg=${activeBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]`;
   }
-
-  return `#{?#{==:#{session_name},${name}},${active},#{?#{==:#{session_name},${leftNeighborName}},${afterActive},#[fg=${sectionBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]}}`;
+  if (leftNeighborName === currentSession) {
+    return `#[fg=${sectionBg}]#[bg=${activeBg}]\uE0B2#[bg=${sectionBg}]`;
+  }
+  return `#[fg=${sectionBg}]#[bg=${leftBg}]\uE0B2#[bg=${sectionBg}]`;
 }
 
 // ─── Compositor ────────────────────────────────────────────────────────────────
@@ -189,18 +154,17 @@ export class Compositor {
 
     const ctx = this.buildContext();
 
-    // Right side: global, written directly to status-right
-    const rightResult = this.composeRight(ctx);
-    tmux.setGlobalOption('status-right', rightResult);
-
-    // Left side: per-session, written as @sisyphus_left session option on each tmux session
-    // status-left globally set to #{E:@sisyphus_left}
+    // Both sides are rendered per-session with all active-session highlights pre-resolved.
+    // Writing @sisyphus_left and @sisyphus_right as session options and pointing
+    // status-left/status-right at them means tmux never evaluates a session_name
+    // conditional — it just expands whichever session it's displaying.
     for (const session of ctx.allSessions) {
       const sessionCtx = this.buildSessionContext(ctx, session.name);
-      const leftResult = this.composeLeft(sessionCtx, session.name);
-      tmux.setSessionOption(session.name, '@sisyphus_left', leftResult);
+      tmux.setSessionOption(session.name, '@sisyphus_left', this.composeLeft(sessionCtx));
+      tmux.setSessionOption(session.name, '@sisyphus_right', this.composeRight(sessionCtx));
     }
     tmux.setGlobalOption('status-left', '#{E:@sisyphus_left}');
+    tmux.setGlobalOption('status-right', '#{E:@sisyphus_right}');
   }
 
   private initialize(): void {
@@ -230,7 +194,7 @@ export class Compositor {
 
     const sisyphusPhases = getSisyphusPhases();
     const sessionOrder = getSessionOrder();
-    const companion = getCachedCompanion();
+    const companion = loadCompanion();
 
     // Build windows map for all sessions
     const windowsBySession = new Map<string, Array<{ index: number; name: string; id: string }>>();
@@ -248,26 +212,24 @@ export class Compositor {
       config: this.config,
       windowsBySession,
       prevBg: STATUS_BAR_BG,
+      currentSession: '', // overwritten per-session in buildSessionContext
     };
   }
 
   /**
-   * Build a session-specific RenderContext for left-side rendering.
-   * Overrides windowsBySession to only include the target session's windows,
-   * and filters allSessions/allPanes to the target session.
+   * Clone the base context and stamp the session we're rendering for.
+   * Segments compare `ctx.currentSession` to session names to pre-resolve
+   * active-highlight styling without emitting tmux format conditionals.
    */
   private buildSessionContext(ctx: RenderContext, sessionName: string): RenderContext {
-    return {
-      ...ctx,
-      allSessions: ctx.allSessions.filter(s => s.name === sessionName),
-    };
+    return { ...ctx, currentSession: sessionName };
   }
 
   /**
    * Compose the left side for a specific tmux session.
    * Renders left-pointing (right-arrow) powerline bands.
    */
-  private composeLeft(ctx: RenderContext, sessionName: string): string {
+  private composeLeft(ctx: RenderContext): string {
     const ids = this.config.left;
     const orderedSegments = this.getOrderedSegments('left', ids);
 
@@ -350,10 +312,13 @@ export class Compositor {
 
     for (const band of rendered) {
       if (prevBg === 'default') {
-        // First band: arrow from default bg
-        result += `#[fg=${band.bg}]#[bg=default]\uE0B2#[bg=${band.bg}]`;
+        // First band (rightmost): arrow from default bg. If the preceding
+        // rendered band trailed on the active session, open this arrow with
+        // activeBg so the highlight bleeds through the band boundary.
+        const fromBg = trailingName === ctx.currentSession ? activeBg : 'default';
+        result += `#[fg=${band.bg}]#[bg=${fromBg}]\uE0B2#[bg=${band.bg}]`;
       } else {
-        result += renderSectionBoundary(band.bg, prevBg, trailingName, activeBg);
+        result += renderSectionBoundary(band.bg, prevBg, trailingName, activeBg, ctx.currentSession);
       }
       result += band.content;
       prevBg = band.bg;
@@ -408,6 +373,7 @@ export class Compositor {
     sectionBg: string,
     prevBg: string,
     activeBg: string,
+    currentSession: string,
   ): { content: string; trailingName: string | null } {
     if (parts.length === 0) return { content: '', trailingName: null };
 
@@ -417,7 +383,7 @@ export class Compositor {
       const part = parts[i]!;
       const leftNeighbor = i > 0 ? parts[i - 1]!.name : null;
       const leftBg = i > 0 ? sectionBg : prevBg;
-      band += renderSessionArrow(part.name, leftNeighbor, leftBg, sectionBg, activeBg);
+      band += renderSessionArrow(part.name, leftNeighbor, leftBg, sectionBg, activeBg, currentSession);
       band += part.rendered;
     }
 

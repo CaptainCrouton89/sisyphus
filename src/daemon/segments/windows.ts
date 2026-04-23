@@ -22,7 +22,7 @@ export function createWindowsSegment(): Segment {
       const activeText = ctx.config.colors.activeText;
       const inactiveText = ctx.config.colors.inactiveText;
 
-      const sessionName = ctx.allSessions[0]?.name;
+      const sessionName = ctx.currentSession;
       if (!sessionName) return { content: '' };
 
       const windows = ctx.windowsBySession.get(sessionName);

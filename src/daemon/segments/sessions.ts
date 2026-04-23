@@ -23,10 +23,12 @@ function renderNormalSession(
   activeText: string,
   inactiveText: string,
   sectionBg: string,
+  isActive: boolean,
 ): string {
-  const active = `#[bg=${activeBg}]#[fg=${color}] ● #[fg=${activeText}]#[bold]${name}#[nobold] #[bg=${sectionBg}]`;
-  const inactive = `#[fg=${color}] ● #[fg=${inactiveText}]${name} `;
-  return `#{?#{==:#{session_name},${name}},${active},${inactive}}`;
+  if (isActive) {
+    return `#[bg=${activeBg}]#[fg=${color}] ● #[fg=${activeText}]#[bold]${name}#[nobold] #[bg=${sectionBg}]`;
+  }
+  return `#[fg=${color}] ● #[fg=${inactiveText}]${name} `;
 }
 
 // ─── Segment implementation ────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ class SessionsSegment implements Segment {
           colors.activeText,
           colors.inactiveText,
           this.bg,
+          name === ctx.currentSession,
         ),
       };
     });
@@ -88,6 +91,7 @@ class SessionsSegment implements Segment {
       this.bg,
       this.bg,     // compositor already drew the entry arrow; use sectionBg to suppress the first intra-band arrow
       colors.activeBg,
+      ctx.currentSession,
     );
 
     return {

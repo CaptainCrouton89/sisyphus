@@ -1,8 +1,8 @@
 # src/daemon/segments/
 
-## Rendering split: left is per-session, right is global
+## Rendering: both sides are per-session, fully pre-resolved
 
-`compositor.render()` writes `status-right` once (global, with tmux format conditionals evaluated at display time), but writes `@sisyphus_left` as a per-session tmux option for each session, with `status-left` set to `#{E:@sisyphus_left}` globally. Left segments receive a filtered `RenderContext` containing only the target session — `ctx.allSessions[0]` is the session being rendered.
+`compositor.render()` iterates every tmux session. For each one it writes `@sisyphus_left` and `@sisyphus_right` as session options, with the active-session highlight baked in against `ctx.currentSession`. `status-left` and `status-right` globally point at `#{E:@sisyphus_left}` / `#{E:@sisyphus_right}`, so tmux never evaluates a `#{==:#{session_name},X}` conditional — it just expands the option for whichever session it's displaying. Segments read `ctx.currentSession` to decide active vs. inactive styling; do not emit `#{?#{==:#{session_name},...}}` conditionals in new segments.
 
 ## `SegmentOutput.trailingName` — cross-band arrow color
 
@@ -18,7 +18,7 @@ Both `sessions` and `sisyphus-sessions` pass `sectionBg` (not actual prevBg) as 
 
 ## Companion segment — field set switches on active sisyphus sessions
 
-When `ctx.sisyphusPhases.size > 0`, `companion` renders `['face', 'boulder', 'verb']`; otherwise `['face', 'boulder', 'hobby']`. Companion state is cached at module level in `compositor.ts` with a 10s TTL — status bar changes lag up to 10s after companion state updates.
+When `ctx.sisyphusPhases.size > 0`, `companion` renders `['face', 'boulder', 'verb']`; otherwise `['face', 'boulder', 'hobby']`. Companion state is read fresh via `loadCompanion()` on every compositor render — no module-level cache.
 
 Boulder size uses `ctx.companion.recentActiveAgents ?? 0`. If pane-monitor hasn't run yet (`recentActiveAgents` is absent), boulder renders at size 0. The pane-monitor filters out zombie sessions (active status but no 2h activity) before computing this — see `hasRecentSessionActivity` in `pane-monitor.ts`.
 
@@ -28,7 +28,7 @@ Boulder size uses `ctx.companion.recentActiveAgents ?? 0`. If pane-monitor hasn'
 
 ## Session order
 
-`~/.config/tmux/session-order` (one name per line) controls display order in `sessions` and `sisyphus-sessions`. Cached 30s at module level in `compositor.ts`. Sessions not listed sort alphabetically after listed ones.
+`~/.config/tmux/session-order` (one name per line) controls display order in `sessions` and `sisyphus-sessions`. Read fresh on every compositor render — no cache. Sessions not listed sort alphabetically after listed ones.
 
 ## `windows` segment — `#{@sisyphus_dots}` injection
 

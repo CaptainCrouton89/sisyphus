@@ -11,7 +11,7 @@ export function createSessionNameSegment(): Segment {
       const bg = ctx.config.segments['session-name']?.bg ?? '#4a4d55';
       const activeText = ctx.config.colors.activeText;
       return {
-        content: `#[fg=${activeText}]#[bg=${bg}]#[bold] #{session_name} #[nobold]`,
+        content: `#[fg=${activeText}]#[bg=${bg}]#[bold] ${ctx.currentSession} #[nobold]`,
       };
     },
   };

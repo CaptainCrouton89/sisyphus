@@ -59,6 +59,7 @@ export interface RenderContext {
   config: StatusBarConfig;
   windowsBySession: Map<string, Array<{ index: number; name: string; id: string }>>;
   prevBg: string; // bg of the preceding segment (or STATUS_BAR_BG if first) — set by compositor per segment
+  currentSession: string; // the session this render pass is for — segments compare against this to bake in active-session highlights without tmux format conditionals
 }
 
 export const DEFAULT_STATUS_BAR_CONFIG: StatusBarConfig = {

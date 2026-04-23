@@ -26,12 +26,9 @@ export function createSisyphusSessionsSegment(): Segment {
 
       for (const { phase, tmuxSession } of ctx.sisyphusPhases.values()) {
         const { icon, color } = DOT_MAP[phase];
-        const active =
-          `#[bg=${activeBg}]#[fg=${color}] ${icon} #[fg=${activeText}]#[bold]S#[nobold] #[bg=${sectionBg}]`;
-        const inactive =
-          `#[fg=${color}] ${icon} #[fg=${inactiveText}]S `;
-        const rendered =
-          `#{?#{==:#{session_name},${tmuxSession}},${active},${inactive}}`;
+        const rendered = tmuxSession === ctx.currentSession
+          ? `#[bg=${activeBg}]#[fg=${color}] ${icon} #[fg=${activeText}]#[bold]S#[nobold] #[bg=${sectionBg}]`
+          : `#[fg=${color}] ${icon} #[fg=${inactiveText}]S `;
         parts.push({ name: tmuxSession, rendered });
       }
 
@@ -42,6 +39,7 @@ export function createSisyphusSessionsSegment(): Segment {
         sectionBg,
         sectionBg,
         activeBg,
+        ctx.currentSession,
       );
 
       return {
