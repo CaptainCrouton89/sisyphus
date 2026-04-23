@@ -244,8 +244,10 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const extraPluginFlags = allExtraPluginDirs.map(p => `--plugin-dir "${p}"`).join(' ');
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
     const promptFlag = agentConfig?.frontmatter.systemPrompt === 'replace' ? '--system-prompt' : '--append-system-prompt';
-    mainCmd = `claude${permFlag} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''} --name ${shellQuote(agentTitle)} ${promptFlag} "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
-    resumeArgs = `${permFlag.trimStart()} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}`;
+    const siblingSettingsPath = agentConfig?.filePath ? agentConfig.filePath.replace(/\.md$/, '.settings.json') : null;
+    const settingsFlag = siblingSettingsPath && existsSync(siblingSettingsPath) ? ` --settings "${siblingSettingsPath}"` : '';
+    mainCmd = `claude${permFlag} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''}${settingsFlag} --name ${shellQuote(agentTitle)} ${promptFlag} "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
+    resumeArgs = `${permFlag.trimStart()} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}${settingsFlag}`;
   }
 
   const scriptPath = writeRunScript(promptsDir(cwd, sessionId), `${agentId}-run`, [
