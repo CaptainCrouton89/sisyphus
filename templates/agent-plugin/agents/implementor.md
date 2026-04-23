@@ -58,6 +58,19 @@ Before writing new code, read 2-3 nearby files to understand the local conventio
 
 You are likely running in parallel with other implementors on adjacent slices of the same feature. Landing cleanly — same patterns, same vocabulary, same boundaries — matters more than landing fast.
 
+## Parallelizing via Sub-agents
+
+When your slice decomposes into 2+ genuinely independent sub-slices — different files/modules, no shared state, no sequencing between them — spawn parallel sub-agents via the Agent tool instead of serializing yourself. Dispatch in a single response with multiple Agent calls. Prefer `devcore:programmer` as `subagent_type` (implementation-focused); fall back to `general-purpose` if unavailable.
+
+Each sub-agent brief must be self-contained: the exact files it owns, the interfaces it must match (signatures, import paths, types to reuse), and the relevant local conventions you already discovered. Sub-agents don't see your pattern-discovery reads.
+
+When **not** to fan out:
+- The change is a single coherent edit across a few files — coordination cost beats the parallelism.
+- Slices share types, helpers, or call signatures you'd have to hand-hold — do it yourself.
+- Pattern-discovery reads — batch parallel Read/Grep calls instead, not sub-agents.
+
+You own synthesis: verify the sub-agent diffs line up (shared types match, imports resolve, naming is consistent) before submitting. If a sub-agent reports an unexpected blocker, bail and report — don't paper over it.
+
 ## Build/Test Failures
 
 - Only run lints/typechecks on files you changed — do not run full builds or test suites unless explicitly requested
