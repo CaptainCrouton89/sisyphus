@@ -26,57 +26,66 @@ fi
 
 # If background tasks are still running, allow stop — the agent isn't done yet
 # and Claude's own task system will handle pending-task warnings.
-PENDING=$(echo "$STDIN_JSON" | python3 -c "
-import json, sys, re
+#
+# Launches are tracked via two structured sources (no prose scraping):
+#   - Bash `run_in_background: true` -> transcript's "Command running in background with ID:" line
+#   - Task `run_in_background: true` -> register-bg-task.sh (PostToolUse) appends agentId to
+#     $SISYPHUS_SESSION_DIR/runtime/bg-tasks/$SISYPHUS_AGENT_ID.txt
+# Completions come from `queue-operation enqueue` entries with `<task-id>` markers.
+# Missing/unreadable state file => launched set is empty (block by default).
+BG_STATE_FILE="$SISYPHUS_SESSION_DIR/runtime/bg-tasks/$SISYPHUS_AGENT_ID.txt"
+PENDING=$(echo "$STDIN_JSON" | BG_STATE_FILE="$BG_STATE_FILE" python3 -c "
+import json, os, re, sys
 
 stdin_data = json.load(sys.stdin)
 transcript_path = stdin_data.get('transcript_path', '')
-if not transcript_path:
-    print(0)
-    sys.exit(0)
 
 launched = set()
 completed = set()
 
-with open(transcript_path) as f:
-    for line in f:
-        try:
-            entry = json.loads(line)
-        except Exception:
-            continue
+state_file = os.environ.get('BG_STATE_FILE', '')
+if state_file and os.path.exists(state_file):
+    try:
+        with open(state_file) as sf:
+            for line in sf:
+                aid = line.strip()
+                if aid:
+                    launched.add(aid)
+    except Exception:
+        pass
 
-        etype = entry.get('type', '')
+if transcript_path and os.path.exists(transcript_path):
+    with open(transcript_path) as f:
+        for line in f:
+            try:
+                entry = json.loads(line)
+            except Exception:
+                continue
 
-        # Extract background task IDs from tool_result content
-        if etype == 'user':
-            msg = entry.get('message', {})
-            content = msg.get('content', [])
-            if isinstance(content, list):
-                for block in content:
-                    if not isinstance(block, dict) or block.get('type') != 'tool_result':
-                        continue
-                    c = block.get('content', '')
-                    # tool_result content can be a string or list of text blocks
-                    if isinstance(c, list):
-                        c = ' '.join(b.get('text', '') for b in c if isinstance(b, dict))
-                    if not isinstance(c, str):
-                        continue
-                    # Bash: \"Command running in background with ID: <id>\"
-                    m = re.search(r'Command running in background with ID: ([a-z0-9]+)', c)
+            etype = entry.get('type', '')
+
+            if etype == 'user':
+                msg = entry.get('message', {})
+                content = msg.get('content', [])
+                if isinstance(content, list):
+                    for block in content:
+                        if not isinstance(block, dict) or block.get('type') != 'tool_result':
+                            continue
+                        c = block.get('content', '')
+                        if isinstance(c, list):
+                            c = ' '.join(b.get('text', '') for b in c if isinstance(b, dict))
+                        if not isinstance(c, str):
+                            continue
+                        m = re.search(r'Command running in background with ID: ([a-z0-9]+)', c)
+                        if m:
+                            launched.add(m.group(1))
+
+            elif etype == 'queue-operation' and entry.get('operation') == 'enqueue':
+                c = entry.get('content', '')
+                if isinstance(c, str):
+                    m = re.search(r'<task-id>([^<]+)</task-id>', c)
                     if m:
-                        launched.add(m.group(1))
-                    # Agent (Task tool): \"agentId: <id>\" in async launch message
-                    m = re.search(r'agentId: ([a-z0-9]+)', c)
-                    if m and 'background' in c.lower():
-                        launched.add(m.group(1))
-
-        # Extract completed/failed/killed task IDs from queue-operation entries
-        elif etype == 'queue-operation' and entry.get('operation') == 'enqueue':
-            c = entry.get('content', '')
-            if isinstance(c, str):
-                m = re.search(r'<task-id>([^<]+)</task-id>', c)
-                if m:
-                    completed.add(m.group(1))
+                        completed.add(m.group(1))
 
 pending = launched - completed
 print(len(pending))

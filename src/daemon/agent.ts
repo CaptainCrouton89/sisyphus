@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, relative, dirname, join } from 'node:path';
@@ -96,7 +96,7 @@ function createAgentPlugin(
   }
 
   const srcHooks = resolve(import.meta.dirname, '../templates/agent-plugin/hooks');
-  for (const f of ['require-submit.sh', 'intercept-send-message.sh']) {
+  for (const f of ['require-submit.sh', 'intercept-send-message.sh', 'register-bg-task.sh']) {
     copyFileSync(`${srcHooks}/${f}`, `${base}/hooks/${f}`);
   }
 
@@ -105,6 +105,9 @@ function createAgentPlugin(
   const hooksConfig: Record<string, unknown[]> = {
     PreToolUse: [
       { matcher: 'SendMessage', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/intercept-send-message.sh' }] },
+    ],
+    PostToolUse: [
+      { matcher: 'Task', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/register-bg-task.sh' }] },
     ],
   };
 
@@ -381,6 +384,10 @@ export async function restartAgent(
     unregisterAgentPane(sessionId, agentId);
   }
 
+  // GC the bg-tasks registry from the prior Claude session — on restart, Claude Code
+  // spawns a fresh session UUID, so any background Tasks it tracked are orphaned.
+  gcBgTasks(cwd, sessionId, agentId);
+
   const claudeSessionId = provider !== 'openai' ? randomUUID() : undefined;
 
   const { paneId, fullCmd } = setupAgentPane({
@@ -450,6 +457,25 @@ export async function handleAgentReport(
   }).catch((err) => { console.warn('[sisyphus] Report summarization failed:', err instanceof Error ? err.message : err); });
 }
 
+// Clean up the per-agent background-task registry written by register-bg-task.sh.
+// Called from every agent-completion path (submit, kill, pane-exit, restart). Any entries
+// still present represent background Tasks the agent launched but never saw complete —
+// surface them as a warning so we can spot detector drift or agents that stop early.
+export function gcBgTasks(cwd: string, sessionId: string, agentId: string): void {
+  const file = `${sessionDir(cwd, sessionId)}/runtime/bg-tasks/${agentId}.txt`;
+  if (!existsSync(file)) return;
+  try {
+    const leftover = readFileSync(file, 'utf-8').split('\n').map(s => s.trim()).filter(Boolean);
+    if (leftover.length > 0) {
+      console.warn(`[bg-tasks] ${agentId} exited with ${leftover.length} untracked background task(s): ${leftover.join(', ')}`);
+      emitHistoryEvent(sessionId, 'bg-tasks-leftover', { agentId, leftover });
+    }
+    unlinkSync(file);
+  } catch (err) {
+    console.warn(`[bg-tasks] ${agentId} cleanup failed:`, err instanceof Error ? err.message : err);
+  }
+}
+
 export async function handleAgentSubmit(
   cwd: string,
   sessionId: string,
@@ -484,6 +510,7 @@ export async function handleAgentSubmit(
     activeMs: flushedActiveMs,
   });
   emitHistoryEvent(sessionId, 'agent-completed', { agentId, status: 'completed', activeMs: flushedActiveMs, reportSummary: report.slice(0, 500) });
+  gcBgTasks(cwd, sessionId, agentId);
 
   // Kill the pane — Claude doesn't exit on its own after running a bash command.
   // But if this is the last agent, defer the kill to onAllAgentsDone() so the tmux
@@ -516,6 +543,7 @@ export async function handleAgentKilled(
     activeMs: flushedActiveMs,
   });
   emitHistoryEvent(sessionId, 'agent-exited', { agentId, status: 'killed', activeMs: flushedActiveMs });
+  gcBgTasks(cwd, sessionId, agentId);
 
   const session = state.getSession(cwd, sessionId);
   return allAgentsDone(session);
