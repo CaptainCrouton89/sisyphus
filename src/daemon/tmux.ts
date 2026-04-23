@@ -322,14 +322,15 @@ export function listAllPanes(): Array<{ sessionName: string; paneId: string }> {
  * Sets window/session-level tmux options that Sisyphus depends on.
  * Without these, pane labels won't show and titles may get clobbered.
  */
-function configureSessionDefaults(sessionName: string, windowId: string): void {
+function configureSessionDefaults(sessionTarget: string, windowId: string): void {
   // Pane border labels at top of each pane
   execSafe(`tmux set -w -t ${t(windowId)} pane-border-status top`);
   // Prevent tmux from overwriting pane/window titles we set
   execSafe(`tmux set -w -t ${t(windowId)} allow-rename off`);
   execSafe(`tmux set -w -t ${t(windowId)} automatic-rename off`);
-  // Re-tile when a pane dies so remaining panes fill the space
-  execSafe(`tmux set-hook -t ${t(sessionName)} after-kill-pane "select-layout even-horizontal"`);
-  execSafe(`tmux set-hook -t ${t(sessionName)} pane-exited "select-layout even-horizontal"`);
+  // Re-tile when a pane dies so remaining panes fill the space.
+  // sessionTarget should be a $N id — tmux -t <name> can substring-match under sparse env.
+  execSafe(`tmux set-hook -t ${t(sessionTarget)} after-kill-pane "select-layout even-horizontal"`);
+  execSafe(`tmux set-hook -t ${t(sessionTarget)} pane-exited "select-layout even-horizontal"`);
 }
 

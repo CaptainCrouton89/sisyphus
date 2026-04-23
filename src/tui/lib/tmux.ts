@@ -176,12 +176,15 @@ export function openClaudeResumeSession(cwd: string, sessionId: string, claudeSe
   const cycleLabel = cycleNum != null ? `c${cycleNum}` : '';
   const paneTitle = cycleLabel ? `ssph:orch ${sessionLabel} ${cycleLabel}` : `ssph:orch ${sessionLabel}`;
 
-  // If session already exists, reattach — re-stamp bindings + pane style in case it predates them
-  const existing = execSafe('tmux list-sessions -F "#{session_name}"');
-  if (existing?.split('\n').some(line => line === sessionName)) {
-    execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
-    execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_session_id ${shellQuote(sessionId)}`);
-    const firstPaneId = execSafe(`tmux list-panes -t ${shellQuote(sessionName)} -F '#{pane_id}'`)?.split('\n')[0];
+  // Resolve name → $N id for subsequent -t ops. tmux -t <name> can
+  // substring-match the wrong session under sparse env; $N is unambiguous.
+  const existing = execSafe('tmux list-sessions -F "#{session_id}|#{session_name}"');
+  const existingLine = existing?.split('\n').find(line => line.slice(line.indexOf('|') + 1) === sessionName);
+  if (existingLine) {
+    const existingSessId = existingLine.slice(0, existingLine.indexOf('|'));
+    execSafe(`tmux set-option -t ${shellQuote(existingSessId)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
+    execSafe(`tmux set-option -t ${shellQuote(existingSessId)} @sisyphus_session_id ${shellQuote(sessionId)}`);
+    const firstPaneId = execSafe(`tmux list-panes -t ${shellQuote(existingSessId)} -F '#{pane_id}'`)?.split('\n')[0];
     if (firstPaneId) applyOrchestratorPaneStyle(firstPaneId, paneTitle, sessionLabel, cycleLabel, mode);
     return sessionName;
   }
@@ -192,15 +195,17 @@ export function openClaudeResumeSession(cwd: string, sessionId: string, claudeSe
     ? `${resumeArgs} --resume ${shellQuote(claudeSessionId)}`
     : `--resume ${shellQuote(claudeSessionId)}`;
   const cmd = `${envPrefix}PATH=${shellQuote(pathEnv)} claude ${args}`;
-  // -P -F captures the new session's first pane ID so we can style it directly.
-  const firstPaneId = exec(`tmux new-session -d -s ${shellQuote(sessionName)} -n main -c ${shellQuote(cwd)} -P -F '#{pane_id}' ${shellQuote(cmd)}`).trim();
-  execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
-  execSafe(`tmux set-option -t ${shellQuote(sessionName)} @sisyphus_session_id ${shellQuote(sessionId)}`);
+  // -P -F captures the new session's $N id + first pane id for unambiguous targeting.
+  const createOut = exec(`tmux new-session -d -s ${shellQuote(sessionName)} -n main -c ${shellQuote(cwd)} -P -F '#{session_id}|#{pane_id}' ${shellQuote(cmd)}`).trim();
+  const pipeIdx = createOut.indexOf('|');
+  const newSessId = createOut.slice(0, pipeIdx);
+  const firstPaneId = createOut.slice(pipeIdx + 1);
+  execSafe(`tmux set-option -t ${shellQuote(newSessId)} @sisyphus_cwd ${shellQuote(cwd.replace(/\/+$/, ''))}`);
+  execSafe(`tmux set-option -t ${shellQuote(newSessId)} @sisyphus_session_id ${shellQuote(sessionId)}`);
   // Match session defaults from daemon tmux.ts configureSessionDefaults
-  const paneTarget = `${sessionName}:`;
-  execSafe(`tmux set -w -t ${shellQuote(paneTarget)} pane-border-status top`);
-  execSafe(`tmux set -w -t ${shellQuote(paneTarget)} allow-rename off`);
-  execSafe(`tmux set -w -t ${shellQuote(paneTarget)} automatic-rename off`);
+  execSafe(`tmux set -w -t ${shellQuote(newSessId + ':')} pane-border-status top`);
+  execSafe(`tmux set -w -t ${shellQuote(newSessId + ':')} allow-rename off`);
+  execSafe(`tmux set -w -t ${shellQuote(newSessId + ':')} automatic-rename off`);
   if (firstPaneId) applyOrchestratorPaneStyle(firstPaneId, paneTitle, sessionLabel, cycleLabel, mode);
   return sessionName;
 }

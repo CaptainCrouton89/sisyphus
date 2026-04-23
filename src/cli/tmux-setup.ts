@@ -87,65 +87,74 @@ function userTmuxConfPath(): string | null {
   return null;
 }
 
-// --- Manifest helper used by multiple scripts ---
-const MANIFEST_LOOKUP = `
-MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
-[ ! -f "$MANIFEST" ] && exit 0
-current=$(tmux display-message -p '#{session_name}')
-# Find cwd for current session from manifest
-cwd=""
-while IFS=$'\\t' read -r type name scwd phase; do
-  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
-done < "$MANIFEST"
-[ -z "$cwd" ] && exit 0`.trim();
-
 const CYCLE_SCRIPT = `#!/bin/bash
-${MANIFEST_LOOKUP}
-# Collect all sessions (S and H) matching this cwd
-sessions=()
-while IFS=$'\\t' read -r type name scwd phase; do
-  [[ "$type" == "#"* ]] && continue
-  [ "$scwd" = "$cwd" ] && sessions+=("$name")
+# Target by $N session ID (column 5 in TSV) — tmux -t <name> can substring-match
+# the wrong session under sparse env.
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+if [ ! -f "$MANIFEST" ]; then
+  tmux display-message "sisyphus: no manifest — daemon running?"
+  exit 0
+fi
+current_id=$(tmux display-message -p '#{session_id}')
+current_name=$(tmux display-message -p '#{session_name}')
+cwd=""
+while IFS=$'\\t' read -r type name scwd phase sid; do
+  [ "$sid" = "$current_id" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
-(( \${#sessions[@]} <= 1 )) && exit 0
-for (( i=0; i<\${#sessions[@]}; i++ )); do
-  if [ "\${sessions[$i]}" = "$current" ]; then
-    next=$(( (i + 1) % \${#sessions[@]} ))
-    tmux switch-client -t "\${sessions[$next]}"
+if [ -z "$cwd" ]; then
+  tmux display-message "sisyphus: '$current_name' has no @sisyphus_cwd — run 'sisyphus start' here to register"
+  exit 0
+fi
+session_ids=()
+while IFS=$'\\t' read -r type name scwd phase sid; do
+  [[ "$type" == "#"* ]] && continue
+  [ "$scwd" = "$cwd" ] && session_ids+=("$sid")
+done < "$MANIFEST"
+if (( \${#session_ids[@]} <= 1 )); then
+  tmux display-message "sisyphus: only one session in $cwd — nothing to cycle to"
+  exit 0
+fi
+for (( i=0; i<\${#session_ids[@]}; i++ )); do
+  if [ "\${session_ids[$i]}" = "$current_id" ]; then
+    next=$(( (i + 1) % \${#session_ids[@]} ))
+    tmux switch-client -t "\${session_ids[$next]}"
     exit 0
   fi
 done
-tmux switch-client -t "\${sessions[0]}"
+tmux switch-client -t "\${session_ids[0]}"
 `;
 
 // Live tmux query for the home session + its dashboard window ID.
 // Sets HOME_SESSION and HOME_DWID. Returns 0 on success, 1 if no home found.
 // Optional arg: explicit cwd to look up. If omitted, uses @sisyphus_cwd from
 // the current tmux session, falling back to #{pane_current_path}.
+// Sets HOME_SESSION (tmux $N id) and HOME_DWID for the non-ssyph_ session
+// matching the given cwd. Always targets by $N — tmux -t <name> can
+// substring-match under sparse env.
 const RESOLVE_HOME = `
 HOME_SESSION=""
 HOME_DWID=""
 resolve_home() {
   local target_cwd="$1"
-  local current_session sname scwd
+  local current_id sid sname scwd
   if [ -z "$target_cwd" ]; then
-    current_session=$(tmux display-message -p '#{session_name}')
-    target_cwd=$(tmux show-options -t "$current_session" -v @sisyphus_cwd 2>/dev/null)
+    current_id=$(tmux display-message -p '#{session_id}')
+    target_cwd=$(tmux show-options -t "$current_id" -v @sisyphus_cwd 2>/dev/null)
     [ -z "$target_cwd" ] && target_cwd=$(tmux display-message -p '#{pane_current_path}')
   fi
   target_cwd="\${target_cwd%/}"
   [ -z "$target_cwd" ] && return 1
-  while IFS= read -r sname; do
-    [ -z "$sname" ] && continue
+  while IFS=$'\\t' read -r sid sname; do
+    [ -z "$sid" ] && continue
     case "$sname" in ssyph_*) continue ;; esac
-    scwd=$(tmux show-options -t "$sname" -v @sisyphus_cwd 2>/dev/null)
+    scwd=$(tmux show-options -t "$sid" -v @sisyphus_cwd 2>/dev/null)
     scwd="\${scwd%/}"
     if [ "$scwd" = "$target_cwd" ]; then
-      HOME_SESSION="$sname"
-      HOME_DWID=$(tmux show-options -t "$sname" -v @sisyphus_dashboard 2>/dev/null)
+      HOME_SESSION="$sid"
+      HOME_DWID=$(tmux show-options -t "$sid" -v @sisyphus_dashboard 2>/dev/null)
       return 0
     fi
-  done < <(tmux list-sessions -F '#{session_name}')
+  done < <(tmux list-sessions -F '#{session_id}	#{session_name}')
   return 1
 }`.trim();
 
@@ -177,8 +186,8 @@ if [ -z "$HOME_DWID" ]; then
   tmux send-keys -t "$HOME_DWID" "node '${tuiPath}' --cwd '$home_cwd'; exit" Enter
   tmux set-option -t "$HOME_SESSION" @sisyphus_dashboard "$HOME_DWID"
 fi
-current=$(tmux display-message -p '#{session_name}')
-[ "$current" != "$HOME_SESSION" ] && tmux switch-client -t "$HOME_SESSION"
+current_id=$(tmux display-message -p '#{session_id}')
+[ "$current_id" != "$HOME_SESSION" ] && tmux switch-client -t "$HOME_SESSION"
 tmux select-window -t "$HOME_DWID"
 `;
 }
@@ -187,14 +196,14 @@ const KILL_PANE_SCRIPT = `#!/bin/bash
 # prefix-x override for sisyphus sessions.
 # If this is the last pane, switch to the home session before killing.
 ${RESOLVE_HOME}
-session=$(tmux display-message -p '#{session_name}')
-pane_count=$(tmux list-panes -t "$session" -F '#{pane_id}' | wc -l | tr -d ' ')
+session_id=$(tmux display-message -p '#{session_id}')
+pane_count=$(tmux list-panes -t "$session_id" -F '#{pane_id}' | wc -l | tr -d ' ')
 
 if [ "$pane_count" -le 1 ]; then
   if resolve_home; then
     tmux switch-client -t "$HOME_SESSION"
     [ -n "$HOME_DWID" ] && tmux select-window -t "$HOME_DWID"
-    tmux kill-session -t "$session"
+    tmux kill-session -t "$session_id"
     exit 0
   fi
   tmux kill-pane
@@ -215,21 +224,22 @@ exec sisyphus start "$(cat "$tmpfile")"
 
 const MESSAGE_SCRIPT = `#!/bin/bash
 # Open nvim to compose a message for the current session's orchestrator
-# Resolve session ID: direct tmux option → manifest lookup
-session_name=$(tmux display-message -p '#{session_name}')
-session_id=$(tmux show-options -t "$session_name" -v @sisyphus_session_id 2>/dev/null)
+# Resolve session ID: direct tmux option → manifest lookup.
+# All -t targeting uses $N session id — tmux -t <name> can substring-match under sparse env.
+tmux_sid=$(tmux display-message -p '#{session_id}')
+session_id=$(tmux show-options -t "$tmux_sid" -v @sisyphus_session_id 2>/dev/null)
 
 if [ -z "$session_id" ]; then
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   [ ! -f "$MANIFEST" ] && { echo "No active sessions found"; sleep 1; exit 1; }
   cwd=""
-  while IFS=$'\\t' read -r type name scwd phase; do
-    [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
+  while IFS=$'\\t' read -r type name scwd phase sid; do
+    [ "$sid" = "$tmux_sid" ] && { cwd="$scwd"; break; }
   done < "$MANIFEST"
   [ -z "$cwd" ] && { echo "Session not in manifest"; sleep 1; exit 1; }
-  while IFS=$'\\t' read -r type name scwd phase; do
+  while IFS=$'\\t' read -r type name scwd phase sid; do
     if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
-      session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
+      session_id=$(tmux show-options -t "$sid" -v @sisyphus_session_id 2>/dev/null)
       [ -n "$session_id" ] && break
     fi
   done < "$MANIFEST"
@@ -245,23 +255,24 @@ exec sisyphus message --session "$session_id" "$(cat "$tmpfile")"
 `;
 
 // --- Shared session ID + cwd resolution for session-scoped scripts ---
+// All tmux -t targeting uses $N session id — -t <name> can substring-match under sparse env.
 const SESSION_RESOLVE = `
-session_name=$(tmux display-message -p '#{session_name}')
-session_id=$(tmux show-options -t "$session_name" -v @sisyphus_session_id 2>/dev/null)
-cwd=$(tmux show-options -t "$session_name" -v @sisyphus_cwd 2>/dev/null)
+tmux_sid=$(tmux display-message -p '#{session_id}')
+session_id=$(tmux show-options -t "$tmux_sid" -v @sisyphus_session_id 2>/dev/null)
+cwd=$(tmux show-options -t "$tmux_sid" -v @sisyphus_cwd 2>/dev/null)
 
 if [ -z "$session_id" ]; then
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   [ ! -f "$MANIFEST" ] && { echo "No active sessions found"; sleep 1; exit 1; }
   if [ -z "$cwd" ]; then
-    while IFS=$'\\t' read -r type name scwd phase; do
-      [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
+    while IFS=$'\\t' read -r type name scwd phase sid; do
+      [ "$sid" = "$tmux_sid" ] && { cwd="$scwd"; break; }
     done < "$MANIFEST"
   fi
   [ -z "$cwd" ] && { echo "Session not in manifest"; sleep 1; exit 1; }
-  while IFS=$'\\t' read -r type name scwd phase; do
+  while IFS=$'\\t' read -r type name scwd phase sid; do
     if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
-      session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
+      session_id=$(tmux show-options -t "$sid" -v @sisyphus_session_id 2>/dev/null)
       [ -n "$session_id" ] && break
     fi
   done < "$MANIFEST"
@@ -331,21 +342,22 @@ read -n 1 -s -r -p "  Press any key to close"
 `;
 
 const STATUS_POPUP_SCRIPT = `#!/bin/bash
-# Show session status — falls back to session list
-session_name=$(tmux display-message -p '#{session_name}')
-session_id=$(tmux show-options -t "$session_name" -v @sisyphus_session_id 2>/dev/null)
+# Show session status — if no sisyphus session here, list all.
+# -t targeting uses $N session id — -t <name> can substring-match under sparse env.
+tmux_sid=$(tmux display-message -p '#{session_id}')
+session_id=$(tmux show-options -t "$tmux_sid" -v @sisyphus_session_id 2>/dev/null)
 
 if [ -z "$session_id" ]; then
   MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
   if [ -f "$MANIFEST" ]; then
     cwd=""
-    while IFS=$'\\t' read -r type name scwd phase; do
-      [ "$name" = "$session_name" ] && { cwd="$scwd"; break; }
+    while IFS=$'\\t' read -r type name scwd phase sid; do
+      [ "$sid" = "$tmux_sid" ] && { cwd="$scwd"; break; }
     done < "$MANIFEST"
     if [ -n "$cwd" ]; then
-      while IFS=$'\\t' read -r type name scwd phase; do
+      while IFS=$'\\t' read -r type name scwd phase sid; do
         if [ "$type" = "S" ] && [ "$scwd" = "$cwd" ]; then
-          session_id=$(tmux show-options -t "$name" -v @sisyphus_session_id 2>/dev/null)
+          session_id=$(tmux show-options -t "$sid" -v @sisyphus_session_id 2>/dev/null)
           [ -n "$session_id" ] && break
         fi
       done < "$MANIFEST"
@@ -361,19 +373,20 @@ fi
 `;
 
 const PICK_SESSION_SCRIPT = `#!/bin/bash
-# Session picker — switch to a sisyphus session
+# Session picker — switch to a sisyphus session.
+# switch-client -t targets $N session id — -t <name> can substring-match under sparse env.
 MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
 [ ! -f "$MANIFEST" ] && { echo "No sessions found"; sleep 1; exit 0; }
 
-current=$(tmux display-message -p '#{session_name}')
+current_id=$(tmux display-message -p '#{session_id}')
 cwd=""
-while IFS=$'\\t' read -r type name scwd phase; do
-  [ "$name" = "$current" ] && { cwd="$scwd"; break; }
+while IFS=$'\\t' read -r type name scwd phase sid; do
+  [ "$sid" = "$current_id" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
 
 declare -a entries=()
 declare -a targets=()
-while IFS=$'\\t' read -r type name scwd phase; do
+while IFS=$'\\t' read -r type name scwd phase sid; do
   [[ "$type" == "#"* ]] && continue
   [ -n "$cwd" ] && [ "$scwd" != "$cwd" ] && continue
   display="$name"
@@ -383,10 +396,10 @@ while IFS=$'\\t' read -r type name scwd phase; do
   fi
   [ "$type" = "H" ] && display="~ home"
   marker=""
-  [ "$name" = "$current" ] && marker=" *"
+  [ "$sid" = "$current_id" ] && marker=" *"
   phase_label="\${phase:-—}"
   entries+=("\${display} [\${phase_label}]\${marker}")
-  targets+=("$name")
+  targets+=("$sid")
 done < "$MANIFEST"
 
 (( \${#entries[@]} == 0 )) && { echo "No sessions found"; sleep 1; exit 0; }

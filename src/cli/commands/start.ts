@@ -2,7 +2,7 @@ import type { Command } from 'commander';
 import { execSync, spawnSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { sendRequest } from '../client.js';
-import { getTmuxSession, isTmuxInstalled } from '../tmux.js';
+import { getTmuxSessionInfo, isTmuxInstalled } from '../tmux.js';
 import { shellQuote } from '../../shared/shell.js';
 import { openDashboardWindow } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
@@ -85,16 +85,44 @@ export function registerStart(program: Command): void {
       // Determine which tmux session to use for the dashboard.
       // If we're already in tmux, use the current session.
       // If not, create a dedicated session for this project.
-      const tmuxSession = process.env['TMUX']
-        ? getTmuxSession()
-        : ensureTmuxSessionExists(cwd);
+      let tmuxSession: string;
+      let tmuxSessionTarget: string;
+      if (process.env['TMUX']) {
+        const info = getTmuxSessionInfo();
+        tmuxSession = info.name;
+        tmuxSessionTarget = info.id;
+      } else {
+        tmuxSession = ensureTmuxSessionExists(cwd);
+        tmuxSessionTarget = tmuxSession;
+      }
 
-      // Tag the tmux session with the cwd
+      // Tag the tmux session with the cwd — but don't clobber a tag that
+      // already points to a different project. Overwriting would re-home an
+      // existing session onto this project, poisoning alt+s cycle groups and
+      // C-s h for the original project.
+      // Target by $N id when available — tmux -t <name> can substring-match
+      // the wrong session under sparse env.
       try {
-        execSync(
-          `tmux set-option -t ${shellQuote(tmuxSession)} @sisyphus_cwd ${shellQuote(cwd)}`,
-          { stdio: 'ignore' },
-        );
+        const normalizedCwd = cwd.replace(/\/+$/, '');
+        let existing = '';
+        try {
+          existing = execSync(
+            `tmux show-options -t ${shellQuote(tmuxSessionTarget)} -v @sisyphus_cwd`,
+            { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+          ).trim();
+        } catch {
+          // option unset
+        }
+        if (!existing || existing === normalizedCwd) {
+          execSync(
+            `tmux set-option -t ${shellQuote(tmuxSessionTarget)} @sisyphus_cwd ${shellQuote(normalizedCwd)}`,
+            { stdio: 'ignore' },
+          );
+        } else {
+          console.error(
+            `Note: tmux session "${tmuxSession}" is already the home for ${existing}; leaving its @sisyphus_cwd unchanged.`,
+          );
+        }
       } catch (err) {
         console.error(`Warning: failed to tag tmux session with cwd: ${err instanceof Error ? err.message : String(err)}`);
       }

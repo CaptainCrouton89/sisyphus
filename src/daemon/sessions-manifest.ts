@@ -9,6 +9,7 @@ import * as tmux from './tmux.js';
 interface ManifestEntry {
   type: 'S' | 'H' | 'O';
   tmuxName: string;
+  tmuxSessionId: string;
   cwd: string;
   phase: SessionPhase | null;
 }
@@ -23,16 +24,23 @@ function buildEntries(): ManifestEntry[] {
   const entries: ManifestEntry[] = [];
   const phases = getSisyphusPhases();
 
+  // One canonical name→$N map for this poll so downstream consumers (shell
+  // scripts using the TSV) can target sessions by $N instead of name —
+  // tmux 3.6a's -t <name> silently substring-matches under sparse env.
+  const allSessions = tmux.listAllSessions();
+  const nameToId = new Map(allSessions.map(s => [s.name, s.sessionId]));
+
   // Sisyphus-managed sessions from tracked entries
-  const trackedCwds = new Set<string>();
   const trackedTmuxNames = new Set<string>();
   for (const entry of getTrackedSessionEntries()) {
+    const tmuxSessId = nameToId.get(entry.tmuxSessionName);
+    if (!tmuxSessId) continue; // session died between poll steps
     const phaseInfo = phases.get(entry.id);
-    trackedCwds.add(entry.cwd);
     trackedTmuxNames.add(entry.tmuxSessionName);
     entries.push({
       type: 'S',
       tmuxName: entry.tmuxSessionName,
+      tmuxSessionId: tmuxSessId,
       cwd: entry.cwd,
       phase: phaseInfo?.phase ?? null,
     });
@@ -42,18 +50,17 @@ function buildEntries(): ManifestEntry[] {
   // Orchestrator-resume sessions (O): ssyph_* sessions NOT tracked by the daemon
   // but stamped with @sisyphus_cwd and @sisyphus_session_id — spawned by the TUI
   // via openClaudeResumeSession for post-mortem review of completed sessions.
-  // Query by session name (not $N ID) because $ in IDs gets shell-expanded by execSync
-  const allSessions = tmux.listAllSessions();
-  for (const { name } of allSessions) {
-    const cwd = tmux.getSessionOption(name, '@sisyphus_cwd')?.trim();
+  for (const { name, sessionId: tmuxSessId } of allSessions) {
+    const cwd = tmux.getSessionOption(tmuxSessId, '@sisyphus_cwd')?.trim();
     if (!cwd) continue;
     if (isSisyphusSession(name)) {
       if (trackedTmuxNames.has(name)) continue;
-      const sessionId = tmux.getSessionOption(name, '@sisyphus_session_id')?.trim();
+      const sessionId = tmux.getSessionOption(tmuxSessId, '@sisyphus_session_id')?.trim();
       if (!sessionId) continue;
       entries.push({
         type: 'O',
         tmuxName: name,
+        tmuxSessionId: tmuxSessId,
         cwd,
         phase: null,
       });
@@ -62,6 +69,7 @@ function buildEntries(): ManifestEntry[] {
     entries.push({
       type: 'H',
       tmuxName: name,
+      tmuxSessionId: tmuxSessId,
       cwd,
       phase: null,
     });
@@ -72,9 +80,11 @@ function buildEntries(): ManifestEntry[] {
 
 function toTsv(entries: ManifestEntry[]): string {
   const ts = Math.floor(Date.now() / 1000);
+  // Columns: type | name | cwd | phase | tmuxSessionId.
+  // Appended at end so existing 4-column consumers keep working.
   const lines = [`#ts:${ts}`];
   for (const e of entries) {
-    lines.push(`${e.type}\t${e.tmuxName}\t${e.cwd}\t${e.phase ?? '-'}`);
+    lines.push(`${e.type}\t${e.tmuxName}\t${e.cwd}\t${e.phase ?? '-'}\t${e.tmuxSessionId}`);
   }
   return lines.join('\n') + '\n';
 }

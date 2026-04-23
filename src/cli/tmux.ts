@@ -20,3 +20,14 @@ export function getTmuxSession(): string {
   return execSync('tmux display-message -p "#{session_name}"', { encoding: 'utf8' }).trim();
 }
 
+/**
+ * Current tmux session's $N id and name. Always prefer the id for `-t` targeting
+ * — tmux -t <name> silently substring-matches other sessions under sparse env.
+ */
+export function getTmuxSessionInfo(): { id: string; name: string } {
+  assertTmux();
+  const out = execSync('tmux display-message -p "#{session_id}|#{session_name}"', { encoding: 'utf8' }).trim();
+  const pipeIdx = out.indexOf('|');
+  return { id: out.slice(0, pipeIdx), name: out.slice(pipeIdx + 1) };
+}
+

@@ -6,23 +6,30 @@ import { shellQuote } from '../../shared/shell.js';
 /**
  * Find the home session (non-ssyph_ session with matching @sisyphus_cwd).
  * Returns the tmux session name, or null if none found.
+ *
+ * Queries by $N session ID — tmux's -t <name> can substring-match the wrong
+ * session under sparse env, and scratch may run from any shell context.
  */
 function findHomeSession(cwd: string): string | null {
   const normalizedCwd = cwd.replace(/\/+$/, '');
   let output: string;
   try {
-    output = execSync('tmux list-sessions -F "#{session_name}"', {
+    output = execSync('tmux list-sessions -F "#{session_id}|#{session_name}"', {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim();
   } catch {
     return null;
   }
-  for (const name of output.split('\n').filter(Boolean)) {
+  for (const line of output.split('\n').filter(Boolean)) {
+    const pipeIdx = line.indexOf('|');
+    if (pipeIdx < 0) continue;
+    const sessId = line.slice(0, pipeIdx);
+    const name = line.slice(pipeIdx + 1);
     if (name.startsWith('ssyph_')) continue;
     try {
       const val = execSync(
-        `tmux show-options -t ${shellQuote(name)} -v @sisyphus_cwd`,
+        `tmux show-options -t ${shellQuote(sessId)} -v @sisyphus_cwd`,
         { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
       ).trim();
       if (val === normalizedCwd) return name;
