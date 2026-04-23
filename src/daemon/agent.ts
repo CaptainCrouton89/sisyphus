@@ -39,6 +39,17 @@ export function clearAgentCounter(sessionId: string): void {
   agentCounters.delete(sessionId);
 }
 
+// Substitute $SISYPHUS_* literals in template text at plugin-creation / pane-setup time.
+// Applied to sub-agent file bodies and to parent agent/codex system prompts — the runtime
+// shell also exports these as real env vars, but substitution here means the LLM sees
+// concrete values in its prompt rather than the variable name.
+function substituteSisyphusVars(text: string, sessionId: string, agentId: string, sesDir: string): string {
+  return text
+    .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
+    .replace(/\$SISYPHUS_SESSION_ID/g, sessionId)
+    .replace(/\$SISYPHUS_AGENT_ID/g, agentId);
+}
+
 function renderAgentSuffix(sessionId: string, instruction: string, contextDirRel: string): string {
   const templatePath = resolve(import.meta.dirname, '../templates/agent-suffix.md');
   let template: string;
@@ -72,11 +83,8 @@ function createAgentPlugin(
     'utf-8',
   );
 
-  // Substitute session env vars in agent type templates
   const sesDir = sessionDir(cwd, sessionId);
-  const substituteEnvVars = (text: string) => text
-    .replace(/\$SISYPHUS_SESSION_DIR/g, sesDir)
-    .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
+  const substituteEnvVars = (text: string) => substituteSisyphusVars(text, sessionId, agentId, sesDir);
 
   if (agentConfig?.filePath && agentType && agentType !== 'worker') {
     const shortName = agentType.replace(/^sisyphus:/, '');
@@ -190,12 +198,14 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   if (agentType === 'plan') {
     mkdirSync(join(contextDir(cwd, sessionId), agentId), { recursive: true });
   }
+  const sesDir = sessionDir(cwd, sessionId);
+  const substitute = (text: string) => substituteSisyphusVars(text, sessionId, agentId, sesDir);
   const suffix = renderAgentSuffix(sessionId, instruction, ctxDirRel);
   // For typed agents, prepend the agent type body to the system prompt.
   // --agent doesn't resolve from --plugin-dir, so we deliver it via --append-system-prompt.
   const systemParts: string[] = [];
   if (agentConfig?.body && agentType && agentType !== 'worker') {
-    systemParts.push(agentConfig.body);
+    systemParts.push(substitute(agentConfig.body));
   }
   systemParts.push(suffix);
   const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
@@ -203,7 +213,6 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
 
   const bannerCmd = resolveBannerCmd();
   const npmBinDir = resolveNpmBinDir();
-  const sesDir = sessionDir(cwd, sessionId);
 
   const envExports = buildEnvExports([
     `export SISYPHUS_SESSION_ID=${shellQuote(sessionId)}`,
@@ -221,7 +230,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   if (provider === 'openai') {
     const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
     const parts: string[] = [];
-    if (agentConfig?.body) parts.push(agentConfig.body);
+    if (agentConfig?.body) parts.push(substitute(agentConfig.body));
     parts.push(suffix);
     parts.push(`## Task\n\n${instruction}`);
     writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
