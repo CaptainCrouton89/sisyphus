@@ -56,9 +56,14 @@ export function registerSpawn(program: Command): void {
         process.exit(1);
       }
 
-      const instruction = opts.instruction ?? positionalInstruction ?? await readStdin();
+      const positional = positionalInstruction === '-' ? undefined : positionalInstruction;
+      const instruction = opts.instruction ?? positional ?? await readStdin();
       if (!instruction) {
         console.error('Error: --instruction is required (or pipe via stdin)');
+        process.exit(1);
+      }
+      if (instruction.trim().length < 20) {
+        console.error(`Error: instruction too short (${instruction.trim().length} chars). Did you mean to pipe via stdin? Use '-' as the positional or omit it entirely.`);
         process.exit(1);
       }
 
