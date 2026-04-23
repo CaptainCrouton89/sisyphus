@@ -1,4 +1,3 @@
-- **`@sisyphus_cwd` trailing slash (scratch.ts):** `findHomeSession` strips trailing slashes before matching — `start.ts` stores without trailing slash; a path stored with one silently finds no home session.
 - **companion `--repo` is exact path match:** `obs.repo === repo` — passing a basename silently matches nothing; display uses basename regardless.
 - **Observations outside `CATEGORY_ORDER` silently dropped (companion):** `grouped.get(obs.category)?.push(...)` is a no-op for unknown categories. Only `session-sentiments`, `repo-impressions`, `user-patterns`, `notable-moments` ever render.
 
@@ -11,5 +10,4 @@
 - **`openQuestions.selectedOption` type differs by artifact:** Requirements stores integer index into `options[]`; design stores title string. Don't pre-fill "Custom answer" — TUI adds it automatically.
 - **`reviewAction: 'bounce-to-design'`** (requirements only): Design items use `agree | pick-alt | comment` — writing `bounce-to-design` into a design item is a schema violation.
 
-- **yield.ts — No orchestrator identity check:** Parent CLAUDE.md states `yield` checks `SISYPHUS_AGENT_ID === 'orchestrator'` — it does not. Only `assertTmux()` runs; `agentId: 'orchestrator'` is hardcoded unconditionally.
 - **`INTERACTIVE_AGENT_TYPES` hardcoded (history.ts):** `sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec` — new TUI agent types must be added here or their time inflates compute averages.
