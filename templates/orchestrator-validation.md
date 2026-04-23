@@ -105,4 +105,4 @@ sisyphus yield --mode completion --prompt "Validation passed — all recipe step
 
 Only yield when every recipe step has been executed with evidence of success. If the recipe was updated during validation, re-validate against the updated version.
 
-Before transitioning, step back: does the validated behavior actually satisfy the original goal? The recipe is a tool, not a substitute for judgment.
+Before yielding, re-read goal.md and check recipe coverage against it — not against itself. For each clause that names a user-visible behavior or capability, find the recipe step that exercised it. If a clause has no matching step, the recipe is incomplete: extend it, re-validate, and only then yield. A passing recipe proves the recipe's steps work; it does not prove the goal was met.
