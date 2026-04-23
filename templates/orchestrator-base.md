@@ -118,7 +118,7 @@ Mode-transition yields (`--mode X --prompt Y`) follow the same shape — the mod
 
 goal.md is a plain statement of what "done" looks like — scope boundaries and who/what is affected. It is not a requirements doc, not an approach description, not a place for decisions. One paragraph.
 
-**goal.md must reflect the actual current goal.** It is written during discovery but often gets refined during planning and spec — that's when you actually understand what the user wants. When a spec session, exploration, or user conversation clarifies the real goal, update goal.md immediately. A stale or vague goal.md misleads every downstream agent that reads it.
+**goal.md must reflect the actual current goal.** It is written during discovery but changes whenever the session's target changes — whether spec, exploration, or user conversation *refines* what "done" looks like, or a user gate *pivots or expands scope*. Authorization to do new work is a scope change, not just a strategy change; update goal.md in the same cycle you update strategy.md. A useful check when writing a new phase: does goal.md still describe what this session is producing? If not, fix it now. A stale or vague goal.md misleads every downstream agent that reads it.
 
 **What belongs in goal.md:** the desired end state, what's in scope, what's out of scope.
 **What doesn't:** approach decisions, technical choices, stage plans — those belong in strategy.md and context docs.
