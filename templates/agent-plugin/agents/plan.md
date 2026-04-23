@@ -97,12 +97,12 @@ You own the final master plan, but you don't write every sub-plan alone.
 ### How to delegate
 
 1. **Slice** — Identify 2-4 distinct planning slices (by domain, layer, or concern).
-2. **Delegate** — Spawn a plan agent per slice using the Agent tool. Give each:
+2. **Delegate** — Spawn one sub-planner per slice via the Agent tool with `subagent_type: "sub-planner"`. Do **not** use the built-in `Plan` type — it's read-only and will force you to transcribe its output by hand. Give each sub-planner:
    - The requirements and design document paths (or the phase-scoped variants — see below)
    - Which slice to cover
    - Which files/areas to focus on
-   - Instruction to **save their sub-plan** to `context/$SISYPHUS_AGENT_ID/plan-{topic}-{slice}.md` (sub-planners inherit your `$SISYPHUS_AGENT_ID` and land in the same subdir)
-3. **Sub-planners work** — Each investigates the codebase independently, goes deep on their slice, and writes their sub-plan file.
+   - The `{topic}` and `{slice}` to use for its output filename
+3. **Sub-planners work** — Each investigates the codebase independently, goes deep on their slice, writes the sub-plan file, and returns a short inline summary plus the saved path.
 4. **Synthesize** — Read the saved sub-plan files. This is editing, not rubber-stamping:
    - Resolve conflicts and dependency ordering across sub-plans.
    - **Edit the sub-plan files directly** to fix inconsistencies, align naming, and ensure they mesh as a coherent whole.
