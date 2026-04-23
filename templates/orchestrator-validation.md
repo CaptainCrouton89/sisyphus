@@ -79,7 +79,7 @@ When validation surfaces real bugs:
 sisyphus yield --mode implementation --prompt "Validation failed — [specific failures]. See reports/agent-XXX-final.md for details."
 ```
 
-Log what failed and why in the cycle log before yielding. The implementation cycle needs clear context on what to fix.
+Log what failed and why before yielding. The implementation cycle needs clear context on what to fix.
 
 When validation reveals that the approach itself is flawed — not bugs, but architectural issues or fundamental misunderstandings:
 

@@ -33,7 +33,7 @@ Each cycle:
 5. **Don't skip what you notice.** When agent reports or your own review surface minor issues — code smells, small inconsistencies, rough edges — address them. Deprioritizing small things is how quality erodes.
 6. Decide what to do next: break down work, spawn agents, re-plan, validate, or complete.
 7. If you need user input, ask and wait — **do NOT yield.** Yielding kills your process. You'll be respawned with no memory of the question and loop forever.
-8. Update roadmap.md and digest.json, spawn agents, then `sisyphus yield --prompt "what to focus on next cycle"`
+8. Update roadmap.md and digest.json, spawn agents, write the cycle log, then `sisyphus yield --prompt "what to focus on next cycle"`
 
 Be proactive. Don't wait for work to arrive — look ahead. If the current stage is wrapping up, prepare context for the next one. If a review found issues, spawn fix agents immediately. If you can run a review alongside the next stage's implementation, do it. Every cycle should maximize agents doing useful work.
 
@@ -56,7 +56,7 @@ sisyphus yield --prompt "waiting for user to decide auth approach"
 <rationale>Yielding kills the process. The respawned orchestrator has no memory of the question and will ask again or proceed blindly.</rationale>
 <good>
 Output the question directly: "Should we use JWT or session-based auth? JWT is simpler but session-based matches the existing middleware pattern."
-Wait for the user to respond. After receiving their answer, update roadmap, spawn agents, then yield.
+Wait for the user to respond. After receiving their answer, update roadmap, spawn agents, write the cycle log, then yield.
 </good>
 </example>
 
@@ -190,7 +190,7 @@ Status: addressing design review feedback before plan stage
 
 ### Cycle Logs — Audit trail (write-only)
 
-Each cycle, write a standalone summary to the log file path in your prompt. This is write-only — don't read old cycle logs.
+Write the cycle log last — after roadmap, digest, and agent spawns — so it captures the cycle's settled state. Write a standalone summary to the log file path in your prompt. This is write-only — don't read old cycle logs.
 
 Good cycle log content:
 - What you decided this cycle and why
@@ -223,7 +223,7 @@ Keep all fields concise (under 120 characters each, except unusualEvents items w
 
 ### Keeping Files Current
 
-Each cycle: Read roadmap.md. Update it (advance phase status, refine next steps). Update digest.json. Write your cycle summary to the log file. Then spawn agents and yield.
+Each cycle: Read roadmap.md. Update it (advance phase status, refine next steps). Update digest.json. Spawn agents. Write your cycle summary to the log file. Then yield.
 
 When something changes the approach: update roadmap.md immediately. If an agent reports something that invalidates the approach, rethink the affected phases — don't patch around it.
 

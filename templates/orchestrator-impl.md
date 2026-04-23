@@ -166,7 +166,7 @@ Validation mode shifts the orchestrator's entire focus to proving the feature wo
 If the approach is wrong mid-implementation, don't keep pushing. Return to planning:
 
 ```bash
-sisyphus yield --mode planning --prompt "Re-evaluate: discovered X changes the approach — write cycle log"
+sisyphus yield --mode planning --prompt "Discovered X mid-implementation — approach needs rework. See cycle log and roadmap.md."
 ```
 
 Concrete triggers:
@@ -174,7 +174,7 @@ Concrete triggers:
 - An agent discovers a dependency that changes the approach
 - Fix agents keep patching the same area across cycles
 
-Document what you found in the cycle log before yielding. Update roadmap.md to reflect you're back in an earlier phase.
+Update roadmap.md to reflect you're back in an earlier phase. Log the discovery before yielding.
 
 </returning-to-planning>
 
