@@ -2,8 +2,6 @@ import { readFileSync } from 'node:fs';
 import * as state from './state.js';
 import * as tmux from './tmux.js';
 import { respawningSessions } from './respawn-guard.js';
-import { sendTerminalNotification } from './notify.js';
-import { loadConfig } from '../shared/config.js';
 import type { Session } from '../shared/types.js';
 
 const CLAUDE_STATE_DIR = '/tmp/claude-tmux-state';
@@ -99,9 +97,6 @@ const sisyphusPhases = new Map<string, { phase: SessionPhase; tmuxSession: strin
 // Tracks which tmux session names currently have @sisyphus_phase set so we can
 // clear it when a session leaves tracking.
 const sessionNamesWithPhase = new Set<string>();
-
-// Previous phase per session — used to detect transitions and fire one-shot notifications
-const previousPhases = new Map<string, SessionPhase>();
 
 export function getSisyphusPhases(): ReadonlyMap<string, { phase: SessionPhase; tmuxSession: string }> {
   return sisyphusPhases;
@@ -231,17 +226,6 @@ export function recomputeDots(): void {
         if (tmuxInfo) {
           sisyphusPhases.set(sessionId, { phase, tmuxSession: tmuxInfo.name });
         }
-
-        // Fire notification on transition to orchestrator:idle (waiting for input)
-        const prevPhase = previousPhases.get(sessionId);
-        if (phase === 'orchestrator:idle' && prevPhase !== 'orchestrator:idle') {
-          const config = loadConfig(cwd);
-          if (config.notifications?.enabled !== false) {
-            const sessionName = session.name ?? sessionId.slice(0, 8);
-            sendTerminalNotification('Sisyphus', `Waiting for input: ${sessionName}`, session.tmuxSessionName);
-          }
-        }
-        previousPhases.set(sessionId, phase);
       } catch {
         // Session state unreadable — skip
       }
@@ -258,10 +242,5 @@ export function recomputeDots(): void {
       const rendered = dots.length > 0 ? ' ' + renderDots(dots) : '';
       tmux.setWindowOption(dashboardWindowId, '@sisyphus_dots', rendered);
     }
-  }
-
-  // Prune previousPhases for sessions no longer tracked
-  for (const id of previousPhases.keys()) {
-    if (!sisyphusPhases.has(id)) previousPhases.delete(id);
   }
 }
