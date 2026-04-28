@@ -1,6 +1,0 @@
-{
-  "recentWork": "Restructured CLI references across orchestrator templates, hid internal commands, added --list-types, dynamic command table in getting-started",
-  "unusualEvents": ["--list-types was documented in CLAUDE.md but never implemented — now it exists"],
-  "currentActivity": "User review of all changes in completion mode",
-  "whatsNext": "User confirmation to finalize session"
-}
