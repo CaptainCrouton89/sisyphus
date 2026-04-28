@@ -1,5 +1,6 @@
 import stringWidth from 'string-width';
 import type { Seg, DetailLine } from './lib/format.js';
+import type { ThrottledScroll } from './state.js';
 
 export type { Seg, DetailLine };
 
@@ -32,8 +33,10 @@ export function renderLine(segs: Seg[]): string {
     if (s.bold) codes.push('1');
     if (s.dim) codes.push('2');
     if (s.italic) codes.push('3');
+    if (s.strikethrough) codes.push('9');
     if (s.inverse) codes.push('7');
-    if (s.color) codes.push(String(colorToSGR(s.color)));
+    if (s.fg) codes.push(s.fg);
+    else if (s.color) codes.push(String(colorToSGR(s.color)));
     if (s.bg) codes.push(s.bg);
     if (codes.length > 0) {
       out += `\x1b[${codes.join(';')}m${s.text}\x1b[0m`;
@@ -391,7 +394,7 @@ export function renderPanel(
 export function buildPanelRows(
   rect: Rect,
   lines: DetailLine[],
-  scrollOffset: number,
+  scroll: ThrottledScroll,
   focused: boolean,
   borderColor: string,
   renderedCache?: RenderedCache | null,
@@ -438,7 +441,8 @@ export function buildPanelRows(
   const hasOverflow = lines.length > innerH;
   const viewableH = hasOverflow ? innerH - 1 : innerH;
   const maxScroll = Math.max(0, lines.length - viewableH);
-  const effectiveOffset = Math.min(scrollOffset, maxScroll);
+  scroll.setMax(maxScroll);
+  const effectiveOffset = scroll.offset;
 
   // Content rows — clip and compose without buffer splicing
   for (let i = 0; i < viewableH && effectiveOffset + i < ansiLines.length; i++) {

@@ -41,6 +41,8 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     completedAt: null,
     reports: [],
     paneId: '%0',
+    activeMs: 0,
+    repo: '.',
     ...overrides,
   };
 }

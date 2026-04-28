@@ -52,7 +52,6 @@ Agents can't talk to each other directly. All communication is mediated through 
 | Reports | agent → orchestrator | `sisyphus submit` (terminal) or `sisyphus report` (non-terminal) |
 | State | daemon → orchestrator | `state.json` — agent statuses, session metadata |
 | Events | daemon → history | `events.jsonl` — timestamped lifecycle events |
-| Present | agent → user | `sisyphus present` — renders markdown in a tmux side pane via termrender |
 | Yield prompt | orchestrator → next orchestrator | `sisyphus yield --prompt "..."` — continuation instructions |
 
 **Key insight:** the yield prompt is the orchestrator's only way to talk to its future self. Everything important must be either in a file or in the yield prompt. The cycle log (`logs/cycle-NNN.md`) is the orchestrator's memory.

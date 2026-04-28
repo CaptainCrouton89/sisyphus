@@ -109,6 +109,17 @@ function parseBuffer(buf: string): { events: Array<[string, Key]>; remaining: st
           continue;
         }
 
+        // Shift+Tab (backtab): \x1b[Z
+        if (after.length >= 1 && after[0] === 'Z') {
+          const key = emptyKey();
+          key.tab = true;
+          key.shift = true;
+          const seq = `\x1b[Z`;
+          events.push([seq, key]);
+          i += seq.length;
+          continue;
+        }
+
         // Arrow keys: \x1b[A/B/C/D
         if (after.length >= 1 && 'ABCD'.includes(after[0]!)) {
           const key = emptyKey();

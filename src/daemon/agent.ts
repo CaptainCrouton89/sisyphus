@@ -19,6 +19,9 @@ import { shellQuote } from '../shared/shell.js';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { resolveRequiredPluginDirs, resolveAgentPluginDirs } from './plugins.js';
 import { emitHistoryEvent } from './history.js';
+import { emitOrphanAsk, markAgentAsksOrphan } from './orphan-asks.js';
+import { capturePanePidLstart } from './orphan-sweep.js';
+import { renderEffortMarkers } from './lib/effort-render.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -201,11 +204,20 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   const sesDir = sessionDir(cwd, sessionId);
   const substitute = (text: string) => substituteSisyphusVars(text, sessionId, agentId, sesDir);
   const suffix = renderAgentSuffix(sessionId, instruction, ctxDirRel);
+
+  // Resolve prompt effort tier. agentConfig.frontmatter.effort is the Claude Code --effort
+  // thinking flag (low|medium|high|xhigh|max); re-using it as the prompt-tier override is
+  // intentional per spec Design Principle 1 (no new frontmatter fields). Unrecognized values
+  // (e.g. 'max') render as 'high' (fail open).
+  const session = state.getSession(cwd, sessionId);
+  const frontmatterEffort = agentConfig?.frontmatter.effort;
+  const promptTier = frontmatterEffort != null ? frontmatterEffort : (session.effort != null ? session.effort : 'high');
+
   // For typed agents, prepend the agent type body to the system prompt.
   // --agent doesn't resolve from --plugin-dir, so we deliver it via --append-system-prompt.
   const systemParts: string[] = [];
   if (agentConfig?.body && agentType && agentType !== 'worker') {
-    systemParts.push(substitute(agentConfig.body));
+    systemParts.push(renderEffortMarkers(substitute(agentConfig.body), promptTier));
   }
   systemParts.push(suffix);
   const suffixFilePath = `${promptsDir(cwd, sessionId)}/${agentId}-system.md`;
@@ -230,7 +242,7 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
   if (provider === 'openai') {
     const codexPromptPath = `${promptsDir(cwd, sessionId)}/${agentId}-codex-prompt.md`;
     const parts: string[] = [];
-    if (agentConfig?.body) parts.push(substitute(agentConfig.body));
+    if (agentConfig?.body) parts.push(renderEffortMarkers(substitute(agentConfig.body), promptTier));
     parts.push(suffix);
     parts.push(`## Task\n\n${instruction}`);
     writeFileSync(codexPromptPath, parts.join('\n\n'), 'utf-8');
@@ -350,6 +362,11 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
 
   tmux.sendKeys(paneId, fullCmd);
 
+  const captured = await capturePanePidLstart(paneId);
+  if (captured) {
+    await state.setAgentPid(cwd, sessionId, agentId, captured.pid, captured.lstart);
+  }
+
   return agent;
 }
 
@@ -425,6 +442,11 @@ export async function restartAgent(
   });
 
   tmux.sendKeys(paneId, fullCmd);
+
+  const capturedRestart = await capturePanePidLstart(paneId);
+  if (capturedRestart) {
+    await state.setAgentPid(cwd, sessionId, agentId, capturedRestart.pid, capturedRestart.lstart);
+  }
 
   emitHistoryEvent(sessionId, 'agent-restarted', { agentId, restartCount, originalSpawnedAt, previousStatus, claudeSessionId });
 }
@@ -547,16 +569,23 @@ export async function handleAgentKilled(
 ): Promise<boolean> {
   unregisterAgentPane(sessionId, agentId);
   const flushedActiveMs = flushAgentTimer(sessionId, agentId);
-  await state.updateAgent(cwd, sessionId, agentId, {
-    status: 'killed',
-    killedReason: reason,
-    completedAt: new Date().toISOString(),
+  await state.markAgentOrphan(cwd, sessionId, agentId, {
+    reason,
+    status: 'lost',
     activeMs: flushedActiveMs,
   });
-  emitHistoryEvent(sessionId, 'agent-exited', { agentId, status: 'killed', activeMs: flushedActiveMs });
+  emitHistoryEvent(sessionId, 'agent-exited', { agentId, status: 'lost', activeMs: flushedActiveMs, orphaned: true });
   gcBgTasks(cwd, sessionId, agentId);
 
   const session = state.getSession(cwd, sessionId);
+  const agent = session.agents.find(a => a.id === agentId);
+  await markAgentAsksOrphan(cwd, sessionId, agentId);
+  await emitOrphanAsk({
+    cwd, sessionId, reason: 'pane-gone',
+    detectedAt: new Date().toISOString(),
+    agent: agent ? { id: agent.id, name: agent.name, paneId: agent.paneId } : undefined,
+  });
+
   return allAgentsDone(session);
 }
 

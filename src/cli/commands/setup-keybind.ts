@@ -12,6 +12,7 @@ export function registerSetupKeybind(program: Command): void {
       switch (result.status) {
         case 'installed':
           console.log(result.message);
+          console.log('Note: requires tmux 3.2+ for display-menu keybindings.');
           break;
         case 'already-installed':
           console.log(result.message);
@@ -24,6 +25,9 @@ export function registerSetupKeybind(program: Command): void {
           console.log('  sisyphus setup-keybind M-S');
           console.log('  sisyphus setup-keybind M-w');
           console.log('  sisyphus setup-keybind M-j');
+          break;
+        case 'unsupported-tmux':
+          console.log(result.message);
           break;
       }
     });

@@ -95,6 +95,13 @@ export function paneExists(paneTarget: string): boolean {
   return execSafe(`tmux display-message -t ${t(paneTarget)} -p "#{pane_id}"`) !== null;
 }
 
+export function getPanePid(paneTarget: string): number | null {
+  const out = execSafe(`tmux display-message -t ${t(paneTarget)} -p "#{pane_pid}"`, undefined, TMUX_TIMEOUT_MS);
+  if (!out) return null;
+  const pid = parseInt(out.trim(), 10);
+  return Number.isFinite(pid) ? pid : null;
+}
+
 /**
  * Check if a tmux session exists by its $N ID. Safe for all operations —
  * $N IDs use exact integer matching (no prefix-match risk).

@@ -175,6 +175,9 @@ export type Seg = {
   dim?: boolean;
   italic?: boolean;
   inverse?: boolean;
+  strikethrough?: boolean;
+  /** ANSI 38;2;R;G;B foreground tint (e.g. '38;2;226;217;198'). Wins over `color` when set. */
+  fg?: string;
   /** ANSI 48;2;R;G;B background tint (e.g. '48;2;40;35;20') */
   bg?: string;
 };

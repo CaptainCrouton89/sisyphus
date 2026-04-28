@@ -267,20 +267,6 @@ function checkNvim(): Check {
   }
 }
 
-async function checkNodePty(): Promise<Check> {
-  try {
-    await import('node-pty');
-    return { name: 'node-pty', status: 'ok', detail: 'Loadable' };
-  } catch {
-    return {
-      name: 'node-pty',
-      status: 'warn',
-      detail: 'Cannot load (nvim editor in dashboard will not work)',
-      fix: 'npm rebuild node-pty — or reinstall: npm install -g sisyphi',
-    };
-  }
-}
-
 function checkNotifyBinary(): Check | null {
   if (process.platform !== 'darwin') return null;
   const binary = join(homedir(), '.sisyphus', 'SisyphusNotify.app', 'Contents', 'MacOS', 'sisyphus-notify');
@@ -301,10 +287,9 @@ export function registerDoctor(program: Command): void {
   program
     .command('doctor')
     .description('Check sisyphus installation health')
-    .action(async () => {
+    .action(() => {
       const itermCheck = checkItermRightOptionKey();
       const notifyCheck = checkNotifyBinary();
-      const nodePtyCheck = await checkNodePty();
       const checks: Check[] = [
         checkNodeVersion(),
         checkClaudeCli(),
@@ -320,7 +305,6 @@ export function registerDoctor(program: Command): void {
         checkTmuxKeybind(),
         checkBeginCommand(),
         checkNvim(),
-        nodePtyCheck,
         ...(notifyCheck ? [notifyCheck] : []),
         checkTermrender(),
       ];

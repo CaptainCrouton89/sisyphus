@@ -100,7 +100,7 @@ The design must answer:
     { "id": "<kebab-case-id>", "title": "<section title>" }
   ],
   "lockedDecisions": ["..."],
-  "openQuestions": ["..."]
+  "openDecisions": ["..."]
 }
 ```
 

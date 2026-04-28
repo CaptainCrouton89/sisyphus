@@ -52,12 +52,19 @@ This review runs **once per stage**. There is no re-review after fixes — the o
 
 2. **Context** — Read CLAUDE.md, applicable `.claude/rules/*.md`, and codebase conventions in the target area.
 
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 3. **Classify** — Determine review depth from change type:
    - Hotfix/security: **maximum** depth
    - New feature: **standard**
    - Refactor: **behavior-focused** (verify equivalence)
    - Test-only: **intent-focused**
    - Documentation: **minimal**
+<!--/EFFORT-->
+<!--EFFORT:LOW-->
+3. **Classify** — Treat the change as **minimal** depth regardless of change type.
+   Sensitive code (auth, crypto, PII paths) is the one carve-out — treat that as
+   standard depth.
+<!--/EFFORT-->
 
 4. **Investigate** — Spawn parallel sub-agents scaled to scope. Pass each sub-agent the full diff so it has complete context. **Do not include your hypotheses, suspicions, or specific things to look for** — sub-agents that receive a leading conclusion will anchor on it and miss independent findings. Scope-only dispatch: diff and file boundaries. Use the Agent tool with these `subagent_type` values:
    - **`reuse`** — Code reuse: searches for existing utilities/helpers, flags duplicated functionality, inline logic that reimplements shared modules
@@ -75,6 +82,7 @@ This review runs **once per stage**. There is no re-review after fixes — the o
 
 6. **Synthesize** — Deduplicate, filter, prioritize by severity. If after filtering you have no findings to report, that is your report — do not backfill.
 
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 ## Scaling Sub-agents
 
 Scale the number of sub-agents to the changeset. The core three (`reuse`, `quality`, `efficiency`) are always spawned. Add `security`, `compliance`, and `tests` based on scope and classification. For larger scopes, spawn multiple instances of each type scoped to different directories/modules:
@@ -87,6 +95,16 @@ Scale the number of sub-agents to the changeset. The core three (`reuse`, `quali
 | 30+ files | 10-16 | All six types, each dimension gets 2-4 sub-agents scoped to specific directories/modules. |
 
 For hotfix/security classifications, always spawn `security` (opus) regardless of scope. Always spawn `tests` when the diff contains test files; skip it when it doesn't.
+<!--/EFFORT-->
+<!--EFFORT:LOW-->
+## Sub-agents
+
+Spawn one `quality` sub-agent. Pass it the diff and file boundaries. Do not include
+hypotheses or "look for X" — leading conclusions cause anchoring.
+
+If the diff touches sensitive code (auth, crypto, PII), additionally spawn `security`
+(opus). Do not spawn `reuse`, `efficiency`, `compliance`, or `tests`.
+<!--/EFFORT-->
 
 ## Flag only when
 

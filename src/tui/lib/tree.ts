@@ -2,6 +2,8 @@ import { join } from 'node:path';
 import { messageSourceLabel } from './format.js';
 import type {
   TreeNode,
+  SectionTreeNode,
+  NeedsYouVirtualTreeNode,
   SessionTreeNode,
   CycleTreeNode,
   AgentTreeNode,
@@ -10,9 +12,11 @@ import type {
   MessageTreeNode,
   ContextTreeNode,
   ContextFileTreeNode,
+  SectionKey,
 } from '../types/tree.js';
 import type { Session } from '../../shared/types.js';
 import type { SessionSummary } from '../state.js';
+import type { AggregateInboxItem } from '../../shared/inbox-types.js';
 import { contextDir } from '../../shared/paths.js';
 
 /** Sort priority: active+open=0, active+closed=1, paused+open=2, paused+closed=3, completed=4 */
@@ -21,7 +25,7 @@ function sessionSortKey(s: SessionSummary): number {
   // Use cached windowAlive from polling hook (avoids execSync in render path)
   const open = s.windowAlive ?? false;
   if (s.status === 'active') return open ? 0 : 1;
-  // paused
+  // paused — goes in Running section (not Done)
   return open ? 2 : 3;
 }
 
@@ -31,43 +35,66 @@ export function buildTree(
   expanded: Set<string>,
   cwd: string,
   polledContextFiles: string[] = [],
+  aggregateInbox: AggregateInboxItem[] = [],
 ): TreeNode[] {
   const nodes: TreeNode[] = [];
 
-  const sorted = [...sessions].sort((a, b) => {
-    const keyDiff = sessionSortKey(a) - sessionSortKey(b);
-    if (keyDiff !== 0) return keyDiff;
-    // Most recent first within each group
+  // Build per-session inbox index
+  const inboxBySession = new Map<string, AggregateInboxItem[]>();
+  for (const item of aggregateInbox) {
+    const arr = inboxBySession.get(item.sessionId) ?? [];
+    arr.push(item);
+    inboxBySession.set(item.sessionId, arr);
+  }
+
+  // Bucket sessions
+  const needsYou: SessionSummary[] = [];
+  const running: SessionSummary[] = [];
+  const done: SessionSummary[] = [];
+  for (const s of sessions) {
+    if (inboxBySession.has(s.id)) needsYou.push(s);
+    else if (s.status === 'completed') done.push(s);
+    else running.push(s); // active + paused both land here
+  }
+
+  // Sort within each bucket
+  needsYou.sort((a, b) => {
+    const aItems = inboxBySession.get(a.id)!;
+    const bItems = inboxBySession.get(b.id)!;
+    const aOldest = Math.min(...aItems.map(i => Date.parse(i.blockedSince)));
+    const bOldest = Math.min(...bItems.map(i => Date.parse(i.blockedSince)));
+    return aOldest - bOldest;
+  });
+  running.sort((a, b) => {
+    const k = sessionSortKey(a) - sessionSortKey(b);
+    if (k !== 0) return k;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
+  // SessionSummary has no completedAt — sort done by createdAt descending
+  done.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
-  for (const s of sorted) {
-    const sessionNodeId = `session:${s.id}`;
-    const isSelected = selectedSession?.id === s.id;
-    const isExpanded = expanded.has(sessionNodeId);
+  // Emit helpers
+  function sectionExpanded(key: SectionKey): boolean {
+    return expanded.has(`section:${key}`);
+  }
 
+  function emitSection(key: SectionKey, count: number): void {
+    const exp = sectionExpanded(key);
     nodes.push({
-      id: sessionNodeId,
-      type: 'session',
+      id: `section:${key}`,
+      type: 'section',
       depth: 0,
+      section: key,
+      count,
       expandable: true,
-      expanded: isExpanded && isSelected,
-      sessionId: s.id,
-      name: s.name,
-      task: s.task,
-      status: s.status,
-      cycleCount: isSelected ? (selectedSession?.orchestratorCycles.length ?? 0) : 0,
-      agentCount: s.agentCount,
-      runningAgentCount: s.runningAgentCount,
-      createdAt: s.createdAt,
-      completedAt: isSelected ? selectedSession?.completedAt : undefined,
-      // Prefer the live activeMs from the selected session (real-time, includes
-      // timer overlay from `status` request) over the list-snapshot value.
-      activeMs: isSelected ? (selectedSession?.activeMs ?? s.activeMs) : s.activeMs,
-    } satisfies SessionTreeNode);
+      expanded: exp,
+      sessionId: '',
+      prefix: '',
+    } satisfies SectionTreeNode);
+  }
 
-    // Only emit children for the selected+expanded session
-    if (!isExpanded || !isSelected || !selectedSession) continue;
+  function emitSessionChildren(s: SessionSummary): void {
+    if (!selectedSession || selectedSession.id !== s.id) return;
 
     const cycles = [...selectedSession.orchestratorCycles].reverse();
     const allSpawnedIds = new Set(
@@ -78,12 +105,9 @@ export function buildTree(
       const cycleNodeId = `cycle:${s.id}:${cycle.cycle}`;
       const cycleExpanded = expanded.has(cycleNodeId);
 
-      // Agents belonging to this cycle
       const cycleAgents = selectedSession.agents.filter((a) =>
         cycle.agentsSpawned.includes(a.id),
       );
-
-      // For the latest cycle, include unassigned agents
       const isLatest = cycle === cycles[0];
       const unassigned = isLatest
         ? selectedSession.agents.filter((a) => !allSpawnedIds.has(a.id))
@@ -93,7 +117,7 @@ export function buildTree(
       nodes.push({
         id: cycleNodeId,
         type: 'cycle',
-        depth: 1,
+        depth: 2,
         expandable: allCycleAgents.length > 0,
         expanded: cycleExpanded,
         sessionId: s.id,
@@ -115,7 +139,7 @@ export function buildTree(
         nodes.push({
           id: agentNodeId,
           type: 'agent',
-          depth: 2,
+          depth: 3,
           expandable: hasReports,
           expanded: agentExpanded && hasReports,
           sessionId: s.id,
@@ -127,6 +151,7 @@ export function buildTree(
           completedAt: agent.completedAt,
           activeMs: agent.activeMs,
           reportCount: agent.reports.length,
+          orphaned: agent.orphaned ?? false,
         } satisfies AgentTreeNode);
 
         if (!agentExpanded || !hasReports) continue;
@@ -136,7 +161,7 @@ export function buildTree(
           nodes.push({
             id: `report:${s.id}:${agent.id}:${ri}`,
             type: 'report',
-            depth: 3,
+            depth: 4,
             expandable: false,
             expanded: false,
             sessionId: s.id,
@@ -158,7 +183,7 @@ export function buildTree(
       nodes.push({
         id: msgsNodeId,
         type: 'messages',
-        depth: 1,
+        depth: 2,
         expandable: true,
         expanded: msgsExpanded,
         sessionId: s.id,
@@ -173,7 +198,7 @@ export function buildTree(
           nodes.push({
             id: `message:${s.id}:${msg.id}`,
             type: 'message',
-            depth: 2,
+            depth: 3,
             expandable: false,
             expanded: false,
             sessionId: s.id,
@@ -186,7 +211,8 @@ export function buildTree(
       }
     }
 
-    // Context group — use polled file list for the selected session (avoids sync I/O in render)
+    // Context group
+    const isSelected = selectedSession?.id === s.id;
     const contextFiles = isSelected ? polledContextFiles : [];
 
     const ctxNodeId = `context:${s.id}`;
@@ -195,7 +221,7 @@ export function buildTree(
     nodes.push({
       id: ctxNodeId,
       type: 'context',
-      depth: 1,
+      depth: 2,
       expandable: contextFiles.length > 0,
       expanded: ctxExpanded && contextFiles.length > 0,
       sessionId: s.id,
@@ -207,7 +233,7 @@ export function buildTree(
         nodes.push({
           id: `context-file:${s.id}:${filename}`,
           type: 'context-file',
-          depth: 2,
+          depth: 3,
           expandable: false,
           expanded: false,
           sessionId: s.id,
@@ -215,6 +241,69 @@ export function buildTree(
           filePath: join(contextDir(cwd, s.id), filename),
         } satisfies ContextFileTreeNode);
       }
+    }
+  }
+
+  function emitSessionRow(s: SessionSummary, askCount: number): void {
+    const sessionNodeId = `session:${s.id}`;
+    const isSelected = selectedSession?.id === s.id;
+    const isExpanded = expanded.has(sessionNodeId);
+
+    nodes.push({
+      id: sessionNodeId,
+      type: 'session',
+      depth: 1,
+      expandable: true,
+      expanded: isExpanded && isSelected,
+      sessionId: s.id,
+      name: s.name,
+      task: s.task,
+      status: s.status,
+      cycleCount: isSelected ? (selectedSession?.orchestratorCycles.length ?? 0) : 0,
+      agentCount: s.agentCount,
+      runningAgentCount: s.runningAgentCount,
+      createdAt: s.createdAt,
+      completedAt: isSelected ? selectedSession?.completedAt : undefined,
+      activeMs: isSelected ? (selectedSession?.activeMs ?? s.activeMs) : s.activeMs,
+      askCount: askCount > 0 ? askCount : undefined,
+      orphaned: s.orphaned ?? false,
+    } satisfies SessionTreeNode);
+
+    if (isExpanded && isSelected) {
+      emitSessionChildren(s);
+    }
+  }
+
+  // Emit Needs You section
+  emitSection('needs-you', needsYou.length);
+  if (sectionExpanded('needs-you')) {
+    nodes.push({
+      id: 'needs-you-virtual',
+      type: 'needs-you-virtual',
+      depth: 1,
+      expandable: false,
+      expanded: false,
+      sessionId: '',
+      pendingCount: aggregateInbox.length,
+    } satisfies NeedsYouVirtualTreeNode);
+    for (const s of needsYou) {
+      emitSessionRow(s, inboxBySession.get(s.id)?.length ?? 0);
+    }
+  }
+
+  // Emit Running section
+  emitSection('running', running.length);
+  if (sectionExpanded('running')) {
+    for (const s of running) {
+      emitSessionRow(s, 0);
+    }
+  }
+
+  // Emit Done section
+  emitSection('done', done.length);
+  if (sectionExpanded('done')) {
+    for (const s of done) {
+      emitSessionRow(s, 0);
     }
   }
 

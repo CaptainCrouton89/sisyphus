@@ -51,8 +51,37 @@ Phase transitions are shaped by exit criteria in `roadmap.md`. "Stuck in a phase
 | Reports | agent → orchestrator | `sisyphus submit` (terminal) / `sisyphus report` (non-terminal) |
 | State | daemon → orchestrator | `state.json` — agent statuses, session metadata |
 | Events | daemon → history | `events.jsonl` — timestamped lifecycle events |
-| Present | agent → user | `sisyphus present` — renders markdown in a tmux side pane |
+| Ask | agent → user | `sisyphus ask <deck.json>` — submits a structured `Deck` of `Interaction[]`; user answers via the dashboard's full-screen resolution mode. Default blocking (caller waits for `output.json`); `--background` returns askId immediately, `poll <askId>` blocks for an answer, `peek <askId>` is non-blocking |
 | Yield prompt | orchestrator → next orchestrator | `sisyphus yield --prompt "..."` |
+
+### `sisyphus ask` deck schema
+
+Agents submit a `Deck` (JSON file). Disk layout per ask: `<sessionDir>/context/ask/<askId>/{decisions.json,progress.json,meta.json,output.json,visuals/<qid>.{md,ansi}}`.
+
+```ts
+interface Deck {
+  title?: string;
+  source?: { sessionName?: string; askedBy?: string; blockedSince?: string };
+  interactions: Interaction[];   // non-empty
+}
+
+interface Interaction {
+  id: string;                    // /^[A-Za-z0-9_-]+$/, ≤64 chars, unique within deck
+  title: string;                 // non-empty; ≤4 words is convention, not enforced
+  subtitle?: string;             // why this matters
+  body?: string;                 // optional inline termrender markdown (validated via `termrender --check`)
+  bodyPath?: string;             // mutually exclusive with body; relative to deck file dir; inlined at submit
+  options: InteractionOption[];  // 0..N
+  allowFreetext?: boolean;       // user may type instead of / alongside option
+  freetextLabel?: string;
+  kind?: 'notify' | 'validation' | 'decision' | 'context' | 'error';  // display hint, opaque to humanloop
+}
+
+interface InteractionOption { id: string; label: string; description?: string; shortcut?: string }
+interface InteractionResponse { id: string; selectedOptionId?: string; freetext?: string }
+```
+
+Output (`output.json`) shape: `{responses: InteractionResponse[], completedAt: string}`. Blocking submit prints this JSON to stdout and exits 0.
 
 ## Session anatomy
 

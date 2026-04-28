@@ -51,7 +51,6 @@ function createRequirementsFixture(): Record<string, unknown> {
             },
             criteria: [],
             agentNotes: 'Keep the copy actionable and avoid provider-specific wording.',
-            userComment: 'Need this to mention retry guidance.',
           },
         ],
         safeAssumptions: [
@@ -67,25 +66,6 @@ function createRequirementsFixture(): Record<string, unknown> {
               { text: 'Timeout is documented', checked: true },
             ],
             agentNotes: 'Thirty minutes is the current working default.',
-          },
-        ],
-        openQuestions: [
-          {
-            id: 'OQ-1',
-            question: 'Should failed login attempts be rate-limited?',
-            options: [
-              {
-                title: 'Yes',
-                description: 'Reduce brute-force risk with escalating delays.',
-              },
-            ],
-            response: 'Yes, add a short backoff after repeated failures.',
-          },
-          {
-            id: 'OQ-2',
-            question: 'Should SSO be available on first release?',
-            options: [],
-            response: '',
           },
         ],
       },
@@ -147,12 +127,8 @@ describe('requirements export', () => {
     assert.match(firstRender, /- \[x\] Username prompt is shown/);
     assert.match(firstRender, /- \[ \] Password input is masked/);
     assert.match(firstRender, /Keep the copy actionable and avoid provider-specific wording\./);
-    assert.match(firstRender, /Need this to mention retry guidance\./);
     assert.match(firstRender, /### Safe Assumptions/);
     assert.match(firstRender, /### SA-1: Session timeout default/);
-    assert.match(firstRender, /### Open Questions/);
-    assert.match(firstRender, /Yes, add a short backoff after repeated failures\./);
-    assert.match(firstRender, /\*\*Response:\*\* \(unanswered\)/);
 
     runRequirementsExport(requirementsPath);
     const secondRender = readFileSync(markdownPath, 'utf-8');

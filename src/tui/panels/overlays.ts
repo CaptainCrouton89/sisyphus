@@ -1,5 +1,6 @@
 import { drawBorder, writeClipped, type FrameBuffer } from '../render.js';
 import { ansiColor, ansiDim, ansiBold } from '../lib/format.js';
+import type { MenuDef } from '../../shared/keymap.js';
 import type { CompanionState, AchievementDef, Mood } from '../../shared/companion-types.js';
 import { getMoodFace } from '../../shared/companion-render.js';
 import { computeLevelProgress } from '../../daemon/companion.js';
@@ -15,9 +16,6 @@ import {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const LEADER_WIDTH = 26;
-const LEADER_HEIGHT = 23; // 21 content lines + 2 border lines
-const COPY_HEIGHT = 9;    // 7 content lines + 2 border lines
 const HELP_WIDTH = 62;
 const COMPANION_WIDTH = 52;
 const DEBUG_WIDTH = 50;
@@ -31,61 +29,50 @@ function helpRow(left: string, right: string, innerWidth: number): string {
 
 // ─── Overlays ─────────────────────────────────────────────────────────────────
 
-export function renderLeaderOverlay(buf: FrameBuffer, rows: number, cols: number): void {
-  const x = cols - LEADER_WIDTH - 1;
-  const y = rows - LEADER_HEIGHT - 2;
-  const innerWidth = LEADER_WIDTH - 2;
+export function renderSubmenuOverlay(
+  buf: FrameBuffer,
+  rows: number,
+  cols: number,
+  menu: MenuDef,
+  accentColor: string,
+): void {
+  const visibleItems = menu.items.filter(i => !i.hidden && i.action.type !== 'tmux');
+  const title = menu.title.trim();
 
-  drawBorder(buf, x, y, LEADER_WIDTH, LEADER_HEIGHT, 'magenta');
+  // Width: max of title+padding, each item line, and the esc footer
+  const maxLabelLen = Math.max(
+    title.length + 2,
+    ...visibleItems.map(i => i.label.trim().length + 5), // '  k  trimmed-label'
+    13, // '  esc  cancel'
+  );
+  const innerWidth = Math.min(maxLabelLen, 32);
+  const totalWidth = innerWidth + 2;
 
-  const lines: string[] = [
-    ansiColor('  LEADER'.padEnd(innerWidth), 'magenta', true),
-    ' '.padEnd(innerWidth),
-    '  y  copy menu'.padEnd(innerWidth),
-    '  d  delete session'.padEnd(innerWidth),
-    '  l  daemon logs'.padEnd(innerWidth),
-    '  o  open session dir'.padEnd(innerWidth),
-    '  s  open strategy'.padEnd(innerWidth),
-    '  r  open roadmap'.padEnd(innerWidth),
-    '  a  spawn agent'.padEnd(innerWidth),
-    '  m  message agent'.padEnd(innerWidth),
-    '  /  search'.padEnd(innerWidth),
-    '  !  shell command'.padEnd(innerWidth),
-    '  j  jump to pane'.padEnd(innerWidth),
-    '  k  kill session/agent'.padEnd(innerWidth),
-    '  E  export session'.padEnd(innerWidth),
-    '  c  companion overlay'.padEnd(innerWidth),
-    '  q  quit'.padEnd(innerWidth),
-    '  ?  help'.padEnd(innerWidth),
-    ' 1-9  jump to session'.padEnd(innerWidth),
-    ' '.padEnd(innerWidth),
-    ansiDim('  esc  dismiss'.padEnd(innerWidth)),
-  ];
+  // Height: title + blank + items (clamped) + esc
+  const contentCount = visibleItems.length;
+  const totalHeight = contentCount + 4; // title + blank + items + esc + 2 borders = +4 inner rows
+  const clampedHeight = Math.min(totalHeight, rows - 2);
 
-  for (let i = 0; i < lines.length; i++) {
-    writeClipped(buf, x + 1, y + 1 + i, lines[i]!, innerWidth);
+  const x = cols - totalWidth - 1;
+  const y = rows - clampedHeight - 2;
+
+  drawBorder(buf, x, y, totalWidth, clampedHeight, accentColor);
+
+  let row = 0;
+  writeClipped(buf, x + 1, y + 1 + row, ansiColor(`  ${title}`.padEnd(innerWidth), accentColor, true), innerWidth);
+  row++;
+  writeClipped(buf, x + 1, y + 1 + row, ' '.padEnd(innerWidth), innerWidth);
+  row++;
+
+  for (const item of visibleItems) {
+    if (row >= clampedHeight - 2) break;
+    const line = `  ${item.key}  ${item.label.trim()}`.padEnd(innerWidth);
+    writeClipped(buf, x + 1, y + 1 + row, line, innerWidth);
+    row++;
   }
-}
 
-export function renderCopyMenuOverlay(buf: FrameBuffer, rows: number, cols: number): void {
-  const x = cols - LEADER_WIDTH - 1;
-  const y = rows - COPY_HEIGHT - 2;
-  const innerWidth = LEADER_WIDTH - 2;
-
-  drawBorder(buf, x, y, LEADER_WIDTH, COPY_HEIGHT, 'cyan');
-
-  const lines: string[] = [
-    ansiColor('  COPY'.padEnd(innerWidth), 'cyan', true),
-    ' '.padEnd(innerWidth),
-    '  p  session path'.padEnd(innerWidth),
-    '  C  LLM context'.padEnd(innerWidth),
-    '  l  logs content'.padEnd(innerWidth),
-    '  s  session ID'.padEnd(innerWidth),
-    ansiDim('  esc  cancel'.padEnd(innerWidth)),
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    writeClipped(buf, x + 1, y + 1 + i, lines[i]!, innerWidth);
+  if (row < clampedHeight - 1) {
+    writeClipped(buf, x + 1, y + 1 + row, ansiDim('  esc  cancel'.padEnd(innerWidth)), innerWidth);
   }
 }
 
@@ -94,49 +81,45 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
   const x = Math.max(0, Math.floor((cols - HELP_WIDTH) / 2));
 
   const contentLines: string[] = [
+    // Nav-mode keys
     helpRow('  hjkl/↑↓←→  navigate', '  tab  switch pane', innerWidth),
-    helpRow('  enter  expand/open', '  t  toggle logs', innerWidth),
-    ' '.padEnd(innerWidth),
+    helpRow('  enter  expand/open', '  F  toggle flow', innerWidth),
     helpRow('  n  new session', '  m  message orch.', innerWidth),
     helpRow('  R  resume session', '  C  continue session', innerWidth),
     helpRow('  b  rollback cycle', '  x  restart agent', innerWidth),
     helpRow('  r  re-run agent', '  g  edit goal', innerWidth),
-    helpRow('  p  open roadmap', '  s  toggle strategy', innerWidth),
-    helpRow('  S  edit strategy', '  w  go to window', innerWidth),
-    helpRow('  o  resume claude session', '  c  claude companion', innerWidth),
-    helpRow('  q  quit', '', innerWidth),
+    helpRow('  p  open roadmap', '  S  edit strategy', innerWidth),
+    helpRow('  w  go to window', '  o  resume claude', innerWidth),
+    helpRow('  c  claude companion', '  q  quit', innerWidth),
     ' '.padEnd(innerWidth),
-    helpRow('  space → y  copy submenu', '  space → d  delete session', innerWidth),
-    helpRow('  space → j  jump to pane', '  space → k  kill', innerWidth),
-    helpRow('  space → q  quit', '  space → o  open dir', innerWidth),
-    helpRow('  space → s  strategy', '  space → r  roadmap', innerWidth),
-    helpRow('  space → l  tail logs', '  space → /  search', innerWidth),
-    helpRow('  space → a  spawn agent', '  space → m  msg agent', innerWidth),
-    helpRow('  space → E  export session', '  space → 1-9  jump', innerWidth),
-    helpRow('  space → ?  help', '', innerWidth),
+    // Leader direct keys (top-level space-key)
+    helpRow('  space s  cycle session', '  space h  home/dashboard', innerWidth),
+    helpRow('  space n  new session', '  space m  message orch.', innerWidth),
+    helpRow('  space t  status popup', '  space l  session picker', innerWidth),
+    helpRow('  space x  kill pane', '  space /  search', innerWidth),
+    helpRow('  space ?  help', '  space 1-9  jump to session', innerWidth),
     ' '.padEnd(innerWidth),
-    helpRow('  y → p  session path', '  y → C  LLM context', innerWidth),
-    helpRow('  y → l  logs content', '  y → s  session ID', innerWidth),
+    // Submenu prefixes
+    helpRow('  space c ›  Copy', '  space o ›  Open', innerWidth),
+    helpRow('  space a ›  Agent', '  space S ›  Session', innerWidth),
+    helpRow('  space g ›  Go', '', innerWidth),
+    ' '.padEnd(innerWidth),
+    ansiDim('  Changed: space a → space a s (spawn agent)'.padEnd(innerWidth)),
   ];
 
-  // title + blank + contentLines + blank = contentLines.length + 3 inner rows, + 2 border
   const height = Math.min(contentLines.length + 4, rows - 2);
   const y = Math.max(0, Math.floor((rows - height) / 2));
 
   drawBorder(buf, x, y, HELP_WIDTH, height, 'yellow');
 
-  // Title row
   writeClipped(buf, x + 1, y + 1, ansiColor('  KEYBINDINGS  (esc or ? to close)'.padEnd(innerWidth), 'yellow', true), innerWidth);
-  // Blank row after title
   writeClipped(buf, x + 1, y + 2, ' '.padEnd(innerWidth), innerWidth);
 
-  // Content rows (clamp to available height: height - 4 rows for title+blank+trailing_blank+borders)
   const availableContentRows = height - 4;
   for (let i = 0; i < Math.min(contentLines.length, availableContentRows); i++) {
     writeClipped(buf, x + 1, y + 3 + i, contentLines[i]!, innerWidth);
   }
 
-  // Trailing blank (only if there's room)
   const trailingBlankRow = y + 3 + Math.min(contentLines.length, availableContentRows);
   if (trailingBlankRow < y + height - 1) {
     writeClipped(buf, x + 1, trailingBlankRow, ' '.padEnd(innerWidth), innerWidth);

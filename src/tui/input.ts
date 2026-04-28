@@ -1,9 +1,8 @@
-import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { exportSessionToZip } from '../cli/commands/export.js';
 import type { Key } from './terminal.js';
-import { setRawBypass } from './terminal.js';
 import {
   type AppState,
   type ComposeAction,
@@ -14,14 +13,18 @@ import {
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session } from '../shared/types.js';
 import type { Response } from '../shared/protocol.js';
-import { sessionDir, goalPath, roadmapPath, strategyPath } from '../shared/paths.js';
+import { sessionDir, goalPath, roadmapPath, strategyPath, reportsDir } from '../shared/paths.js';
 import type { Request } from '../shared/protocol.js';
 import { findParentIndex } from './lib/tree.js';
 import { badgeGalleryLeft, badgeGalleryRight, closeBadgeGallery, companionOverlayNextPage, companionOverlayShowHelp, companionOverlayDismissHelp, getCompanionPage, badgeListScrollUp, badgeListScrollDown } from './panels/overlays.js';
+import { enterResolutionMode } from './panels/mounted-humanloop.js';
+import { KEYMAP, MENU_FOR_MODE } from '../shared/keymap.js';
+import type { MenuItem } from '../shared/keymap.js';
 
 // ── Re-exported types (same definition, no React) ─────────────────────────────
 
 export type LeaderAction =
+  // already present
   | { type: 'enter-copy-menu' }
   | { type: 'copy-path' }
   | { type: 'copy-context' }
@@ -44,7 +47,44 @@ export type LeaderAction =
   | { type: 'export-session' }
   | { type: 'kill' }
   | { type: 'quit' }
-  | { type: 'dismiss' };
+  | { type: 'dismiss' }
+  // new submenu enters
+  | { type: 'enter-open-menu' }
+  | { type: 'enter-agent-menu' }
+  | { type: 'enter-session-menu' }
+  | { type: 'enter-go-menu' }
+  // new copy variants
+  | { type: 'copy-latest-report' }
+  | { type: 'copy-agent-id' }
+  // new open variants
+  | { type: 'open-goal' }
+  | { type: 'open-latest-report' }
+  | { type: 'open-scratch' }
+  | { type: 'edit-context-file' }
+  // new agent variants
+  | { type: 'restart-agent' }
+  | { type: 'rerun-agent' }
+  | { type: 'open-claude-agent' }
+  | { type: 'tail-agent-logs' }
+  | { type: 'kill-agent' }
+  | { type: 'quick-spawn-explore' }
+  | { type: 'quick-spawn-debug' }
+  // new session variants
+  | { type: 'new-session' }
+  | { type: 'resume-session' }
+  | { type: 'continue-session' }
+  | { type: 'rollback' }
+  | { type: 'kill-session' }
+  | { type: 'go-to-window' }
+  | { type: 'clone-session' }
+  | { type: 'history' }
+  // new go variants
+  | { type: 'pick-session' }
+  | { type: 'cycle-session' }
+  | { type: 'reconnect' }
+  // messaging / status
+  | { type: 'message-orchestrator' }
+  | { type: 'show-status' };
 
 export interface KeybindingHandlers {
   onMoveUp: () => void;
@@ -92,11 +132,15 @@ export interface InputActions {
   selectWindow: typeof import('./lib/tmux.js').selectWindow;
   selectPane: typeof import('./lib/tmux.js').selectPane;
   switchToSession: typeof import('./lib/tmux.js').switchToSession;
+  paneExists: typeof import('./lib/tmux.js').paneExists;
   openLogPopup: typeof import('./lib/tmux.js').openLogPopup;
   openShellPopup: typeof import('./lib/tmux.js').openShellPopup;
   openInFileManager: typeof import('./lib/tmux.js').openInFileManager;
   copyToClipboard: typeof import('./lib/clipboard.js').copyToClipboard;
   buildSessionContext: typeof import('./lib/context.js').buildSessionContext;
+
+  // Compose via tmux popup
+  composeViaPopup: typeof import('./lib/popup-compose.js').composeViaPopup;
 
   // Config
   resolveEditor: () => string;
@@ -105,166 +149,10 @@ export interface InputActions {
   cleanup: () => void;
 }
 
-// ── Neovim bypass helpers ─────────────────────────────────────────────────────
-
-function activateNvimBypass(state: AppState): void {
-  setRawBypass((data: string) => {
-    // If nvim died, deactivate bypass and let input fall through
-    if (!state.nvimBridge?.ready) {
-      deactivateNvimBypass();
-      state.focusPane = 'tree';
-      if (state.mode === 'compose') cancelCompose(state);
-      requestRender();
-      return false; // not consumed — re-process as normal input
-    }
-    // Tab (0x09) escapes neovim focus — in compose mode, cancels compose
-    if (data === '\t') {
-      if (state.mode === 'compose') {
-        cancelCompose(state);
-        return true;
-      }
-      deactivateNvimBypass();
-      state.focusPane = state.showCombinedView ? 'logs' : 'tree';
-      requestRender();
-      return true; // consumed, not forwarded to nvim
-    }
-    // Everything else → neovim
-    state.nvimBridge!.write(data);
-    return true;
-  });
-}
-
-function deactivateNvimBypass(): void {
-  setRawBypass(null);
-}
-
-// ── Compose mode helpers ─────────────────────────────────────────────────────
-
-const COMPOSE_DIR = join(tmpdir(), 'sisyphus-nvim');
-
-/**
- * Enter compose mode: opens a temp file in the nvim detail pane for multi-line input.
- * Returns false if nvim is unavailable (caller should fall back to popup/inline).
- */
-function enterComposeMode(state: AppState, action: ComposeAction, actions: InputActions): boolean {
-  if (!state.nvimEnabled || !state.nvimBridge?.ready) return false;
-
-  mkdirSync(COMPOSE_DIR, { recursive: true });
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const tempFile = join(COMPOSE_DIR, `compose-${id}.md`);
-  const signalFile = join(COMPOSE_DIR, `compose-signal-${id}`);
-
-  // Create empty temp file
-  writeFileSync(tempFile, '', 'utf-8');
-
-  // Save current nvim file key so we can force re-resolution on cancel
-  state.composePrevNvimFile = state.prevNvimFile;
-  state.composeAction = action;
-  state.composeTempFile = tempFile;
-  state.composeSignalFile = signalFile;
-  state.mode = 'compose';
-  state.focusPane = 'detail';
-
-  // Open in nvim
-  state.nvimBridge.openComposeFile(tempFile, signalFile);
-
-  // Activate nvim bypass so all input goes to nvim
-  activateNvimBypass(state);
-
-  // Start polling for signal file
-  state.composePollTimer = setInterval(() => {
-    checkComposeSignal(state, actions);
-  }, 100);
-
-  requestRender();
-  return true;
-}
-
-/**
- * Cancel compose mode: clean up and restore previous state.
- */
-function cancelCompose(state: AppState): void {
-  if (state.composePollTimer !== null) {
-    clearInterval(state.composePollTimer);
-    state.composePollTimer = null;
-  }
-
-  // Clean up temp files
-  if (state.composeTempFile) {
-    try { unlinkSync(state.composeTempFile); } catch { /* ignore */ }
-  }
-  if (state.composeSignalFile) {
-    try { unlinkSync(state.composeSignalFile); } catch { /* ignore */ }
-  }
-
-  // Force nvim to re-resolve files on next render by nulling prevNvimFile
-  state.prevNvimFile = null;
-  state.composePrevNvimFile = null;
-  state.composeAction = null;
-  state.composeTempFile = null;
-  state.composeSignalFile = null;
-  state.mode = 'navigate';
-  state.focusPane = 'tree';
-
-  deactivateNvimBypass();
-  requestRender();
-}
-
-/**
- * Poll for compose signal file. On detection, read content and dispatch action.
- */
-function checkComposeSignal(state: AppState, actions: InputActions): void {
-  if (!state.composeSignalFile || !state.composeAction) return;
-
-  // Check signal file BEFORE nvim health — :wq writes signal then exits,
-  // and nvim may die before this 100ms poll fires. We must read a valid
-  // submit signal even if nvim is already gone.
-  if (existsSync(state.composeSignalFile)) {
-    let signalContent = '';
-    try { signalContent = readFileSync(state.composeSignalFile, 'utf-8').trim(); } catch { /* ignore */ }
-
-    if (signalContent === 'cancel') {
-      cancelCompose(state);
-      return;
-    }
-
-    // Signal is a submit — fall through to dispatch below
-  } else {
-    // No signal file yet — cancel if nvim died (unexpected exit, not :wq)
-    if (!state.nvimBridge?.ready) {
-      cancelCompose(state);
-      return;
-    }
-    return;
-  }
-
-  // Signal detected — read compose content
-  let content = '';
-  if (state.composeTempFile) {
-    try { content = readFileSync(state.composeTempFile, 'utf-8').trim(); } catch { /* ignore */ }
-  }
-
-  const action = state.composeAction;
-  const required = !OPTIONAL_COMPOSE.has(action.kind);
-
-  if (required && !content) {
-    // Delete signal file so user can try again
-    try { unlinkSync(state.composeSignalFile); } catch { /* ignore */ }
-    notify(state, 'Content required');
-    return;
-  }
-
-  // Dispatch the action
-  dispatchComposeAction(action, content, state, actions);
-
-  // Clean up
-  cancelCompose(state);
-}
-
 /**
  * Map compose action kinds to daemon requests.
  */
-function dispatchComposeAction(
+export function dispatchComposeAction(
   action: ComposeAction,
   content: string,
   state: AppState,
@@ -327,6 +215,136 @@ function dispatchComposeAction(
       );
       break;
   }
+}
+
+// ── Descriptor-driven dispatcher ──────────────────────────────────────────────
+
+// Maps submenu ref → the LeaderAction type that enters it
+const ENTER_FOR_REF: Record<string, LeaderAction['type']> = {
+  copy:    'enter-copy-menu',
+  open:    'enter-open-menu',
+  agent:   'enter-agent-menu',
+  session: 'enter-session-menu',
+  go:      'enter-go-menu',
+};
+
+// Maps tuiAction strings (from MenuItem.tuiAction) to LeaderAction types
+const TUI_ACTION_FOR_NAME: Record<string, LeaderAction['type']> = {
+  'search':           'search',
+  'edit-context-file':'edit-context-file',
+  'show-leader':      'help',
+};
+
+// Hand-maintained mapping from script/popup name → LeaderAction type.
+// The `satisfies` clause is the compile-time gate: any value not in LeaderAction['type']
+// fails the build immediately. Add a row here when a new descriptor item must
+// be handled in-process by the dashboard.
+const TUI_HANDLERS = {
+  'sisyphus-copy-path':           'copy-path',
+  'sisyphus-copy-id':             'copy-session-id',
+  'sisyphus-copy-context':        'copy-context',
+  'sisyphus-copy-logs':           'copy-logs',
+  'sisyphus-copy-latest-report':  'copy-latest-report',
+  'sisyphus-copy-agent-id':       'copy-agent-id',
+  'sisyphus-open-goal':           'open-goal',
+  'sisyphus-open-roadmap':        'open-roadmap',
+  'sisyphus-open-strategy':       'open-strategy',
+  'sisyphus-open-logs':           'open-logs',
+  'sisyphus-open-dir':            'open-session-dir',
+  'sisyphus-open-latest-report':  'open-latest-report',
+  'sisyphus-open-scratch':        'open-scratch',
+  'sisyphus-spawn-agent':         'spawn-agent',
+  'sisyphus-msg-agent':           'message-agent',
+  'sisyphus-restart-agent-popup': 'restart-agent',
+  'sisyphus-rerun-agent':         'rerun-agent',
+  'sisyphus-jump-to-pane':        'jump-to-pane',
+  'sisyphus-open-claude-agent':   'open-claude-agent',
+  'sisyphus-tail-agent-logs':     'tail-agent-logs',
+  'sisyphus-kill-agent':          'kill-agent',
+  'sisyphus-quick-spawn-explore': 'quick-spawn-explore',
+  'sisyphus-quick-spawn-debug':   'quick-spawn-debug',
+  'sisyphus-new':                 'new-session',
+  'sisyphus-resume-session':      'resume-session',
+  'sisyphus-continue-session':    'continue-session',
+  'sisyphus-rollback-session':    'rollback',
+  'sisyphus-kill-session':        'kill-session',
+  'sisyphus-delete-session':      'delete-session',
+  'sisyphus-export-session':      'export-session',
+  'sisyphus-go-to-window':        'go-to-window',
+  'sisyphus-clone-session':       'clone-session',
+  'sisyphus-history':             'history',
+  'sisyphus-pick-session':        'pick-session',
+  'sisyphus-cycle':               'cycle-session',
+  'sisyphus-reconnect':           'reconnect',
+  'sisyphus-help':                'help',
+  'sisyphus-home':                'cycle-session',
+  'sisyphus-msg':                 'message-orchestrator',
+  'sisyphus-status-popup':        'show-status',
+  'sisyphus-kill-pane':           'kill',
+} as const satisfies Record<string, LeaderAction['type']>;
+
+function findLatestReport(cwd: string, sessionId: string): string | null {
+  const dir = reportsDir(cwd, sessionId);
+  try {
+    const files = readdirSync(dir);
+    if (files.length === 0) return null;
+    let latestFile = files[0]!;
+    let latestMtime = statSync(join(dir, latestFile)).mtimeMs;
+    for (let i = 1; i < files.length; i++) {
+      const m = statSync(join(dir, files[i]!)).mtimeMs;
+      if (m > latestMtime) { latestMtime = m; latestFile = files[i]!; }
+    }
+    return join(dir, latestFile);
+  } catch { return null; }
+}
+
+function goToSessionWindow(state: AppState, actions: InputActions): void {
+  const session = state.selectedSession;
+  if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
+
+  if (session.status !== 'completed' && state.paneAlive && session.tmuxWindowId) {
+    const switchTarget = session.tmuxSessionId ?? session.tmuxSessionName;
+    if (switchTarget) actions.switchToSession(switchTarget);
+    actions.selectWindow(session.tmuxWindowId);
+    return;
+  }
+
+  const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
+  const claudeSessionId = lastCycle?.claudeSessionId;
+  if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
+  try {
+    const label = session.name ?? state.selectedSessionId!.slice(0, 8);
+    const sessionName = actions.openClaudeResumeSession(state.cwd, state.selectedSessionId!, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs, lastCycle.cycle, lastCycle.mode);
+    actions.switchToSession(sessionName);
+  } catch {
+    notify(state, 'Failed to open Claude session');
+  }
+}
+
+function dispatchItem(item: MenuItem, state: AppState, actions: InputActions): void {
+  if (item.action.type === 'submenu') {
+    const t = ENTER_FOR_REF[item.action.ref];
+    if (!t) return handleLeaderAction({ type: 'dismiss' }, state, actions);
+    return handleLeaderAction({ type: t } as LeaderAction, state, actions);
+  }
+  if (item.tuiAction) {
+    const t = TUI_ACTION_FOR_NAME[item.tuiAction];
+    if (t) return handleLeaderAction({ type: t } as LeaderAction, state, actions);
+  }
+  if (item.action.type === 'tui') {
+    const t = TUI_ACTION_FOR_NAME[item.action.action];
+    if (t) return handleLeaderAction({ type: t } as LeaderAction, state, actions);
+    notify(state, `No tui-action handler for ${item.action.action}`);
+    return handleLeaderAction({ type: 'dismiss' }, state, actions);
+  }
+  if (item.action.type === 'script' || item.action.type === 'popup') {
+    const t = TUI_HANDLERS[item.action.name as keyof typeof TUI_HANDLERS];
+    if (t) return handleLeaderAction({ type: t } as LeaderAction, state, actions);
+    notify(state, `No dashboard handler for ${item.action.name}`);
+    return handleLeaderAction({ type: 'dismiss' }, state, actions);
+  }
+  // tmux-only items silently dismissed on dashboard
+  handleLeaderAction({ type: 'dismiss' }, state, actions);
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -500,44 +518,14 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'spawn-agent': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      if (enterComposeMode(state, { kind: 'spawn-agent', sessionId: selectedSessionId }, actions)) return;
-      // Fallback to popup
-      {
-        const editor = actions.resolveEditor();
-        try {
-          const content = actions.editInPopup(state.cwd, editor);
-          if (content?.trim()) {
-            actions.sendAndNotify(
-              { type: 'spawn', sessionId: selectedSessionId, agentType: 'default', name: 'agent', instruction: content },
-              'Agent spawned',
-            );
-          }
-        } catch {
-          notify(state, 'Failed to open editor');
-        }
-      }
+      actions.composeViaPopup({ kind: 'spawn-agent', sessionId: selectedSessionId }, state, actions);
       break;
     }
 
     case 'message-agent': {
       const agent = actions.getAgentForNode(cursorNode);
       if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
-      if (enterComposeMode(state, { kind: 'message-agent', sessionId: selectedSessionId!, agentId: agent.id }, actions)) return;
-      // Fallback to popup
-      {
-        const editor = actions.resolveEditor();
-        try {
-          const content = actions.editInPopup(state.cwd, editor);
-          if (content?.trim()) {
-            actions.sendAndNotify(
-              { type: 'message', sessionId: selectedSessionId!, content, source: { type: 'agent', agentId: agent.id } },
-              `Message sent to ${agent.id}`,
-            );
-          }
-        } catch {
-          notify(state, 'Failed to open editor');
-        }
-      }
+      actions.composeViaPopup({ kind: 'message-agent', sessionId: selectedSessionId!, agentId: agent.id }, state, actions);
       break;
     }
 
@@ -607,6 +595,305 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       actions.cleanup();
       return;
 
+    case 'enter-open-menu':
+      state.mode = 'open-menu';
+      requestRender();
+      return;
+
+    case 'enter-agent-menu':
+      state.mode = 'agent-menu';
+      requestRender();
+      return;
+
+    case 'enter-session-menu':
+      state.mode = 'session-menu';
+      requestRender();
+      return;
+
+    case 'enter-go-menu':
+      state.mode = 'go-menu';
+      requestRender();
+      return;
+
+    case 'copy-latest-report': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const latest = findLatestReport(state.cwd, selectedSessionId);
+      if (!latest) { notify(state, 'No reports found'); break; }
+      try {
+        const content = readFileSync(latest, 'utf-8');
+        actions.copyToClipboard(content);
+        notify(state, `Copied latest report (${content.length} chars)`);
+      } catch {
+        notify(state, 'Failed to copy report');
+      }
+      break;
+    }
+
+    case 'copy-agent-id': {
+      const agent = actions.getAgentForNode(cursorNode);
+      if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
+      try {
+        actions.copyToClipboard(agent.id);
+        notify(state, `Copied agent ID (${agent.id})`);
+      } catch {
+        notify(state, 'Failed to copy to clipboard');
+      }
+      break;
+    }
+
+    case 'open-goal': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        actions.openEditorPopup(state.cwd, editor, goalPath(state.cwd, selectedSessionId));
+      } catch {
+        notify(state, 'Failed to open goal');
+      }
+      break;
+    }
+
+    case 'open-latest-report': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const latest = findLatestReport(state.cwd, selectedSessionId);
+      if (!latest) { notify(state, 'No reports found'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        actions.openEditorPopup(state.cwd, editor, latest);
+      } catch {
+        notify(state, 'Failed to open report');
+      }
+      break;
+    }
+
+    case 'open-scratch': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        actions.openEditorPopup(state.cwd, editor, join(sessionDir(state.cwd, selectedSessionId), 'scratch.md'));
+      } catch {
+        notify(state, 'Failed to open scratch');
+      }
+      break;
+    }
+
+    case 'edit-context-file': {
+      if (!cursorNode || cursorNode.type !== 'context-file') { notify(state, 'Cursor must be on a context file'); break; }
+      const editor = actions.resolveEditor();
+      try {
+        actions.openEditorPopup(state.cwd, editor, cursorNode.filePath);
+      } catch {
+        notify(state, 'Failed to open file in editor');
+      }
+      break;
+    }
+
+    case 'restart-agent': {
+      const agent = actions.getAgentForNode(cursorNode);
+      if (!agent || !selectedSessionId) { notify(state, 'Select an agent to restart'); break; }
+      actions.sendAndNotify(
+        { type: 'restart-agent', sessionId: selectedSessionId, agentId: agent.id },
+        `Restarted ${agent.id}`,
+      );
+      break;
+    }
+
+    case 'rerun-agent': {
+      const agent = actions.getAgentForNode(cursorNode);
+      if (!agent || !selectedSessionId) { notify(state, 'Select an agent to re-run'); break; }
+      actions.sendAndNotify(
+        {
+          type: 'spawn',
+          sessionId: selectedSessionId,
+          agentType: agent.agentType,
+          name: `${agent.name}-retry`,
+          instruction: agent.instruction,
+        },
+        `Re-spawned ${agent.name}`,
+      );
+      break;
+    }
+
+    case 'open-claude-agent': {
+      const agent = actions.getAgentForNode(cursorNode);
+      if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
+      if (!agent.claudeSessionId) { notify(state, 'No Claude session ID available'); break; }
+      try {
+        actions.openClaudeResumePopup(state.cwd, agent.claudeSessionId, agent.resumeEnv, agent.resumeArgs);
+      } catch {
+        notify(state, 'Failed to open Claude session');
+      }
+      break;
+    }
+
+    case 'tail-agent-logs': {
+      const agent = actions.getAgentForNode(cursorNode);
+      if (!agent) { notify(state, 'Cursor must be on an agent'); break; }
+      if (!agent.paneId) { notify(state, 'Agent has no active pane'); break; }
+      try {
+        actions.openShellPopup(state.cwd, `tmux capture-pane -t ${agent.paneId} -p -S -2000 | less +G`);
+      } catch {
+        notify(state, 'Failed to open logs');
+      }
+      break;
+    }
+
+    case 'kill-agent': {
+      const agent = actions.getAgentForNode(cursorNode);
+      if (!agent || !selectedSessionId) { notify(state, 'Select an agent to kill'); break; }
+      if (agent.status !== 'running') { notify(state, `Agent ${agent.id} is not running`); break; }
+      actions.sendAndNotify({ type: 'kill-agent', sessionId: selectedSessionId, agentId: agent.id }, `Killed ${agent.id}`);
+      break;
+    }
+
+    case 'quick-spawn-explore': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      let exploreInstruction: string;
+      try {
+        exploreInstruction = execSync('pbpaste', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
+      } catch {
+        notify(state, 'pbpaste not available — macOS only');
+        break;
+      }
+      if (exploreInstruction.length < 20) {
+        notify(state, `Clipboard too short (${exploreInstruction.length} chars; need 20+)`);
+        break;
+      }
+      actions.sendAndNotify(
+        { type: 'spawn', sessionId: selectedSessionId, agentType: 'sisyphus:explore', name: `explore-${Date.now()}`, instruction: exploreInstruction },
+        'Explore agent spawned',
+      );
+      break;
+    }
+
+    case 'quick-spawn-debug': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      let debugInstruction: string;
+      try {
+        debugInstruction = execSync('pbpaste', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
+      } catch {
+        notify(state, 'pbpaste not available — macOS only');
+        break;
+      }
+      if (debugInstruction.length < 20) {
+        notify(state, `Clipboard too short (${debugInstruction.length} chars; need 20+)`);
+        break;
+      }
+      actions.sendAndNotify(
+        { type: 'spawn', sessionId: selectedSessionId, agentType: 'sisyphus:debug', name: `debug-${Date.now()}`, instruction: debugInstruction },
+        'Debug agent spawned',
+      );
+      break;
+    }
+
+    case 'new-session': {
+      actions.composeViaPopup({ kind: 'new-session' }, state, actions);
+      break;
+    }
+
+    case 'resume-session': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      if (session?.status === 'active' && state.paneAlive) { notify(state, 'Session already active'); break; }
+      actions.composeViaPopup({ kind: 'resume', sessionId: selectedSessionId }, state, actions);
+      break;
+    }
+
+    case 'continue-session': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      if (session?.status !== 'completed') { notify(state, 'Session not completed'); break; }
+      actions.composeViaPopup({ kind: 'continue', sessionId: selectedSessionId }, state, actions);
+      break;
+    }
+
+    case 'rollback': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      try {
+        const text = actions.promptInPopup('Rollback to cycle:');
+        if (text?.trim()) {
+          const toCycle = parseInt(text.trim(), 10);
+          if (isNaN(toCycle) || toCycle < 1) { notify(state, 'Invalid cycle number'); break; }
+          actions.sendAndNotify(
+            { type: 'rollback', sessionId: selectedSessionId, cwd: state.cwd, toCycle },
+            `Rolled back to cycle ${toCycle} — use [R]esume to respawn`,
+          );
+        }
+      } catch {
+        notify(state, 'Failed to open prompt');
+      }
+      break;
+    }
+
+    case 'kill-session': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      actions.sendAndNotify({ type: 'kill', sessionId: selectedSessionId }, 'Session killed');
+      break;
+    }
+
+    case 'go-to-window': {
+      goToSessionWindow(state, actions);
+      break;
+    }
+
+    case 'clone-session': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      try {
+        actions.openShellPopup(state.cwd, `sisyphus clone ${selectedSessionId}`);
+      } catch {
+        notify(state, 'Failed to open shell');
+      }
+      break;
+    }
+
+    case 'history': {
+      try {
+        actions.openShellPopup(state.cwd, 'sisyphus history');
+      } catch {
+        notify(state, 'Failed to open shell');
+      }
+      break;
+    }
+
+    case 'pick-session': {
+      try {
+        actions.openShellPopup(state.cwd, 'sisyphus pick-session');
+      } catch {
+        notify(state, 'Failed to open shell');
+      }
+      break;
+    }
+
+    case 'cycle-session': {
+      try {
+        actions.openShellPopup(state.cwd, 'sisyphus cycle');
+      } catch {
+        notify(state, 'Failed to open shell');
+      }
+      break;
+    }
+
+    case 'reconnect': {
+      try {
+        actions.openShellPopup(state.cwd, 'sisyphus reconnect');
+      } catch {
+        notify(state, 'Failed to open shell');
+      }
+      break;
+    }
+
+    case 'message-orchestrator': {
+      if (!selectedSessionId) { notify(state, 'No session selected'); break; }
+      actions.composeViaPopup({ kind: 'message-orchestrator', sessionId: selectedSessionId }, state, actions);
+      break;
+    }
+
+    case 'show-status': {
+      try {
+        actions.openShellPopup(state.cwd, `sisyphus status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
+      } catch {
+        notify(state, 'Failed to open status');
+      }
+      break;
+    }
+
     case 'dismiss':
       closeBadgeGallery();
       break;
@@ -616,48 +903,11 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
   requestRender();
 }
 
-function handleLeaderKey(input: string, key: Key, state: AppState, actions: InputActions): void {
-  if (state.mode === 'leader') {
-    if (key.escape) { handleLeaderAction({ type: 'dismiss' }, state, actions); return; }
-    if (input === 'y') { handleLeaderAction({ type: 'enter-copy-menu' }, state, actions); return; }
-    if (input === 'd') { handleLeaderAction({ type: 'delete-session' }, state, actions); return; }
-    if (input === 'l') { handleLeaderAction({ type: 'open-logs' }, state, actions); return; }
-    if (input === 'o') { handleLeaderAction({ type: 'open-session-dir' }, state, actions); return; }
-    if (input === 's') { handleLeaderAction({ type: 'open-strategy' }, state, actions); return; }
-    if (input === 'r') { handleLeaderAction({ type: 'open-roadmap' }, state, actions); return; }
-    if (input === '/') { handleLeaderAction({ type: 'search' }, state, actions); return; }
-    if (input === 'a') { handleLeaderAction({ type: 'spawn-agent' }, state, actions); return; }
-    if (input === 'm') { handleLeaderAction({ type: 'message-agent' }, state, actions); return; }
-    if (input === '?') { handleLeaderAction({ type: 'help' }, state, actions); return; }
-    if (input === 'c') { handleLeaderAction({ type: 'companion-overlay' }, state, actions); return; }
-    if (input === 'D') { handleLeaderAction({ type: 'companion-debug' }, state, actions); return; }
-    if (input === '!') { handleLeaderAction({ type: 'shell-command' }, state, actions); return; }
-    if (input === 'E') { handleLeaderAction({ type: 'export-session' }, state, actions); return; }
-    if (input === 'j') { handleLeaderAction({ type: 'jump-to-pane' }, state, actions); return; }
-    if (input === 'k') { handleLeaderAction({ type: 'kill' }, state, actions); return; }
-    if (input === 'q') { handleLeaderAction({ type: 'quit' }, state, actions); return; }
-    const digit = parseInt(input, 10);
-    if (!isNaN(digit) && digit >= 1 && digit <= 9) {
-      handleLeaderAction({ type: 'jump-to-session', index: digit }, state, actions);
-      return;
-    }
-    handleLeaderAction({ type: 'dismiss' }, state, actions);
-    return;
-  }
-
-  if (state.mode === 'copy-menu') {
-    if (key.escape) { handleLeaderAction({ type: 'dismiss' }, state, actions); return; }
-    if (input === 'p') { handleLeaderAction({ type: 'copy-path' }, state, actions); return; }
-    if (input === 'C') { handleLeaderAction({ type: 'copy-context' }, state, actions); return; }
-    if (input === 'l') { handleLeaderAction({ type: 'copy-logs' }, state, actions); return; }
-    if (input === 's') { handleLeaderAction({ type: 'copy-session-id' }, state, actions); return; }
-    handleLeaderAction({ type: 'dismiss' }, state, actions);
-    return;
-  }
-
+function handleOverlayKey(input: string, key: Key, state: AppState, actions: InputActions): void {
   if (state.mode === 'help') {
-    if (key.escape || input === '?') { handleLeaderAction({ type: 'dismiss' }, state, actions); return; }
+    if (key.escape || input === '?') { handleLeaderAction({ type: 'dismiss' }, state, actions); }
     // any other key: ignore
+    return;
   }
 
   if (state.mode === 'companion-overlay') {
@@ -686,6 +936,119 @@ function handleLeaderKey(input: string, key: Key, state: AppState, actions: Inpu
   }
 }
 
+function handleLeaderKey(input: string, key: Key, state: AppState, actions: InputActions): void {
+  // Overlay modes (help, companion-overlay, companion-debug) are not in KEYMAP
+  if (state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
+    return handleOverlayKey(input, key, state, actions);
+  }
+
+  if (key.escape) { handleLeaderAction({ type: 'dismiss' }, state, actions); return; }
+
+  const menuId = MENU_FOR_MODE[state.mode];
+  if (!menuId) return;
+
+  const menu = menuId === 'topLevel' ? KEYMAP.topLevel : KEYMAP.submenus[menuId]!;
+  const item = menu.items.find(i => i.key === input);
+  if (!item) {
+    // Digit 1-9: jump to session — only at top level
+    if (state.mode === 'leader') {
+      const digit = parseInt(input, 10);
+      if (digit >= 1 && digit <= 9) {
+        handleLeaderAction({ type: 'jump-to-session', index: digit }, state, actions);
+        return;
+      }
+    }
+    handleLeaderAction({ type: 'dismiss' }, state, actions);
+    return;
+  }
+  dispatchItem(item, state, actions);
+}
+
+// Returns the scroll object that j/k should drive when detail pane is focused in stacked mode,
+// or null when the caller should fall through to normal tree/logs scroll logic.
+function getActiveDetailScroll(state: AppState) {
+  if (state.focusPane !== 'detail' || !state.useStackedDetail) return null;
+  if (state.detailMode === 'cycle-log') return state.detailScroll;
+  return state.focusedStrip === 'goal' ? state.goalScroll
+    : state.focusedStrip === 'strategy' ? state.strategyScroll
+    : state.roadmapScroll;
+}
+
+// ── handleResolutionKey ───────────────────────────────────────────────────────
+// Layered-key precedence (load-bearing — see src/tui/CLAUDE.md):
+// 1. esc always wins (even mid comment-buffer)
+// 2. Shift+J/K queue walk, gated by canAcceptHostKeys
+// 3. space/R visual gen/toggle, gated by canAcceptHostKeys
+// 4. fall-through to humanloop
+
+function handleResolutionKey(input: string, key: Key, state: AppState, actions: InputActions): void {
+  const handle = state.resolutionHandle;
+  if (!handle) return;
+
+  // 1. esc → exit resolution mode (always wins)
+  if (key.escape) {
+    handle.unmount();
+    return;
+  }
+
+  // 2. Shift+J / Shift+K → queue walk (only when humanloop can accept host keys)
+  if (input === 'J' && handle.canAcceptHostKeys()) {
+    handle.advanceQueue(+1);
+    return;
+  }
+  if (input === 'K' && handle.canAcceptHostKeys()) {
+    handle.advanceQueue(-1);
+    return;
+  }
+
+  // 3. space → toggle visual / fire generation (gated)
+  if (input === ' ' && handle.canAcceptHostKeys()) {
+    handle.spaceVisualToggle();
+    return;
+  }
+
+  // 4. R → force regenerate visual (gated)
+  if (input === 'R' && handle.canAcceptHostKeys()) {
+    handle.regenerateVisual();
+    return;
+  }
+
+  // 5. Fall-through to humanloop
+  handle.handleKey(input, key);
+  requestRender();
+}
+
+// ── Focus cycle ───────────────────────────────────────────────────────────────
+// Tab / Shift-Tab walks an ordered list of focus stops. In stacked gsr mode,
+// the detail pane expands into three strip stops (goal/strategy/roadmap).
+
+type FocusStop = {
+  pane: AppState['focusPane'];
+  strip?: AppState['focusedStrip'];
+};
+
+function focusCycle(state: AppState): FocusStop[] {
+  const stops: FocusStop[] = [{ pane: 'tree' }];
+  if (state.useStackedDetail && state.detailMode === 'gsr') {
+    stops.push({ pane: 'detail', strip: 'goal' });
+    stops.push({ pane: 'detail', strip: 'strategy' });
+    stops.push({ pane: 'detail', strip: 'roadmap' });
+  } else {
+    stops.push({ pane: 'detail', ...(state.useStackedDetail ? { strip: 'goal' as const } : {}) });
+  }
+  stops.push({ pane: 'logs' });
+  return stops;
+}
+
+function currentFocusIndex(stops: FocusStop[], state: AppState): number {
+  const exact = stops.findIndex(
+    (s) => s.pane === state.focusPane && (s.strip === undefined || s.strip === state.focusedStrip),
+  );
+  if (exact !== -1) return exact;
+  const fuzzy = stops.findIndex((s) => s.pane === state.focusPane);
+  return fuzzy === -1 ? 0 : fuzzy;
+}
+
 // ── handleNavigateKey ─────────────────────────────────────────────────────────
 
 function handleNavigateKey(input: string, key: Key, state: AppState, actions: InputActions): void {
@@ -695,11 +1058,13 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // k / ↑
   if (key.upArrow || input === 'k') {
-    if (state.focusPane === 'detail') {
+    const upScroll = getActiveDetailScroll(state);
+    if (upScroll) {
+      upScroll.scrollBy(-1);
+    } else if (state.focusPane === 'detail') {
       state.detailScroll.scrollBy(-1);
     } else if (state.focusPane === 'logs') {
-      const rightScroll = state.rightPanelMode === 'digest' ? state.digestScroll : state.logsScroll;
-      rightScroll.scrollBy(-1);
+      state.digestScroll.scrollBy(-1);
     } else {
       state.cursorIndex = Math.max(0, state.cursorIndex - 1);
       state.cursorNodeId = nodes[state.cursorIndex]?.id ?? state.cursorNodeId;
@@ -710,11 +1075,13 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // j / ↓
   if (key.downArrow || input === 'j') {
-    if (state.focusPane === 'detail') {
+    const downScroll = getActiveDetailScroll(state);
+    if (downScroll) {
+      downScroll.scrollBy(1);
+    } else if (state.focusPane === 'detail') {
       state.detailScroll.scrollBy(1);
     } else if (state.focusPane === 'logs') {
-      const rightScroll = state.rightPanelMode === 'digest' ? state.digestScroll : state.logsScroll;
-      rightScroll.scrollBy(1);
+      state.digestScroll.scrollBy(1);
     } else {
       state.cursorIndex = Math.min(nodes.length - 1, state.cursorIndex + 1);
       state.cursorNodeId = nodes[state.cursorIndex]?.id ?? state.cursorNodeId;
@@ -723,18 +1090,37 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
+  // u / d — fast scroll (vim-style ½-page) for detail/log strips. Tree focus
+  // intentionally ignores these so cursor navigation stays single-step (j/k).
+  // Roughly half the visible terminal height, clamped to a sensible band so a
+  // tiny terminal still moves and a tall one doesn't leap past the strip.
+  if (input === 'u' || input === 'd') {
+    const direction = input === 'u' ? -1 : 1;
+    const fastStep = Math.max(5, Math.min(20, Math.floor(state.rows / 4))) * direction;
+    const fastScroll = getActiveDetailScroll(state);
+    if (fastScroll) {
+      fastScroll.scrollBy(fastStep);
+      return;
+    }
+    if (state.focusPane === 'detail') {
+      state.detailScroll.scrollBy(fastStep);
+      return;
+    }
+    if (state.focusPane === 'logs') {
+      state.digestScroll.scrollBy(fastStep);
+      return;
+    }
+    return;
+  }
+
   // h / ←
   if (key.leftArrow || input === 'h') {
     if (state.focusPane === 'logs') {
       state.focusPane = 'detail';
-      if (state.nvimEnabled && state.nvimBridge?.ready) {
-        activateNvimBypass(state);
-      }
       requestRender();
       return;
     }
     if (state.focusPane === 'detail') {
-      deactivateNvimBypass();
       state.focusPane = 'tree';
       requestRender();
       return;
@@ -759,6 +1145,20 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (key.rightArrow || input === 'l') {
     const node = nodes[state.cursorIndex];
     if (!node) return;
+    // When stacked detail active and cursor is on an already-expanded session in tree focus,
+    // toggle between gsr and cycle-log detail mode instead of moving into child.
+    if (
+      state.useStackedDetail &&
+      state.focusPane === 'tree' &&
+      node.type === 'session' &&
+      node.expanded
+    ) {
+      state.detailMode = state.detailMode === 'gsr' ? 'cycle-log' : 'gsr';
+      state.cachedStackedLines = null;
+      state.stackedCacheKey = '';
+      requestRender();
+      return;
+    }
     if (node.expandable && !node.expanded) {
       state.expanded.add(node.id);
       expandSessionLatestCycle(state, node);
@@ -774,19 +1174,13 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // tab: cycle focus panes
+  // tab / shift+tab: walk the focus cycle forward / backward
   if (key.tab) {
-    if (state.focusPane === 'tree') {
-      state.focusPane = 'detail';
-      if (state.nvimEnabled && state.nvimBridge?.ready) {
-        activateNvimBypass(state);
-      }
-    } else if (state.focusPane === 'detail') {
-      deactivateNvimBypass();
-      state.focusPane = state.showCombinedView ? 'logs' : 'tree';
-    } else {
-      state.focusPane = 'tree';
-    }
+    const stops = focusCycle(state);
+    const idx = currentFocusIndex(stops, state);
+    const next = stops[(idx + (key.shift ? -1 : 1) + stops.length) % stops.length]!;
+    state.focusPane = next.pane;
+    if (next.strip) state.focusedStrip = next.strip;
     requestRender();
     return;
   }
@@ -798,11 +1192,30 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // enter: expand / report-detail / open context file
+  // enter: expand / report-detail / open context file / resolution mode
   if (key.return) {
     const node = nodes[state.cursorIndex];
     if (!node) return;
-    if (node.expandable && !node.expanded) {
+    if (node.type === 'needs-you-virtual') {
+      const firstItem = state.aggregateInbox[0];
+      if (firstItem) {
+        enterResolutionMode(state, firstItem.askId, actions.send, async ({ sessionId, agentId, paneId }) => {
+          const res = await actions.send({ type: 'status', sessionId });
+          const sess = res.ok ? (res.data?.session as Session | undefined) : undefined;
+          if (!sess) { notify(state, 'Session not found'); return; }
+          if (paneId && actions.paneExists(paneId)) {
+            if (sess.tmuxSessionName) actions.switchToSession(sess.tmuxSessionName);
+            if (sess.tmuxWindowId) actions.selectWindow(sess.tmuxWindowId);
+            actions.selectPane(paneId);
+            return;
+          }
+          if (sess.tmuxSessionName) actions.switchToSession(sess.tmuxSessionName);
+          notify(state, `Pane ${paneId ? paneId : '?'} is gone — agent ${agentId} cannot be taken over.`);
+        });
+      } else {
+        notify(state, 'No pending asks');
+      }
+    } else if (node.expandable && !node.expanded) {
       state.expanded.add(node.id);
       expandSessionLatestCycle(state, node);
       requestRender();
@@ -824,48 +1237,13 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   // m: message orchestrator
   if (input === 'm') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
-    if (enterComposeMode(state, { kind: 'message-orchestrator', sessionId: state.selectedSessionId }, actions)) return;
-    // Fallback to popup
-    const editor = actions.resolveEditor();
-    try {
-      const content = actions.editInPopup(state.cwd, editor);
-      if (content) {
-        actions.sendAndNotify(
-          { type: 'message', sessionId: state.selectedSessionId, content },
-          'Message queued',
-        );
-      }
-    } catch {
-      notify(state, 'Failed to open editor');
-    }
+    actions.composeViaPopup({ kind: 'message-orchestrator', sessionId: state.selectedSessionId }, state, actions);
     return;
   }
 
   // w: go to tmux window (or resume orchestrator Claude session if window is dead/completed)
   if (input === 'w') {
-    if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
-
-    // If the session's own tmux window is alive, switch to it directly
-    if (session.status !== 'completed' && state.paneAlive && session.tmuxWindowId) {
-      const switchTarget = session.tmuxSessionId ?? session.tmuxSessionName;
-      if (switchTarget) actions.switchToSession(switchTarget);
-      actions.selectWindow(session.tmuxWindowId);
-      return;
-    }
-
-    // Window is gone (paused, completed, or active-but-dead) — resume the last
-    // orchestrator Claude session in a fresh tmux session for review/continuation.
-    // Does not touch sisyphus state; use R to respawn the orchestrator.
-    const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
-    const claudeSessionId = lastCycle?.claudeSessionId;
-    if (!claudeSessionId) { notify(state, 'No orchestrator Claude session ID available'); return; }
-    try {
-      const label = session.name ?? state.selectedSessionId!.slice(0, 8);
-      const sessionName = actions.openClaudeResumeSession(state.cwd, state.selectedSessionId, claudeSessionId, label, lastCycle.resumeEnv, lastCycle.resumeArgs, lastCycle.cycle, lastCycle.mode);
-      actions.switchToSession(sessionName);
-    } catch {
-      notify(state, 'Failed to open Claude session');
-    }
+    goToSessionWindow(state, actions);
     return;
   }
 
@@ -910,20 +1288,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // n: new session
   if (input === 'n') {
-    if (enterComposeMode(state, { kind: 'new-session' }, actions)) return;
-    // Fallback to popup
-    const editor = actions.resolveEditor();
-    try {
-      const content = actions.editInPopup(state.cwd, editor);
-      if (content) {
-        actions.sendAndNotify(
-          { type: 'start', task: content, cwd: state.cwd },
-          'Session created',
-        );
-      }
-    } catch {
-      notify(state, 'Failed to open editor');
-    }
+    actions.composeViaPopup({ kind: 'new-session' }, state, actions);
     return;
   }
 
@@ -976,21 +1341,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'R') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     if (session?.status === 'active' && state.paneAlive) { notify(state, 'Session already active'); return; }
-    if (enterComposeMode(state, { kind: 'resume', sessionId: state.selectedSessionId }, actions)) return;
-    // Fallback to popup
-    {
-      const sessionId = state.selectedSessionId;
-      const editor = actions.resolveEditor();
-      try {
-        const content = actions.editInPopup(state.cwd, editor);
-        actions.sendAndNotify(
-          { type: 'resume', sessionId, cwd: state.cwd, message: content?.trim() || undefined },
-          'Session resumed',
-        );
-      } catch {
-        notify(state, 'Failed to open editor');
-      }
-    }
+    actions.composeViaPopup({ kind: 'resume', sessionId: state.selectedSessionId }, state, actions);
     return;
   }
 
@@ -998,25 +1349,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (input === 'C') {
     if (!state.selectedSessionId) { notify(state, 'No session selected'); return; }
     if (session?.status !== 'completed') { notify(state, 'Session not completed'); return; }
-    if (enterComposeMode(state, { kind: 'continue', sessionId: state.selectedSessionId }, actions)) return;
-    // Fallback to popup
-    {
-      const sessionId = state.selectedSessionId;
-      const editor = actions.resolveEditor();
-      void (async () => {
-        try {
-          const content = actions.editInPopup(state.cwd, editor);
-          const contRes = await actions.send({ type: 'continue', sessionId });
-          if (!contRes.ok) { notify(state, `Error: ${contRes.error}`); return; }
-          actions.sendAndNotify(
-            { type: 'resume', sessionId, cwd: state.cwd, message: content?.trim() || undefined },
-            'Session continued',
-          );
-        } catch (err) {
-          notify(state, `Error: ${(err as Error).message}`);
-        }
-      })();
-    }
+    actions.composeViaPopup({ kind: 'continue', sessionId: state.selectedSessionId }, state, actions);
     return;
   }
 
@@ -1080,12 +1413,12 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // F: toggle cycle flow expanded/collapsed
   if (input === 'F') {
-    if (state.rightPanelMode === 'digest' || cursorNode?.type === 'session') {
-      state.flowExpanded = !state.flowExpanded;
-      state.cachedDetailLines = null;
-      state.cachedDigestLines = null;
-      requestRender();
-    }
+    state.flowExpanded = !state.flowExpanded;
+    state.cachedDetailLines = null;
+    state.cachedDigestLines = null;
+    state.cachedStackedLines = null;
+    state.stackedCacheKey = '';
+    requestRender();
     return;
   }
 
@@ -1097,18 +1430,6 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
-  // t: toggle right panel content between digest and logs
-  if (input === 't') {
-    if (state.rightPanelMode === 'digest') {
-      state.rightPanelMode = 'logs';
-      state.logsScroll.reset();
-    } else {
-      state.rightPanelMode = 'digest';
-      state.digestScroll.reset();
-    }
-    requestRender();
-    return;
-  }
 }
 
 // ── handleSearchKey ──────────────────────────────────────────────────────────
@@ -1148,12 +1469,14 @@ function handleSearchKey(input: string, key: Key, state: AppState): void {
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
 export function handleKeypress(input: string, key: Key, state: AppState, actions: InputActions): void {
-  // Compose mode: all input goes through nvim bypass — nothing to handle here
-  if (state.mode === 'compose') return;
-
+  // Resolution mode intercepts all keys (before mode checks — esc always exits)
+  if (state.resolutionActive) {
+    handleResolutionKey(input, key, state, actions);
+    return;
+  }
   if (state.mode === 'search') {
     handleSearchKey(input, key, state);
-  } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
+  } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'open-menu' || state.mode === 'agent-menu' || state.mode === 'session-menu' || state.mode === 'go-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
     handleLeaderKey(input, key, state, actions);
   } else if (state.mode === 'report-detail') {
     handleReportDetailKey(input, key, state, actions);

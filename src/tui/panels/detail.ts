@@ -38,6 +38,7 @@ import {
   type DetailLine,
 } from '../lib/format.js';
 import { buildCycleFlowLines } from './cycle-flow.js';
+import { coerceKind } from '../../shared/inbox-types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -217,6 +218,15 @@ function buildSessionLines(
       seg('  '),
       seg(' ✕ DEAD ', { color: 'red', bold: true }),
       seg(' tmux window closed — [w] reopen  [R] resume', { color: 'red' }),
+    ]);
+  }
+
+  // Orphan tag
+  if (session.orphaned) {
+    lines.push([
+      seg('  '),
+      seg('⚠ orphan', { color: 'red', bold: true }),
+      seg(' — orchestrator process lost', { color: 'red' }),
     ]);
   }
 
@@ -494,7 +504,7 @@ function buildReportViewLines(agent: Agent, reportBlocks: ReportBlock[], width: 
 // buildLogsLines (ported from LogsPanel.tsx buildLines)
 // ---------------------------------------------------------------------------
 
-function buildLogsLines(cycleLogs: CycleLog[], width: number): DetailLine[] {
+export function buildLogsLines(cycleLogs: CycleLog[], width: number): DetailLine[] {
   const lines: DetailLine[] = [];
   const contentWidth = width - 4;
 
@@ -533,7 +543,6 @@ export function renderDetailRows(
   detailCtx: DetailContext,
 ): string[] {
   const { session, agents, reportBlocks, detailReportBlocks, contextFileContent } = detailCtx;
-  const scrollOffset = state.detailScroll.offset;
   const focused = state.focusPane === 'detail';
 
   // Report detail mode — full panel
@@ -541,7 +550,7 @@ export function renderDetailRows(
     const reportAgent = agents.find((a) => a.id === state.targetAgentId);
     if (reportAgent) {
       const lines = buildReportViewLines(reportAgent, reportBlocks, rect.w);
-      return buildPanelRows(rect, lines, scrollOffset, focused, 'cyan');
+      return buildPanelRows(rect, lines, state.detailScroll, focused, 'cyan');
     }
   }
 
@@ -740,7 +749,7 @@ export function renderDetailRows(
     }
   }
 
-  return buildPanelRows(rect, lines, scrollOffset, focused, borderColor, state.detailRenderedCache);
+  return buildPanelRows(rect, lines, state.detailScroll, focused, borderColor, state.detailRenderedCache);
 }
 
 // ---------------------------------------------------------------------------
@@ -785,14 +794,135 @@ function buildDigestLines(digest: StatusDigest, width: number): DetailLine[] {
   return lines;
 }
 
+function buildDoneDigestLines(session: Session, digest: StatusDigest | null, width: number): DetailLine[] {
+  const lines: DetailLine[] = [];
+  const contentWidth = width - 4;
+
+  // KPI band — most-asked stats first
+  const kpiCycles = session.orchestratorCycles.length;
+  const kpiAgents = session.agents.length;
+  const kpiWall = session.wallClockMs
+    ? formatMs(session.wallClockMs)
+    : (session.completedAt ? formatDuration(session.createdAt, session.completedAt) : '—');
+  const kpiActive = formatMs(computeActiveTimeMs(session));
+
+  lines.push([seg('  Stats', { color: 'cyan', bold: true })]);
+  lines.push([
+    seg('    cycles ', { dim: true }),
+    seg(String(kpiCycles), { color: 'white', bold: true }),
+    seg('  ·  agents ', { dim: true }),
+    seg(String(kpiAgents), { color: 'white', bold: true }),
+  ]);
+  lines.push([
+    seg('    wall ', { dim: true }),
+    seg(kpiWall, { color: 'white', bold: true }),
+    seg('  ·  active ', { dim: true }),
+    seg(kpiActive, { color: 'white', bold: true }),
+  ]);
+  lines.push(singleLine(''));
+
+  // What shipped (recapped from digest if present)
+  if (digest?.recentWork) {
+    lines.push([seg('  What shipped', { color: 'cyan', bold: true })]);
+    for (const wl of wrapText(digest.recentWork, contentWidth - 4)) {
+      lines.push(singleLine(`    ${wl}`));
+    }
+    lines.push(singleLine(''));
+  }
+
+  // Final state — replaces Now/Up Next
+  lines.push([seg('  Final', { color: 'white', bold: true })]);
+  if (session.completedAt) {
+    lines.push([seg(`    completed ${formatTimestampShort(session.completedAt)}`, { dim: true })]);
+  }
+  if (digest?.currentActivity) {
+    for (const wl of wrapText(digest.currentActivity, contentWidth - 4)) {
+      lines.push([seg(`    ${wl}`, { dim: true })]);
+    }
+  }
+  lines.push(singleLine(''));
+
+  // Notable — preserved from Unusual; still useful post-hoc
+  if (digest && digest.unusualEvents.length > 0) {
+    lines.push([seg('  Notable', { color: 'yellow', bold: true })]);
+    for (const event of digest.unusualEvents) {
+      for (const wl of wrapText(`· ${event}`, contentWidth - 4)) {
+        lines.push([seg(`    ${wl}`, { color: 'yellow' })]);
+      }
+    }
+  }
+
+  return lines;
+}
+
+function formatMs(ms: number): string {
+  if (!ms || ms < 0) return '—';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m${sec % 60 ? ` ${sec % 60}s` : ''}`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h${min % 60 ? ` ${min % 60}m` : ''}`;
+}
+
+function formatTimestampShort(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function renderFleetRollup(rect: Rect, state: AppState, focused: boolean): string[] {
+  const items = state.aggregateInbox;
+  const sessions = state.sessions;
+  const cacheKey = `rollup:${items.length}:${sessions.length}:${items.map(i => `${i.askId}:${i.status}`).join(',')}:${rect.w}`;
+  let lines: DetailLine[];
+  if (cacheKey === state.digestCacheKey && state.cachedDigestLines !== null) {
+    lines = state.cachedDigestLines;
+  } else {
+    const byKind = new Map<string, number>();
+    for (const i of items) {
+      const k = coerceKind(i.kind);
+      byKind.set(k, (byKind.get(k) ?? 0) + 1);
+    }
+    const byStatus = new Map<string, number>();
+    for (const s of sessions) {
+      byStatus.set(s.status, (byStatus.get(s.status) ?? 0) + 1);
+    }
+    const uniqueSessions = new Set(items.map(i => i.sessionId)).size;
+    lines = [];
+    lines.push([seg('  Fleet Inbox', { color: 'red', bold: true })]);
+    lines.push(singleLine(`    ${items.length} pending across ${uniqueSessions} sessions`, { dim: true }));
+    lines.push(singleLine(' '));
+    lines.push([seg('  By Type', { color: 'cyan', bold: true })]);
+    for (const [kind, count] of byKind) {
+      lines.push(singleLine(`    · ${kind}: ${count}`, { dim: true }));
+    }
+    lines.push(singleLine(' '));
+    lines.push([seg('  Sessions', { color: 'white', bold: true })]);
+    for (const [status, count] of byStatus) {
+      lines.push(singleLine(`    · ${status}: ${count}`, { dim: true }));
+    }
+    state.cachedDigestLines = lines;
+    state.digestCacheKey = cacheKey;
+  }
+  return buildPanelRows(rect, lines, state.digestScroll, focused, 'red', state.digestRenderedCache);
+}
+
 export function renderDigestRows(
   rect: Rect,
   state: AppState,
 ): string[] {
   const focused = state.focusPane === 'logs';
-  const scrollOffset = state.digestScroll.offset;
   const digest = state.digestData;
   const session = state.selectedSession;
+
+  if (state.detailMode === 'cross-session-inbox') {
+    return renderFleetRollup(rect, state, focused);
+  }
 
   if (!digest && !session) {
     return buildEmptyPanelRows(rect, focused, 'cyan', '\x1b[2mAwaiting digest...\x1b[0m');
@@ -801,9 +931,11 @@ export function renderDigestRows(
   // Combined cache key: digest + flow inputs
   const lastCycle = session?.orchestratorCycles[session.orchestratorCycles.length - 1];
   const agentStatuses = session?.agents.map(a => `${a.id}:${a.status}`).join(',') ?? '';
+  const isDone = session?.status === 'completed';
   const cacheKey = [
     JSON.stringify(digest),
     session?.id ?? '',
+    session?.status ?? '',
     session?.orchestratorCycles.length ?? 0,
     lastCycle?.completedAt ?? '',
     lastCycle?.agentsSpawned.length ?? 0,
@@ -818,7 +950,9 @@ export function renderDigestRows(
     lines = state.cachedDigestLines;
   } else {
     lines = [];
-    if (digest) {
+    if (isDone && session) {
+      lines.push(...buildDoneDigestLines(session, digest, rect.w));
+    } else if (digest) {
       lines.push(...buildDigestLines(digest, rect.w));
     }
     if (session) {
@@ -829,29 +963,7 @@ export function renderDigestRows(
     state.digestCacheKey = cacheKey;
   }
 
-  return buildPanelRows(rect, lines, scrollOffset, focused, 'cyan', state.digestRenderedCache);
+  return buildPanelRows(rect, lines, state.digestScroll, focused, 'cyan', state.digestRenderedCache);
 }
 
-export function renderLogsRows(
-  rect: Rect,
-  state: AppState,
-): string[] {
-  const focused = state.focusPane === 'logs';
-  const scrollOffset = state.logsScroll.offset;
 
-  if (state.logsCycles.length === 0) {
-    return buildEmptyPanelRows(rect, focused, 'gray', '\x1b[2mNo logs\x1b[0m');
-  }
-
-  const logsCacheKey = `${state.logsCycles.length}:${rect.w}:${state.logsCycles.map((c) => c.cycle).join(',')}`;
-  let lines: DetailLine[];
-  if (logsCacheKey === state.logsCacheKey && state.cachedLogsLines !== null) {
-    lines = state.cachedLogsLines;
-  } else {
-    lines = buildLogsLines(state.logsCycles, rect.w);
-    state.cachedLogsLines = lines;
-    state.logsCacheKey = logsCacheKey;
-  }
-
-  return buildPanelRows(rect, lines, scrollOffset, focused, 'gray', state.logsRenderedCache);
-}

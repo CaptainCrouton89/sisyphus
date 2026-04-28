@@ -18,7 +18,7 @@ You WILL receive:
 - A path to `$SISYPHUS_SESSION_DIR/context/design-rendered.txt`
 - A path to write your output
 
-Why this matters: requirements must be extracted only from what is actually documented in the design. If something the user "intended" isn't in the design, it must not appear in the requirements. If the design is ambiguous on a point, capture the ambiguity as an `openQuestion` — do not infer intent.
+Why this matters: requirements must be extracted only from what is actually documented in the design. If something the user "intended" isn't in the design, it must not appear in the requirements. If the design is ambiguous on a point, note it in `agentNotes` on the most relevant requirement — do not infer intent.
 
 Do not search the codebase to fill gaps. Do not ask the user (you have no UI in this role). Work strictly from `design-rendered.txt`.
 
@@ -35,7 +35,7 @@ Do not search the codebase to fill gaps. Do not ask the user (you have no UI in 
 4. For each behavior, decide: is this **load-bearing** (the user must review and approve) or a **safe assumption** (obvious, standard-convention, low-risk — bulk-approvable)?
 5. Write each load-bearing behavior as one EARS-format requirement.
 6. Write each safe assumption as one item in `safeAssumptions[]`.
-7. If the design is ambiguous on a point, add an `openQuestion` to the relevant group.
+7. If the design is ambiguous on a point, note the ambiguity in `agentNotes` on the most relevant requirement. Surfacing unresolved points to the user (as `kind: 'decision'` decks) is the spec lead's responsibility during Stage 2 — the writer remains isolated and does not interact with the user.
 
 ## Conciseness
 
@@ -70,9 +70,8 @@ Standard requirement JSON shape:
     { "text": "Criterion description", "checked": false }
   ],
   "status": "draft",
-  "agentNotes": "Your reasoning or caveats — shown to the user in the TUI",
-  "userNotes": "",
-  "questions": []
+  "agentNotes": "Your reasoning or caveats about this requirement",
+  "userNotes": ""
 }
 ```
 
@@ -105,10 +104,9 @@ Write a JSON object with the following shape:
       "id": "group-id",
       "name": "Group Name",
       "description": "One sentence describing what this group covers.",
-      "context": "Markdown context for the group — rendered in the TUI before the user reviews items.",
+      "context": "Markdown context for the group — rendered into the review prompt before requirement items.",
       "requirements": [ ],
-      "safeAssumptions": [ ],
-      "openQuestions": [ ]
+      "safeAssumptions": [ ]
     }
   ]
 }

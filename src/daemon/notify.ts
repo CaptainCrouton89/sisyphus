@@ -4,14 +4,22 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { escapeAppleScript } from '../shared/shell.js';
 
+/**
+ * Notification urgency.
+ * - `urgent` (default): plays sound, banner; for crashes, asks, things needing real attention
+ * - `info`: silent passive banner; for status updates the user only needs to acknowledge
+ */
+export type NotificationLevel = 'info' | 'urgent';
+
 export interface NotificationOptions {
   title: string;
   message: string;
   /** tmux session name to switch to on click */
   tmuxSession?: string;
+  level?: NotificationLevel;
 }
 
-const TMUX_SOCKET = `/tmp/tmux-${process.getuid()}/default`;
+const TMUX_SOCKET = `/tmp/tmux-${process.getuid?.() ?? 0}/default`;
 
 const SWITCH_SCRIPT = [
   '#!/bin/bash',
@@ -94,45 +102,57 @@ function ensureNotifyProcess(): ChildProcess | null {
     notifyProcess = null;
   });
 
+  // Don't keep short-lived parents alive (CLI, tests). The daemon stays up
+  // for other reasons; when it exits, the notify subprocess sees stdin EOF.
+  notifyProcess.unref();
+  notifyProcess.stdin?.unref();
+  notifyProcess.stderr?.unref();
+
   return notifyProcess;
 }
 
 export function sendTerminalNotification(opts: NotificationOptions): void;
-export function sendTerminalNotification(title: string, message: string, tmuxSession?: string): void;
-export function sendTerminalNotification(titleOrOpts: string | NotificationOptions, message?: string, tmuxSession?: string): void {
+export function sendTerminalNotification(title: string, message: string, tmuxSession?: string, level?: NotificationLevel): void;
+export function sendTerminalNotification(titleOrOpts: string | NotificationOptions, message?: string, tmuxSession?: string, level?: NotificationLevel): void {
   let title: string;
   let msg: string;
   let tmuxSess: string | undefined;
+  let lvl: NotificationLevel;
 
   if (typeof titleOrOpts === 'object') {
     title = titleOrOpts.title;
     msg = titleOrOpts.message;
     tmuxSess = titleOrOpts.tmuxSession;
+    lvl = titleOrOpts.level ?? 'urgent';
   } else {
     title = titleOrOpts;
     msg = message!;
     tmuxSess = tmuxSession;
+    lvl = level ?? 'urgent';
   }
 
   // Ensure the switch script is in place
   if (tmuxSess) ensureSwitchScript();
 
-  // Try native SisyphusNotify.app (supports click-to-switch)
+  // Try native SisyphusNotify.app (supports click-to-switch + level styling)
   const proc = ensureNotifyProcess();
   if (proc?.stdin?.writable) {
-    const payload: Record<string, string> = { title, message: msg };
+    const payload: Record<string, string> = { title, message: msg, level: lvl };
     if (tmuxSess) payload.tmuxSession = tmuxSess;
     proc.stdin.write(JSON.stringify(payload) + '\n');
     return;
   }
 
-  // Fallback: terminal-notifier (no click action)
-  execFile('terminal-notifier', ['-title', title, '-message', msg], (err) => {
+  // Fallback: terminal-notifier — sound only on urgent
+  const tnArgs = ['-title', title, '-message', msg];
+  if (lvl === 'urgent') tnArgs.push('-sound', 'default');
+  execFile('terminal-notifier', tnArgs, (err) => {
     if (err) {
       // Last resort: osascript — use escapeAppleScript for safe string interpolation
+      const soundClause = lvl === 'urgent' ? ' sound name "default"' : '';
       execFile('osascript', [
         '-e',
-        `display notification "${escapeAppleScript(msg)}" with title "${escapeAppleScript(title)}"`,
+        `display notification "${escapeAppleScript(msg)}" with title "${escapeAppleScript(title)}"${soundClause}`,
       ], () => {});
     }
   });

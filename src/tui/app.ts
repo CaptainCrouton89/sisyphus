@@ -17,7 +17,7 @@ import { writeToStdout, startKeypressListener, onResize } from './terminal.js';
 import { buildTree } from './lib/tree.js';
 import { precomputePrefixes } from './lib/tree-render.js';
 import { resolveReports } from './lib/reports.js';
-import { send } from './lib/client.js';
+import { send, inboxList } from './lib/client.js';
 import {
   listAllWindowIds,
   openEditorPopup,
@@ -28,6 +28,7 @@ import {
   selectWindow,
   selectPane,
   switchToSession,
+  paneExists,
   openLogPopup,
   openShellPopup,
   openInFileManager,
@@ -36,18 +37,18 @@ import {
 import { copyToClipboard } from './lib/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
 import { renderTreePanel } from './panels/tree.js';
-import { renderDetailRows, renderLogsRows, renderDigestRows, type DetailContext } from './panels/detail.js';
-import { renderNvimDetailRows } from './panels/nvim-detail.js';
+import { renderDetailRows, renderDigestRows, type DetailContext } from './panels/detail.js';
+import { renderStackedDetailRows } from './panels/stacked-detail.js';
 import { renderStatusLine } from './panels/bottom.js';
-import { renderLeaderOverlay, renderCopyMenuOverlay, renderHelpOverlay, renderCompanionOverlay, renderCompanionDebugOverlay } from './panels/overlays.js';
+import { renderCrossSessionInboxRows } from './panels/cross-session-inbox.js';
+import { renderSubmenuOverlay, renderHelpOverlay, renderCompanionOverlay, renderCompanionDebugOverlay } from './panels/overlays.js';
+import { KEYMAP, MENU_FOR_MODE } from '../shared/keymap.js';
 import { companionPath } from '../shared/paths.js';
 import type { CompanionState } from '../shared/companion-types.js';
-import { NvimBridge } from './lib/nvim-bridge.js';
-import { resolveNvimFile } from './lib/overview-writer.js';
+import { composeViaPopup, ensureSisyphusInitLua } from './lib/popup-compose.js';
 import { loadConfig } from '../shared/config.js';
 import { roadmapPath, goalPath, strategyPath, logsDir, contextDir, digestPath } from '../shared/paths.js';
 import { statusIndicator, formatDuration, statusColor, agentStatusIcon, agentDisplayName, truncate, ansiColor, ansiDim, ansiBold } from './lib/format.js';
-import { COMPOSE_HEADERS } from './state.js';
 import type { TreeNode } from './types/tree.js';
 import type { Agent, Session, StatusDigest } from '../shared/types.js';
 
@@ -80,6 +81,8 @@ let cachedContextFileContent: string | null = null;
 // ── Previous frame for diffing ────────────────────────────────────────────────
 
 let prevFrame: string[] = [];
+// Tracks last known resolution state so render() can reset prevFrame on transition
+let prevResolutionActive = false;
 
 // ── Panel dirty tracking ─────────────────────────────────────────────────────
 // Tracks the inputs that affect each panel. When only the scroll offset changes,
@@ -103,6 +106,81 @@ let cachedTreeRows: string[] = [];
 let cachedLogSessionId: string | null = null;
 let cachedLogFiles: Map<string, { mtime: number; cycle: number; content: string }> = new Map();
 
+// ── Resolution frame renderer (3e) ───────────────────────────────────────────
+
+function renderResolutionFrame(buf: import('./render.js').FrameBuffer, state: AppState): void {
+  const handle = state.resolutionHandle!;
+  const info = handle.getHeaderInfo();
+  const now = new Date().toISOString();
+
+  // Build header strip (row 0)
+  // Format: [esc] back   ●●●○○ N of M   sessionName/title   ⏱ blocked Xm
+  const escPart = ansiDim(' [esc] back');
+
+  // Queue dots (max 12)
+  const dotLimit = 12;
+  const qLen = info.queueLength;
+  let dotsPart = '';
+  if (qLen <= dotLimit) {
+    for (let i = 0; i < qLen; i++) {
+      dotsPart += i < info.currentIndex ? '●' : '○';
+    }
+  } else {
+    for (let i = 0; i < dotLimit; i++) {
+      dotsPart += i < info.currentIndex ? '●' : '○';
+    }
+    const trailing = qLen - dotLimit;
+    dotsPart += ` +${trailing}`;
+  }
+  const posLabel = ` ${info.currentIndex + 1} of ${info.queueLength}`;
+
+  const sourcePart = info.sessionName
+    ? ansiBold(info.sessionName) + (info.askTitle ? `/${truncate(info.askTitle, 32)}` : '')
+    : '';
+
+  const blocked = formatDuration(info.blockedSince, now);
+  const timePart = ansiDim(`⏱ blocked ${blocked}`);
+
+  const parts = [escPart, '   ', dotsPart, posLabel, '   ', sourcePart, '   ', timePart];
+  let header = parts.join('');
+  // Truncate if over width (drop source first, then truncate)
+  if (header.replace(/\x1b\[[0-9;]*m/g, '').length > state.cols) {
+    const shortened = [escPart, '   ', dotsPart, posLabel, '   ', timePart].join('');
+    header = shortened;
+  }
+  buf.lines[0] = header + ' '.repeat(Math.max(0, state.cols - header.replace(/\x1b\[[0-9;]*m/g, '').length));
+
+  // Rows 1..h-1: humanloop body OR visual (v0 toggle)
+  const qid = handle.getCurrentQid();
+  const visualEntry = qid ? state.visuals.get(qid) : undefined;
+
+  const bodyH = state.rows - 1;
+
+  if (visualEntry?.visible && visualEntry.status === 'ready') {
+    // v0 toggle: visual replaces humanloop body entirely
+    const visualLines = visualEntry.content.split('\n');
+    for (let i = 0; i < bodyH; i++) {
+      buf.lines[i + 1] = i < visualLines.length ? visualLines[i]! : '';
+    }
+  } else {
+    // Show humanloop content (with optional loading/error overlay on center row)
+    const humanloopLines = handle.render();
+    const midRow = Math.floor(bodyH / 2);
+    for (let i = 0; i < bodyH; i++) {
+      if (visualEntry?.visible && visualEntry.status === 'loading' && i === midRow) {
+        const placeholder = ansiDim('[generating visual…]');
+        const padL = Math.floor((state.cols - 20) / 2);
+        buf.lines[i + 1] = ' '.repeat(Math.max(0, padL)) + placeholder;
+      } else if (visualEntry?.visible && visualEntry.status === 'error' && i === midRow) {
+        const errText = visualEntry.error ? visualEntry.error : 'unknown';
+        buf.lines[i + 1] = ansiColor(`[visual error: ${errText}]`, 'red') + ansiDim('  [R] retry');
+      } else {
+        buf.lines[i + 1] = i < humanloopLines.length ? humanloopLines[i]! : '';
+      }
+    }
+  }
+}
+
 // ── Status header constants ──────────────────────────────────────────────────
 
 const STATUS_ROW_COUNT = 2; // Fixed height for status header (avoids nvim resize on cursor change)
@@ -112,6 +190,20 @@ function buildStatusRows(
   session: Session | null,
   state: AppState,
 ): string[] {
+  if (cursorNode?.type === 'needs-you-virtual') {
+    const count = state.aggregateInbox.length;
+    return [
+      ' ' + ansiColor('⚑', 'red', true) + ' ' + ansiColor('Fleet Inbox', 'white', true),
+      ' ' + ansiDim(`${count} pending ask${count !== 1 ? 's' : ''} across the fleet`),
+    ];
+  }
+
+  if (cursorNode?.type === 'section') {
+    const label = cursorNode.section === 'needs-you' ? 'Needs You' :
+                  cursorNode.section === 'running' ? 'Running' : 'Done';
+    return [ansiDim(` ${label} section`), ''];
+  }
+
   if (!cursorNode || !session) {
     return [ansiDim(' No session selected'), ''];
   }
@@ -189,19 +281,8 @@ function getAgentForNode(node: TreeNode | undefined, agents: Agent[]): Agent | n
 export function startApp(state: AppState, cleanup: () => void): void {
   const config = loadConfig(state.cwd);
 
-  // Initialize NvimBridge
-  const treeWidth = computeTreeWidth(state.cols);
-  const remaining = state.cols - treeWidth;
-  const detailW = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
-  const initialDetailW = detailW - 4; // detail width minus borders
-  const initialDetailH = (state.rows - 1) - 2 - STATUS_ROW_COUNT - 1; // content height minus borders, status, separator
-  const bridge = new NvimBridge(
-    Math.max(1, initialDetailW),
-    Math.max(1, initialDetailH),
-    requestRender,
-  );
-  state.nvimBridge = bridge.available ? bridge : null;
-  state.nvimEnabled = bridge.available;
+  // Materialize ~/.config/sisyphus/init.lua if missing (idempotent)
+  ensureSisyphusInitLua();
 
   // Track selectedSessionId to detect changes across renders (for immediate poll)
   let prevSelectedSessionId: string | null | undefined = undefined;
@@ -215,6 +296,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       let planContent = '';
       let strategyContent = '';
       let goalContent = '';
+      let completionSummaryContent = '';
       let logsContent = '';
       let logsCycles: CycleLog[] = [];
       let digestData: StatusDigest | null = null;
@@ -225,15 +307,22 @@ export function startApp(state: AppState, cleanup: () => void): void {
       const statusPromise = state.selectedSessionId
         ? send({ type: 'status', sessionId: state.selectedSessionId, cwd: state.cwd })
         : null;
+      const inboxPromise = inboxList();
 
-      const [listRes, statusRes] = await Promise.all([
+      const [listRes, statusRes, aggregateInbox] = await Promise.all([
         listPromise,
         statusPromise ?? Promise.resolve(null),
+        inboxPromise,
       ]);
+      state.aggregateInbox = aggregateInbox;
 
       const sessions: SessionSummary[] = listRes.ok
         ? ((listRes.data?.sessions as SessionSummary[] | undefined) ?? [])
         : [];
+
+      // Skip expensive sync I/O when resolution mode is active — panels are hidden,
+      // data won't be rendered, and blocking here delays keystroke rendering.
+      if (!state.resolutionActive) {
 
       // Batch-check window existence in a single tmux call
       const aliveWindows = listAllWindowIds();
@@ -279,6 +368,15 @@ export function startApp(state: AppState, cleanup: () => void): void {
           }
         } catch {
           // strategy.md may not exist yet
+        }
+
+        try {
+          const cp = join(contextDir(state.cwd, state.selectedSessionId), 'completion-summary.md');
+          if (existsSync(cp)) {
+            completionSummaryContent = readFileSync(cp, 'utf-8');
+          }
+        } catch {
+          // completion-summary.md may not exist (only written on done)
         }
 
         try {
@@ -376,27 +474,20 @@ export function startApp(state: AppState, cleanup: () => void): void {
         }
       }
 
+      } // end !state.resolutionActive
+
       state.sessions = sessions;
       state.selectedSession = selectedSession;
       state.planContent = planContent;
       state.strategyContent = strategyContent;
       state.goalContent = goalContent;
+      state.completionSummaryContent = completionSummaryContent;
       state.logsContent = logsContent;
       state.logsCycles = logsCycles;
       state.digestData = digestData;
       state.paneAlive = paneAlive;
       state.contextFiles = contextFiles;
       state.error = null;
-
-      // Merge-check editable files; falls back to checktime for readonly buffers
-      if (state.nvimEnabled && state.nvimBridge?.ready && state.prevNvimFile) {
-        const mergeStatus = state.nvimBridge.mergeCheckOrReload();
-        if (mergeStatus === 'clean') {
-          notify(state, 'Auto-merged external changes');
-        } else if (mergeStatus === 'union') {
-          notify(state, 'Auto-merged overlapping edits — review buffer');
-        }
-      }
 
       requestRender();
     } catch (err) {
@@ -426,18 +517,31 @@ export function startApp(state: AppState, cleanup: () => void): void {
       return;
     }
 
+    // Detect resolution mode transition → force full redraw (CLAUDE.md cache-pair invariant)
+    if (state.resolutionActive !== prevResolutionActive) {
+      prevFrame = [];
+      prevResolutionActive = state.resolutionActive;
+    }
+
+    // Resolution mode full-screen takeover (3e)
+    if (state.resolutionActive && state.resolutionHandle) {
+      renderResolutionFrame(buf, state);
+      const out = flushFrame(buf.lines, prevFrame, '\x1b[0 q\x1b[?25l');
+      writeToStdout(out);
+      prevFrame = buf.lines;
+      return;
+    }
+
     // Compute layout
     const treeWidth = computeTreeWidth(state.cols);
     const remaining = state.cols - treeWidth;
-    const detailWidth = state.showCombinedView ? Math.floor(remaining * 0.6) : remaining;
-    const logsWidth = state.showCombinedView ? remaining - detailWidth : 0;
+    const detailWidth = Math.floor(remaining * 0.6);
+    const digestWidth = remaining - detailWidth;
     const contentHeight = state.rows - 1;
 
     const treeRect = { x: 0, y: 0, w: treeWidth, h: contentHeight };
     const detailRect = { x: treeWidth, y: 0, w: detailWidth, h: contentHeight };
-    const logsRect = state.showCombinedView
-      ? { x: treeWidth + detailWidth, y: 0, w: logsWidth, h: contentHeight }
-      : null;
+    const digestRect = { x: treeWidth + detailWidth, y: 0, w: digestWidth, h: contentHeight };
     const bottomY = contentHeight;
 
     // Derive data
@@ -448,8 +552,9 @@ export function startApp(state: AppState, cleanup: () => void): void {
         })
       : state.sessions;
 
-    const statusFP = filteredSessions.map(s => `${s.status}:${s.windowAlive}:${s.runningAgentCount}`).join(',');
-    const cacheKey = `${state.expanded.size}:${filteredSessions.length}:${state.selectedSession?.id}:${state.contextFiles.length}:${state.searchFilter}:${statusFP}`;
+    const statusFP = filteredSessions.map(s => `${s.status}:${s.windowAlive}:${s.runningAgentCount}:${s.orphaned ?? false}`).join(',');
+    const inboxFP = `${state.aggregateInbox.length}:${state.aggregateInbox.map(i => i.askId).join(',')}`;
+    const cacheKey = `${state.expanded.size}:${filteredSessions.length}:${state.selectedSession?.id}:${state.contextFiles.length}:${state.searchFilter}:${statusFP}:${inboxFP}`;
     let nodes: TreeNode[];
     if (cacheKey === state.treeCacheKey && state.cachedTreeNodes !== null) {
       nodes = state.cachedTreeNodes;
@@ -460,6 +565,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
         state.expanded,
         state.cwd,
         state.contextFiles,
+        state.aggregateInbox,
       );
       precomputePrefixes(nodes);
       state.cachedTreeNodes = nodes;
@@ -477,20 +583,35 @@ export function startApp(state: AppState, cleanup: () => void): void {
     if (cursorNode) state.cursorNodeId = cursorNode.id;
 
     // Derive selectedSessionId from cursor
-    const newSessionId = cursorNode?.sessionId ?? null;
+    // section and needs-you-virtual nodes have sessionId === '' — treat as null
+    const rawSessionId = cursorNode?.sessionId;
+    const newSessionId = rawSessionId ? rawSessionId : null;
     if (newSessionId !== state.selectedSessionId) {
       state.selectedSessionId = newSessionId;
       state.detailScroll.reset();
-      state.logsScroll.reset();
       state.digestScroll.reset();
       state.cachedDetailLines = null;
       state.detailCacheKey = '';
-      state.prevNvimFile = null;
-      state.cachedLogsLines = null;
-      state.logsCacheKey = '';
       state.cachedDigestLines = null;
       state.digestCacheKey = '';
+      state.cachedInboxLines = null;
+      state.inboxCacheKey = '';
+      state.crossSessionInboxScroll.reset();
       state.flowExpanded = false;
+      state.goalScroll.reset();
+      state.strategyScroll.reset();
+      state.roadmapScroll.reset();
+      state.cachedStackedLines = null;
+      state.stackedCacheKey = '';
+      state.detailMode = 'gsr';
+      state.focusedStrip = 'roadmap';
+    }
+
+    // Override detailMode when cursor is on the virtual fleet-inbox node
+    if (cursorNode?.type === 'needs-you-virtual') {
+      state.detailMode = 'cross-session-inbox';
+    } else if (state.detailMode === 'cross-session-inbox') {
+      state.detailMode = 'gsr';
     }
 
     // Trigger debounced poll when session changes (avoids poll storm during rapid scrolling)
@@ -548,7 +669,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     const treeFocused = state.mode === 'navigate' && state.focusPane === 'tree';
     const treeInputs = `${state.treeCacheKey}:${state.cursorIndex}:${treeFocused}`;
     const bottomInputs = `${state.notification}:${state.error}:${state.mode}:${state.searchText}:${cursorNode?.type}`;
-    const overlayMode = state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug' ? state.mode : '';
+    const overlayMode = (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'open-menu' || state.mode === 'agent-menu' || state.mode === 'session-menu' || state.mode === 'go-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') ? state.mode : '';
     let companionFP = '';
     if (state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
       const c = getCompanion();
@@ -604,66 +725,18 @@ export function startApp(state: AppState, cleanup: () => void): void {
     };
 
     let detailRows: string[];
-    const composing = state.mode === 'compose';
-
-    // Auto-respawn nvim if it died (user quit while viewing goal, roadmap, etc.)
-    if (state.nvimEnabled && state.nvimBridge && state.nvimBridge.wasReady && !state.nvimBridge.ready && !state.nvimBridge.respawning) {
-      state.nvimBridge.respawning = true;
-      state.prevNvimFile = null; // force re-resolve after respawn
-      state.nvimBridge.respawn().then(() => {
-        state.nvimBridge!.respawning = false;
-        requestRender();
-      }).catch(() => {
-        state.nvimBridge!.respawning = false;
-        state.nvimEnabled = false;
-        requestRender();
-      });
-    }
-
-    if (state.nvimEnabled && state.nvimBridge?.ready) {
-      if (composing) {
-        // In compose mode, don't resolve nvim files — nvim is showing the compose temp file
-        const action = state.composeAction;
-        const label = action ? COMPOSE_HEADERS[action.kind] : 'Compose';
-        const statusRows = [
-          ' ' + ansiColor(label, 'yellow', true),
-          ' ' + ansiDim(':w to submit · Tab to cancel'),
-        ];
-        detailRows = renderNvimDetailRows(detailRect, state.nvimBridge, true, false, statusRows, true);
-      } else {
-        // Determine which file(s) neovim should display
-        const result = resolveNvimFile(state, cursorNode, detailCtx, state.cwd);
-        const resultKey = result ? result.files.map(f => f.path).join('|') : null;
-        if (resultKey && resultKey !== state.prevNvimFile) {
-          state.nvimBridge.openTabFiles(result!.files);
-          state.prevNvimFile = resultKey;
-          state.nvimEditable = result!.files.some(f => !f.readonly);
-        } else if (!resultKey) {
-          state.prevNvimFile = null;
-          state.nvimEditable = false;
-        }
-
-        // Build status rows for the header
-        const statusRows = buildStatusRows(cursorNode, state.selectedSession, state);
-        detailRows = renderNvimDetailRows(detailRect, state.nvimBridge, state.focusPane === 'detail', state.nvimEditable, statusRows);
-      }
+    if (cursorNode?.type === 'needs-you-virtual') {
+      detailRows = renderCrossSessionInboxRows(detailRect, state);
+    } else if (state.useStackedDetail) {
+      detailRows = renderStackedDetailRows(detailRect, state, detailCtx);
     } else {
       detailRows = renderDetailRows(detailRect, state, detailCtx);
     }
-    let rightPanelRows: string[] | null = null;
-    if (logsRect) {
-      rightPanelRows = state.rightPanelMode === 'logs'
-        ? renderLogsRows(logsRect, state)
-        : renderDigestRows(logsRect, state);
-    }
+    const rightPanelRows = renderDigestRows(digestRect, state);
 
     // Compose panel rows into buffer by concatenation (no slicing/splicing)
     for (let i = 0; i < contentHeight; i++) {
-      if (rightPanelRows) {
-        buf.lines[i] = treeRows[i]! + detailRows[i]! + rightPanelRows[i]!;
-      } else {
-        buf.lines[i] = treeRows[i]! + detailRows[i]!;
-      }
+      buf.lines[i] = treeRows[i]! + detailRows[i]! + rightPanelRows[i]!;
     }
 
     // Bottom row (single status line — notifications replace keybindings transiently)
@@ -675,8 +748,20 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
     // Overlays (rendered AFTER panels — overwrites panel content)
     if (overlayMode) {
-      if (state.mode === 'leader') renderLeaderOverlay(buf, state.rows, state.cols);
-      if (state.mode === 'copy-menu') renderCopyMenuOverlay(buf, state.rows, state.cols);
+      const ACCENT: Record<string, string> = {
+        topLevel: 'magenta',
+        copy: 'cyan',
+        open: 'green',
+        agent: 'blue',
+        session: 'red',
+        go: 'yellow',
+      };
+      const menuId = MENU_FOR_MODE[state.mode];
+      if (menuId) {
+        const menu = menuId === 'topLevel' ? KEYMAP.topLevel : KEYMAP.submenus[menuId]!;
+        const accent = ACCENT[menuId];
+        renderSubmenuOverlay(buf, state.rows, state.cols, menu, accent !== undefined ? accent : 'white');
+      }
       if (state.mode === 'help') renderHelpOverlay(buf, state.rows, state.cols);
       if (state.mode === 'companion-overlay') {
         const companion = getCompanion();
@@ -689,16 +774,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     }
 
     // Build cursor suffix inside synchronized output block to prevent flicker
-    let cursorSuffix: string;
-    if (state.focusPane === 'detail' && state.nvimBridge?.ready) {
-      const cursor = state.nvimBridge.getCursorPos();
-      const absX = detailRect.x + 2 + cursor.x;
-      // Nvim content starts after: top border (1) + status rows (STATUS_ROW_COUNT) + separator (1)
-      const absY = detailRect.y + 1 + STATUS_ROW_COUNT + 1 + cursor.y;
-      cursorSuffix = `\x1b[${state.nvimBridge.cursorStyle} q\x1b[?25h\x1b[${absY + 1};${absX + 1}H`;
-    } else {
-      cursorSuffix = '\x1b[0 q\x1b[?25l';
-    }
+    const cursorSuffix = '\x1b[0 q\x1b[?25l';
 
     // Flush diff to stdout with cursor positioning inside sync block
     const out = flushFrame(buf.lines, prevFrame, cursorSuffix);
@@ -730,6 +806,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
         });
     },
     send,
+    composeViaPopup,
     openEditorPopup,
     editInPopup,
     promptInPopup,
@@ -739,6 +816,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     selectWindow,
     selectPane,
     switchToSession,
+    paneExists,
     openLogPopup,
     openShellPopup,
     openInFileManager,
@@ -769,16 +847,9 @@ export function startApp(state: AppState, cleanup: () => void): void {
     state.rows = (typeof stdoutRows === 'number' && stdoutRows > 0) ? stdoutRows : 24;
     state.cols = (typeof stdoutCols === 'number' && stdoutCols > 0) ? stdoutCols : 80;
     prevFrame = []; // force full redraw
-
-    // Resize nvim bridge to match new detail panel dimensions
-    // Account for: combined view split, borders (2), status rows (STATUS_ROW_COUNT), separator (1)
-    if (state.nvimBridge) {
-      const resizeRemaining = state.cols - computeTreeWidth(state.cols);
-      const resizeDetailW = state.showCombinedView ? Math.floor(resizeRemaining * 0.6) : resizeRemaining;
-      const contentH = state.rows - 1; // bottomBar=1
-      state.nvimBridge.resize(Math.max(1, resizeDetailW - 4), Math.max(1, contentH - 2 - STATUS_ROW_COUNT - 1));
+    if (state.resolutionActive && state.resolutionHandle) {
+      state.resolutionHandle.handleResize(state.cols, state.rows - 1);
     }
-
     requestRender();
   });
 
@@ -791,13 +862,14 @@ export function startApp(state: AppState, cleanup: () => void): void {
   inputActions.cleanup = () => {
     clearInterval(pollInterval);
     if (debouncedPollTimer !== null) clearTimeout(debouncedPollTimer);
-    if (state.composePollTimer !== null) clearInterval(state.composePollTimer);
     stopKeypress();
     stopResize();
+    state.resolutionHandle?.unmount();
     state.detailScroll.destroy();
-    state.logsScroll.destroy();
     state.digestScroll.destroy();
-    state.nvimBridge?.destroy();
+    state.goalScroll.destroy();
+    state.strategyScroll.destroy();
+    state.roadmapScroll.destroy();
     origCleanup();
   };
 

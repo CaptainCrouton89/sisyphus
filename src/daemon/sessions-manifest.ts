@@ -1,7 +1,5 @@
-import { writeFileSync, renameSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { dirname, join } from 'node:path';
 import { sessionsManifestPath, sessionsManifestTsvPath, isSisyphusSession } from '../shared/paths.js';
+import { atomicWrite } from './lib/atomic.js';
 import { getTrackedSessionEntries } from './pane-monitor.js';
 import { getSisyphusPhases, type SessionPhase } from './status-dots.js';
 import * as tmux from './tmux.js';
@@ -14,11 +12,6 @@ interface ManifestEntry {
   phase: SessionPhase | null;
 }
 
-function atomicWrite(filePath: string, data: string): void {
-  const tmpPath = join(dirname(filePath), `.manifest-${randomUUID()}.tmp`);
-  writeFileSync(tmpPath, data, 'utf-8');
-  renameSync(tmpPath, filePath);
-}
 
 function buildEntries(): ManifestEntry[] {
   const entries: ManifestEntry[] = [];

@@ -20,7 +20,10 @@ export type HistoryEventType =
   | 'session-continued'
   | 'session-cloned'
   | 'cloned-from'
-  | 'popup-feedback';
+  | 'popup-feedback'
+  | 'ask-issued'
+  | 'ask-answered'
+  | 'bg-tasks-leftover';
 
 export interface HistoryEvent {
   ts: string;
@@ -57,14 +60,6 @@ export interface SessionSummaryCycle {
   completedAt: string | null;
 }
 
-export interface ReviewTiming {
-  type: 'requirements' | 'design';
-  startedAt: string;
-  completedAt: string;
-  durationMs: number;
-  itemsReviewed: number;
-  itemsTotal: number;
-}
 
 export interface SessionSummary {
   sessionId: string;
@@ -78,6 +73,7 @@ export interface SessionSummary {
   completedAt: string | null;
   activeMs: number;
   wallClockMs: number | null;
+  userBlockedMs: number;
   agentCount: number;
   cycleCount: number;
   completionReport: string | null;
@@ -93,5 +89,4 @@ export interface SessionSummary {
   efficiency: number | null;
   xpGained: number;
   sentiment: string | null;
-  reviews?: ReviewTiming[];
 }

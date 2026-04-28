@@ -64,13 +64,13 @@ function setupCompanionPlugin(): string {
   return destDir;
 }
 
-function isPaneAlive(paneId: string): boolean {
+export function paneExists(paneId: string): boolean {
   return execSafe(`tmux display-message -t ${shellQuote(paneId)} -p "#{pane_id}"`) !== null;
 }
 
 export function openCompanionPane(cwd: string): void {
   // If companion pane is alive, focus it
-  if (companionPaneId && isPaneAlive(companionPaneId)) {
+  if (companionPaneId && paneExists(companionPaneId)) {
     execSafe(`tmux select-pane -t ${shellQuote(companionPaneId)}`);
     return;
   }

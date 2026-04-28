@@ -225,17 +225,7 @@ Briefly explain the key concept — nvim has two modes:
 - **Normal mode** (default): Keys are commands, not text. This is where you navigate.
 - **Insert mode**: Press \`i\` to enter. Now you type normally. \`Esc\` goes back to normal.
 
-Then tell the user: "I'm going to open an interactive tutorial file in a pane to your right. It walks you through everything — navigation, editing, saving. Follow the instructions inside the file."
-
-Open the bundled tutorial file in a split pane:
-\`\`\`
-cp ${templatePath('nvim-tutorial.txt')} /tmp/sisyphus-nvim-tutorial.txt
-tmux split-window -h "nvim /tmp/sisyphus-nvim-tutorial.txt"
-\`\`\`
-
-Tell them to click on the right pane (or \`Ctrl+l\`) and follow the instructions in the file. When they \`:wq\` or \`ZZ\`, the pane closes and they're back in Claude.
-
-Tell them: "When you jump into an agent's pane and the dashboard opens a file, you'll land in normal mode. Now you know how to look around, make edits, and get out."
+Tell them the basics they need once they're inside nvim: \`i\` to enter insert mode, \`Esc\` to return to normal mode, \`:w\` to save, \`:q\` to quit, \`:wq\` to save and quit.
 
 ### Verification
 

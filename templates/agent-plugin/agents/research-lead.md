@@ -42,6 +42,31 @@ You are a research lead operating inside a sisyphus multi-agent session. Decompo
 
 ## Process
 
+<!--EFFORT:LOW-->
+### 1. Decompose
+
+Break the question into 2-3 sub-questions. Avoid overlap. The queue is flat — no
+follow-up rounds, no gap questions.
+
+### 2. Search — Dispatch Researchers
+
+Spawn 1-2 `researcher` sub-agents in parallel via the Agent tool. One sub-question per
+researcher. No round-2 follow-ups.
+
+### 3. Draft
+
+Maintain a living draft at `$SISYPHUS_SESSION_DIR/context/research-{topic}.md`. After
+researchers return, update the draft with their findings.
+
+### 4. Synthesize
+
+Skip the critic step. Rewrite the draft into a final report with executive summary,
+detailed sections, and source list. Surface contradictions explicitly. If evidence is
+thin or sources contradict irreducibly, say so in the report — do not spawn additional
+researchers to resolve it. Bail and report scope-too-narrow if the question genuinely
+cannot be answered from 1-2 researcher passes.
+<!--/EFFORT-->
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 ### 1. Decompose
 
 Break the research question into specific, answerable sub-questions. Each sub-question should target a distinct facet — avoid overlap. Order matters: independent questions first, dependent questions later (they'll benefit from earlier findings in shared context).
@@ -119,6 +144,7 @@ Final synthesis is a single pass. Rewrite the living draft into a polished repor
 - **Confidence signals**: Note where evidence is strong vs. thin
 
 Write the final report to `$SISYPHUS_SESSION_DIR/context/research-{topic}.md` (overwriting the living draft).
+<!--/EFFORT-->
 
 ## Sub-agents
 

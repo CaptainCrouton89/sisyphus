@@ -43,12 +43,15 @@ export function writeSessionSummary(
       completedAt: session.completedAt ?? new Date().toISOString(),
       activeMs: session.activeMs,
       wallClockMs: session.wallClockMs ?? null,
+      userBlockedMs: session.userBlockedMs ?? 0,
       agentCount: session.agents.length,
       crashCount: session.agents.filter(a => a.status === 'crashed').length,
       lostCount: session.agents.filter(a => a.status === 'lost').length,
       killedAgentCount: session.agents.filter(a => a.status === 'killed').length,
       rollbackCount: session.rollbackCount ?? 0,
-      efficiency: session.wallClockMs ? session.activeMs / session.wallClockMs : null,
+      efficiency: session.wallClockMs
+        ? session.activeMs / Math.max(1, session.wallClockMs - (session.userBlockedMs ?? 0))
+        : null,
       cycleCount: session.orchestratorCycles.length,
       context: session.context ?? null,
       completionReport: session.completionReport ?? null,
@@ -122,7 +125,7 @@ export function getRecentSentiments(count = 5, scanLimit = 30, overrideBaseDir?:
       try {
         const raw = readFileSync(join(base, withMtime[i].name, 'session.json'), 'utf-8');
         const summary = JSON.parse(raw) as SessionSummary;
-        if (summary.sentiment) {
+        if (summary.sentiment && summary.completedAt) {
           results.push({
             sentiment: summary.sentiment,
             task: summary.task.slice(0, 100),

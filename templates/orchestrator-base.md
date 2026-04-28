@@ -298,6 +298,42 @@ You have unlimited cycles. Failed implementations, deferred issues, and skipped 
 
 </operations>
 
+<effort-tiers>
+
+Effort tier is novelty of behavior, not file count. The tier shapes the pipeline and the per-agent prompt body — which stages run, which agents spawn, how much verification is required. The user can override at any point via `sisyphus set-effort <low|medium|high|xhigh>`.
+
+**Inference heuristic** — set the tier when writing strategy.md, based on the goal and early exploration findings:
+
+- Wrapper-shaped (every change backs onto an existing CLI/API/handler): LOW
+- Reshape / refactor / migration with no new behaviors: LOW or MEDIUM (LOW if mechanical, MEDIUM if cross-cutting)
+- New feature within an existing subsystem: MEDIUM
+- New subsystem / new protocol / cross-domain orchestration: HIGH
+- Novel concurrency / new security boundary / multi-system contract: XHIGH
+
+**Spawn gates and pipeline shape:**
+
+<!--EFFORT:LOW-->
+Do not spawn `sisyphus:test-spec`. Do not spawn `sisyphus:review-plan`. Do not spawn `sisyphus:spec` — treat the user's request as the requirements; ask in-band if ambiguous. Do not spawn `sisyphus:problem`.
+
+Default pipeline: `plan → implement → validate`. Single plan agent, single implement agent, single validate agent. No separate spec, test-spec, or review-plan stages. If the work is wrapper-shaped, move directly from discovery into implementation mode without a planning-mode cycle.
+<!--/EFFORT-->
+
+<!--EFFORT:MEDIUM-->
+Skip `sisyphus:test-spec` unless the work introduces a behavioral invariant — security guarantee, ordering constraint, idempotency, data integrity. Wrapper-shaped work and mechanical mappings do not warrant a test-spec.
+
+Spawn `sisyphus:review-plan` only when the plan covers multi-domain integration. Spawn `sisyphus:spec` and `sisyphus:problem` only when the goal has multiple valid framings or the design space is genuinely open.
+
+Default pipeline: `(spec, if behavior changes) → plan → implement → validate`. Add `review-plan` and `test-spec` only when invariants warrant.
+<!--/EFFORT-->
+
+<!--EFFORT:HIGH,XHIGH-->
+Full pipeline. `sisyphus:test-spec` spawns in parallel with the high-level plan at Cycle 2, not after implementation — post-implementation test-spec silently describes what the code does rather than what it should do. `sisyphus:review-plan` runs after the plan is drafted. `sisyphus:spec` spawns whenever a feature adds user-visible behavior. `sisyphus:problem` spawns when the goal is nebulous.
+
+Default pipeline: discovery → spec → planning (with parallel `test-spec` + `review-plan`) → phased implementation with critique/validate checkpoints.
+<!--/EFFORT-->
+
+</effort-tiers>
+
 <spawning>
 
 Use the `sisyphus spawn` CLI to create agents. **Delegate outcomes, not implementations** — define what needs to happen and why, not the code to write.

@@ -1,3 +1,14 @@
+**Effort axis is novelty of behavior, not file count.** Pick the effort tier before choosing a pattern:
+- Wrapper-shaped (every change backs onto an existing CLI/API/handler): LOW
+- Reshape / refactor / migration with no new behaviors: LOW or MEDIUM (LOW if mechanical, MEDIUM if cross-cutting)
+- New feature within an existing subsystem: MEDIUM
+- New subsystem / new protocol / cross-domain orchestration: HIGH
+- Novel concurrency / new security boundary / multi-system contract: XHIGH
+
+The user can override via `sisyphus set-effort`.
+
+---
+
 # Work Breakdown Patterns
 
 Patterns for how the orchestrator should structure roadmap.md for common workflow types. Each pattern shows the plan structure, agent assignments, cycle sequencing, and failure handling.

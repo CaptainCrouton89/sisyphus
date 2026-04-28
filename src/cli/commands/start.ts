@@ -50,9 +50,18 @@ export function registerStart(program: Command): void {
     .argument('<task>', 'Task description for the orchestrator')
     .option('-c, --context <context>', 'Background context for the orchestrator')
     .option('-n, --name <name>', 'Human-readable name for the session')
+    .option('--effort <tier>', 'Pipeline effort tier (low|medium|high|xhigh)')
     .option('--no-tmux-check', 'Skip the tmux session check')
-    .action(async (task: string, opts: { context?: string; name?: string; tmuxCheck?: boolean }) => {
+    .action(async (task: string, opts: { context?: string; name?: string; effort?: string; tmuxCheck?: boolean }) => {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+
+      if (opts.effort !== undefined) {
+        const validTiers = ['low', 'medium', 'high', 'xhigh'];
+        if (!validTiers.includes(opts.effort)) {
+          console.error(`Error: --effort must be one of: ${validTiers.join(', ')}`);
+          process.exit(1);
+        }
+      }
 
       if (!isTmuxInstalled()) {
         console.error('Error: tmux is not installed. Sisyphus requires tmux for agent panes.');
@@ -61,7 +70,8 @@ export function registerStart(program: Command): void {
       }
 
       // Send the start request — this is just a socket call, no tmux needed
-      const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name };
+      const effort = opts.effort as 'low' | 'medium' | 'high' | 'xhigh' | undefined;
+      const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name, ...(effort !== undefined ? { effort } : {}) };
       const response = await sendRequest(request);
       if (!response.ok) {
         console.error(`Error: ${response.error}`);

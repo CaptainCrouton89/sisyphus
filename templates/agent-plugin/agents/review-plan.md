@@ -47,6 +47,16 @@ This review runs **once per plan**. There is no re-review after revisions — th
 1. **Read the requirements and design documents** (from paths provided). If the design is phase-structured (top-level architecture + `## Phase N — …` sections), scope your review to the phase the plan covers.
 2. **Read the plan(s)** (from paths provided — may be a master plan with sub-plans, or a single-phase plan for a multi-phase feature). Note the plan's declared phase scope if stated; follow-up phases are explicitly out of scope for this review.
 3. **Read codebase context** — CLAUDE.md, `.claude/rules/*.md`, and existing code in the areas the plan touches. This context is essential for the pattern consistency and code smell reviews.
+<!--EFFORT:LOW-->
+4. **Spawn one sub-agent** — `requirements-coverage` (sonnet). Pass it the requirements,
+   design documents, plan(s), and relevant codebase context. Its job is to verify every
+   requirement and design constraint maps to a concrete plan section, classified as
+   Covered / Partial / Missing.
+
+   Do not spawn `security`, `code-smells`, or `pattern-consistency`. A coverage check is
+   the assessment this review provides; deeper analysis is out of scope.
+<!--/EFFORT-->
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 4. **Spawn 4 parallel sub-agents** — one per concern area. Use the Agent tool with these `subagent_type` values:
    - **`security`** (opus) — Input validation, injection surfaces, auth/authz gaps, data exposure, race conditions
    - **`requirements-coverage`** (sonnet) — Verify every requirement and design constraint maps to a concrete plan section, classify as Covered/Partial/Missing
@@ -54,6 +64,7 @@ This review runs **once per plan**. There is no re-review after revisions — th
    - **`pattern-consistency`** (sonnet) — Architecture patterns, naming conventions, error handling patterns, API conventions, frontend patterns, cross-plan consistency
 
    Pass each sub-agent the requirements, design documents, plan(s), and relevant codebase context.
+<!--/EFFORT-->
 
 5. **Validate** — Review sub-agent findings. Drop anything subjective, speculative, or non-blocking. Confirm critical/high findings by cross-referencing the plan and requirements/design yourself.
 6. **Synthesize** — Deduplicate across sub-agents, prioritize by severity, produce final report.

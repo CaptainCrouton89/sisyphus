@@ -17,6 +17,8 @@ console.log = (...args: unknown[]) => origLog(`[${ts()}]`, ...args);
 console.error = (...args: unknown[]) => origError(`[${ts()}]`, ...args);
 import { loadConfig } from '../shared/config.js';
 import { startServer, stopServer, registerSessionCwd, registerSessionTmux, loadSessionRegistry, setCompositor } from './server.js';
+import { sweepOrphans } from './orphan-sweep.js';
+import { startHeartbeatScanner, stopHeartbeatScanner } from './heartbeat-asks.js';
 import { startMonitor, stopMonitor, setRespawnCallback, setDotsCallback, trackSession, updateTrackedWindow, flushTimers, initTimers, getTrackedSessionIds, getTrackedSessionEntries } from './pane-monitor.js';
 import { onAllAgentsDone } from './session-manager.js';
 import { recomputeDots, setTrackedEntriesProvider } from './status-dots.js';
@@ -31,6 +33,8 @@ import {
 } from './segments/index.js';
 import { writeManifest, writeEmptyManifest } from './sessions-manifest.js';
 import { resetAgentCounterFromState } from './agent.js';
+import { orphanOrchestrator } from './orphan-asks.js';
+import { isProcessAlive } from './lib/process.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
 import { listPanes, sessionExistsById, sessionNameTaken, resolveSessionId, initSessionMeta, getFirstWindowId } from './tmux.js';
 import { registerPane } from './pane-registry.js';
@@ -41,15 +45,6 @@ import { installPlugin } from './plugin-install.js';
 
 function ensureDirs(): void {
   mkdirSync(globalDir(), { recursive: true });
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function readPid(): number | null {
@@ -188,7 +183,7 @@ async function recoverSessions(): Promise<void> {
           // Discover window ID if missing from state
           let windowId = session.tmuxWindowId;
           if (!windowId) {
-            windowId = getFirstWindowId(currentTmuxId!) ?? getFirstWindowId(session.tmuxSessionName!) ?? null;
+            windowId = getFirstWindowId(currentTmuxId!) ?? getFirstWindowId(session.tmuxSessionName!) ?? undefined;
             if (windowId) {
               await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, windowId, currentTmuxId);
               console.log(`[sisyphus] Discovered missing windowId ${windowId} for session ${sessionId}`);
@@ -235,6 +230,7 @@ async function recoverSessions(): Promise<void> {
                 const orchestratorPaneId = getOrchestratorPaneId(sessionId);
                 const orchestratorAlive = orchestratorPaneId && livePaneIds.has(orchestratorPaneId);
                 if (!orchestratorAlive) {
+                  await orphanOrchestrator(cwd, sessionId, 'orchestrator lost while daemon was down', 'daemon-startup-stuck');
                   await stateModule.completeOrchestratorCycle(cwd, sessionId);
                   console.log(`[sisyphus] Detected stuck session ${sessionId} on recovery: triggering orchestrator respawn`);
                   await onAllAgentsDone(sessionId, cwd, session.tmuxWindowId!);
@@ -315,6 +311,11 @@ async function startDaemon(): Promise<void> {
   startMonitor(config.pollIntervalMs);
 
   await recoverSessions();
+  await sweepOrphans();
+
+  // Heartbeat scanner runs on its own slow clock (every 15min) — orphan startup-scan
+  // already completed above, so heartbeats won't fire for asks that should be orphaned instead.
+  startHeartbeatScanner();
 
   if (config.autoUpdate !== false) {
     startPeriodicUpdateCheck();
@@ -323,6 +324,7 @@ async function startDaemon(): Promise<void> {
   const shutdown = async () => {
     console.log('[sisyphus] Shutting down...');
     stopPeriodicUpdateCheck();
+    stopHeartbeatScanner();
     stopMonitor();
     // Persist all in-memory active time accumulators before exiting
     for (const sessionId of getTrackedSessionIds()) {

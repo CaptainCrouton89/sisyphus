@@ -12,6 +12,13 @@ import { lookupPane, unregisterPane } from './pane-registry.js';
 import { emitHistoryEvent } from './history.js';
 import { getActiveTimers } from './pane-monitor.js';
 import type { Compositor } from './segments/index.js';
+import { generateVisualForQuestion } from './ask-visual.js';
+import { listAsks, readMeta, readDecisions } from './ask-store.js';
+import { resolveOrchestratorOrphanAsks } from './orphan-asks.js';
+import { recomputeDots } from './status-dots.js';
+import * as orchestrator from './orchestrator.js';
+import * as tmux from './tmux.js';
+import type { AggregateInboxItem } from '../shared/inbox-types.js';
 
 let server: Server | null = null;
 let compositor: Compositor | null = null;
@@ -26,6 +33,7 @@ interface SessionTracking {
   windowId?: string;
   tmuxSessionId?: string;
   messageCounter: number;
+  name?: string;
 }
 const sessionTrackingMap = new Map<string, SessionTracking>();
 
@@ -62,6 +70,11 @@ export function registerSessionCwd(sessionId: string, cwd: string): void {
     sessionTrackingMap.set(sessionId, { cwd, messageCounter: 0 });
   }
   persistSessionRegistry();
+}
+
+export function setSessionName(sessionId: string, name: string): void {
+  const tracking = sessionTrackingMap.get(sessionId);
+  if (tracking) tracking.name = name;
 }
 
 export function registerSessionTmux(sessionId: string, tmuxSession: string, windowId: string, tmuxSessionId?: string): void {
@@ -173,13 +186,14 @@ async function handleRequest(req: Request): Promise<Response> {
 
     switch (req.type) {
       case 'start': {
-        const session = await sessionManager.startSession(req.task, req.cwd, req.context, req.name);
+        const session = await sessionManager.startSession(req.task, req.cwd, req.context, req.name, req.effort);
         sessionTrackingMap.set(session.id, {
           cwd: req.cwd,
           tmuxSession: session.tmuxSessionName,
           windowId: session.tmuxWindowId,
           tmuxSessionId: session.tmuxSessionId,
           messageCounter: 0,
+          name: session.name,
         });
         persistSessionRegistry();
         return { ok: true, data: { sessionId: session.id, tmuxSessionName: session.tmuxSessionName } };
@@ -338,6 +352,38 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { sessionId: session.id, status: session.status, tmuxSessionName: session.tmuxSessionName } };
       }
 
+      case 'clear-orphan': {
+        // Clears the sticky orphan flag and resolves any pending orchestrator orphan asks
+        // without spawning anything. For when the user has handled the situation manually
+        // (e.g. orchestrator pane is actually still alive) and just wants the badge gone.
+        // If the orchestrator pane is detected alive, also flip status active.
+        const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
+        if (!existsSync(stateFile)) {
+          return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json at ${stateFile}.` };
+        }
+        await Promise.all([
+          state.clearSessionOrphan(req.cwd, req.sessionId),
+          resolveOrchestratorOrphanAsks(req.cwd, req.sessionId, 'dismiss'),
+        ]);
+        // Re-attach if a live orchestrator pane is detected — flip paused→active so the
+        // session reflects reality without spawning a new orchestrator.
+        let reattached = false;
+        try {
+          const session = state.getSession(req.cwd, req.sessionId);
+          const orchPaneId = orchestrator.getOrchestratorPaneId(req.sessionId);
+          if (orchPaneId && session.tmuxWindowId) {
+            const livePanes = tmux.listPanes(session.tmuxWindowId);
+            const alive = livePanes.some(p => p.paneId === orchPaneId);
+            if (alive && session.status === 'paused') {
+              await state.updateSessionStatus(req.cwd, req.sessionId, 'active');
+              reattached = true;
+            }
+          }
+        } catch { /* best-effort */ }
+        try { recomputeDots(); } catch { /* best-effort */ }
+        return { ok: true, data: { reattached } };
+      }
+
       case 'kill': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
@@ -450,6 +496,13 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true };
       }
 
+      case 'set-effort': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await state.updateSession(tracking.cwd, req.sessionId, { effort: req.effort });
+        return { ok: true };
+      }
+
       case 'message': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
@@ -459,6 +512,16 @@ async function handleRequest(req: Request): Promise<Response> {
 
         const source: MessageSource = req.source ?? { type: 'user' };
         const summary = req.content.length > 200 ? req.content.slice(0, 200) + '...' : req.content;
+
+        if (req.agentId) {
+          // Route to per-agent inbox: messages/<agentId>/<id>.md
+          const dir = join(messagesDir(tracking.cwd, req.sessionId), req.agentId);
+          mkdirSync(dir, { recursive: true });
+          const filePath = join(dir, `${id}.md`);
+          writeFileSync(filePath, req.content, 'utf-8');
+          emitHistoryEvent(req.sessionId, 'message', { source: source.type, agentId: req.agentId, content: req.content });
+          return { ok: true };
+        }
 
         let filePath: string | undefined;
         if (req.content.length > 200) {
@@ -515,6 +578,85 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!compositor) return { ok: false, error: 'Compositor not initialized' };
         compositor.unregisterExternal(req.id);
         return { ok: true };
+      }
+
+      case 'ask-generate-visual': {
+        const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+        if (!ID_RE.test(req.askId)) return { ok: false, error: `Invalid askId: ${req.askId}` };
+        if (!ID_RE.test(req.qid)) return { ok: false, error: `Invalid qid: ${req.qid}` };
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        if (!tracking.cwd) return { ok: false, error: `No cwd registered for session: ${req.sessionId}` };
+        const result = await generateVisualForQuestion({
+          cwd: tracking.cwd,
+          sessionId: req.sessionId,
+          askId: req.askId,
+          qid: req.qid,
+          cols: req.cols,
+          force: req.force,
+        });
+        if (result.ok) {
+          return { ok: true, data: { markdownPath: result.markdownPath, ansiPath: result.ansiPath, turns: result.turns } };
+        }
+        return { ok: false, error: result.error };
+      }
+
+      case 'inbox-list': {
+        const items: AggregateInboxItem[] = [];
+        for (const [sessionId, tracking] of sessionTrackingMap) {
+          if (!tracking.cwd) continue;
+          let askIds: string[] = [];
+          try {
+            askIds = listAsks(tracking.cwd, sessionId);
+          } catch (err) {
+            console.warn(`[sisyphus] inbox-list: listAsks failed for ${sessionId}:`, err);
+            continue;
+          }
+          const sessionName = tracking.name;
+
+          for (const askId of askIds) {
+            try {
+              const meta = readMeta(tracking.cwd, sessionId, askId);
+              if (!meta) continue;
+              if (meta.status === 'answered') continue;
+
+              let title = meta.title;
+              let subtitle = meta.subtitle;
+              let kind = meta.kind;
+              if (title === undefined || kind === undefined) {
+                try {
+                  const decisions = readDecisions(tracking.cwd, sessionId, askId);
+                  if (decisions) {
+                    const q0 = decisions.interactions[0];
+                    if (title === undefined) title = decisions.title !== undefined ? decisions.title : q0?.title;
+                    if (subtitle === undefined) subtitle = q0?.subtitle;
+                    if (kind === undefined) kind = q0?.kind;
+                  }
+                } catch (_err) { /* decisions.json is optional */ }
+              }
+
+              items.push({
+                sessionId,
+                sessionName,
+                cwd: tracking.cwd,
+                askId,
+                askedBy: meta.askedBy,
+                askedAt: meta.askedAt,
+                status: meta.status,
+                blocking: meta.blocking,
+                orphaned: meta.orphaned,
+                title,
+                subtitle,
+                blockedSince: meta.status === 'in-progress' ? (meta.startedAt ?? meta.askedAt) : meta.askedAt,
+                kind,
+              });
+            } catch (err) {
+              console.warn(`[sisyphus] inbox-list: readMeta failed for ${sessionId}/${askId}:`, err);
+            }
+          }
+        }
+        items.sort((a, b) => a.blockedSince.localeCompare(b.blockedSince));
+        return { ok: true, data: { items: items as unknown as Record<string, unknown> } };
       }
 
       default:

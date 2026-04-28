@@ -8,7 +8,8 @@ export function registerMessage(program: Command): void {
     .command('message <content>')
     .description('Queue a message for the orchestrator to see on next cycle')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
-    .action(async (content: string, opts: { session?: string }) => {
+    .option('--agent <agentId>', 'Route message to a specific agent inbox instead of the orchestrator')
+    .action(async (content: string, opts: { session?: string; agent?: string }) => {
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
         console.error('Error: provide --session or set SISYPHUS_SESSION_ID environment variable');
@@ -19,7 +20,7 @@ export function registerMessage(program: Command): void {
         ? { type: 'agent' as const, agentId: process.env.SISYPHUS_AGENT_ID }
         : undefined;
 
-      const request: Request = { type: 'message', sessionId, content, source };
+      const request: Request = { type: 'message', sessionId, content, source, ...(opts.agent ? { agentId: opts.agent } : {}) };
       const response = await sendRequest(request);
       if (response.ok) {
         console.log('Message queued');

@@ -1,4 +1,9 @@
-export type TreeNodeType = 'session' | 'cycle' | 'agent' | 'report' | 'messages' | 'message' | 'context' | 'context-file';
+export type TreeNodeType =
+  | 'session' | 'cycle' | 'agent' | 'report'
+  | 'messages' | 'message' | 'context' | 'context-file'
+  | 'section' | 'needs-you-virtual' | 'inbox-row';
+
+export type SectionKey = 'needs-you' | 'running' | 'done';
 
 interface BaseTreeNode {
   id: string;
@@ -10,9 +15,25 @@ interface BaseTreeNode {
   prefix?: string;
 }
 
+export interface SectionTreeNode extends BaseTreeNode {
+  type: 'section';
+  depth: 0;
+  section: SectionKey;
+  count: number;
+  expanded: boolean;
+  sessionId: '';
+}
+
+export interface NeedsYouVirtualTreeNode extends BaseTreeNode {
+  type: 'needs-you-virtual';
+  depth: 1;
+  pendingCount: number;
+  sessionId: '';
+}
+
 export interface SessionTreeNode extends BaseTreeNode {
   type: 'session';
-  depth: 0;
+  depth: 1;
   name?: string;
   task: string;
   status: string;
@@ -22,11 +43,13 @@ export interface SessionTreeNode extends BaseTreeNode {
   createdAt: string;
   completedAt?: string;
   activeMs: number;
+  askCount?: number;
+  orphaned?: boolean;
 }
 
 export interface CycleTreeNode extends BaseTreeNode {
   type: 'cycle';
-  depth: 1;
+  depth: 2;
   cycleNumber: number;
   timestamp: string;
   completedAt?: string;
@@ -37,7 +60,7 @@ export interface CycleTreeNode extends BaseTreeNode {
 
 export interface AgentTreeNode extends BaseTreeNode {
   type: 'agent';
-  depth: 2;
+  depth: 3;
   agentId: string;
   name: string;
   agentType: string;
@@ -46,11 +69,12 @@ export interface AgentTreeNode extends BaseTreeNode {
   completedAt: string | null;
   activeMs: number;
   reportCount: number;
+  orphaned?: boolean;
 }
 
 export interface ReportTreeNode extends BaseTreeNode {
   type: 'report';
-  depth: 3;
+  depth: 4;
   reportIndex: number;
   reportType: 'update' | 'final';
   timestamp: string;
@@ -59,13 +83,13 @@ export interface ReportTreeNode extends BaseTreeNode {
 
 export interface MessagesTreeNode extends BaseTreeNode {
   type: 'messages';
-  depth: 1;
+  depth: 2;
   count: number;
 }
 
 export interface MessageTreeNode extends BaseTreeNode {
   type: 'message';
-  depth: 2;
+  depth: 3;
   messageId: string;
   source: string;
   summary: string;
@@ -74,18 +98,20 @@ export interface MessageTreeNode extends BaseTreeNode {
 
 export interface ContextTreeNode extends BaseTreeNode {
   type: 'context';
-  depth: 1;
+  depth: 2;
   fileCount: number;
 }
 
 export interface ContextFileTreeNode extends BaseTreeNode {
   type: 'context-file';
-  depth: 2;
+  depth: 3;
   label: string;
   filePath: string;
 }
 
 export type TreeNode =
+  | SectionTreeNode
+  | NeedsYouVirtualTreeNode
   | SessionTreeNode
   | CycleTreeNode
   | AgentTreeNode

@@ -12,6 +12,7 @@ import {
   addOrchestratorCycle,
   appendAgentToLastCycle,
   updateSessionStatus,
+  markSessionOrphan,
 } from '../daemon/state.js';
 import type { Agent, OrchestratorCycle } from '../shared/types.js';
 import { statePath, sessionDir } from '../shared/paths.js';
@@ -94,6 +95,8 @@ describe('addAgent', () => {
       completedAt: null,
       reports: [],
       paneId: '%99',
+      activeMs: 0,
+      repo: '.',
     };
 
     await addAgent(testDir, id, agent);
@@ -118,6 +121,8 @@ describe('addAgent', () => {
       completedAt: null,
       reports: [],
       paneId: '%0',
+      activeMs: 0,
+      repo: '.',
     });
 
     await addAgent(testDir, id, makeAgent('agent-001'));
@@ -147,6 +152,8 @@ describe('updateAgent', () => {
       completedAt: null,
       reports: [],
       paneId: '%1',
+      activeMs: 0,
+      repo: '.',
     };
 
     await addAgent(testDir, id, agent);
@@ -184,6 +191,7 @@ describe('addOrchestratorCycle', () => {
       timestamp: new Date().toISOString(),
       agentsSpawned: [],
       paneId: '%10',
+      activeMs: 0,
     };
 
     await addOrchestratorCycle(testDir, id, cycle);
@@ -206,6 +214,7 @@ describe('appendAgentToLastCycle', () => {
       cycle: 1,
       timestamp: new Date().toISOString(),
       agentsSpawned: [],
+      activeMs: 0,
     });
 
     await appendAgentToLastCycle(testDir, id, 'agent-001');
@@ -290,6 +299,8 @@ describe('atomicWrite', () => {
       completedAt: null,
       reports: [],
       paneId: '%0',
+      activeMs: 0,
+      repo: '.',
     });
 
     await addAgent(testDir, id, makeAgent('agent-001'));
@@ -322,11 +333,38 @@ describe('concurrent mutations', () => {
       completedAt: null,
       reports: [],
       paneId: '%0',
+      activeMs: 0,
+      repo: '.',
     });
 
     const promises = Array.from({ length: 5 }, (_, i) => addAgent(testDir, id, makeAgent(`agent-00${i + 1}`)));
     await Promise.all(promises);
     const session = getSession(testDir, id);
     assert.equal(session.agents.length, 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// markSessionOrphan — persists orphanReason
+// ---------------------------------------------------------------------------
+describe('markSessionOrphan', () => {
+  it('sets orphaned=true and persists orphanReason', async () => {
+    const id = randomUUID();
+    createSession(id, 'orphan test', testDir);
+
+    await markSessionOrphan(testDir, id, { reason: 'orchestrator pane vanished' });
+
+    const session = getSession(testDir, id);
+    assert.equal(session.orphaned, true, 'orphaned flag must be set');
+    assert.equal(session.orphanReason, 'orchestrator pane vanished', 'orphanReason must be persisted');
+  });
+
+  it('normalizes orphanReason as undefined for sessions without it (old state)', () => {
+    const id = randomUUID();
+    createSession(id, 'old session', testDir);
+
+    const session = getSession(testDir, id);
+    // A freshly created session has no orphanReason — normalization leaves it undefined
+    assert.equal(session.orphanReason, undefined);
   });
 });

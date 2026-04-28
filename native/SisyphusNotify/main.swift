@@ -52,27 +52,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 let title = json["title"] ?? "Sisyphus"
                 let message = json["message"] ?? ""
                 let tmuxSession = json["tmuxSession"]
+                let level = json["level"] ?? "urgent"
 
-                self.sendNotification(title: title, message: message, tmuxSession: tmuxSession)
+                self.sendNotification(title: title, message: message, tmuxSession: tmuxSession, level: level)
             }
             // stdin closed — exit
             DispatchQueue.main.async { NSApp.terminate(nil) }
         }
     }
 
-    private func sendNotification(title: String, message: String, tmuxSession: String?) {
+    private func sendNotification(title: String, message: String, tmuxSession: String?, level: String) {
         guard authorized else {
             fputs("Not authorized to send notifications\n", stderr)
             return
         }
 
+        let isUrgent = level != "info"
+
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message
-        content.sound = .default
+        content.sound = isUrgent ? .default : nil
         content.categoryIdentifier = "SISYPHUS"
+        // .timeSensitive needs an entitlement we don't have — .active for urgent, .passive for info
+        content.interruptionLevel = isUrgent ? .active : .passive
 
-        var userInfo: [String: String] = [:]
+        var userInfo: [String: String] = ["level": level]
         if let s = tmuxSession { userInfo["tmuxSession"] = s }
         content.userInfo = userInfo
 
@@ -94,7 +99,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        let level = notification.request.content.userInfo["level"] as? String ?? "urgent"
+        if level == "info" {
+            completionHandler([.banner])
+        } else {
+            completionHandler([.banner, .sound])
+        }
     }
 
     // Click handler — runs the switch script

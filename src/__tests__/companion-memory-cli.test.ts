@@ -57,7 +57,7 @@ describe('sisyphus companion CLI (Phase 4 skeleton)', () => {
     const program = new Command('sisyphus');
     registerCompanion(program);
     const companion = program.commands.find(c => c.name() === 'companion')!;
-    const handler = (companion as Record<string, unknown>)['_actionHandler'];
+    const handler = (companion as unknown as Record<string, unknown>)['_actionHandler'];
     assert.ok(
       typeof handler === 'function',
       'companion parent command should still have an action handler',

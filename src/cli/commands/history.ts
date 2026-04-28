@@ -120,12 +120,15 @@ function buildLiveSummary(sessionId: string): SessionSummary | null {
     completedAt: session.completedAt ?? null,
     activeMs: session.activeMs,
     wallClockMs: session.wallClockMs ?? liveWallClockMs,
+    userBlockedMs: session.userBlockedMs ?? 0,
     agentCount: session.agents.length,
     crashCount: session.agents.filter(a => a.status === 'crashed').length,
     lostCount: session.agents.filter(a => a.status === 'lost').length,
     killedAgentCount: session.agents.filter(a => a.status === 'killed').length,
     rollbackCount: session.rollbackCount ?? 0,
-    efficiency: liveWallClockMs > 0 ? session.activeMs / liveWallClockMs : null,
+    efficiency: liveWallClockMs > 0
+      ? session.activeMs / Math.max(1, liveWallClockMs - (session.userBlockedMs ?? 0))
+      : null,
     cycleCount: session.orchestratorCycles.length,
     context: session.context ?? null,
     completionReport: session.completionReport ?? null,
@@ -389,21 +392,6 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
     console.log('');
   }
 
-  // Reviews (from event timeline)
-  const events = loadEvents(id);
-  const reviewEvents = events.filter(e => e.event === 'review-completed');
-  if (reviewEvents.length > 0) {
-    console.log(`${BOLD}Reviews${RESET}`);
-    for (const e of reviewEvents) {
-      const rd = e.data;
-      const durMs = typeof rd.durationMs === 'number' ? rd.durationMs : null;
-      const durStr = durMs != null ? formatDuration(durMs) : '—';
-      const type = c('cyan', rd.type as string);
-      console.log(`  ${type}  ${durStr}  ${rd.itemsReviewed}/${rd.itemsTotal} items reviewed  ${c('gray', fmtDate(e.ts))}`);
-    }
-    console.log('');
-  }
-
   // Completion report
   if (s.completionReport) {
     console.log(`${BOLD}Completion Report${RESET}`);
@@ -458,11 +446,6 @@ function formatEventData(e: HistoryEvent): string {
     case 'review-started': {
       const fileParts = typeof d.filePath === 'string' ? d.filePath.split('/').slice(-2).join('/') : '';
       return `${c('cyan', d.type as string)}  ${c('gray', fileParts)}`;
-    }
-    case 'review-completed': {
-      const durMs = typeof d.durationMs === 'number' ? d.durationMs : null;
-      const durStr = durMs != null ? formatDuration(durMs) : '—';
-      return `${c('cyan', d.type as string)}  ${durStr}  ${d.itemsReviewed}/${d.itemsTotal} reviewed`;
     }
     case 'agent-killed':
       return `${d.agentId}  ${fmtStatus(d.status as string)}  ${DIM}${formatDuration(d.activeMs as number)}${RESET}  ${d.reason ?? ''}`;
@@ -524,7 +507,9 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   // Efficiency
   const efficiencyValues: number[] = [];
   for (const { summary: s } of sessions) {
-    const eff = s.efficiency ?? (s.wallClockMs ? s.activeMs / s.wallClockMs : null);
+    const eff = s.efficiency ?? (s.wallClockMs
+      ? s.activeMs / Math.max(1, s.wallClockMs - (s.userBlockedMs ?? 0))
+      : null);
     if (eff != null) efficiencyValues.push(eff);
   }
   const avgEfficiency = efficiencyValues.length > 0

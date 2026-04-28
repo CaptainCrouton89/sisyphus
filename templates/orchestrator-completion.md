@@ -20,15 +20,13 @@ Synthesize this into a clear picture of what was done and how it maps to what wa
 
 ## Present the Summary
 
-Write a polished markdown summary and display it with `termrender --tmux` so the user sees a well-rendered report in a side pane:
+Write a polished markdown summary to `$SISYPHUS_SESSION_DIR/context/completion-summary.md`:
 
 ```bash
 cat > "$SISYPHUS_SESSION_DIR/context/completion-summary.md" << 'EOF'
 # Session Summary
 ... your markdown summary ...
 EOF
-
-termrender --tmux "$SISYPHUS_SESSION_DIR/context/completion-summary.md"
 ```
 
 The user already knows what they asked for — don't recap the goal. Focus on what's interesting:
@@ -38,47 +36,74 @@ The user already knows what they asked for — don't recap the goal. Focus on wh
 - **Gaps** — anything deferred, any known limitations. Be honest.
 - **Validation** — brief summary of what was tested. Reference reports if the user wants detail.
 
-Use tables, diagrams, and structured markdown freely — `sisyphus present` renders it with full styling. Keep it tight but visually clear. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
+Use tables, diagrams, and structured markdown freely — the deck below renders the file via `bodyPath`, so termrender directives are styled in the user's resolution view. Keep it tight but visually clear. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
 
-## Wait for User Confirmation
+## Ask for Sign-off via `sisyphus ask`
 
-After presenting the report, ask the user directly:
+Submit a structured deck. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sisyphus complete` until the user picks `approve`.**
 
-> Does this look good? Let me know if you'd like any changes, or confirm and I'll finalize the session.
+```bash
+deck="$SISYPHUS_SESSION_DIR/context/.ask-completion-$(date +%s).json"
+cat > "$deck" <<'EOF'
+{
+  "interactions": [{
+    "id": "signoff",
+    "title": "Approve completion?",
+    "subtitle": "Review the summary and choose how to proceed",
+    "bodyPath": "../completion-summary.md",
+    "kind": "validation",
+    "options": [
+      {"id": "approve",  "label": "Looks good — finalize"},
+      {"id": "minor",    "label": "Minor fixes needed (cosmetic, rename, typo)"},
+      {"id": "moderate", "label": "Bugs or gaps to address"},
+      {"id": "major",    "label": "Scope or approach rework"}
+    ],
+    "allowFreetext": true,
+    "freetextLabel": "Anything specific to fix?"
+  }]
+}
+EOF
+result=$(sisyphus ask "$deck")
+choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
+notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
+```
 
-Then **stop and wait.** The user will respond in the tmux pane.
-
-**NEVER call `sisyphus complete` until the user explicitly confirms.**
+`sisyphus ask` blocks internally — do not add any "wait for the user" step around it.
 
 ## Handle Feedback
 
-When the user responds, assess the scope:
+Branch on `$choice`:
 
-### Minor (typo, rename, small fix, cosmetic tweak)
-Fix it yourself directly. Then re-present the affected section and ask for confirmation again. Multiple rounds of minor fixes are fine — stay in the conversation.
+### `approve` — finalize
+Call `sisyphus complete` (see Finalizing below). `$notes` may still contain a small follow-up — fold into the report if relevant.
 
-### Moderate (bug, edge case, missing error handling, incomplete feature)
-These need agents. Accumulate all moderate items the user raises, then:
+### `minor` — typo, rename, small fix, cosmetic tweak
+Fix it yourself directly using `$notes` as the spec. Then update `completion-summary.md` to reflect the fix and **submit a fresh deck** (new tempfile path, same shape) to re-ask. Multiple rounds of minor fixes are fine — stay in the loop.
+
+If the iterative fix loop runs long (many rounds, context filling up), yield back to completion mode with a progress summary so you get fresh context (see Context Management below) rather than continuing to ask in the same cycle.
+
+### `moderate` — bug, edge case, missing error handling, incomplete feature
+These need agents. Use `$notes` to capture the items raised, then:
 
 1. Update roadmap.md with the items to address
 2. Update strategy.md if the approach needs adjustment
 3. Yield back to implementation (or planning if the fix requires design):
 
 ```bash
-sisyphus yield --mode implementation --prompt "User review surfaced issues to fix: [list items]. See roadmap.md for details."
+sisyphus yield --mode implementation --prompt "User review surfaced issues to fix: $notes. See roadmap.md for details."
 ```
 
-Don't yield after each individual item — collect them, then yield once.
+If a single deck round surfaces multiple moderate items, capture them all in `$notes` (the freetext field) — don't ask again in the same cycle to collect more.
 
-### Major (new feature request, fundamental approach change, scope expansion)
+### `major` — new feature request, fundamental approach change, scope expansion
 These change the goal itself:
 
-1. Update goal.md with the revised scope
+1. Update goal.md with the revised scope (record the pivot, per goal.md conventions)
 2. Invoke the **strategy skill** to revise strategy.md with the new direction
 3. Yield to discovery mode:
 
 ```bash
-sisyphus yield --mode discovery --prompt "User requested significant scope change: [summary]. Goal and strategy updated — re-evaluate approach."
+sisyphus yield --mode discovery --prompt "User requested significant scope change: $notes. Goal and strategy updated — re-evaluate approach."
 ```
 
 ## Context Management
@@ -91,7 +116,7 @@ sisyphus yield --mode completion --prompt "User review in progress. Fixed: [list
 
 ## Finalizing
 
-Only after the user explicitly confirms — "looks good", "ship it", "done", "approved", or equivalent — call:
+Only after `$choice == "approve"` — call:
 
 ```bash
 sisyphus complete --report "summary of what was accomplished"

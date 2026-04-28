@@ -5,4 +5,3 @@
 - `removeTmuxKeybind` only unbinds `DEFAULT_CYCLE_KEY`/`DEFAULT_PREFIX_KEY` — if setup was called with custom keys, those root bindings persist after removal
 - `@sisyphus_dashboard` reconciliation matches any pane whose command is `node` — a non-TUI node process running in the home session gets incorrectly adopted as the dashboard window, preventing dashboard reopen
 - Session picker (`PICK_SESSION_SCRIPT`) scopes to the current session's cwd from the manifest; if the current session has no manifest entry, `cwd` is empty and **all** sessions across all cwds are shown instead
-- `SESSION_RESOLVE` resolves session_id via two-pass manifest read (name→cwd, then cwd→session_id); `H`-type (home) sessions are excluded from the second pass — scripts that depend on `session_id` silently fail when run from the home session

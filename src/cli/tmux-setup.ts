@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSy
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { globalDir } from '../shared/paths.js';
+import { KEYMAP, formatHelpForKeymap, type MenuDef, type MenuItem, type Action } from '../shared/keymap.js';
 
 export const DEFAULT_CYCLE_KEY = 'M-s';
 export const DEFAULT_PREFIX_KEY = 'C-s';
@@ -74,6 +75,75 @@ export function openStrategyScriptPath(): string {
   return scriptPath('sisyphus-open-strategy');
 }
 
+export function keymapJsonPath(): string {
+  return join(globalDir(), 'keymap.json');
+}
+
+export function writeKeymapJson(): void {
+  mkdirSync(globalDir(), { recursive: true });
+  writeFileSync(keymapJsonPath(), JSON.stringify(KEYMAP, null, 2), 'utf8');
+}
+
+export function tmuxVersionAtLeast(major: number, minor: number): boolean {
+  try {
+    const out = execSync('tmux -V', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
+    const match = out.match(/tmux\s+(\d+)\.(\d+)/);
+    if (!match) return false;
+    const v = parseInt(match[1], 10) * 1000 + parseInt(match[2], 10);
+    return v >= major * 1000 + minor;
+  } catch {
+    return false;
+  }
+}
+
+function menuItemCommand(action: Action, scriptsDir: string): string | null {
+  switch (action.type) {
+    case 'script':
+      return `run-shell ${join(scriptsDir, action.name)}`;
+    case 'popup': {
+      const { w, h, borderStyle, title, cwd } = action.popup;
+      let args = '-E';
+      if (w) args += ` -w ${w}`;
+      if (h) args += ` -h ${h}`;
+      if (borderStyle) args += ` -S '${borderStyle}'`;
+      if (title) args += ` -T '${title}'`;
+      if (cwd === 'current') args += ` -d '#{pane_current_path}'`;
+      return `display-popup ${args} ${join(scriptsDir, action.name)}`;
+    }
+    case 'submenu':
+      return `run-shell ${join(scriptsDir, `sisyphus-menu-${action.ref}`)}`;
+    case 'tmux':
+      return action.cmd;
+    case 'tui':
+      return null;
+  }
+}
+
+export function generateMenuLine(item: MenuItem, scriptsDir: string): string {
+  const cmd = menuItemCommand(item.action, scriptsDir);
+  if (cmd === null) return '';
+  const label = item.label.replace(/"/g, '\\"');
+  return `"${label}" ${item.key} "${cmd}"`;
+}
+
+export function generateSubmenuScript(submenuId: string, def: MenuDef, scriptsDir: string): string {
+  const lines = def.items
+    .map(item => generateMenuLine(item, scriptsDir))
+    .filter(l => l !== '');
+  const args = lines.join(' \\\n  ');
+  return `#!/bin/bash
+exec tmux display-menu -T '${def.title}' -x R -y S \\
+  ${args}
+`;
+}
+
+export function generateTopLevelBinding(prefixKey: string, def: MenuDef, scriptsDir: string): string {
+  const args = def.items
+    .map(item => generateMenuLine(item, scriptsDir))
+    .filter(l => l !== '')
+    .join(' ');
+  return `bind-key -T root ${prefixKey} display-menu -T '${def.title}' -x R -y S ${args}`;
+}
 
 export function sisyphusTmuxConfPath(): string {
   return join(globalDir(), 'tmux.conf');
@@ -310,34 +380,9 @@ ${GO_HOME_AFTER}
 `;
 
 const HELP_SCRIPT = `#!/bin/bash
-cat <<'EOF'
-
-  Sisyphus Keybindings  (Ctrl-s + key)
-
-  --- Navigation --------------------
-    s   Cycle between sessions
-    h   Go to dashboard
-    l   Session picker
-    z   Zoom/focus toggle
-
-  --- Actions -----------------------
-    n   New session
-    m   Message orchestrator
-    c   Continue session
-    r   Restart agent
-    t   Session status
-    p   Open roadmap
-    S   Open strategy
-    e   Export session
-
-  --- Management --------------------
-    k   Kill session
-    d   Delete session
-    x   Kill current pane
-
-    ?   This help
-
-EOF
+cat <<'EOF_HELP'
+${formatHelpForKeymap(KEYMAP)}
+EOF_HELP
 read -n 1 -s -r -p "  Press any key to close"
 `;
 
@@ -462,22 +507,792 @@ read -n 1 -s -r -p "Press a key to close."
 `;
 
 const RESTART_AGENT_SCRIPT = `#!/bin/bash
-# Restart a failed/lost agent
+# Pick a sisyphus agent and restart it (fzf picker with confirm for running agents).
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\`.
 ${SESSION_RESOLVE}
 
-echo "Session agents:"
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+declare -a statuses=()
+while IFS=$'\\t' read -r aid aname atype astatus; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+  statuses+=("$astatus")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Restart: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+if [ "\${statuses[$idx]}" = "running" ]; then
+  printf "\\033[33mAgent is running. Restart anyway? (yes/no): \\033[0m"
+  read -r answer
+  [ "$answer" = "yes" ] || exit 0
+fi
+
+sisyphus restart-agent "\${ids[$idx]}" --session "$session_id"
 echo ""
-sisyphus status "$session_id" 2>&1 | grep -E '(agent-[0-9]+|Active agents|Agents:)' | head -20
-echo ""
-printf "Agent ID to restart (e.g. agent-001): "
-read -r agent_id
-[ -z "$agent_id" ] && exit 0
-echo ""
-sisyphus restart-agent "$agent_id" --session "$session_id"
-echo ""
-echo "Press any key to close."
-read -n 1 -s -r
+read -n 1 -s -r -p "Press a key to close."
 `;
+
+// === Stage 2 script constants ===
+
+const OPEN_GOAL_SCRIPT = `#!/bin/bash
+# Open goal.md for the current session in nvim.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+file="$cwd/.sisyphus/sessions/$session_id/goal.md"
+[ ! -f "$file" ] && { tmux display-message "No goal.md for this session"; exit 0; }
+exec nvim "$file"
+`;
+
+const OPEN_DIR_SCRIPT = `#!/bin/bash
+# Open session dir in Finder (macOS).
+# macOS-only — Linux/Windows port deferred.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+dir="$cwd/.sisyphus/sessions/$session_id"
+[ ! -d "$dir" ] && { tmux display-message "Session dir not found: $dir"; exit 0; }
+exec open "$dir"
+`;
+
+const OPEN_LOGS_SCRIPT = `#!/bin/bash
+# Tail the newest cycle log for this session in a popup.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+session_dir="$cwd/.sisyphus/sessions/$session_id"
+target=$(ls -t "$session_dir/logs/"cycle-*.md 2>/dev/null | head -1)
+[ -z "$target" ] && { tmux display-message "No logs for this session yet"; exit 0; }
+exec tail -n 500 -f "$target"
+`;
+
+const RESUME_SESSION_SCRIPT = `#!/bin/bash
+# Resume a paused/completed session with optional follow-up instructions.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+short_id="\${session_id:0:8}"
+
+# Optional message — leave empty to resume with no extra instructions.
+tmpfile=$(mktemp /tmp/sisyphus-resume-XXXXXX.md)
+trap 'rm -f "$tmpfile"' EXIT
+printf "# Resume session %s\\n# (Optional) Add follow-up instructions for the orchestrator below.\\n# Save & quit empty to resume with no message.\\n\\n" "$short_id" > "$tmpfile"
+nvim "$tmpfile"
+
+# Strip comment + blank lines to detect empty submission
+body=$(grep -v '^[[:space:]]*#' "$tmpfile" | sed '/^[[:space:]]*$/d')
+
+if [ -z "$body" ]; then
+  exec sisyphus resume "$session_id"
+else
+  exec sisyphus resume "$session_id" "$body"
+fi
+`;
+
+const ROLLBACK_SESSION_SCRIPT = `#!/bin/bash
+# Roll back session to a chosen cycle. Prompts inline.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+short_id="\${session_id:0:8}"
+printf "Rollback %s to cycle: " "$short_id"
+read -r cycle_input
+
+# Validate: positive integer
+case "$cycle_input" in
+  ''|*[!0-9]*)
+    echo "Invalid cycle number"
+    read -n 1 -s -r -p "Press a key to close."
+    exit 0
+    ;;
+esac
+
+if [ "$cycle_input" -lt 1 ]; then
+  echo "Cycle must be >= 1"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 0
+fi
+
+sisyphus rollback "$session_id" "$cycle_input"
+echo ""
+echo "Rolled back to cycle $cycle_input — use [C-s S r] to resume."
+read -n 1 -s -r -p "Press a key to close."
+`;
+
+const GO_TO_WINDOW_SCRIPT = `#!/bin/bash
+# Switch to the sisyphus session's tmux window. If the window is dead,
+# fall back to opening the orchestrator's last claude --resume in a popup.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+# Walk the manifest for the S-row whose tmux session has @sisyphus_session_id == ours.
+# Manifest format: type\tname\tcwd\tphase\tsessionId
+MANIFEST="$HOME/.sisyphus/sessions-manifest.tsv"
+[ ! -f "$MANIFEST" ] && { tmux display-message "No manifest"; exit 0; }
+
+target_sid=""
+while IFS=$'\\t' read -r type name scwd phase sid; do
+  [[ "$type" == "#"* ]] && continue
+  [ "$type" = "S" ] || continue
+  [ "$scwd" = "$cwd" ] || continue
+  ssid=$(tmux show-options -t "$sid" -v @sisyphus_session_id 2>/dev/null)
+  if [ "$ssid" = "$session_id" ]; then
+    target_sid="$sid"
+    break
+  fi
+done < "$MANIFEST"
+
+if [ -n "$target_sid" ] && tmux has-session -t "$target_sid" 2>/dev/null; then
+  tmux switch-client -t "$target_sid"
+  exit 0
+fi
+
+# Fallback: orchestrator window is gone. Open last claude session in a popup.
+state="$cwd/.sisyphus/sessions/$session_id/state.json"
+[ ! -f "$state" ] && { tmux display-message "Window dead and no state.json — try sisyphus resume"; exit 0; }
+
+claude_sid=$(jq -r '[.orchestratorCycles[].claudeSessionId] | last // empty' "$state")
+
+if [ -z "$claude_sid" ]; then
+  tmux display-message "No orchestrator claude session id found — try sisyphus resume"
+  exit 0
+fi
+
+# Validate before passing to exec — value must be a safe session id.
+[[ "$claude_sid" =~ ^[A-Za-z0-9_-]+$ ]] || { tmux display-message "Invalid claude session id"; exit 1; }
+
+exec claude --resume "$claude_sid"
+`;
+
+const SPAWN_AGENT_SCRIPT = `#!/bin/bash
+# Compose an instruction for a new agent and spawn it.
+# Run from a sisyphus session pane, not the home dashboard.
+${SESSION_RESOLVE}
+
+tmpfile=$(mktemp /tmp/sisyphus-spawn-XXXXXX.md)
+trap 'rm -f "$tmpfile"' EXIT
+printf "# Spawn agent in session %s\\n# Write the agent's instruction below. Empty = abort.\\n\\n" "\${session_id:0:8}" > "$tmpfile"
+nvim "$tmpfile"
+
+body=$(grep -v '^[[:space:]]*#' "$tmpfile" | sed '/^[[:space:]]*$/d')
+[ -z "$body" ] && exit 0
+
+exec sisyphus spawn --session "$session_id" --name "agent" --instruction "$body"
+`;
+
+const SEARCH_REPORTS_SCRIPT = `#!/bin/bash
+# fzf over reports/*.md across all sessions for the current cwd.
+# Falls back to numbered list if fzf is missing.
+
+# Resolve cwd via tmux option (set by daemon) or fall back.
+tmux_sid=$(tmux display-message -p '#{session_id}')
+cwd=$(tmux show-options -t "$tmux_sid" -v @sisyphus_cwd 2>/dev/null)
+[ -z "$cwd" ] && cwd=$(tmux display-message -p '#{pane_current_path}')
+
+sessions_dir="$cwd/.sisyphus/sessions"
+[ ! -d "$sessions_dir" ] && { tmux display-message "No sessions in $cwd"; exit 0; }
+
+# Find all report files. -path filter scopes to */reports/*.md inside any session.
+mapfile -t files < <(find "$sessions_dir" -type f -path '*/reports/*.md' 2>/dev/null | sort)
+(( \${#files[@]} == 0 )) && { tmux display-message "No reports yet in $cwd"; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  picked=$(printf '%s\\n' "\${files[@]}" \\
+    | sed "s|$sessions_dir/||" \\
+    | fzf --reverse --height=100% --prompt="Report: " \\
+        --preview 'f={}; cat -- "'"$sessions_dir"'/$f"' --preview-window=right:60%)
+  [ -z "$picked" ] && exit 0
+  exec nvim "$sessions_dir/$picked"
+else
+  for (( i=0; i<\${#files[@]}; i++ )); do
+    rel="\${files[$i]#$sessions_dir/}"
+    printf "  %d) %s\\n" $((i+1)) "\${rel}"
+  done
+  printf "\\nPick: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#files[@]} )) || exit 0
+  exec nvim "\${files[$idx]}"
+fi
+`;
+
+// === end Stage 2 script constants ===
+
+// === Stage 3 script constants ===
+
+const JUMP_TO_PANE_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent and jump to its tmux pane.
+# Assumes macOS (pbcopy, fzf optional). Requires \`sisyphus status --json\`.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+declare -a panes=()
+while IFS=$'\\t' read -r aid aname atype astatus pid; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+  panes+=("$pid")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status, .paneId] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Jump to: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+target_pane="\${panes[$idx]}"
+[ -z "$target_pane" ] && { echo "Agent has no active pane"; sleep 1; exit 1; }
+target_session=$(tmux display-message -p -t "$target_pane" '#{session_id}' 2>/dev/null)
+target_window=$(tmux display-message -p -t "$target_pane" '#{window_id}' 2>/dev/null)
+[ -n "$target_session" ] && tmux switch-client -t "$target_session"
+[ -n "$target_window" ] && tmux select-window -t "$target_window"
+tmux select-pane -t "$target_pane"
+`;
+
+const MSG_AGENT_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent and send it a message via nvim.
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\` and \`--agent\` on message.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+while IFS=$'\\t' read -r aid aname atype astatus; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Message agent: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+tmpfile=$(mktemp /tmp/sisyphus-msg-agent-XXXX.md)
+trap 'rm -f "$tmpfile"' EXIT
+nvim "$tmpfile"
+grep -q '[^[:space:]]' "$tmpfile" || exit 0
+exec sisyphus message --session "$session_id" --agent "\${ids[$idx]}" "$(cat "$tmpfile")"
+`;
+
+const RERUN_AGENT_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent and spawn a retry with its original instruction.
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\`.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+declare -a atypes=()
+declare -a anames=()
+declare -a instrs=()
+while IFS=$'\\t' read -r aid aname atype astatus ainstr_b64; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+  atypes+=("$atype")
+  anames+=("$aname")
+  instrs+=("$(echo "$ainstr_b64" | base64 -d)")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status, (.instruction // "" | @base64)] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Rerun: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+instr="\${instrs[$idx]}"
+if [ "\${#instr}" -lt 20 ]; then
+  echo "Original instruction is shorter than 20 chars — cannot rerun safely."
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+exec sisyphus spawn --session "$session_id" --agent-type "\${atypes[$idx]}" --name "\${anames[$idx]}-retry-$(date +%s)" --instruction "$instr"
+`;
+
+const OPEN_CLAUDE_AGENT_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent or orchestrator cycle and resume its Claude session.
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\`.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+state="$cwd/.sisyphus/sessions/$session_id/state.json"
+[ ! -f "$state" ] && { echo "No state.json for this session"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a claudes=()
+while IFS=$'\\t' read -r rid rname rtype rcid; do
+  [ -z "$rid" ] && continue
+  entries+=("$rid  $rname ($rtype)")
+  claudes+=("$rcid")
+done < <(echo "$agents_json" | jq -r '
+  ((.agents // [])[] | [.id, .name, .agentType, (.claudeSessionId // "")] | @tsv),
+  ((.orchestratorCycles // [])[] | ["cycle-" + (.cycle|tostring), "orchestrator", "cycle", (.claudeSessionId // "")] | @tsv)
+')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents or cycles in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Open Claude: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+cid="\${claudes[$idx]}"
+[ -z "$cid" ] && { echo "No Claude session"; sleep 1; exit 1; }
+[[ "$cid" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "Invalid claude session id"; sleep 1; exit 1; }
+cd "$cwd" && exec claude --resume "$cid"
+`;
+
+const TAIL_AGENT_LOGS_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent and view its tmux pane scrollback (last 2000 lines) in less.
+# Uses tmux capture-pane — no tail -f, no pipe-pane side effects.
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\`.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+declare -a panes=()
+while IFS=$'\\t' read -r aid aname atype astatus pid; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+  panes+=("$pid")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status, .paneId] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Tail logs: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+target_pane="\${panes[$idx]}"
+[ -z "$target_pane" ] && { echo "Agent has no active pane"; sleep 1; exit 1; }
+tmux capture-pane -t "$target_pane" -p -S -2000 | less +G
+`;
+
+const KILL_AGENT_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent and kill it (with red confirmation prompt).
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\` and \`sisyphus kill-agent\`.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+while IFS=$'\\t' read -r aid aname atype astatus; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Kill agent: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+printf '\\033[31mKill %s? (yes/no): \\033[0m' "\${ids[$idx]}"
+read -r answer
+[ "$answer" = "yes" ] || exit 0
+sisyphus kill-agent "\${ids[$idx]}" --session "$session_id"
+echo ""
+read -n 1 -s -r -p "Press a key to close."
+`;
+
+const COPY_AGENT_ID_SCRIPT = `#!/bin/bash
+# Pick a sisyphus agent and copy its ID to clipboard.
+# Assumes macOS (pbcopy, fzf optional). Requires \`sisyphus status --json\`.
+${SESSION_RESOLVE}
+
+command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
+
+agents_json=$(sisyphus status "$session_id" --json 2>/dev/null)
+if [ -z "$agents_json" ]; then
+  echo "Failed to read session status"; sleep 1; exit 1
+fi
+
+declare -a entries=()
+declare -a ids=()
+while IFS=$'\\t' read -r aid aname atype astatus; do
+  [ -z "$aid" ] && continue
+  entries+=("$aid  $aname ($atype) — $astatus")
+  ids+=("$aid")
+done < <(echo "$agents_json" | jq -r '.agents[] | [.id, .name, .agentType, .status] | @tsv')
+
+(( \${#entries[@]} == 0 )) && { echo "No agents in session"; sleep 1; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  idx=$(for (( i=0; i<\${#entries[@]}; i++ )); do echo "$i \${entries[$i]}"; done \\
+    | fzf --reverse --height=100% --with-nth=2.. --prompt="Copy agent ID: " | awk '{print $1}')
+  [ -z "$idx" ] && exit 0
+else
+  for (( i=0; i<\${#entries[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${entries[$i]}"
+  done
+  printf "\\nPick agent: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
+fi
+
+aid="\${ids[$idx]}"
+printf '%s' "$aid" | pbcopy
+tmux display-message "Copied $aid"
+`;
+
+const COPY_LOGS_SCRIPT = `#!/bin/bash
+# Copy last 200 lines of the newest cycle log to clipboard.
+# Assumes macOS (pbcopy).
+${SESSION_RESOLVE}
+
+dir="$cwd/.sisyphus/sessions/$session_id/logs"
+[ -d "$dir" ] || { tmux display-message "No logs dir"; exit 0; }
+latest=$(ls -t "$dir"/cycle-*.md 2>/dev/null | head -1)
+[ -z "$latest" ] && { tmux display-message "No cycle logs yet"; exit 0; }
+tail -n 200 "$latest" | pbcopy
+tmux display-message "Copied last 200 lines of $(basename "$latest")"
+`;
+
+const COPY_LATEST_REPORT_SCRIPT = `#!/bin/bash
+# Copy the newest report file to clipboard.
+# Assumes macOS (pbcopy).
+${SESSION_RESOLVE}
+
+dir="$cwd/.sisyphus/sessions/$session_id/reports"
+[ -d "$dir" ] || { tmux display-message "No reports dir"; exit 0; }
+latest=$(ls -t "$dir" 2>/dev/null | head -1)
+[ -z "$latest" ] && { tmux display-message "No reports yet"; exit 0; }
+cat "$dir/$latest" | pbcopy
+tmux display-message "Copied $latest"
+`;
+
+const COPY_PATH_SCRIPT = `#!/bin/bash
+# Copy the session directory path to clipboard.
+# Assumes macOS (pbcopy).
+${SESSION_RESOLVE}
+
+printf '%s' "$cwd/.sisyphus/sessions/$session_id" | pbcopy
+tmux display-message "Copied session path"
+`;
+
+const COPY_ID_SCRIPT = `#!/bin/bash
+# Copy the session ID to clipboard.
+# Assumes macOS (pbcopy).
+${SESSION_RESOLVE}
+
+printf '%s' "$session_id" | pbcopy
+tmux display-message "Copied session ID"
+`;
+
+const COPY_CONTEXT_SCRIPT = `#!/bin/bash
+# Copy the session context XML to clipboard.
+# Assumes macOS (pbcopy). Requires \`sisyphus print-context\`.
+${SESSION_RESOLVE}
+
+sisyphus print-context "$session_id" --cwd "$cwd" | pbcopy
+tmux display-message "Copied session context (XML)"
+`;
+
+const EDIT_CONTEXT_FILE_SCRIPT = `#!/bin/bash
+# Pick a context file for the current session and open it in nvim.
+# Excludes archive/ subdirectory. Assumes macOS (fzf optional).
+${SESSION_RESOLVE}
+
+ctx_dir="$cwd/.sisyphus/sessions/$session_id/context"
+[ -d "$ctx_dir" ] || { echo "No context dir for this session"; read -n 1 -s -r -p "Press a key to close."; exit 0; }
+
+mapfile -t files < <(find "$ctx_dir" -type f -not -path '*/archive/*' | sort)
+(( \${#files[@]} == 0 )) && { echo "No context files yet"; read -n 1 -s -r -p "Press a key to close."; exit 0; }
+
+if command -v fzf &>/dev/null; then
+  picked=$(printf '%s\\n' "\${files[@]}" | sed "s|$ctx_dir/||" \\
+    | fzf --reverse --height=100% --prompt="Context file: ")
+  [ -z "$picked" ] && exit 0
+else
+  declare -a display_files=()
+  for f in "\${files[@]}"; do
+    display_files+=("\${f#$ctx_dir/}")
+  done
+  for (( i=0; i<\${#display_files[@]}; i++ )); do
+    printf "  %d) %s\\n" $((i+1)) "\${display_files[$i]}"
+  done
+  printf "\\nPick file: "
+  read -r choice
+  idx=$((choice - 1))
+  (( idx >= 0 && idx < \${#display_files[@]} )) || exit 0
+  picked="\${display_files[$idx]}"
+fi
+
+file="$ctx_dir/$picked"
+exec nvim "$file"
+`;
+
+// === end Stage 3 script constants ===
+
+// === Stage 4 script constants ===
+
+const QUICK_SPAWN_EXPLORE_SCRIPT = `#!/bin/bash
+# Spawn an Explore agent with the macOS clipboard contents as the instruction.
+# macOS only — pbpaste hard dependency.
+${SESSION_RESOLVE}
+
+if ! command -v pbpaste >/dev/null 2>&1; then
+  echo "pbpaste not found — macOS only for now"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+instruction=$(pbpaste)
+if [ -z "\${instruction// }" ]; then
+  echo "Clipboard is empty — copy a task description first"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+if [ "\${#instruction}" -lt 20 ]; then
+  echo "Clipboard text too short (\${#instruction} chars; spawn requires 20+)"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+name="explore-$(date +%s)"
+sisyphus spawn \\
+  --agent-type sisyphus:explore \\
+  --name "$name" \\
+  --session "$session_id" \\
+  --instruction "$instruction"
+exit_code=$?
+[ $exit_code -ne 0 ] && read -n 1 -s -r -p "Press a key to close."
+exit $exit_code
+`;
+
+const QUICK_SPAWN_DEBUG_SCRIPT = `#!/bin/bash
+# Spawn a Debug agent with the macOS clipboard contents as the instruction.
+# macOS only — pbpaste hard dependency.
+${SESSION_RESOLVE}
+
+if ! command -v pbpaste >/dev/null 2>&1; then
+  echo "pbpaste not found — macOS only for now"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+instruction=$(pbpaste)
+if [ -z "\${instruction// }" ]; then
+  echo "Clipboard is empty — copy a task description first"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+if [ "\${#instruction}" -lt 20 ]; then
+  echo "Clipboard text too short (\${#instruction} chars; spawn requires 20+)"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 1
+fi
+
+name="debug-$(date +%s)"
+sisyphus spawn \\
+  --agent-type sisyphus:debug \\
+  --name "$name" \\
+  --session "$session_id" \\
+  --instruction "$instruction"
+exit_code=$?
+[ $exit_code -ne 0 ] && read -n 1 -s -r -p "Press a key to close."
+exit $exit_code
+`;
+
+const OPEN_LATEST_REPORT_SCRIPT = `#!/bin/bash
+# Open the most-recently-modified file in the current session's reports/ in nvim.
+${SESSION_RESOLVE}
+
+reports_dir="$cwd/.sisyphus/sessions/$session_id/reports"
+if [ ! -d "$reports_dir" ]; then
+  echo "No reports/ directory for this session"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 0
+fi
+
+latest=$(ls -t "$reports_dir"/*.md 2>/dev/null | head -1)
+if [ -z "$latest" ]; then
+  echo "No reports yet"
+  read -n 1 -s -r -p "Press a key to close."
+  exit 0
+fi
+
+exec nvim "$latest"
+`;
+
+const CLONE_SESSION_SCRIPT = `#!/bin/bash
+# Clone the current session into a new independent session.
+# Orchestrator-only — the underlying CLI rejects calls from other panes/agents.
+${SESSION_RESOLVE}
+
+printf "Goal for cloned session: "
+read -e goal
+[ -z "\${goal// }" ] && exit 0
+
+printf "Optional name (blank to skip): "
+read -e clone_name
+
+printf "Copy strategy.md? (y/N): "
+read -r copy_strategy
+
+args=()
+[ -n "$clone_name" ] && args+=(--name "$clone_name")
+[ "$copy_strategy" = "y" ] || [ "$copy_strategy" = "Y" ] && args+=(--strategy)
+
+sisyphus clone "\${args[@]}" "$goal"
+exit_code=$?
+read -n 1 -s -r -p "Press a key to close."
+exit $exit_code
+`;
+
+const HISTORY_SCRIPT = `#!/bin/bash
+# Show rich session detail (history command's per-session view) in a popup.
+${SESSION_RESOLVE}
+sisyphus history "$session_id" 2>&1 | less -R
+`;
+
+const RECONNECT_SCRIPT = `#!/bin/bash
+# Reconnect daemon to an orphaned tmux session for the current cwd.
+${SESSION_RESOLVE}
+sisyphus reconnect "$session_id"
+exit_code=$?
+read -n 1 -s -r -p "Press a key to close."
+exit $exit_code
+`;
+
+const OPEN_SCRATCH_SCRIPT = `#!/bin/bash
+# Open a standalone Claude scratch window in the home tmux session for this cwd.
+# scratch resolves the home session itself via @sisyphus_cwd; no session_id needed.
+exec sisyphus scratch
+`;
+
+// === end Stage 4 script constants ===
 
 function installScript(name: string, content: string): void {
   mkdirSync(join(globalDir(), 'bin'), { recursive: true });
@@ -487,6 +1302,7 @@ function installScript(name: string, content: string): void {
 }
 
 function installAllScripts(): void {
+  // Existing scripts with real content
   installScript('sisyphus-cycle', CYCLE_SCRIPT);
   installScript('sisyphus-home', homeScript());
   installScript('sisyphus-kill-pane', KILL_PANE_SCRIPT);
@@ -494,7 +1310,6 @@ function installAllScripts(): void {
   installScript('sisyphus-msg', MESSAGE_SCRIPT);
   installScript('sisyphus-kill-session', KILL_SESSION_SCRIPT);
   installScript('sisyphus-delete-session', DELETE_SESSION_SCRIPT);
-  installScript('sisyphus-help', HELP_SCRIPT);
   installScript('sisyphus-status-popup', STATUS_POPUP_SCRIPT);
   installScript('sisyphus-pick-session', PICK_SESSION_SCRIPT);
   installScript('sisyphus-continue-session', CONTINUE_SESSION_SCRIPT);
@@ -502,6 +1317,56 @@ function installAllScripts(): void {
   installScript('sisyphus-open-roadmap', OPEN_ROADMAP_SCRIPT);
   installScript('sisyphus-open-strategy', OPEN_STRATEGY_SCRIPT);
   installScript('sisyphus-export-session', EXPORT_SESSION_SCRIPT);
+
+  // === Stage 1 (descriptor + generator + stub installs) ===
+  const scriptsDir = join(globalDir(), 'bin');
+
+  // Submenu dispatch scripts — one per submenu, generated from descriptor
+  for (const [id, def] of Object.entries(KEYMAP.submenus)) {
+    installScript(`sisyphus-menu-${id}`, generateSubmenuScript(id, def, scriptsDir));
+  }
+  // === end Stage 1 ===
+
+  // === Stage 2 (tmux submenu scripts) ===
+  installScript('sisyphus-open-goal', OPEN_GOAL_SCRIPT);
+  installScript('sisyphus-open-dir', OPEN_DIR_SCRIPT);
+  installScript('sisyphus-open-logs', OPEN_LOGS_SCRIPT);
+  installScript('sisyphus-resume-session', RESUME_SESSION_SCRIPT);
+  installScript('sisyphus-rollback-session', ROLLBACK_SESSION_SCRIPT);
+  installScript('sisyphus-go-to-window', GO_TO_WINDOW_SCRIPT);
+  installScript('sisyphus-spawn-agent', SPAWN_AGENT_SCRIPT);
+  installScript('sisyphus-search-reports', SEARCH_REPORTS_SCRIPT);
+  // === end Stage 2 ===
+
+  // === Stage 3 (cursor pickers) ===
+  installScript('sisyphus-jump-to-pane', JUMP_TO_PANE_SCRIPT);
+  installScript('sisyphus-msg-agent', MSG_AGENT_SCRIPT);
+  installScript('sisyphus-rerun-agent', RERUN_AGENT_SCRIPT);
+  installScript('sisyphus-open-claude-agent', OPEN_CLAUDE_AGENT_SCRIPT);
+  installScript('sisyphus-tail-agent-logs', TAIL_AGENT_LOGS_SCRIPT);
+  installScript('sisyphus-kill-agent', KILL_AGENT_SCRIPT);
+  installScript('sisyphus-copy-agent-id', COPY_AGENT_ID_SCRIPT);
+  installScript('sisyphus-copy-logs', COPY_LOGS_SCRIPT);
+  installScript('sisyphus-copy-latest-report', COPY_LATEST_REPORT_SCRIPT);
+  installScript('sisyphus-copy-path', COPY_PATH_SCRIPT);
+  installScript('sisyphus-copy-id', COPY_ID_SCRIPT);
+  installScript('sisyphus-copy-context', COPY_CONTEXT_SCRIPT);
+  installScript('sisyphus-edit-context-file', EDIT_CONTEXT_FILE_SCRIPT);
+  // === end Stage 3 ===
+
+  // === Stage 4 (creative additions) ===
+  installScript('sisyphus-quick-spawn-explore', QUICK_SPAWN_EXPLORE_SCRIPT);
+  installScript('sisyphus-quick-spawn-debug', QUICK_SPAWN_DEBUG_SCRIPT);
+  installScript('sisyphus-open-latest-report', OPEN_LATEST_REPORT_SCRIPT);
+  installScript('sisyphus-clone-session', CLONE_SESSION_SCRIPT);
+  installScript('sisyphus-history', HISTORY_SCRIPT);
+  installScript('sisyphus-reconnect', RECONNECT_SCRIPT);
+  installScript('sisyphus-open-scratch', OPEN_SCRATCH_SCRIPT);
+  // === end Stage 4 ===
+
+  // === Stage 6 (help script override) ===
+  installScript('sisyphus-help', HELP_SCRIPT);
+  // === end Stage 6 ===
 }
 
 export function getExistingBinding(key: string, table: string = 'root'): string | null {
@@ -529,10 +1394,21 @@ export function isSisyphusBinding(binding: string): boolean {
 export type SetupResult =
   | { status: 'installed'; message: string }
   | { status: 'already-installed'; message: string }
-  | { status: 'conflict'; message: string; existingBinding: string };
+  | { status: 'conflict'; message: string; existingBinding: string }
+  | { status: 'unsupported-tmux'; message: string };
 
 export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey: string = DEFAULT_PREFIX_KEY): SetupResult {
   installAllScripts();
+
+  // Version check — hard requirement for display-menu flags used
+  if (!tmuxVersionAtLeast(3, 2)) {
+    let version = 'unknown';
+    try { version = execSync('tmux -V', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim(); } catch {}
+    return {
+      status: 'unsupported-tmux',
+      message: `tmux 3.2+ required for sisyphus keybindings; got ${version}`,
+    };
+  }
 
   // Check for existing bindings before writing anything
   for (const [label, key] of [['cycle', cycleKey], ['prefix', prefixKey]] as const) {
@@ -546,33 +1422,15 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     }
   }
 
-  // Build binding lines
-  const popupOpts = `-E -w 80% -h 60%`;
+  writeKeymapJson();
+
+  const scriptsDir = join(globalDir(), 'bin');
   const bindings = [
-    // Root-table: direct cycle + prefix entry
+    // C-s → display-menu top-level (descriptor-driven)
+    generateTopLevelBinding(prefixKey, KEYMAP.topLevel, scriptsDir),
+    // M-s → cycle (unchanged)
     `bind-key -T root ${cycleKey} run-shell ${cycleScriptPath()}`,
-    `bind-key -T root ${prefixKey} switch-client -T ${KEY_TABLE}`,
-    // Sisyphus key table
-    `bind-key -T ${KEY_TABLE} s run-shell ${cycleScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} h run-shell ${homeScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} x run-shell ${killPaneScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} n display-popup ${popupOpts} -d "#{pane_current_path}" ${newPromptScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} m display-popup ${popupOpts} -d "#{pane_current_path}" ${messageScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} k display-popup -E -w 40 -h 5 -S 'fg=red' -T ' Kill Session ' -d "#{pane_current_path}" ${killSessionScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} d display-popup -E -w 40 -h 5 -S 'fg=red' -T ' Delete Session ' -d "#{pane_current_path}" ${deleteSessionScriptPath()}`,
-    // Info & navigation
-    `bind-key -T ${KEY_TABLE} ? display-popup -E -w 44 -h 28 -T ' Keybindings ' ${helpScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} t display-popup -E -w 90% -h 90% -d "#{pane_current_path}" ${statusPopupScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} l display-popup -E -w 60% -h 60% -d "#{pane_current_path}" ${pickSessionScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} z resize-pane -Z`,
-    // Session actions
-    `bind-key -T ${KEY_TABLE} c display-popup -E -w 50 -h 5 -S 'fg=yellow' -T ' Continue Session ' -d "#{pane_current_path}" ${continueSessionScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} r display-popup -E -w 70% -h 50% -d "#{pane_current_path}" ${restartAgentScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} p display-popup -E -w 95% -h 95% -d "#{pane_current_path}" ${openRoadmapScriptPath()}`,
-    `bind-key -T ${KEY_TABLE} S display-popup -E -w 95% -h 95% -d "#{pane_current_path}" ${openStrategyScriptPath()}`,
-    // Export
-    `bind-key -T ${KEY_TABLE} e display-popup -E -w 60 -h 8 -T ' Export Session ' -d "#{pane_current_path}" ${exportSessionScriptPath()}`,
-    // prefix-x smart kill
+    // prefix-x smart kill (unchanged — users invoke via tmux prefix, not C-s)
     `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`,
   ];
 
@@ -653,12 +1511,29 @@ export function removeTmuxKeybind(): void {
     // tmux not running
   }
 
+  // Remove keymap.json
+  const kmPath = keymapJsonPath();
+  if (existsSync(kmPath)) unlinkSync(kmPath);
+
   // Remove scripts
   const scripts = [
     'sisyphus-cycle', 'sisyphus-home', 'sisyphus-kill-pane', 'sisyphus-new', 'sisyphus-msg',
     'sisyphus-kill-session', 'sisyphus-delete-session', 'sisyphus-help', 'sisyphus-status-popup',
     'sisyphus-pick-session', 'sisyphus-continue-session', 'sisyphus-restart-agent-popup',
     'sisyphus-open-roadmap', 'sisyphus-open-strategy', 'sisyphus-export-session',
+    // Stage 1: submenu dispatch scripts
+    ...Object.keys(KEYMAP.submenus).map(id => `sisyphus-menu-${id}`),
+    // Stage 1: new stub scripts
+    'sisyphus-copy-path', 'sisyphus-copy-id', 'sisyphus-copy-context',
+    'sisyphus-copy-logs', 'sisyphus-copy-latest-report', 'sisyphus-copy-agent-id',
+    'sisyphus-open-goal', 'sisyphus-open-dir', 'sisyphus-open-logs',
+    'sisyphus-open-latest-report', 'sisyphus-open-scratch', 'sisyphus-edit-context-file',
+    'sisyphus-spawn-agent', 'sisyphus-msg-agent', 'sisyphus-rerun-agent',
+    'sisyphus-jump-to-pane', 'sisyphus-open-claude-agent', 'sisyphus-tail-agent-logs',
+    'sisyphus-kill-agent', 'sisyphus-quick-spawn-explore', 'sisyphus-quick-spawn-debug',
+    'sisyphus-resume-session', 'sisyphus-rollback-session', 'sisyphus-go-to-window',
+    'sisyphus-clone-session', 'sisyphus-history', 'sisyphus-reconnect',
+    'sisyphus-search-reports',
   ];
   for (const name of scripts) {
     const path = scriptPath(name);

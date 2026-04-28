@@ -114,6 +114,44 @@ export function tuiScratchDir(cwd: string, sessionId: string): string {
   return join(sessionDir(cwd, sessionId), '.tui');
 }
 
+// ── sisyphus ask: per-session ask directory and per-ask file paths ────────────
+
+export function askDir(cwd: string, sessionId: string): string {
+  return join(contextDir(cwd, sessionId), 'ask');
+}
+
+export function askEntryDir(cwd: string, sessionId: string, askId: string): string {
+  return join(askDir(cwd, sessionId), askId);
+}
+
+export function askMetaPath(cwd: string, sessionId: string, askId: string): string {
+  return join(askEntryDir(cwd, sessionId, askId), 'meta.json');
+}
+
+export function askDecisionsPath(cwd: string, sessionId: string, askId: string): string {
+  return join(askEntryDir(cwd, sessionId, askId), 'decisions.json');
+}
+
+export function askOutputPath(cwd: string, sessionId: string, askId: string): string {
+  return join(askEntryDir(cwd, sessionId, askId), 'output.json');
+}
+
+export function askProgressPath(cwd: string, sessionId: string, askId: string): string {
+  return join(askEntryDir(cwd, sessionId, askId), 'progress.json');
+}
+
+export function askVisualsDir(cwd: string, sessionId: string, askId: string): string {
+  return join(askEntryDir(cwd, sessionId, askId), 'visuals');
+}
+
+export function askVisualMarkdownPath(cwd: string, sessionId: string, askId: string, qid: string): string {
+  return join(askVisualsDir(cwd, sessionId, askId), `${qid}.md`);
+}
+
+export function askVisualAnsiPath(cwd: string, sessionId: string, askId: string, qid: string): string {
+  return join(askVisualsDir(cwd, sessionId, askId), `${qid}.ansi`);
+}
+
 export function tmuxSessionName(cwd: string, sessionLabel: string): string {
   // Use underscores as separators — slashes break tmux -t target resolution,
   // dots get silently converted to underscores by tmux (reserved for window.pane targeting)

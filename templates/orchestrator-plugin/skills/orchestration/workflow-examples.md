@@ -8,6 +8,116 @@ Plan files live under per-plan-lead subdirectories: `context/{plan-lead-agent-id
 
 ---
 
+## Example 4: Wrapper-Shaped Config Migration (LOW effort — 5 files, mechanical)
+
+**Starting task**: "All config access goes through `process.env` directly — migrate to a `getConfig()` wrapper already defined in `src/config.ts`"
+
+**Effort tier**: LOW. Every change is a call-site swap onto an existing handler. No new behavior.
+
+### Cycle 1 — Plan
+```
+roadmap.md:
+  ## Refactor: Migrate env access to getConfig()
+
+  - [ ] Plan migration — enumerate all process.env call sites
+  - [ ] Update call sites to use getConfig()
+  - [ ] Validate — no direct process.env access remains; tests pass
+
+Agents spawned:
+  plan agent → "Enumerate every direct process.env access in src/. Map each call site
+    to the matching getConfig() key. Output a migration checklist. Files expected:
+    src/api/server.ts, src/db/connection.ts, src/queue/worker.ts,
+    src/cli/commands/start.ts, src/config.ts (source of truth — do not modify)."
+```
+
+### Cycle 2 — Implement
+```
+Plan complete. 23 call sites across 4 files.
+
+Agents spawned:
+  implement agent → "Execute migration plan at context/{plan-agent-id}/plan-config-migration.md.
+    Replace every process.env.X access with getConfig('X'). Do not modify src/config.ts.
+    Do not add error handling — getConfig() already throws on missing keys."
+```
+
+### Cycle 3 — Validate + complete
+```
+Implementation complete.
+
+Agents spawned:
+  validate agent → "Verify migration: grep for remaining process.env access in src/ (excluding
+    src/config.ts). Run existing tests. Confirm zero direct env reads outside config.ts."
+
+Validation: PASS. Complete — "All env access routed through getConfig()."
+```
+
+**Pipeline shape**: `plan → implement → validate`. 3 cycles. No `sisyphus:spec`, no `sisyphus:test-spec`, no `sisyphus:review-plan`.
+
+---
+
+## Example 5: New Subsystem — Distributed Task Queue (HIGH effort)
+
+**Starting task**: "Add a persistent task queue so long-running jobs survive server restarts"
+
+**Effort tier**: HIGH. New subsystem, new protocol (worker ↔ queue contract), cross-domain orchestration (API + storage + worker process).
+
+### Cycle 0 — Problem exploration
+```
+roadmap.md:
+  ## Feature: Persistent Task Queue
+
+  - [ ] Explore current job execution patterns and constraints
+  - [ ] Spec — requirements + architecture
+  - [ ] Plan implementation (staged outline)
+  - [ ] Spec behavioral properties (test-spec)
+  ...
+
+Agents spawned:
+  explore agent → "Map current job execution in src/jobs/. Identify what needs to survive
+    restarts, current storage backends, worker process lifecycle."
+  problem agent → "Explore design space for persistent task queue. Questions: push vs pull
+    worker model, at-least-once vs exactly-once semantics, failure/retry policy, storage
+    backend options (Redis, Postgres, SQLite)."
+```
+
+### Cycle 1 — Spec (human iterates)
+```
+Agents spawned:
+  sisyphus:spec → "Run spec session for persistent task queue.
+    Context in context/problem-task-queue.md and context/explore-task-queue.md."
+
+Human iterates. Spec outputs:
+  context/requirements-task-queue.md — acceptance criteria, failure semantics
+  context/design-task-queue.md — Redis-backed queue, pull workers, at-least-once delivery
+```
+
+### Cycle 2 — High-level plan + test-spec (parallel)
+```
+Agents spawned (parallel):
+  plan agent → "Create high-level stage outline from context/requirements-task-queue.md
+    and context/design-task-queue.md. Stages: (1) queue storage layer, (2) producer API,
+    (3) worker consumer, (4) integration + retry logic. Cycle estimates per stage."
+  test-spec agent → "Define behavioral properties: job survives server restart, failed
+    jobs retry up to N times, concurrent workers don't double-execute the same job."
+```
+
+### Cycles 3–9 — Staged implementation with critique + validation checkpoints
+```
+Follows Feature Build Large pattern:
+  Cycle 3: detail-plan stage 1 + implement stage 1
+  Cycle 4: implement stage 2; detail-plan stage 3 in parallel
+  Cycle 5: critique stages 1-2 (foundation review before worker builds on it)
+  Cycle 6: address critique + implement stage 3
+  Cycle 7: implement stage 4 (integration + retry); validate stages 3-4
+  Cycle 8: sisyphus yield --mode validation — e2e: enqueue job, kill server, restart,
+    confirm job ran exactly once
+  Cycle 9: final review agent; complete
+```
+
+**Pipeline shape**: Full HIGH pipeline — `problem → spec → plan+test-spec (parallel) → staged implement → critique → validate → review`. 9+ cycles.
+
+---
+
 ## Example 1: Fix a Race Condition in WebSocket Reconnection
 
 **Starting task**: "WebSocket connections sometimes drop messages during reconnection"

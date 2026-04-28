@@ -136,6 +136,8 @@ function printSession(session: Session, verbose: boolean): void {
   const sessionDuration = formatDuration(session.createdAt, session.completedAt);
   console.log(`\n${BOLD}Session: ${session.id}${RESET}`);
   console.log(`  Status: ${status}`);
+  const effortLabel = session.effort != null ? session.effort : 'high (default)';
+  console.log(`  Effort: ${effortLabel}`);
   console.log(`  Task: ${session.task}`);
   if (session.context) {
     const truncated = !verbose && session.context.length > 120 ? session.context.slice(0, 120) + '...' : session.context;
@@ -248,9 +250,11 @@ export function registerStatus(program: Command): void {
     .description('Show session status')
     .argument('[session-id]', 'Session ID (defaults to SISYPHUS_SESSION_ID env)')
     .option('-v, --verbose', 'Show detailed output (roadmap, pane output, agent instructions)')
-    .action(async (sessionIdArg?: string, opts?: { verbose?: boolean }) => {
+    .option('-j, --json', 'Output raw JSON instead of formatted text')
+    .action(async (sessionIdArg?: string, opts?: { verbose?: boolean; json?: boolean }) => {
       const sessionId = sessionIdArg ?? process.env.SISYPHUS_SESSION_ID;
       const verbose = opts?.verbose ?? false;
+      const json = opts?.json ?? false;
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
       const request: Request = { type: 'status', sessionId, cwd };
@@ -258,7 +262,11 @@ export function registerStatus(program: Command): void {
       if (response.ok) {
         const session = response.data?.session as Session | undefined;
         if (session) {
-          printSession(session, verbose);
+          if (json) {
+            console.log(JSON.stringify(session));
+          } else {
+            printSession(session, verbose);
+          }
         } else {
           console.log('No session found');
         }

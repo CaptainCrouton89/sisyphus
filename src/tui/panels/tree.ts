@@ -34,19 +34,65 @@ interface NodeContent {
 
 function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
   switch (node.type) {
+    case 'section': {
+      switch (node.section) {
+        case 'needs-you':
+          return {
+            icon: '',
+            label: 'Needs You',
+            meta: node.count > 0 ? `${node.count}` : '',
+            color: node.count > 0 ? 'red' : 'gray',
+            dim: false,
+            metaColor: 'red',
+          };
+        case 'running':
+          return {
+            icon: '',
+            label: 'Running',
+            meta: node.count > 0 ? `${node.count}` : '',
+            color: 'green',
+            dim: false,
+            metaColor: 'gray',
+          };
+        case 'done':
+          return {
+            icon: '',
+            label: `Done (${node.count})`,
+            meta: '',
+            color: 'gray',
+            dim: true,
+          };
+      }
+    }
+    case 'needs-you-virtual': {
+      const hasPending = node.pendingCount > 0;
+      return {
+        icon: '⚑',
+        label: 'Needs You',
+        meta: hasPending ? `${node.pendingCount} pending` : '',
+        color: hasPending ? 'red' : 'gray',
+        dim: !hasPending,
+        metaColor: hasPending ? 'red' : undefined,
+      };
+    }
     case 'session': {
       const icon = statusIndicator(node.status);
       const color = statusColor(node.status);
-      const dim = node.status === 'completed';
+      const dim = node.status === 'completed' || node.orphaned === true;
       const cyclePart = node.cycleCount > 0 ? `C${node.cycleCount}` : '';
       // Use tracked active time (matches detail panel), not wall-clock elapsed.
       const dur = formatDuration(node.activeMs);
       const agopart =
         node.status === 'completed' && node.completedAt ? formatTimeAgo(node.completedAt) : '';
-      const meta = [cyclePart, dur, agopart].filter(Boolean).join(' ');
+      const askBadge = node.askCount ? `!${node.askCount}` : '';
+      const meta = [askBadge, cyclePart, dur, agopart].filter(Boolean).join(' ');
+      const metaColor = node.askCount ? 'red' : undefined;
+      const suffix = node.orphaned ? '⚠ orphan' : undefined;
+      const suffixColor = node.orphaned ? 'red' : undefined;
       const displayText = node.name ?? node.task;
-      const maxLabel = Math.max(8, maxWidth - meta.length - 4);
-      return { icon, label: truncate(displayText, maxLabel), meta, color, dim };
+      const suffixWidth = suffix ? suffix.length + 1 : 0;
+      const maxLabel = Math.max(8, maxWidth - meta.length - 4 - suffixWidth);
+      return { icon, label: truncate(displayText, maxLabel), meta, color, dim, metaColor, suffix, suffixColor };
     }
     case 'cycle': {
       const isRunning = !node.completedAt;
@@ -67,14 +113,16 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
       const color = statusColor(node.status);
       const dur = formatDuration(node.activeMs);
       const durClr = durationColor(node.activeMs) || undefined;
-      const dim = node.status === 'completed';
+      const dim = node.status === 'completed' || node.orphaned === true;
       const displayName = agentDisplayName({
         name: node.name,
         id: node.agentId,
         agentType: node.agentType,
       });
-
-      const maxLabel = Math.max(8, maxWidth - dur.length - 4);
+      const suffix = node.orphaned ? '⚠ orphan' : undefined;
+      const suffixColor = node.orphaned ? 'red' : undefined;
+      const suffixWidth = suffix ? suffix.length + 1 : 0;
+      const maxLabel = Math.max(8, maxWidth - dur.length - 4 - suffixWidth);
       return {
         icon,
         label: truncate(displayName, maxLabel),
@@ -82,6 +130,8 @@ function renderNodeContent(node: TreeNode, maxWidth: number): NodeContent {
         color,
         dim,
         metaColor: durClr,
+        suffix,
+        suffixColor,
       };
     }
     case 'report': {

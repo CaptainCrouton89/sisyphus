@@ -139,24 +139,41 @@ Auto-opens when you `sisyphus start`.
 
 Left panel is a session tree (sessions, cycles, agents, reports) with status indicators. Right panel shows detail for whatever's selected: roadmap, agent instructions, report content, live pane output. If neovim is available, files open in an embedded editor. Bottom bar has mode and keybinding hints.
 
-Key bindings:
+Key bindings — navigate mode:
 
 | Key | Action |
 |-----|--------|
 | `j/k` or `↑/↓` | Navigate tree / scroll detail |
 | `h/l` or `←/→` | Collapse/expand nodes |
+| `Tab` | Cycle panel focus |
+| `Enter` | Open selection |
 | `n` | New session (compose mode) |
-| `R` | Resume a paused/completed session |
-| `w` | Jump to session's tmux window |
-| `g` | Edit goal | 
-| `p` | Open roadmap |
 | `m` | Message orchestrator |
+| `R` | Resume a paused/completed session |
+| `g` | Edit goal |
+| `p` | Open roadmap |
 | `r` | Re-run agent |
 | `x` | Restart agent |
-| `Space` | Leader menu (copy, delete, spawn agent, shell, etc.) |
-| `Tab` | Cycle panel focus |
+| `b` | Jump to session's tmux window |
+| `w` | Go to session window |
+| `o` | Open (file manager) |
+| `e` | Edit context file |
+| `S` | Session info |
+| `F` | Filter / search |
+| `c` | Open companion overlay |
 | `/` | Search sessions |
+| `q` | Quit |
 | `?` | Help overlay |
+
+Key bindings — leader mode (`Space` + key):
+
+| Key | Action |
+|-----|--------|
+| `Space c …` | Copy submenu: `p` path, `i` id, `c` context, `l` logs, `r` report, `a` agent-id |
+| `Space o …` | Open submenu: `g` goal, `r` roadmap, `s` strategy, `l` logs, `d` dir, `R` latest report, `c` scratch, `e` context file |
+| `Space a …` | Agent submenu: `s` spawn, `m` message, `r` restart, `R` re-run, `j` jump-pane, `o` claude, `t` tail, `k` kill, `e` quick-Explore, `d` quick-Debug |
+| `Space S …` | Session submenu: `n` new, `r` resume, `c` continue, `b` rollback, `k` kill, `d` delete, `e` export, `w` window, `C` clone, `i` history |
+| `Space g …` | Go submenu: `w` window, `p` pane-picker, `s` session-picker, `n` next session, `r` reconnect |
 
 Compose mode opens a temp file in neovim for multi-line input (new sessions, messages, resume instructions). Falls back to tmux popups without neovim.
 
@@ -234,13 +251,18 @@ Updates every 5 seconds. Focused session is highlighted.
 
 ### Keybindings
 
-Installed by `sisyphus setup` into `~/.sisyphus/tmux.conf`:
+Installed by `sisyphus setup` into `~/.sisyphus/tmux.conf`. Requires tmux ≥ 3.2.
 
 | Key | Action |
 |-----|--------|
 | `M-s` | Cycle through sisyphus sessions in current project |
 | `M-S` | Jump to dashboard window |
+| `Ctrl-S` | Open the which-key popup (anchored bottom-right) |
 | `prefix-x` | Smart kill: pane or session depending on context |
+
+The which-key popup shows direct actions and submenu prefixes. Press the mnemonic key to fire an action; press a submenu prefix (`c`, `o`, `a`, `S`, `g`) to enter that submenu. Submenus follow the same letter conventions as the dashboard `Space` leader, so muscle memory transfers.
+
+Press `Ctrl-S ?` to see the full reference.
 
 ### Native notifications (macOS)
 
@@ -260,7 +282,7 @@ sisyphus companion --badges     # Full achievement gallery
 sisyphus companion --name Bub   # Rename your companion
 ```
 
-`Space` → `c` in the dashboard opens the companion overlay.
+Press `c` in the dashboard (nav mode) to open the companion overlay.
 
 ## Configuration
 
@@ -336,16 +358,6 @@ sisyphus clone "new goal" --name my-clone --context "extra context"
 
 Useful for branching off a variant approach without starting from scratch.
 
-### present
-
-Render a markdown file via termrender in a tmux split pane — agent-to-user visual feedback.
-
-```bash
-sisyphus present report.md
-sisyphus present report.md --interactive    # open in nvim, block until closed
-sisyphus present report.md --width 120
-```
-
 ### reconnect
 
 Reconnect the daemon to an orphaned tmux session (e.g. after a daemon restart). Makes no state changes and does not spawn the orchestrator.
@@ -362,17 +374,6 @@ Delete a session and all its data.
 sisyphus delete <session-id>
 sisyphus delete <session-id> --cwd /path/to/project
 ```
-
-### requirements / design (standalone TUI tools)
-
-Interactive terminal tools for reviewing requirements and designs. These are standalone entry points, not daemon-connected.
-
-```bash
-sisyphus-review <requirements.json>   # Interactive EARS requirements reviewer
-sisyphus-design <design.json>         # Interactive technical design walkthrough
-```
-
-These are review TUIs invoked by `sisyphus:spec` (and usable standalone for inspecting any `requirements.json` / `design.json`).
 
 ---
 

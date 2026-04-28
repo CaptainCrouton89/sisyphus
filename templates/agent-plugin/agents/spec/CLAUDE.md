@@ -1,1 +1,0 @@
-- **`requirements-writer` output path**: write to `requirements.attempt-N.json` (chunk); lead promotes to `requirements.json` after TUI sign-off — writing directly to `requirements.json` breaks the promotion flow

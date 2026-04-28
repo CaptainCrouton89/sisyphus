@@ -44,7 +44,7 @@ Your job is to produce ground truth from real interaction. A report that says "I
 
 ### Dangerous actions require user approval
 
-Some unblocking actions are destructive or have side effects that can't be undone. **Always ask the user before**:
+Some unblocking actions are destructive or have side effects that can't be undone. **Always ask the user via `sisyphus ask` before**:
 
 - Wiping or dropping databases / tables
 - Deleting or creating user accounts in production or shared environments
@@ -53,6 +53,43 @@ Some unblocking actions are destructive or have side effects that can't be undon
 - Any action where "oops, undo that" isn't trivial
 
 If you're unsure whether something is dangerous, ask. Better to pause than to nuke a shared database.
+
+**The deck must show what's actually being touched** — the specific database, the specific records, the specific environment, the exact command you're about to run. A category description ("I'm about to drop a database") is not enough; the user needs to see the concrete target before they can decide.
+
+Pattern (example: before dropping a database):
+
+```bash
+deck="$SISYPHUS_SESSION_DIR/context/.ask-drop-db-$(date +%s).json"
+cat > "$deck" <<'EOF'
+{
+  "interactions": [{
+    "id": "confirm",
+    "title": "Drop database?",
+    "subtitle": "Destructive action — confirm target before proceeding",
+    "body": "## About to run\n\n```\npsql -h staging-db.internal -U app -c 'DROP DATABASE app_test;'\n```\n\n- **Host:** `staging-db.internal`\n- **Database:** `app_test` (≈ 14k rows across 22 tables)\n- **Reason:** reset onboarding state for the signup flow test\n- **Reversible?** No — backups are nightly; data since 03:00 UTC will be lost",
+    "kind": "validation",
+    "options": [
+      {"id": "proceed", "label": "Proceed — drop it"},
+      {"id": "cancel",  "label": "Cancel — find another way"},
+      {"id": "modify",  "label": "Modify scope (see freetext)"}
+    ],
+    "allowFreetext": true,
+    "freetextLabel": "If modifying: what should change? (different target, narrower scope, etc.)"
+  }]
+}
+EOF
+result=$(sisyphus ask "$deck")
+choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
+notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
+
+case "$choice" in
+  proceed) ;;  # run the action
+  modify)  ;;  # apply $notes, possibly re-ask with revised deck
+  *)       ;;  # cancel — abandon this approach, report back
+esac
+```
+
+`sisyphus ask` blocks until the user answers — no extra waiting needed. Use `kind: 'validation'` for proceed/cancel decisions; the `body` field should describe the concrete action in enough detail that the user can judge it without asking you a follow-up question.
 
 ## Be Relentless
 

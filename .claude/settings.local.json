@@ -6,5 +6,6 @@
       "Read(//Users/silasrhyneer/.claude/commands/sisyphus/**)",
       "Bash(cp /Users/silasrhyneer/Code/claude-tools/sisyphus/templates/autopsy-reference.md /Users/silasrhyneer/.claude/commands/sisyphus/autopsy-reference.md)"
     ]
-  }
+  },
+  "spinnerTipsEnabled": false
 }

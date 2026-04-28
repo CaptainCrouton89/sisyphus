@@ -9,6 +9,7 @@ import { generateCommentary } from './companion-commentary.js';
 import { showCommentaryPopup } from './companion-popup.js';
 import type { MoodSignals, FeedbackEntry } from '../shared/companion-types.js';
 import { emitHistoryEvent } from './history.js';
+import { orphanOrchestrator } from './orphan-asks.js';
 
 function buildFeedbackSignals(history: FeedbackEntry[]): Pick<MoodSignals, 'recentFeedbackGood' | 'recentFeedbackBad' | 'recentFeedbackWhip'> {
   const cutoff = Date.now() - 30 * 60 * 1000;
@@ -496,11 +497,14 @@ async function pollSession(
 
   if (paneRemoved) tmux.selectLayout(windowId);
 
-  // Check orchestrator pane
-  if (orchPaneId && !livePaneIds.has(orchPaneId)) {
+  // Check orchestrator pane — skip if respawn is in flight (resume/yield/continue have all
+  // killed the old pane and not yet registered the new one; the stale orchPaneId would
+  // otherwise misfire as an orphan).
+  if (orchPaneId && !livePaneIds.has(orchPaneId) && !respawningSessions.has(sessionId)) {
     // Orchestrator pane disappeared without a yield command
     const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
     await state.completeOrchestratorCycle(cwd, sessionId, undefined, undefined, cycleActiveMs);
+    await orphanOrchestrator(cwd, sessionId, 'orchestrator pane vanished without yield', 'orchestrator-gone');
     const runningAgents = session.agents.filter(a => a.status === 'running');
     if (runningAgents.length === 0) {
       // No agents running and orchestrator gone — pause
@@ -517,9 +521,11 @@ async function pollSession(
     session.agents.length > 0 &&
     session.agents.every(a => a.status !== 'running') &&
     (!orchPaneId || !livePaneIds.has(orchPaneId)) &&
+    !respawningSessions.has(sessionId) &&
     onAllAgentsDone
   ) {
     console.log(`[sisyphus] Detected stuck session ${sessionId}: all agents done, no orchestrator — triggering respawn`);
+    await orphanOrchestrator(cwd, sessionId, 'orchestrator gone; respawn triggered', 'orchestrator-gone');
     onAllAgentsDone(sessionId, cwd, windowId);
   }
 }

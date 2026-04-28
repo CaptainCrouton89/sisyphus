@@ -5,12 +5,14 @@ import { resolve, join, relative } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { contextDir, goalPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
+import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { shellQuote } from '../shared/shell.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
 import { discoverAgentTypes, parseAgentFrontmatter, extractAgentBody } from './frontmatter.js';
 import * as state from './state.js';
+import { renderEffortMarkers } from './lib/effort-render.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 import { flushCycleTimer } from './pane-monitor.js';
@@ -351,11 +353,13 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     return `- \`${m.name}\`${desc}`;
   }).join('\n');
 
-  const systemPrompt = substituteEnvVars(
+  const substitutedPrompt = substituteEnvVars(
     basePrompt
       .replace('{{AGENT_TYPES}}', agentTypeLines)
       .replace('{{ORCHESTRATOR_MODES}}', modeLines)
   );
+  const sessionEffort = session.effort != null ? session.effort : 'high';
+  const systemPrompt = renderEffortMarkers(substitutedPrompt, sessionEffort);
 
   // System prompt: template + agent types (no state)
   const cycleNum = session.orchestratorCycles.length + 1;
@@ -368,7 +372,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   const envExports = buildEnvExports([
     `export SISYPHUS_SESSION_ID=${shellQuote(sessionId)}`,
-    `export SISYPHUS_AGENT_ID='orchestrator'`,
+    `export SISYPHUS_AGENT_ID='${ORCHESTRATOR_ASKED_BY}'`,
     `export SISYPHUS_CWD=${shellQuote(cwd)}`,
     `export SISYPHUS_SESSION_DIR=${shellQuote(sesDir)}`,
     `export PATH="${npmBinDir}:$PATH"`,
@@ -382,6 +386,15 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     const storedPrompt = lastCycle?.nextPrompt;
     const continuationText = storedPrompt ? storedPrompt : 'Review the current session and delegate the next cycle of work.';
     userPrompt += `\n\n## Continuation Instructions\n\n${continuationText}`;
+  }
+
+  // Surface long human-in-the-loop waits from the prior cycle so the orchestrator
+  // can decide whether to re-verify state freshness before acting on a stale answer.
+  const PROMPT_BLOCK_THRESHOLD_MS = 60 * 60 * 1000; // 1h
+  const priorBlockedMs = lastCycle?.userBlockedMs ?? 0;
+  if (priorBlockedMs >= PROMPT_BLOCK_THRESHOLD_MS) {
+    const hours = (priorBlockedMs / (60 * 60 * 1000)).toFixed(1);
+    userPrompt += `\n\n## Note: Prior Cycle Included a Long Pause\n\nThe previous cycle waited ~${hours}h for a \`sisyphus ask\` answer. Repository state and any in-flight context may have drifted during that window. Briefly verify before acting on the answer.`;
   }
 
   const userPromptFilePath = `${promptsDir(cwd, sessionId)}/orchestrator-user-${cycleNum}.md`;

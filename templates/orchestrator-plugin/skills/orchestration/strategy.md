@@ -22,9 +22,37 @@ Reference material for writing and updating strategy.md — the document that ma
 - **Every detailed stage gets exit criteria** — concrete enough to evaluate, not so rigid they become checkboxes
 - **Include user gates** — where does this stage need the user? What decision or approval?
 
+## Stages name kinds of work, not areas of code
+
+A strategy stage is a **process phase** — `discovery`, `planning`, `implementation`, `validation`, `spike`. It describes the *kind* of thinking happening that stage. It is **not** a work-area label like `auth-refactor`, `tui-panel`, `migration-script`, or `foundations`.
+
+Work areas are the plan agent's job. They live in `context/{plan-lead-agent-id}/plan-stage-N-*.md` and structure the implementation phase from the inside. Keep them out of `strategy.md`.
+
+<example>
+✓ Correct — process phases:
+```
+## Ahead
+- **implementation** — phased build per the plan outline (5 sub-stages: foundations → ask-cli → tui → orphan-handling → migration). Critique + validate per stage.
+- **validation** — run e2e recipe end-to-end, capture evidence, user gate.
+```
+
+✗ Wrong — work areas masquerading as stages:
+```
+## Ahead
+- **foundations** — humanloop refactor + ask-store helpers
+- **ask-cli + haiku + template** — CLI command and tool-use loop
+- **tui-integration** — inbox panel and key routing
+- **orphan-handling** — kill/complete paths
+- **migration + e2e validation** — drop old command, run recipe
+```
+The second list is a roadmap of code work. Strategy.md collapses into a task list and the process shape (when do we critique? when do we validate? what's the user gate?) disappears.
+</example>
+
+When you're tempted to name a stage after a code area, that signals you're sketching the plan, not the strategy. Push that detail down into the plan agent's output and keep `strategy.md` at the process-shape layer.
+
 ## Choosing Process Shape
 
-The progression depends entirely on the problem — there's no fixed template. Common patterns to draw from:
+Pick the shape that matches the problem. These canonical progressions are the strong default — start here and prune what's already clear, rather than inventing custom shapes:
 
 ```
 discovery → spec → planning → implementation → validation
@@ -34,7 +62,7 @@ analysis → phased-transformation → verification
 discovery → product-design → technical-investigation → architecture → implementation → validation
 ```
 
-Mix and match. Not every stage needs to appear — skip what's already clear. Add stages the patterns don't show — spikes, prototypes, migration stages, compatibility checks. Stages can be anything.
+Add a new stage *type* only when the problem demands a kind of work the patterns don't cover — for example a `spike` to prove feasibility, a `compatibility-check` before a migration, or a `prototype` before committing. The test for "is this a real new stage?" is whether it names a different kind of thinking, not a different slice of code.
 
 ## Stage Patterns
 

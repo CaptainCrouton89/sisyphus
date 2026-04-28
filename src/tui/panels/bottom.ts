@@ -18,7 +18,6 @@ export function renderStatusLine(
   const { mode, focusPane, notification, error } = state;
 
   if (mode === 'report-detail') return;
-  if (mode === 'compose') return;
 
   let content: string;
 
@@ -36,9 +35,17 @@ export function renderStatusLine(
     const cursor = `\x1b[7m \x1b[0m`;
     content = `\x1b[1;34m/\x1b[0m${state.searchText}${cursor}` + D('  enter to apply · esc to clear');
   } else if (mode === 'leader') {
-    content = `\x1b[1;35mLEADER\x1b[0m` + D('  press a command key or [esc] to cancel');
+    content = `\x1b[1;35mLEADER\x1b[0m` + D('  [c]opy [o]pen [a]gent [S]ession [g]o  or  [s]cycle [h]ome [n]ew [m]sg [t]status [l]picker [x]kill [/]search [?]help  [esc] cancel');
   } else if (mode === 'copy-menu') {
-    content = `\x1b[1;36mCOPY\x1b[0m` + D('  [p] path  [C] context  [l] logs  [s] session ID  [esc] cancel');
+    content = `\x1b[1;36mCOPY\x1b[0m` + D('  [p]ath  [i]d  [c] context  [l]ogs  [r]eport  [a]gent ID  [esc] cancel');
+  } else if (mode === 'open-menu') {
+    content = `\x1b[1;32mOPEN\x1b[0m` + D('  [g]oal  [r]oadmap  [s]trategy  [l]ogs  [d]ir  [R]eport  [c]scratch  [e]dit context  [esc] cancel');
+  } else if (mode === 'agent-menu') {
+    content = `\x1b[1;34mAGENT\x1b[0m` + D('  [s]pawn  [m]sg  [r]estart  [R]erun  [j]ump  [o]pen-claude  [t]ail  [k]ill  [e]xplore  [d]ebug  [esc] cancel');
+  } else if (mode === 'session-menu') {
+    content = `\x1b[1;31mSESSION\x1b[0m` + D('  [n]ew  [r]esume  [c]ontinue  [b]ollback  [k]ill  [d]elete  [e]xport  [w]indow  [C]lone  [i]history  [esc] cancel');
+  } else if (mode === 'go-menu') {
+    content = `\x1b[1;33mGO\x1b[0m` + D('  [w]indow  [p]ane  [s]ession  [n]ext  [r]econnect  [esc] cancel');
   } else if (mode === 'help') {
     content = `\x1b[1;33mHELP\x1b[0m` + D('  [esc] or [?] to dismiss');
   } else if (focusPane === 'logs' || focusPane === 'detail') {
@@ -55,6 +62,12 @@ export function renderStatusLine(
       B('[w]') + D('indow  ') +
       B('[R]') + D('esume  ') +
       B('[q]') + D('uit');
+  } else if (cursorNodeType === 'needs-you-virtual') {
+    content =
+      B('[enter]') + D(' open ask  ') +
+      B('[esc]') + D(' back  ') +
+      SEP +
+      B('[q]') + D('uit');
   } else {
     // tree focused
     let contextFilePart = '';
@@ -62,16 +75,12 @@ export function renderStatusLine(
       contextFilePart = B('[e]') + D('dit  ') + B('[⏎]') + D(' open  ');
     }
     content =
-      B('[hjkl]') + D(' navigate  ') +
-      SEP +
       contextFilePart +
-      B('[space]') + D(' leader  ') +
-      B('[tab]') + D(' detail  ') +
-      B('[t]') + D('oggle view  ') +
-      SEP +
-      B('[m]') + D('sg  ') +
+      B('[enter]') + D(' select  ') +
+      B('[m]') + D('essage  ') +
       B('[n]') + D('ew  ') +
-      B('[R]') + D('esume  ') +
+      B('[w]') + D(' tmux  ') +
+      SEP +
       B('[q]') + D('uit');
   }
 

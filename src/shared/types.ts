@@ -58,6 +58,12 @@ export interface Session {
   createdAt: string;
   completedAt?: string;
   activeMs: number;
+  /** Set true when the orchestrator pane vanished unexpectedly or daemon-startup found a stuck session. */
+  orphaned?: boolean;
+  /** Reason string passed to markSessionOrphan — mirrors agent.killedReason. */
+  orphanReason?: string;
+  /** Cumulative time blocked on `sisyphus ask` (blocking asks only). Subtracted from wallClockMs to compute efficiency. */
+  userBlockedMs?: number;
   agents: Agent[];
   orchestratorCycles: OrchestratorCycle[];
   messages: Message[];
@@ -81,6 +87,7 @@ export interface Session {
   resumeCount?: number;
   continueCount?: number;
   companionCreditedWisdom?: number;
+  effort?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 export interface StatusDigest {
@@ -88,6 +95,7 @@ export interface StatusDigest {
   unusualEvents: string[];
   currentActivity: string;
   whatsNext: string;
+  effort?: string;
 }
 
 export interface Agent {
@@ -111,6 +119,12 @@ export interface Agent {
   originalSpawnedAt?: string;
   resumeEnv?: string;
   resumeArgs?: string;
+  /** Set true when the agent's pane vanished unexpectedly or pid+lstart no longer match. Orthogonal to status. */
+  orphaned?: boolean;
+  /** Captured at spawn time by `setupAgentPane` → first `tmux display-message #{pane_pid}`. */
+  pid?: number;
+  /** `ps -o lstart=` output captured at spawn. Compared during pid-sweep to detect PID recycling. */
+  pidLstart?: string;
 }
 
 export interface OrchestratorCycle {
@@ -118,6 +132,8 @@ export interface OrchestratorCycle {
   timestamp: string;
   completedAt?: string;
   activeMs: number;
+  /** Cumulative time blocked on `sisyphus ask` during this cycle (blocking asks only). */
+  userBlockedMs?: number;
   interCycleGapMs?: number;
   agentsSpawned: string[];
   paneId?: string;
@@ -126,4 +142,81 @@ export interface OrchestratorCycle {
   mode?: string;
   resumeEnv?: string;
   resumeArgs?: string;
+}
+
+// ── sisyphus ask: v2 interaction / deck types (mirror humanloop's published shapes) ──
+
+export type InteractionKind = 'notify' | 'validation' | 'decision' | 'context' | 'error';
+
+export interface InteractionOption {
+  id: string;
+  label: string;
+  description?: string;
+  shortcut?: string;
+}
+
+export interface Interaction {
+  id: string;
+  title: string;
+  subtitle?: string;
+  body?: string;
+  bodyPath?: string;
+  options: InteractionOption[];
+  allowFreetext?: boolean;
+  freetextLabel?: string;
+  kind?: InteractionKind;
+}
+
+export interface DeckSource {
+  sessionName?: string;
+  askedBy?: string;
+  blockedSince?: string;
+}
+
+export interface Deck {
+  title?: string;
+  source?: DeckSource;
+  interactions: Interaction[];
+}
+
+export interface InteractionResponse {
+  id: string;
+  selectedOptionId?: string;
+  freetext?: string;
+}
+
+export interface AskOutput {
+  responses: InteractionResponse[];
+  completedAt: string;
+}
+
+export interface VisualBlock {
+  questionId: string;
+  content: string;
+  status: 'loading' | 'ready' | 'error';
+}
+
+export const ORCHESTRATOR_ASKED_BY = 'orchestrator' as const;
+
+export type AskStatus = 'pending' | 'in-progress' | 'answered' | 'not-found';
+
+export interface AskMeta {
+  askId: string;
+  askedBy: string;
+  askedAt: string;
+  status: AskStatus;
+  blocking: boolean;
+  pid?: number;
+  startedAt?: string;
+  completedAt?: string;
+  orphaned?: boolean;
+  /** ISO timestamp set by the heartbeat scanner when a stale-question notify ask is emitted; dedup key. */
+  heartbeatNotifiedAt?: string;
+  claudeSessionId?: string;
+  cwd: string;
+  title?: string;
+  subtitle?: string;
+  kind?: InteractionKind;
+  /** Set on system-emitted error-kind asks; carries the takeover-dispatch context. */
+  orphanTarget?: { kind: 'agent'; agentId: string; paneId?: string } | { kind: 'orchestrator' };
 }

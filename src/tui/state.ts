@@ -1,4 +1,5 @@
 import type { Session } from '../shared/types.js';
+import type { AggregateInboxItem } from '../shared/inbox-types.js';
 import type { TreeNode } from './types/tree.js';
 import type { ReportBlock } from './lib/reports.js';
 
@@ -15,9 +16,12 @@ export interface SessionSummary {
   runningAgentCount: number;
   createdAt: string;
   activeMs: number;
+  tmuxSessionName?: string;
+  tmuxSessionId?: string;
   tmuxWindowId?: string;
   /** Cached result of windowExists check — avoids synchronous subprocess in render */
   windowAlive?: boolean;
+  orphaned?: boolean;
 }
 
 export interface CycleLog {
@@ -34,10 +38,13 @@ export type InputMode =
   | 'report-detail'
   | 'leader'
   | 'copy-menu'
+  | 'open-menu'
+  | 'agent-menu'
+  | 'session-menu'
+  | 'go-menu'
   | 'help'
   | 'companion-overlay'
   | 'companion-debug'
-  | 'compose'
   | 'search';
 
 // ---------------------------------------------------------------------------
@@ -54,16 +61,6 @@ export type ComposeAction =
 
 /** Actions where empty content is allowed (submit without typing) */
 export const OPTIONAL_COMPOSE = new Set(['resume', 'continue']);
-
-/** Display labels for compose actions */
-export const COMPOSE_HEADERS: Record<ComposeAction['kind'], string> = {
-  'new-session': 'New Session',
-  'message-orchestrator': 'Message Orchestrator',
-  'resume': 'Resume Session',
-  'continue': 'Continue Session',
-  'spawn-agent': 'Spawn Agent',
-  'message-agent': 'Message Agent',
-};
 
 // ---------------------------------------------------------------------------
 // Render scheduling
@@ -94,6 +91,7 @@ const FRAME_MS = 16; // ~60fps
 export class ThrottledScroll {
   offset: number = 0;
   private target: number = 0;
+  private max: number = Infinity;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private onRender: () => void;
 
@@ -113,14 +111,30 @@ export class ThrottledScroll {
     }
   }
 
+  private clamp(value: number): number {
+    if (value < 0) return 0;
+    if (value > this.max) return this.max;
+    return value;
+  }
+
   scrollBy(delta: number): void {
-    this.target = Math.max(0, this.target + delta);
+    this.target = this.clamp(this.target + delta);
     this.scheduleFlush();
   }
 
   scrollTo(value: number): void {
-    this.target = Math.max(0, value);
+    this.target = this.clamp(value);
     this.scheduleFlush();
+  }
+
+  // Renderer pushes the current content's max scroll each frame so scrollBy
+  // can't accumulate past the bottom. Without this, over-scroll inflates
+  // `target` invisibly and reverse scrolls have to burn through the buffer
+  // before any visual movement resumes.
+  setMax(max: number): void {
+    this.max = Math.max(0, max);
+    if (this.target > this.max) this.target = this.max;
+    if (this.offset > this.max) this.offset = this.max;
   }
 
   reset(): void {
@@ -164,13 +178,33 @@ export interface AppState {
   // UI
   notification: string | null;
   notificationTimer: ReturnType<typeof setTimeout> | null;
-  showCombinedView: boolean;
-  rightPanelMode: 'digest' | 'logs';
 
   // Scroll
   detailScroll: ThrottledScroll;
-  logsScroll: ThrottledScroll;
   digestScroll: ThrottledScroll;
+
+  // Aggregate inbox — fetched from daemon on each poll
+  aggregateInbox: AggregateInboxItem[];
+  crossSessionInboxScroll: ThrottledScroll;
+  cachedInboxLines: import('./lib/format.js').DetailLine[] | null;
+  inboxCacheKey: string;
+  inboxRenderedCache: import('./render.js').RenderedCache;
+
+  // Stacked detail (3b) — cachedStackedLines + stackedCacheKey must be cleared together (cache pair invariant)
+  useStackedDetail: boolean;
+  detailMode: 'gsr' | 'cycle-log' | 'cross-session-inbox';
+  focusedStrip: 'goal' | 'strategy' | 'roadmap';
+  goalScroll: ThrottledScroll;
+  strategyScroll: ThrottledScroll;
+  roadmapScroll: ThrottledScroll;
+  cachedStackedLines: {
+    goal: import('./lib/format.js').DetailLine[];
+    strategy: import('./lib/format.js').DetailLine[];
+    roadmap: import('./lib/format.js').DetailLine[];
+    cycleLog: import('./lib/format.js').DetailLine[];
+  } | null;
+  stackedCacheKey: string;
+  stackedRenderedCache: import('./render.js').RenderedCache;
 
   // Polling data (from daemon)
   sessions: SessionSummary[];
@@ -178,6 +212,7 @@ export interface AppState {
   planContent: string;
   strategyContent: string;
   goalContent: string;
+  completionSummaryContent: string;
   logsContent: string;
   logsCycles: CycleLog[];
   digestData: import('../shared/types.js').StatusDigest | null;
@@ -197,29 +232,17 @@ export interface AppState {
   cachedDetailLines: import('./lib/format.js').DetailLine[] | null;
   detailCacheKey: string;
   detailRenderedCache: import('./render.js').RenderedCache;
-  cachedLogsLines: import('./lib/format.js').DetailLine[] | null;
-  logsCacheKey: string;
-  logsRenderedCache: import('./render.js').RenderedCache;
   cachedDigestLines: import('./lib/format.js').DetailLine[] | null;
   digestCacheKey: string;
   digestRenderedCache: import('./render.js').RenderedCache;
 
-  // Neovim integration
-  nvimBridge: import('./lib/nvim-bridge.js').NvimBridge | null;
-  nvimEnabled: boolean;
-  prevNvimFile: string | null;
-  nvimEditable: boolean;
-  nvimOpenTabs: Map<string, { path: string; readonly: boolean }>;
-
-  // Compose mode
-  composeAction: ComposeAction | null;
-  composeTempFile: string | null;
-  composeSignalFile: string | null;
-  composePollTimer: ReturnType<typeof setInterval> | null;
-  composePrevNvimFile: string | null;
-
   // Cycle flow
   flowExpanded: boolean;
+
+  // Resolution mode (3e)
+  resolutionActive: boolean;
+  resolutionHandle: import('./panels/mounted-humanloop.js').MountedResolutionHandle | null;
+  visuals: Map<string, import('./panels/mounted-humanloop.js').VisualEntry>;
 
   // Config
   cwd: string;
@@ -230,14 +253,22 @@ export function createAppState(cwd: string): AppState {
   const rows = process.stdout.rows ?? 24;
 
   const detailScroll = new ThrottledScroll(requestRender);
-  const logsScroll = new ThrottledScroll(requestRender);
   const digestScroll = new ThrottledScroll(requestRender);
+  const crossSessionInboxScroll = new ThrottledScroll(requestRender);
+  const goalScroll = new ThrottledScroll(requestRender);
+  const strategyScroll = new ThrottledScroll(requestRender);
+  const roadmapScroll = new ThrottledScroll(requestRender);
+
+  // Seed default-expanded sections (done stays collapsed)
+  const expanded = new Set<string>();
+  expanded.add('section:needs-you');
+  expanded.add('section:running');
 
   return {
     rows,
     cols,
     cursorIndex: 0,
-    expanded: new Set(),
+    expanded,
     mode: 'navigate',
     focusPane: 'tree',
     selectedSessionId: null,
@@ -246,16 +277,28 @@ export function createAppState(cwd: string): AppState {
     targetAgentId: null,
     notification: null,
     notificationTimer: null,
-    showCombinedView: true,
-    rightPanelMode: 'digest',
     detailScroll,
-    logsScroll,
     digestScroll,
+    aggregateInbox: [],
+    crossSessionInboxScroll,
+    cachedInboxLines: null,
+    inboxCacheKey: '',
+    inboxRenderedCache: { lines: [], ansi: [] },
+    useStackedDetail: process.env.SISYPHUS_USE_STACKED_DETAIL !== '0',
+    detailMode: 'gsr',
+    focusedStrip: 'roadmap',
+    goalScroll,
+    strategyScroll,
+    roadmapScroll,
+    cachedStackedLines: null,
+    stackedCacheKey: '',
+    stackedRenderedCache: { lines: [], ansi: [] },
     sessions: [],
     selectedSession: null,
     planContent: '',
     strategyContent: '',
     goalContent: '',
+    completionSummaryContent: '',
     logsContent: '',
     logsCycles: [],
     digestData: null,
@@ -271,23 +314,13 @@ export function createAppState(cwd: string): AppState {
     cachedDetailLines: null,
     detailCacheKey: '',
     detailRenderedCache: { lines: [], ansi: [] },
-    cachedLogsLines: null,
-    logsCacheKey: '',
-    logsRenderedCache: { lines: [], ansi: [] },
     cachedDigestLines: null,
     digestCacheKey: '',
     digestRenderedCache: { lines: [], ansi: [] },
-    nvimBridge: null,
-    nvimEnabled: true,
-    prevNvimFile: null,
-    nvimEditable: false,
-    nvimOpenTabs: new Map(),
-    composeAction: null,
-    composeTempFile: null,
-    composeSignalFile: null,
-    composePollTimer: null,
-    composePrevNvimFile: null,
     flowExpanded: false,
+    resolutionActive: false,
+    resolutionHandle: null,
+    visuals: new Map(),
     cwd,
   };
 }

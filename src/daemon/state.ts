@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { atomicWrite, withLock } from './lib/atomic.js';
 import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, reportsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath, strategyPath } from '../shared/paths.js';
 import { ensureSisyphusGitignore } from '../shared/gitignore.js';
-import type { Agent, AgentReport, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
+import type { Agent, AgentReport, AgentStatus, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
 
 const ROADMAP_SEED = `---
 description: >
@@ -16,30 +16,11 @@ const CONTEXT_CLAUDE_MD = `# context/
 Agents save exploration findings, architectural notes, and reference material here for use across cycles.
 `;
 
-// Per-session mutex to prevent read-modify-write races
-const sessionLocks = new Map<string, Promise<void>>();
-
-async function withSessionLock<T>(sessionId: string, fn: () => T): Promise<T> {
-  const prev = sessionLocks.get(sessionId) ?? Promise.resolve();
-  let resolve: () => void;
-  const next = new Promise<void>(r => { resolve = r; });
-  sessionLocks.set(sessionId, next);
-  await prev;
-  try {
-    return fn();
-  } finally {
-    resolve!();
-  }
+function withSessionLock<T>(sessionId: string, fn: () => T): Promise<T> {
+  return withLock(sessionId, fn);
 }
 
-function atomicWrite(filePath: string, data: string): void {
-  const dir = dirname(filePath);
-  const tmpPath = join(dir, `.state.${randomUUID()}.tmp`);
-  writeFileSync(tmpPath, data, 'utf-8');
-  renameSync(tmpPath, filePath);
-}
-
-export function createSession(id: string, task: string, cwd: string, context?: string, name?: string): Session {
+export function createSession(id: string, task: string, cwd: string, context?: string, name?: string, effort?: 'low' | 'medium' | 'high' | 'xhigh'): Session {
   ensureSisyphusGitignore(cwd);
 
   const dir = sessionDir(cwd, id);
@@ -67,11 +48,14 @@ export function createSession(id: string, task: string, cwd: string, context?: s
     status: 'active',
     createdAt,
     activeMs: 0,
+    userBlockedMs: 0,
     agents: [],
     orchestratorCycles: [],
     messages: [],
     startHour: created.getHours(),
     startDayOfWeek: created.getDay(),
+    orphaned: false,
+    ...(effort ? { effort } : {}),
   };
 
   atomicWrite(statePath(cwd, id), JSON.stringify(session, null, 2));
@@ -83,12 +67,20 @@ export function getSession(cwd: string, sessionId: string): Session {
   const session = JSON.parse(content) as Session;
   // Normalize fields from pre-existing sessions that may lack newer properties
   if (session.activeMs == null) session.activeMs = 0;
+  if (session.userBlockedMs == null) session.userBlockedMs = 0;
   for (const agent of session.agents) {
     if (!agent.repo) agent.repo = '.';
     if (agent.activeMs == null) agent.activeMs = 0;
+    if (agent.orphaned == null) agent.orphaned = false;
+    // pid / pidLstart left undefined when absent — their absence signals "not yet captured"
   }
+  if (session.orphaned == null) session.orphaned = false;
+  // session.effort is intentionally not defaulted here — absence means "not explicitly set"
+  // and consumers (agent.ts, orchestrator.ts, status.ts) fall back to 'high' at read time.
+  // orphanReason is only set alongside orphaned=true; absent on healthy sessions and old state files
   for (const cycle of session.orchestratorCycles) {
     if (cycle.activeMs == null) cycle.activeMs = 0;
+    if (cycle.userBlockedMs == null) cycle.userBlockedMs = 0;
   }
   return session;
 }
@@ -111,6 +103,82 @@ export async function updateAgent(cwd: string, sessionId: string, agentId: strin
     const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
     Object.assign(agent, updates);
+    saveSession(session);
+  });
+}
+
+export async function markAgentOrphan(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+  opts: { reason: string; status?: AgentStatus; activeMs?: number },
+): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
+    agent.orphaned = true;
+    agent.status = opts.status !== undefined ? opts.status : 'lost';
+    agent.killedReason = opts.reason;
+    agent.completedAt = new Date().toISOString();
+    if (opts.activeMs !== undefined) agent.activeMs = opts.activeMs;
+    delete agent.pid;
+    delete agent.pidLstart;
+    saveSession(session);
+  });
+}
+
+export async function markSessionOrphan(
+  cwd: string,
+  sessionId: string,
+  opts: { reason: string },
+): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    session.orphaned = true;
+    session.orphanReason = opts.reason;
+    saveSession(session);
+  });
+}
+
+export async function clearSessionOrphan(cwd: string, sessionId: string): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    if (!session.orphaned && session.orphanReason == null) return;
+    session.orphaned = false;
+    delete session.orphanReason;
+    saveSession(session);
+  });
+}
+
+export async function clearAgentPidInfo(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    if (!agent) return;
+    delete agent.pid;
+    delete agent.pidLstart;
+    saveSession(session);
+  });
+}
+
+export async function setAgentPid(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+  pid: number,
+  pidLstart: string,
+): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    if (!agent) return;
+    agent.pid = pid;
+    agent.pidLstart = pidLstart;
     saveSession(session);
   });
 }
@@ -265,6 +333,29 @@ export async function completeOrchestratorCycle(cwd: string, sessionId: string, 
     if (nextPrompt) cycle.nextPrompt = nextPrompt;
     if (mode) cycle.mode = mode;
     if (activeMs != null) cycle.activeMs += activeMs;
+    saveSession(session);
+  });
+}
+
+export async function incrementUserBlockedMs(
+  cwd: string,
+  sessionId: string,
+  deltaMs: number,
+  askedAt?: string,
+): Promise<void> {
+  if (deltaMs <= 0) return;
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    session.userBlockedMs = (session.userBlockedMs ?? 0) + deltaMs;
+    if (askedAt) {
+      const askedAtMs = new Date(askedAt).getTime();
+      const cycle = session.orchestratorCycles.find(c => {
+        const startMs = new Date(c.timestamp).getTime();
+        const endMs = c.completedAt ? new Date(c.completedAt).getTime() : Infinity;
+        return startMs <= askedAtMs && askedAtMs < endMs;
+      });
+      if (cycle) cycle.userBlockedMs = (cycle.userBlockedMs ?? 0) + deltaMs;
+    }
     saveSession(session);
   });
 }
@@ -497,6 +588,7 @@ export async function createCloneState(
       parentSessionId: sourceId,
       ...(model ? { model } : {}),
       launchConfig,
+      ...(source.effort != null ? { effort: source.effort } : {}),
     };
 
     atomicWrite(statePath(sourceCwd, cloneId), JSON.stringify(clone, null, 2));

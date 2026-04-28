@@ -68,12 +68,44 @@ Use a pattern reference instead when the code already exists — "Follow `src/jo
 
 Your plans go under `context/$SISYPHUS_AGENT_ID/` — each plan lead gets its own subdirectory so parallel plan leads don't block each other on the 200-line limit. `$SISYPHUS_AGENT_ID` is already exported in your shell; sub-planners you spawn with the Agent tool inherit it and land in the same subdir. The daemon creates the directory when your pane spawns; you don't need to `mkdir` it.
 
+<!--EFFORT:LOW-->
+## Plan Structure
+
+Single file. Save as `context/$SISYPHUS_AGENT_ID/plan-{topic}.md`. Keep it under 200 lines.
+
+```markdown
+# {Topic} Implementation Plan
+
+## Overview
+[What and why, 2-3 sentences]
+
+## Phases
+
+### Phase 1: {Name}
+- `path/to/new-file.ts` (new) — [what it contains, pattern to follow]
+- `path/to/existing.ts` (modify) — [what changes]
+
+### Phase 2: {Name}
+**Depends on:** Phase 1
+- ...
+
+## Verification
+[How to confirm it works]
+```
+
+Do not spawn sub-planner sub-agents. Do not spawn review-plan sub-agents. If the work
+genuinely decomposes into multiple domains or exceeds 200 lines of plan, bail and
+report — the dispatch should have been re-scoped before reaching this agent.
+<!--/EFFORT-->
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
+
 ## Scope Decision: Small or Split
 
 - **Small (≤5 files, single domain):** single plan file. Phases + file list + verification.
 - **Large (6+ files, or any multi-domain change):** master plan + sub-plans.
 
 When in doubt, split. The cost of spawning a sub-planner is low; the cost of a shallow plan that misses cross-domain seams is a wasted implementation cycle.
+<!--/EFFORT-->
 
 ## Phase-Scoped Planning
 
@@ -84,6 +116,7 @@ Read `$SISYPHUS_SESSION_DIR/strategy.md` and count its implementation phases.
 
 Your dispatch instruction should already name the phase scope. If it doesn't and strategy.md has multiple phases, pick the next unplanned phase and name it explicitly in your submission report.
 
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 ## Large Plans: Your Role as Lead
 
 You own the final master plan, but you don't write every sub-plan alone.
@@ -222,6 +255,7 @@ If you are over 200 lines:
 1. Is the master carrying per-file detail, long env-var tables, RBAC blocks, or deletion enumerations? → Move to sub-plans. (Small types or schemas that actually earn their place can stay where they clarify a phase.)
 2. Is there narrative fat — prose expanding bullet points, repeated rationale, redundant tables? → Trim to the structural skeleton.
 3. Is this actually a "small" plan that ballooned past 200 lines? → You misread the scope. Delegate sub-plans.
+<!--/EFFORT-->
 
 ## Quality Standards
 
