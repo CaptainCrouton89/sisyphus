@@ -6,7 +6,7 @@ import {
 import { coerceKind, type AggregateInboxItem } from '../../shared/inbox-types.js';
 
 const KIND_ICON: Record<string, string> = {
-  notify: '📨',
+  notify: '✉',
   validation: '✓',
   decision: '◆',
   context: '✎',
