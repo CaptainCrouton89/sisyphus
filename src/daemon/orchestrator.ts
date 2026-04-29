@@ -10,12 +10,14 @@ import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { shellQuote } from '../shared/shell.js';
 import { ORCHESTRATOR_COLOR } from './colors.js';
-import { discoverAgentTypes, parseAgentFrontmatter, extractAgentBody } from './frontmatter.js';
+import { discoverAgentTypes, extractAgentBody } from './frontmatter.js';
+import { discoverOrchestratorModes } from './orchestrator-modes.js';
 import * as state from './state.js';
 import { renderEffortMarkers } from './lib/effort-render.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 import { flushCycleTimer } from './pane-monitor.js';
+import { emitModeTransitionNotify } from './mode-notify.js';
 import { resolveRequiredPluginDirs } from './plugins.js';
 
 
@@ -82,26 +84,6 @@ export function getOrchestratorPaneId(sessionId: string): string | undefined {
 
 export function setOrchestratorPaneId(sessionId: string, paneId: string): void {
   sessionOrchestratorPane.set(sessionId, paneId);
-}
-
-interface DiscoveredMode {
-  name: string;
-  description?: string;
-  filePath: string;
-}
-
-function discoverOrchestratorModes(): DiscoveredMode[] {
-  const templatesDir = resolve(import.meta.dirname, '../templates');
-  const files = readdirSync(templatesDir).filter(
-    f => f.startsWith('orchestrator-') && f.endsWith('.md') && f !== 'orchestrator-base.md'
-  );
-
-  return files.map(file => {
-    const content = readFileSync(join(templatesDir, file), 'utf-8');
-    const fm = parseAgentFrontmatter(content);
-    const name = fm.name ?? file.replace(/^orchestrator-/, '').replace(/\.md$/, '');
-    return { name, description: fm.description, filePath: join(templatesDir, file) };
-  });
 }
 
 function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): string {
@@ -491,8 +473,29 @@ export async function handleOrchestratorYield(sessionId: string, cwd: string, ne
   if (windowId) tmux.selectLayout(windowId);
 
   const session = state.getSession(cwd, sessionId);
+  const prevMode = session.orchestratorCycles[session.orchestratorCycles.length - 1]?.mode;
   const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
+
+  // Snapshot prev-mode tail stats while cycle.mode still reflects the mode each
+  // cycle ran in — completeOrchestratorCycle below overwrites the just-finished
+  // cycle's mode to the new target.
+  let prevModeStats: { cycles: number; activeMs: number } | undefined;
+  if (mode && prevMode && mode !== prevMode) {
+    let cycles = 0;
+    let activeMs = cycleActiveMs;
+    for (let i = session.orchestratorCycles.length - 1; i >= 0; i--) {
+      const c = session.orchestratorCycles[i]!;
+      if (c.mode !== prevMode) break;
+      cycles++;
+      activeMs += c.activeMs;
+    }
+    prevModeStats = { cycles, activeMs };
+  }
+
   await state.completeOrchestratorCycle(cwd, sessionId, nextPrompt, mode, cycleActiveMs);
+  if (mode && mode !== prevMode) {
+    await emitModeTransitionNotify(cwd, sessionId, prevMode, mode, prevModeStats);
+  }
 
   const freshSession = state.getSession(cwd, sessionId);
   const runningAgents = freshSession.agents.filter(a => a.status === 'running');
