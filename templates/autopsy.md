@@ -97,6 +97,7 @@ Each subagent acts as a **first-pass surveyor**: its job is to flag candidate in
 2. An @-ref to `~/.claude/commands/sisyphus/autopsy-reference.md` so it has the sisyphus mental model.
 3. A specific read-set (files/globs it should consume).
 4. An instruction to return a **punch list of specific citations** (`reports/agent-004-final.md:12`) with one sentence of context each. Flag anomalies; leave interpretation to the main thread.
+5. Brief surveyors with the evidence (file lists, line counts, timestamps), not with your hypotheses about what it means. A surveyor handed a hypothesis confirms it; one handed evidence tests it. *"8 docs in `context/agent-004/` totaling 1,290 lines"* is evidence; *"agent-004 spawned 4 review sub-agents"* is a hypothesis — handing the latter contaminates the report.
 
 Suggested concern splits:
 
@@ -124,6 +125,10 @@ For each inflection, work through these four questions. Cite the files you read 
    - **Judgment failure — mis-read signal.** The signal was visible in what they actually read, and they weighed it wrong, ignored it, or pattern-matched to the wrong response. Fix lives in decision-making guidance: the templates that shape how the orchestrator or agent reasons about this class of situation.
 
 That split is what the user most cares about — it tells them whether to edit the harness/templates (information architecture) or the guidance inside them (decision-making). Resist the temptation to call something "just a crash" or "just a rollback" and stop there; trace it back to the prompting choice it exposes.
+
+**Verify authorship before attributing.** "Agent X did Y" is a claim that needs evidence. Three independent signals lock it in: (1) the system prompt (`prompts/agent-NNN-system.md`) — does the template instruct this agent to do Y? If not, it probably didn't. (2) Timing — file mtimes inside the agent's `agent-spawned` → `agent-completed` window in `events.jsonl`. Files written outside that window were written by someone else, full stop. (3) The agent's final report — does the agent claim Y? Reports omit, but rarely fabricate.
+
+Path conventions are not authorship. `context/{agent-id}/` is where that agent's plan *lives*; it is not a guarantee that every file there was *written* by that agent. Reviewers and later cycles can write into it. Never infer authorship from path alone.
 
 **Resource map for reconstruction** (which file answers which question):
 

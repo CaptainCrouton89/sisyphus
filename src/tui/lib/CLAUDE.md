@@ -1,1 +1,0 @@
-- **Emoji in Ink renders silently overflow**: Ink's `@alcalzone/ansi-tokenize` measures emoji as width=1 but terminals render them as width=2 — off-by-one causes the right border to wrap to the next row (phantom blank lines). All display strings must pass through `cleanMarkdown` or `truncate` before rendering; never pass raw emoji-containing strings to Ink components.
