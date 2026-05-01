@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@crouton-kit/humanloop':
-        specifier: file:../../cli/humanloop
-        version: file:../../cli/humanloop
+        specifier: ^0.1.3
+        version: 0.1.3
       '@r-cli/sdk':
         specifier: ^1.2.0
         version: 1.3.0
@@ -48,8 +48,8 @@ importers:
 
 packages:
 
-  '@crouton-kit/humanloop@file:../../cli/humanloop':
-    resolution: {directory: ../../cli/humanloop, type: directory}
+  '@crouton-kit/humanloop@0.1.3':
+    resolution: {integrity: sha512-xotWf7Blko6BLKKkUPq2oRVS4gFZRRkBaocak9V3KMEXkgzF0c3DyN75mL+swRm9YPgJCurbI36ZlhOWKUZLNQ==}
     hasBin: true
 
   '@esbuild/aix-ppc64@0.27.7':
@@ -619,7 +619,7 @@ packages:
 
 snapshots:
 
-  '@crouton-kit/humanloop@file:../../cli/humanloop':
+  '@crouton-kit/humanloop@0.1.3':
     dependencies:
       '@r-cli/sdk': 1.3.0
       commander: 13.1.0
