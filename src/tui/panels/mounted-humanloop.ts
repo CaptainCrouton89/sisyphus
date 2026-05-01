@@ -160,6 +160,66 @@ export function mountResolutionPanel(
     })();
   }
 
+  // Mirror humanloop's standalone launchTui pattern: track latest responses
+  // so onExit (incomplete submit via final-phase Enter) can submit partials.
+  let lastResponses: InteractionResponse[] = [];
+
+  const submitResponses = (responses: InteractionResponse[]): void => {
+    void (async () => {
+      const it = item();
+      const completedAt = new Date().toISOString();
+
+      // Orphan disposition: dispatch before writeOutput so action lands first
+      const meta = readMeta(it.cwd, it.sessionId, it.askId);
+      if (meta?.orphanTarget && responses.length > 0) {
+        const sel = responses[0]!.selectedOptionId;
+        if (sel) {
+          await dispatchOrphanResolution(meta.orphanTarget, sel, {
+            daemonSend: opts.daemonSend,
+            onOrphanTakeover: opts.onOrphanTakeover,
+            sessionId: it.sessionId,
+            cwd: it.cwd,
+          });
+        }
+      }
+
+      // Write output first (before inbox-list so daemon sees answered status)
+      writeOutput(it.cwd, it.sessionId, it.askId, responses, completedAt);
+      await updateMeta(it.cwd, it.sessionId, it.askId, { status: 'answered', completedAt });
+
+      const refreshRes = await opts.daemonSend({ type: 'inbox-list' });
+      const newQueue: AggregateInboxItem[] = refreshRes.ok
+        ? ((refreshRes.data?.items as AggregateInboxItem[]) ?? [])
+        : [];
+
+      if (newQueue.length === 0) {
+        opts.onUnmount();
+        return;
+      }
+
+      queue = newQueue;
+      currentIndex = 0;
+      const nextItem = queue[0]!;
+      const nextDeck = buildDeck(0);
+      if (!nextDeck) {
+        opts.onUnmount();
+        return;
+      }
+
+      currentDeck = nextDeck;
+      const nextProgress = readProgress(nextItem.cwd, nextItem.sessionId, nextItem.askId);
+      answeredCount = nextProgress?.responses.length ?? 0;
+      lastResponses = [];
+
+      state.visuals.clear();
+
+      panel.loadDeck(nextDeck, {
+        progressPath: askProgressPath(nextItem.cwd, nextItem.sessionId, nextItem.askId),
+      });
+      requestRender();
+    })();
+  };
+
   const panel: MountedPanel = mountPanel({
     deck: initialDeck,
     cols: opts.cols,
@@ -167,6 +227,7 @@ export function mountResolutionPanel(
     progressPath: askProgressPath(item().cwd, item().sessionId, item().askId),
     onProgress: (responses: InteractionResponse[]) => {
       answeredCount = responses.length;
+      lastResponses = responses;
       requestRender();
       const it = item();
       const cur = readMeta(it.cwd, it.sessionId, it.askId);
@@ -175,61 +236,13 @@ export function mountResolutionPanel(
       }
     },
     onComplete: (responses: InteractionResponse[]) => {
-      void (async () => {
-        const it = item();
-        const completedAt = new Date().toISOString();
-
-        // Orphan disposition: dispatch before writeOutput so action lands first
-        const meta = readMeta(it.cwd, it.sessionId, it.askId);
-        if (meta?.orphanTarget && responses.length > 0) {
-          const sel = responses[0]!.selectedOptionId;
-          if (sel) {
-            await dispatchOrphanResolution(meta.orphanTarget, sel, {
-              daemonSend: opts.daemonSend,
-              onOrphanTakeover: opts.onOrphanTakeover,
-              sessionId: it.sessionId,
-              cwd: it.cwd,
-            });
-          }
-        }
-
-        // Write output first (before inbox-list so daemon sees answered status)
-        writeOutput(it.cwd, it.sessionId, it.askId, responses, completedAt);
-        await updateMeta(it.cwd, it.sessionId, it.askId, { status: 'answered', completedAt });
-
-        const refreshRes = await opts.daemonSend({ type: 'inbox-list' });
-        const newQueue: AggregateInboxItem[] = refreshRes.ok
-          ? ((refreshRes.data?.items as AggregateInboxItem[]) ?? [])
-          : [];
-
-        if (newQueue.length === 0) {
-          opts.onUnmount();
-          return;
-        }
-
-        queue = newQueue;
-        currentIndex = 0;
-        const nextItem = queue[0]!;
-        const nextDeck = buildDeck(0);
-        if (!nextDeck) {
-          opts.onUnmount();
-          return;
-        }
-
-        currentDeck = nextDeck;
-        const nextProgress = readProgress(nextItem.cwd, nextItem.sessionId, nextItem.askId);
-        answeredCount = nextProgress?.responses.length ?? 0;
-
-        state.visuals.clear();
-
-        panel.loadDeck(nextDeck, {
-          progressPath: askProgressPath(nextItem.cwd, nextItem.sessionId, nextItem.askId),
-        });
-        requestRender();
-      })();
+      submitResponses(responses);
     },
+    // Final-phase Enter on an incomplete deck routes here (humanloop only fires
+    // onComplete when responses === interactions). The 'final' UI prompts
+    // "enter submit", so honor that by submitting whatever was answered.
     onExit: () => {
-      opts.onUnmount();
+      submitResponses(lastResponses);
     },
   });
 
