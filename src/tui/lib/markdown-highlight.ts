@@ -13,7 +13,7 @@
 
 import stringWidth from 'string-width';
 import { GLOAM } from './gloam.js';
-import { stripFrontmatter, type DetailLine, type Seg } from './format.js';
+import { cleanMarkdown, stripFrontmatter, type DetailLine, type Seg } from './format.js';
 
 // ─── Heading styles by level ───────────────────────────────────────────────
 
@@ -361,6 +361,264 @@ function buildParagraphLines(body: string, innerW: number): DetailLine[] {
   return wrapSegs([...head, ...bodySegs], innerW, '  ');
 }
 
+// ─── GFM tables ────────────────────────────────────────────────────────────
+
+type TableAlign = 'left' | 'center' | 'right';
+
+function parseTableCells(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|') && !s.endsWith('\\|')) s = s.slice(0, -1);
+  const cells: string[] = [];
+  let cur = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (ch === '\\' && s[i + 1] === '|') {
+      cur += '|';
+      i++;
+    } else if (ch === '|') {
+      cells.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function parseTableSeparator(line: string): TableAlign[] | null {
+  if (!line.includes('|') && !/^[\s:|+-]+$/.test(line)) return null;
+  const cells = parseTableCells(line);
+  if (cells.length === 0) return null;
+  const aligns: TableAlign[] = [];
+  for (const c of cells) {
+    const m = c.match(/^(:?)\s*-{2,}\s*(:?)$/);
+    if (!m) return null;
+    if (m[1] === ':' && m[2] === ':') aligns.push('center');
+    else if (m[2] === ':') aligns.push('right');
+    else aligns.push('left');
+  }
+  return aligns;
+}
+
+function padCell(text: string, width: number, align: TableAlign): string {
+  const w = stringWidth(text);
+  const pad = Math.max(0, width - w);
+  let left = 0;
+  let right = 0;
+  if (align === 'right') left = pad;
+  else if (align === 'center') {
+    left = Math.floor(pad / 2);
+    right = pad - left;
+  } else right = pad;
+  return ' '.repeat(left) + text + ' '.repeat(right);
+}
+
+/**
+ * Soft-wrap cell text to `width` columns, returning each visual line padded
+ * (and aligned) to exactly `width` display columns. Words longer than the
+ * column hard-break on character boundaries.
+ */
+function wrapCell(text: string, width: number, align: TableAlign): string[] {
+  if (width <= 0) return [''];
+  const cleaned = cleanMarkdown(text);
+  if (cleaned === '') return [padCell('', width, align)];
+
+  const out: string[] = [];
+  let cur = '';
+  let curW = 0;
+  const flush = () => {
+    out.push(padCell(cur.replace(/\s+$/, ''), width, align));
+    cur = '';
+    curW = 0;
+  };
+
+  for (const piece of cleaned.match(/\s+|\S+/g) ?? []) {
+    const isSpace = /^\s+$/.test(piece);
+    const pw = stringWidth(piece);
+
+    if (isSpace) {
+      if (curW === 0) continue; // drop leading whitespace on a wrapped line
+      if (curW + pw > width) flush();
+      else {
+        cur += piece;
+        curW += pw;
+      }
+      continue;
+    }
+
+    if (curW + pw <= width) {
+      cur += piece;
+      curW += pw;
+      continue;
+    }
+
+    if (curW > 0) flush();
+
+    if (pw > width) {
+      // Hard-break a word wider than the column.
+      let rem = piece;
+      while (rem.length > 0) {
+        let cut = 0;
+        let cutW = 0;
+        for (let k = 0; k < rem.length; k++) {
+          const cw = stringWidth(rem[k]!);
+          if (cutW + cw > width) break;
+          cutW += cw;
+          cut = k + 1;
+        }
+        if (cut === 0) cut = 1;
+        const slice = rem.slice(0, cut);
+        if (cut === rem.length) {
+          cur = slice;
+          curW = stringWidth(slice);
+        } else {
+          out.push(padCell(slice, width, align));
+        }
+        rem = rem.slice(cut);
+      }
+      continue;
+    }
+
+    cur = piece;
+    curW = pw;
+  }
+
+  if (curW > 0 || out.length === 0) flush();
+  return out;
+}
+
+function buildTableLines(
+  headers: string[],
+  alignsIn: TableAlign[],
+  rowsIn: string[][],
+  innerW: number,
+): DetailLine[] {
+  const ncols = headers.length;
+  if (ncols === 0) return [];
+
+  // Normalize aligns and rows to exactly ncols entries so downstream indexing
+  // is total. Missing entries default to left-align / empty string.
+  const aligns: TableAlign[] = [];
+  for (let i = 0; i < ncols; i++) {
+    const a = alignsIn[i];
+    aligns.push(a === undefined ? 'left' : a);
+  }
+
+  const rows: string[][] = rowsIn.map((r) => {
+    const out: string[] = [];
+    for (let i = 0; i < ncols; i++) {
+      const c = r[i];
+      out.push(c === undefined ? '' : c);
+    }
+    return out;
+  });
+
+  // Natural widths from cleaned cell text
+  const naturalW: number[] = new Array(ncols).fill(0);
+  const measure = (cells: string[]) => {
+    for (let i = 0; i < ncols; i++) {
+      const w = stringWidth(cleanMarkdown(cells[i]!));
+      if (w > naturalW[i]!) naturalW[i] = w;
+    }
+  };
+  measure(headers);
+  for (const r of rows) measure(r);
+
+  // Layout: 2-char margin + left border + (cell + right-border) per column.
+  // Each cell is " <content> " (2 chars padding) so per-column overhead is 3
+  // (one separator + two pad spaces). Plus 1 for the leading border.
+  const margin = 2;
+  const overhead = 1 + ncols * 3;
+  const available = innerW - margin - overhead;
+  const minColW = 3;
+
+  if (available < ncols * minColW) {
+    return [[{ text: '  (table too narrow to render)', fg: GLOAM.fg4, italic: true }]];
+  }
+
+  const colW: number[] = [...naturalW];
+  for (let i = 0; i < ncols; i++) if (colW[i]! < minColW) colW[i] = minColW;
+  let total = colW.reduce((a, b) => a + b, 0);
+
+  if (total > available) {
+    // Shrink the widest column repeatedly until it fits.
+    while (total > available) {
+      let widest = 0;
+      for (let i = 1; i < ncols; i++) if (colW[i]! > colW[widest]!) widest = i;
+      if (colW[widest]! <= minColW) break;
+      colW[widest]!--;
+      total--;
+    }
+  } else if (total < available) {
+    // Grow the widest column to absorb the slack so the right border aligns.
+    while (total < available) {
+      let widest = 0;
+      for (let i = 1; i < ncols; i++) if (colW[i]! > colW[widest]!) widest = i;
+      colW[widest]!++;
+      total++;
+    }
+  }
+
+  const borderFg = GLOAM.fg3;
+  const headerFg = GLOAM.fg0;
+  const headerBg = GLOAM.bg_bg1;
+  const cellFg = GLOAM.fg1;
+  const marginText = '  ';
+
+  const buildBorder = (left: string, mid: string, right: string): DetailLine => {
+    let s = left;
+    for (let i = 0; i < ncols; i++) {
+      s += '─'.repeat(colW[i]! + 2);
+      s += i === ncols - 1 ? right : mid;
+    }
+    return [{ text: marginText }, { text: s, fg: borderFg }];
+  };
+
+  const buildDataRow = (cells: string[], header: boolean): DetailLine[] => {
+    const wrapped: string[][] = [];
+    for (let i = 0; i < ncols; i++) {
+      const cell = cells[i];
+      wrapped.push(wrapCell(cell === undefined ? '' : cell, colW[i]!, aligns[i]!));
+    }
+    let height = 1;
+    for (const w of wrapped) if (w.length > height) height = w.length;
+    // Pad shorter columns with blank lines so the row has a uniform height.
+    for (let i = 0; i < ncols; i++) {
+      const blank = ' '.repeat(colW[i]!);
+      while (wrapped[i]!.length < height) wrapped[i]!.push(blank);
+    }
+
+    const out: DetailLine[] = [];
+    for (let row = 0; row < height; row++) {
+      const segs: Seg[] = [
+        { text: marginText },
+        { text: '│', fg: borderFg },
+      ];
+      for (let i = 0; i < ncols; i++) {
+        const padded = ' ' + wrapped[i]![row]! + ' ';
+        segs.push(
+          header
+            ? { text: padded, fg: headerFg, bg: headerBg, bold: true }
+            : { text: padded, fg: cellFg },
+        );
+        segs.push({ text: '│', fg: borderFg });
+      }
+      out.push(segs);
+    }
+    return out;
+  };
+
+  const out: DetailLine[] = [];
+  out.push(buildBorder('┌', '┬', '┐'));
+  for (const dl of buildDataRow(headers, true)) out.push(dl);
+  out.push(buildBorder('├', '┼', '┤'));
+  for (const r of rows) for (const dl of buildDataRow(r, false)) out.push(dl);
+  out.push(buildBorder('└', '┴', '┘'));
+  return out;
+}
+
 // ─── Public entry point ────────────────────────────────────────────────────
 
 /**
@@ -382,7 +640,8 @@ export function buildHighlightedMarkdownLines(
   const rawLines = clean.split('\n');
   let inCodeBlock = false;
 
-  for (const raw of rawLines) {
+  for (let li = 0; li < rawLines.length; li++) {
+    const raw = rawLines[li]!;
     const trimmed = raw.trim();
 
     // Code fence — toggles block state, rendered as a dim line
@@ -395,6 +654,28 @@ export function buildHighlightedMarkdownLines(
     if (inCodeBlock) {
       lines.push(buildCodeLine(raw.replace(/\t/g, '    '), innerW));
       continue;
+    }
+
+    // GFM table: current line has a pipe and next line is an alignment row.
+    if (trimmed.includes('|') && li + 1 < rawLines.length) {
+      const sepLine = rawLines[li + 1]!;
+      const sepAligns = parseTableSeparator(sepLine);
+      if (sepAligns) {
+        const headers = parseTableCells(raw);
+        const tRows: string[][] = [];
+        let j = li + 2;
+        while (j < rawLines.length) {
+          const next = rawLines[j]!;
+          if (next.trim() === '') break;
+          if (!next.includes('|')) break;
+          if (/^```/.test(next.trim())) break;
+          tRows.push(parseTableCells(next));
+          j++;
+        }
+        for (const tl of buildTableLines(headers, sepAligns, tRows, innerW)) lines.push(tl);
+        li = j - 1; // resume after consumed rows; loop ++ moves past them
+        continue;
+      }
     }
 
     // Empty line
