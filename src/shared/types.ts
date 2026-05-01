@@ -25,6 +25,8 @@ export interface StatusBarConfig {
 
 export type SessionStatus = 'active' | 'paused' | 'completed';
 
+export type UploadStatus = 'pending' | 'uploaded' | 'failed';
+
 export type MessageSource =
   | { type: 'agent'; agentId: string }
   | { type: 'user' }
@@ -87,6 +89,14 @@ export interface Session {
   resumeCount?: number;
   continueCount?: number;
   companionCreditedWisdom?: number;
+  /** Lifecycle of the upload to the Worker proxy. `undefined` means upload was never attempted. */
+  uploadStatus?: UploadStatus;
+  /** R2 storage key returned by the Worker, e.g. `users/silas/<sessionId>.zip`. Bucket is private; this is NOT a fetch-able URL. */
+  uploadKey?: string;
+  /** Clean error message extracted from the Worker's JSON response when `uploadStatus === 'failed'`. */
+  uploadError?: string;
+  /** Daemon-local `new Date().toISOString()` at the moment the success was persisted. */
+  uploadCompletedAt?: string;
   effort?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 

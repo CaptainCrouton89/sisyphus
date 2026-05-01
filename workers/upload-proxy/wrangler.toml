@@ -1,0 +1,13 @@
+name = "sisyphus-upload-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+account_id = "8c13ab7fc53dc5dfb06c42c05a0e58eb"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "sisyphus-sessions-captaincrouton89"
+
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "b609152eaaf34ebfa05049674c33f8f7"

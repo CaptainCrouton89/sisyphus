@@ -1,4 +1,4 @@
-import type { MessageSource } from './types.js';
+import type { MessageSource, UploadStatus } from './types.js';
 
 export type Request =
   | { type: 'start'; task: string; context?: string; cwd: string; name?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' }
@@ -20,6 +20,7 @@ export type Request =
   | { type: 'message'; sessionId: string; content: string; source?: MessageSource; agentId?: string }
   | { type: 'update-task'; sessionId: string; task: string }
   | { type: 'set-effort'; sessionId: string; effort: 'low' | 'medium' | 'high' | 'xhigh' }
+  | { type: 'set-upload-status'; sessionId: string; cwd: string; status: UploadStatus; storageKey?: string; error?: string }
   | { type: 'rollback'; sessionId: string; cwd: string; toCycle: number }
   | { type: 'delete'; sessionId: string; cwd: string }
   | { type: 'reopen-window'; sessionId: string; cwd: string }

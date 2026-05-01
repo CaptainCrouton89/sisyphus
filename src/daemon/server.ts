@@ -503,6 +503,28 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true };
       }
 
+      case 'set-upload-status': {
+        // File-backed lookup — manual upload works on completed sessions which aren't in sessionTrackingMap.
+        // existsSync (not try/catch around getSession) closes the TOCTOU window: file-deletion mid-update
+        // surfaces as a clear updateSession error rather than a swallowed JSON-parse / permission failure.
+        // Path style mirrors the existing file-backed handlers — literal template, not `statePath()`.
+        const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
+        if (!existsSync(stateFile)) {
+          return unknownSessionError(req.sessionId);
+        }
+        try {
+          await state.updateSession(req.cwd, req.sessionId, {
+            uploadStatus: req.status,
+            uploadKey: req.storageKey,
+            uploadError: req.error,
+            ...(req.status === 'uploaded' && { uploadCompletedAt: new Date().toISOString() }),
+          });
+          return { ok: true };
+        } catch (err) {
+          return { ok: false, error: `Failed to persist upload status: ${err instanceof Error ? err.message : String(err)}` };
+        }
+      }
+
       case 'message': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);

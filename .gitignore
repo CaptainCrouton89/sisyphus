@@ -15,3 +15,8 @@ __pycache__/
 
 tmp/
 package-lock.json
+
+# Cloudflare Workers
+.dev.vars
+.wrangler/
+workers/*/node_modules

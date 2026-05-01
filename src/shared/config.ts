@@ -14,6 +14,13 @@ export interface RequiredPlugin {
   marketplace: string;
 }
 
+export interface UploadConfig {
+  /** Worker base URL, e.g. https://sisyphus-upload-proxy.rhyneer-silas.workers.dev */
+  url: string;
+  /** Bearer token, format `sisyphus_pat_<43-char-base64url>` */
+  token: string;
+}
+
 export interface Config {
   model?: string;
   tmuxSession?: string;
@@ -28,6 +35,7 @@ export interface Config {
   companionPopup?: boolean;
   requiredPlugins?: RequiredPlugin[];
   statusBar?: StatusBarConfig;
+  upload?: UploadConfig;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -57,6 +65,12 @@ function readJsonFile(filePath: string): Partial<Config> {
 export function loadConfig(cwd: string): Config {
   const globalConfig = readJsonFile(globalConfigPath());
   const projectConfig = readJsonFile(projectConfigPath(cwd));
+  if (projectConfig.upload !== undefined) {
+    console.warn(
+      'ignoring `upload` block from project-local .sisyphus/config.json — only the global config can set upload credentials',
+    );
+    delete projectConfig.upload;
+  }
   const merged: Config = { ...DEFAULT_CONFIG, ...globalConfig, ...projectConfig };
   if (globalConfig.statusBar || projectConfig.statusBar) {
     merged.statusBar = {

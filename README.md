@@ -313,6 +313,65 @@ Project `.sisyphus/config.json` overrides global `~/.sisyphus/config.json`:
 | `notifications.enabled` | `true` | Desktop notifications on lifecycle events |
 | `notifications.sound` | macOS Hero | Notification sound file path |
 | `requiredPlugins` | `[devcore]` | Claude Code plugins to auto-install for agents |
+| `upload` | — | Worker-proxy upload target — see [Session upload](#session-upload-optional) below |
+
+### Session upload (optional)
+
+On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sisyphus upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sisyphus export` is unchanged; upload is purely additive.
+
+**Token workflow** — the operator mints a per-user token and shares a URL of the form:
+
+```
+https://<worker-host>/upload?token=sisyphus_pat_...
+```
+
+Run `configure-upload` with that URL to write credentials to `~/.sisyphus/config.json`:
+
+```bash
+# Safest — no argv leak:
+pbpaste | sisyphus configure-upload --stdin
+
+# Interactive prompt:
+sisyphus configure-upload
+
+# Direct argv (triggers a leak warning — token visible via `ps` and shell history):
+sisyphus configure-upload "https://<worker-host>/upload?token=sisyphus_pat_..."
+```
+
+**Config** — `configure-upload` always writes to `~/.sisyphus/config.json`. The `upload` block is only honored from the global config; a project-local `.sisyphus/config.json` with an `upload` block is ignored with a warning (security hardening — prevents project files from redirecting your uploads).
+
+```json
+{
+  "upload": {
+    "url": "https://<worker-host>",
+    "token": "sisyphus_pat_..."
+  }
+}
+```
+
+**Manifest** — the zip includes a `manifest.json` with session metadata. Fields sent on the wire (13 fields):
+
+- `sessionId`, `sisyphusVersion`, `hostname`, `platform`
+- `status` (`completed` / `failed` / `cancelled`), `completedAt`, `durationMs`, `wallClockMs`
+- `model`, `effortTier` (`low` / `medium` / `high` / `xhigh`)
+- `cycleCount`, `agentCount`, `goal`
+
+`userId` is **not sent by the client** — the Worker injects it from the token, so it is opaque to end-users and non-operators.
+
+**Privacy / consent** — presence of `Config.upload` is consent. No upload happens unless the block is configured. The manifest is content-free metadata; the full session zip lands in private R2 owned by the operator.
+
+**State fields** — the session JSON surfaces `uploadStatus` (`pending` / `uploaded` / `failed`), `uploadKey` (e.g. `users/{userId}/{sessionId}.zip`), `uploadError`, and `uploadCompletedAt`.
+
+**Manual retry:**
+
+```bash
+sisyphus upload <session-id>     # re-uploads any session (active or completed)
+sisyphus upload                  # uploads the active session in this cwd
+```
+
+**Disable** — omit the `upload` config block. Daemon skips silently.
+
+Operator setup (token minting, Worker deployment, R2 provisioning): see [`workers/upload-proxy/README.md`](workers/upload-proxy/README.md).
 
 ## CLI reference
 

@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { exportSessionToZip } from '../cli/commands/export.js';
+import { exportSessionToZip } from '../shared/session-export.js';
 import type { Key } from './terminal.js';
 import {
   type AppState,
@@ -568,12 +568,9 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'export-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      try {
-        const outputPath = exportSessionToZip(selectedSessionId, state.cwd);
-        notify(state, `Exported to ${outputPath}`);
-      } catch (err) {
-        notify(state, `Export failed: ${(err as Error).message}`);
-      }
+      exportSessionToZip(selectedSessionId, state.cwd)
+        .then(outputPath => notify(state, `Exported to ${outputPath}`))
+        .catch(err => notify(state, `Export failed: ${(err as Error).message}`));
       break;
     }
 

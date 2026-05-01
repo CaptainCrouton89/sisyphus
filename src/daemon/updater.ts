@@ -1,8 +1,9 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, unlinkSync, lstatSync } from 'node:fs';
+import { writeFileSync, unlinkSync, lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { get } from 'node:https';
 import { daemonUpdatingPath } from '../shared/paths.js';
+import { getSisyphusVersion } from '../shared/version.js';
 
 export function isNewer(latest: string, current: string): boolean {
   const a = latest.split('.').map(Number);
@@ -16,23 +17,8 @@ export function isNewer(latest: string, current: string): boolean {
   return false;
 }
 
-function readPackageVersion(): string {
-  // Bundled: dist/daemon.js → ../package.json
-  // Source (tsx): src/daemon/updater.ts → ../../package.json
-  for (const rel of ['../package.json', '../../package.json']) {
-    try {
-      const raw = readFileSync(resolve(import.meta.dirname, rel), 'utf-8');
-      const pkg = JSON.parse(raw) as { name?: string; version?: string };
-      if (pkg.name === 'sisyphi' && pkg.version) return pkg.version;
-    } catch {}
-  }
-  return '0.0.0';
-}
-
-const currentVersion = readPackageVersion();
-
 export function getCurrentVersion(): string {
-  return currentVersion;
+  return getSisyphusVersion();
 }
 
 export function checkForUpdate(): Promise<{ current: string; latest: string } | null> {
@@ -49,8 +35,8 @@ export function checkForUpdate(): Promise<{ current: string; latest: string } | 
         clearTimeout(timeout);
         try {
           const { version: latest } = JSON.parse(data) as { version: string };
-          if (latest && isNewer(latest, currentVersion)) {
-            resolve({ current: currentVersion, latest });
+          if (latest && isNewer(latest, getSisyphusVersion())) {
+            resolve({ current: getSisyphusVersion(), latest });
           } else {
             resolve(null);
           }

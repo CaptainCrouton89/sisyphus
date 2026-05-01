@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import * as state from './state.js';
 import * as orchestrator from './orchestrator.js';
 import * as tmux from './tmux.js';
@@ -23,6 +24,9 @@ import { showCommentaryPopup, showCommentaryPopupQueue } from './companion-popup
 import type { PopupPage } from './companion-popup.js';
 import type { CommentaryEvent, CompanionState } from '../shared/companion-types.js';
 import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.js';
+import { runSessionUploadAndPersist } from './uploader.js';
+import { isUploadConfigured } from '../shared/upload.js';
+import { getSisyphusVersion } from '../shared/version.js';
 import { markAgentAsksOrphan, orphanRunningAgentAsks, resolveOrchestratorOrphanAsks } from './orphan-asks.js';
 import { formatDuration } from '../shared/format.js';
 
@@ -839,6 +843,31 @@ export async function handleComplete(sessionId: string, cwd: string, report: str
       writeSessionSummary(completedSession, { sentiment });
     }
   }).catch((err) => { console.warn('[sisyphus] Sentiment generation failed:', err instanceof Error ? err.message : err); });
+
+  // Fire-and-forget: archive session zip via the Worker proxy (if configured).
+  //   1. Config.upload absent → silent skip.
+  //   2. Config.upload present but partial → warn + persist failed (diagnostic).
+  //   3. Config.upload complete → fire upload.
+  const config = loadConfig(cwd);
+  if (isUploadConfigured(config.upload)) {
+    runSessionUploadAndPersist({
+      sessionId, cwd, fullConfig: config, session: completedSession,
+      status: 'completed', sisyphusVersion: getSisyphusVersion(),
+    }).catch(() => {
+      // arg-less .catch: the underlying error is already persisted to state.uploadError
+      // (with a clean Worker-supplied message via parseWorkerError); avoid double-logging.
+      console.warn('[sisyphus] upload pipeline crashed; check uploadError on session state');
+    });
+  } else if (config.upload) {
+    const partialUpload = config.upload;
+    const missing: string[] = [];
+    if (!partialUpload.url)   missing.push('upload.url');
+    if (!partialUpload.token) missing.push('upload.token');
+    const error = `upload skipped: missing ${missing.join(', ')}`;
+    console.warn(`[sisyphus] ${error}`);
+    state.updateSession(cwd, sessionId, { uploadStatus: 'failed', uploadError: error })
+      .catch(() => console.warn('[sisyphus] failed to persist upload skip status'));
+  }
 
   // Companion hook — fire-and-forget, errors must not break session flow
   try {
