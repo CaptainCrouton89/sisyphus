@@ -102,7 +102,7 @@ async function markAnswered(cwd: string, sessionId: string, askId: string): Prom
   if (meta.blocking && durationMs > 0) {
     try {
       if (existsSync(statePath(cwd, sessionId))) {
-        await state.incrementUserBlockedMs(cwd, sessionId, durationMs, meta.askedAt);
+        await state.incrementUserBlockedMs(cwd, sessionId, durationMs, meta.askedAt, meta.askedBy);
       }
     } catch {
       // State increment is best-effort — history event is the source of truth for autopsy.

@@ -50,7 +50,8 @@ export function writeSessionSummary(
       killedAgentCount: session.agents.filter(a => a.status === 'killed').length,
       rollbackCount: session.rollbackCount ?? 0,
       efficiency: session.wallClockMs
-        ? session.activeMs / Math.max(1, session.wallClockMs - (session.userBlockedMs ?? 0))
+        ? Math.max(0, session.activeMs - (session.userBlockedMs ?? 0))
+          / Math.max(1, session.wallClockMs - (session.userBlockedMs ?? 0))
         : null,
       cycleCount: session.orchestratorCycles.length,
       context: session.context ?? null,
@@ -62,6 +63,7 @@ export function writeSessionSummary(
         agentType: a.agentType,
         status: a.status,
         activeMs: a.activeMs,
+        userBlockedMs: a.userBlockedMs ?? 0,
         spawnedAt: a.spawnedAt,
         completedAt: a.completedAt,
         restartCount: a.restartCount ?? 0,
@@ -71,6 +73,7 @@ export function writeSessionSummary(
         mode: c.mode ?? null,
         agentsSpawned: c.agentsSpawned.length,
         activeMs: c.activeMs,
+        userBlockedMs: c.userBlockedMs ?? 0,
         startedAt: c.timestamp,
         completedAt: c.completedAt ?? null,
       })),

@@ -121,6 +121,8 @@ export interface Agent {
   spawnedAt: string;
   completedAt: string | null;
   activeMs: number;
+  /** Cumulative time this agent was blocked on its own `sisyphus ask` calls (blocking only). Subset of activeMs. */
+  userBlockedMs?: number;
   reports: AgentReport[];
   paneId: string;
   repo: string;

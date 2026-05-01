@@ -4,6 +4,7 @@ import { atomicWrite, withLock } from './lib/atomic.js';
 import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, reportsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath, strategyPath } from '../shared/paths.js';
 import { ensureSisyphusGitignore } from '../shared/gitignore.js';
 import type { Agent, AgentReport, AgentStatus, Message, OrchestratorCycle, Session, SessionStatus } from '../shared/types.js';
+import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
 
 const ROADMAP_SEED = `---
 description: >
@@ -342,6 +343,7 @@ export async function incrementUserBlockedMs(
   sessionId: string,
   deltaMs: number,
   askedAt?: string,
+  askedBy?: string,
 ): Promise<void> {
   if (deltaMs <= 0) return;
   return withSessionLock(sessionId, () => {
@@ -355,6 +357,10 @@ export async function incrementUserBlockedMs(
         return startMs <= askedAtMs && askedAtMs < endMs;
       });
       if (cycle) cycle.userBlockedMs = (cycle.userBlockedMs ?? 0) + deltaMs;
+    }
+    if (askedBy && askedBy !== ORCHESTRATOR_ASKED_BY) {
+      const agent = session.agents.slice().reverse().find(a => a.id === askedBy);
+      if (agent) agent.userBlockedMs = (agent.userBlockedMs ?? 0) + deltaMs;
     }
     saveSession(session);
   });

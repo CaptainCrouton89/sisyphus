@@ -32,14 +32,18 @@ function isInteractiveAgent(agentType: string | null | undefined): boolean {
   return agentType != null && INTERACTIVE_AGENT_TYPES.has(agentType);
 }
 
-function splitAgentTime(agents: SessionSummaryAgent[]): { computeMs: number; interactiveMs: number } {
+function splitAgentTime(agents: SessionSummaryAgent[]): { computeMs: number; interactiveMs: number; blockedMs: number } {
   let computeMs = 0;
   let interactiveMs = 0;
+  let blockedMs = 0;
   for (const a of agents) {
-    if (isInteractiveAgent(a.agentType)) interactiveMs += a.activeMs;
-    else computeMs += a.activeMs;
+    const blocked = a.userBlockedMs ?? 0;
+    const remaining = Math.max(0, a.activeMs - blocked);
+    blockedMs += blocked;
+    if (isInteractiveAgent(a.agentType)) interactiveMs += remaining;
+    else computeMs += remaining;
   }
-  return { computeMs, interactiveMs };
+  return { computeMs, interactiveMs, blockedMs };
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +131,8 @@ function buildLiveSummary(sessionId: string): SessionSummary | null {
     killedAgentCount: session.agents.filter(a => a.status === 'killed').length,
     rollbackCount: session.rollbackCount ?? 0,
     efficiency: liveWallClockMs > 0
-      ? session.activeMs / Math.max(1, liveWallClockMs - (session.userBlockedMs ?? 0))
+      ? Math.max(0, session.activeMs - (session.userBlockedMs ?? 0))
+        / Math.max(1, liveWallClockMs - (session.userBlockedMs ?? 0))
       : null,
     cycleCount: session.orchestratorCycles.length,
     context: session.context ?? null,
@@ -139,6 +144,7 @@ function buildLiveSummary(sessionId: string): SessionSummary | null {
       agentType: a.agentType,
       status: a.status,
       activeMs: a.activeMs,
+      userBlockedMs: a.userBlockedMs ?? 0,
       spawnedAt: a.spawnedAt,
       completedAt: a.completedAt,
       restartCount: a.restartCount ?? 0,
@@ -148,6 +154,7 @@ function buildLiveSummary(sessionId: string): SessionSummary | null {
       mode: c.mode ?? null,
       agentsSpawned: c.agentsSpawned.length,
       activeMs: c.activeMs,
+      userBlockedMs: c.userBlockedMs ?? 0,
       startedAt: c.timestamp,
       completedAt: c.completedAt ?? null,
     })),
@@ -345,6 +352,9 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
   if (interactiveMs > 0) {
     console.log(`${DIM}Compute:${RESET} ${formatDuration(computeMs)}  ${DIM}Interactive:${RESET} ${formatDuration(interactiveMs)} ${DIM}(TUI wait time, not compute)${RESET}`);
   }
+  if (s.userBlockedMs > 0) {
+    console.log(`${DIM}Waiting on user:${RESET} ${formatDuration(s.userBlockedMs)} ${DIM}(blocked on sisyphus ask, not compute)${RESET}`);
+  }
   console.log('');
 
   // Task
@@ -366,7 +376,9 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
       const name = a.nickname ? `${a.name} "${a.nickname}"` : a.name;
       const type = a.agentType ? c('gray', ` [${a.agentType}]`) : '';
       const interactive = isInteractiveAgent(a.agentType) ? c('yellow', ' (interactive)') : '';
-      console.log(`  ${fmtStatus(a.status)}  ${name}${type}${interactive}  ${DIM}${formatDuration(a.activeMs)}${RESET}`);
+      const blocked = a.userBlockedMs ?? 0;
+      const waiting = blocked > 0 ? `  ${DIM}· ${formatDuration(blocked)} waiting${RESET}` : '';
+      console.log(`  ${fmtStatus(a.status)}  ${name}${type}${interactive}  ${DIM}${formatDuration(a.activeMs)}${RESET}${waiting}`);
     }
     console.log('');
   }
@@ -376,7 +388,9 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
     console.log(`${BOLD}Cycles${RESET} (${s.cycles.length})`);
     for (const cy of s.cycles) {
       const mode = cy.mode ? c('magenta', cy.mode) : '';
-      console.log(`  ${DIM}#${cy.cycle}${RESET}  ${mode}  ${cy.agentsSpawned} agents  ${DIM}${formatDuration(cy.activeMs)}${RESET}`);
+      const blocked = cy.userBlockedMs ?? 0;
+      const waiting = blocked > 0 ? `  ${DIM}· ${formatDuration(blocked)} waiting${RESET}` : '';
+      console.log(`  ${DIM}#${cy.cycle}${RESET}  ${mode}  ${cy.agentsSpawned} agents  ${DIM}${formatDuration(cy.activeMs)}${RESET}${waiting}`);
     }
     console.log('');
   }
@@ -508,7 +522,8 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   const efficiencyValues: number[] = [];
   for (const { summary: s } of sessions) {
     const eff = s.efficiency ?? (s.wallClockMs
-      ? s.activeMs / Math.max(1, s.wallClockMs - (s.userBlockedMs ?? 0))
+      ? Math.max(0, s.activeMs - (s.userBlockedMs ?? 0))
+        / Math.max(1, s.wallClockMs - (s.userBlockedMs ?? 0))
       : null);
     if (eff != null) efficiencyValues.push(eff);
   }

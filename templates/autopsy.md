@@ -85,6 +85,8 @@ sisyphus history --status killed              # filter by terminal status
 
 **Interactive agents:** `sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec` have their `activeMs` bucketed as **interactive (TUI wait time), not compute**. Don't count their activeMs as wasted work in efficiency analysis — the user was sitting at a TUI.
 
+**User-ask wait time:** `userBlockedMs` (session-, cycle-, and agent-level) is time the decision-maker was blocked on a `sisyphus ask` waiting for the user to answer. **Subtract it from `activeMs` before judging "long-running" or "stalled."** The CLI surfaces this as a `Waiting on user:` header line and `· Xm waiting` suffixes per agent and cycle. Long inter-event gaps in `events.jsonl` that fall inside a matching `ask-issued` → `ask-answered` pair are user wait time, not stalled work — check the askedBy field on the events to attribute waits to the right decision-maker. Treat it like interactive TUI time: not a smell.
+
 **Efficiency field:** may be `null` for older sessions even when `wallClockMs` exists — the CLI recomputes inline. Don't assume null means "no data."
 
 ## Phase 1 — Evidence gathering (Explore subagents)
@@ -152,7 +154,7 @@ Path conventions are not authorship. `context/{agent-id}/` is where that agent's
 - **Rollback loop.** `rollback` events in the timeline. `sisyphus rollback` is destructive — it rewinds to a prior cycle boundary. If there are multiple, the orchestrator gave up and retried repeatedly. Check what changed between the retried cycles.
 - **Killed/crashed agents.** `agent-killed` with a reason; `agent-restarted` means it was respawned. The kill event may be mechanical (OOM, timeout, process died) but the smell is in *how the orchestrator responded* — did it respawn blindly, fail to read why the agent died, or miss that the kill indicated the scope was wrong? Check the agent's report (if any), the cycle log around the kill, and the prompt the respawn got.
 - **Session resumed mid-work.** `session-resumed` + non-zero `lostAgentCount` — daemon restarted. The restart is mechanical; the smell is how the orchestrator's next cycle handled the lost work (did it re-spawn, silently drop it, pretend it completed?).
-- **Wasted interactive time — not a smell.** High `activeMs` on `sisyphus:requirements`/`sisyphus:design`/`sisyphus:spec` is user think-time at a TUI, not compute. Treat it as neutral.
+- **Wasted interactive time — not a smell.** High `activeMs` on `sisyphus:requirements`/`sisyphus:design`/`sisyphus:spec` is user think-time at a TUI, not compute. Treat it as neutral. Same goes for `userBlockedMs` on any agent or cycle — that's wait time on `sisyphus ask`, not stalled work.
 
 ## Artifact-visible smells
 
