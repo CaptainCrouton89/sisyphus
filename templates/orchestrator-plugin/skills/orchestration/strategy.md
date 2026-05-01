@@ -63,13 +63,13 @@ A single plan agent, a single implement agent, a single validate agent. No spec,
 <!--EFFORT:MEDIUM-->
 **Pipeline:** `(spec, if behavior changes) → plan → implement → validate`
 
-Add `sisyphus:review-plan` only when the plan covers multi-domain integration. Add `sisyphus:test-spec` only when the work introduces a behavioral invariant — security guarantee, ordering constraint, idempotency, data integrity. Wrapper-shaped work and mechanical mappings don't warrant a test-spec. Spawn `sisyphus:spec` and `sisyphus:problem` only when the goal has multiple valid framings or the design space is genuinely open.
+Add `sisyphus:review-plan` only when the plan covers multi-domain integration. Add `sisyphus:test-spec` **only when the user's initial prompt or goal.md explicitly requested tests** (e.g. "with tests", "TDD", "include unit tests", "test coverage"). Silence is a "no" — do not proactively ask, do not infer from feature risk. Spawn `sisyphus:spec` and `sisyphus:problem` only when the goal has multiple valid framings or the design space is genuinely open.
 <!--/EFFORT-->
 
 <!--EFFORT:HIGH,XHIGH-->
-**Pipeline:** `discovery → spec → planning (with parallel test-spec + review-plan) → phased implementation with critique/validate checkpoints → validation`
+**Pipeline:** `discovery → spec → planning (with parallel review-plan) → phased implementation with critique/validate checkpoints → validation`
 
-`sisyphus:test-spec` spawns in parallel with the high-level plan at Cycle 2, not after implementation — post-implementation test-spec silently describes what the code does rather than what it should do. `sisyphus:review-plan` runs after the plan is drafted. `sisyphus:spec` spawns whenever a feature adds user-visible behavior. `sisyphus:problem` spawns when the goal is nebulous.
+`sisyphus:review-plan` runs after the plan is drafted. `sisyphus:spec` spawns whenever a feature adds user-visible behavior. `sisyphus:problem` spawns when the goal is nebulous. Append `+ test-spec` to the planning stage **only when the user's initial prompt or goal.md explicitly requested tests** (e.g. "with tests", "TDD", "include unit tests", "test coverage"); silence is a "no." When justified, `sisyphus:test-spec` spawns in parallel with the high-level plan at Cycle 2, not after implementation — post-implementation test-spec silently describes what the code does rather than what it should do.
 <!--/EFFORT-->
 
 ## Choosing a Different Shape

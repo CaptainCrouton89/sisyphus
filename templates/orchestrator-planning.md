@@ -82,18 +82,15 @@ Spawn **one plan lead** per feature (or per phase — see phase-scoped planning 
 After the plan lead delivers:
 
 - Spawn `sisyphus:review-plan` only when the plan covers multi-domain integration. For single-domain plans, the implementation cycle's review catches issues without a dedicated review pass.
-- Spawn `sisyphus:test-spec` only when the work introduces a behavioral invariant — security guarantee, ordering constraint, idempotency, data integrity. Wrapper-shaped and mechanical work doesn't warrant a test-spec.
+- Spawn `sisyphus:test-spec` **only when the user's initial prompt or goal.md explicitly requested tests** (e.g. "with tests", "TDD", "include unit tests", "test coverage"). Silence is a "no" — do not proactively ask, do not infer from feature risk. Reviews and validation cover correctness without a test-spec.
 
 If neither applies, transition straight to implementation.
 <!--/EFFORT-->
 
 <!--EFFORT:HIGH,XHIGH-->
-After the plan lead delivers, two parallel reviews run alongside the planning cycle:
+After the plan lead delivers, `sisyphus:review-plan` runs alongside the planning cycle as an adversarial review of the plan against the requirements and design. Spawn it after the plan is drafted; feed findings back to the plan lead. Address review findings before transitioning to implementation.
 
-- `sisyphus:review-plan` — adversarial review of the plan against the requirements and design. Spawn after the plan is drafted; feed findings back to the plan lead.
-- `sisyphus:test-spec` — derives behavioral invariants and test properties from the requirements. Spawn **in parallel with the high-level plan**, not after implementation. Post-implementation test-spec silently describes what the code does rather than what it should do.
-
-Address review findings before transitioning to implementation. The test-spec output feeds the implementation phase as a verification target.
+Spawn `sisyphus:test-spec` **only when the user's initial prompt or goal.md explicitly requested tests** (e.g. "with tests", "TDD", "include unit tests", "test coverage"). Silence is a "no" — do not proactively ask, do not infer from feature risk. When test-spec is justified, spawn it **in parallel with the high-level plan**, not after implementation — post-implementation test-spec silently describes what the code does rather than what it should do. Its output then feeds the implementation phase as a verification target.
 <!--/EFFORT-->
 
 </plan-review-and-test-spec>

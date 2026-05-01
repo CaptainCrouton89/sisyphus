@@ -1,6 +1,6 @@
 ---
 name: test-spec
-description: Use after requirements and a plan exist to define what must be provably true when implementation is done. Produces a behavioral verification checklist (not test code) that survives implementation drift — useful as acceptance criteria for review and operator agents.
+description: Use only when the user explicitly requested tests (e.g. "with tests", "TDD", "test coverage" in the initial prompt or goal.md). Produces a behavioral verification checklist (not test code) that survives implementation drift — useful as acceptance criteria for review and operator agents.
 model: opus
 color: magenta
 effort: high

@@ -57,9 +57,9 @@ Validation: PASS. Complete — "All env access routed through getConfig()."
 
 ## Example 5: New Subsystem — Distributed Task Queue (HIGH effort)
 
-**Starting task**: "Add a persistent task queue so long-running jobs survive server restarts"
+**Starting task**: "Add a persistent task queue so long-running jobs survive server restarts. Include test coverage of the survival, retry, and concurrency invariants."
 
-**Effort tier**: HIGH. New subsystem, new protocol (worker ↔ queue contract), cross-domain orchestration (API + storage + worker process).
+**Effort tier**: HIGH. New subsystem, new protocol (worker ↔ queue contract), cross-domain orchestration (API + storage + worker process). The prompt explicitly asks for test coverage — `sisyphus:test-spec` is justified at Cycle 2.
 
 ### Cycle 0 — Problem exploration
 ```
@@ -69,7 +69,7 @@ roadmap.md:
   - [ ] Explore current job execution patterns and constraints
   - [ ] Spec — requirements + architecture
   - [ ] Plan implementation (staged outline)
-  - [ ] Spec behavioral properties (test-spec)
+  - [ ] Spec behavioral properties (test-spec) — user asked for tests in the prompt
   ...
 
 Agents spawned:
@@ -101,6 +101,8 @@ Agents spawned (parallel):
     jobs retry up to N times, concurrent workers don't double-execute the same job."
 ```
 
+If the original prompt had been silent on tests, the test-spec spawn would be omitted and Cycle 2 would be plan-only — Cycle 3 would then proceed straight to detail-planning stage 1.
+
 ### Cycles 3–9 — Staged implementation with critique + validation checkpoints
 ```
 Follows Feature Build Large pattern:
@@ -114,7 +116,7 @@ Follows Feature Build Large pattern:
   Cycle 9: final review agent; complete
 ```
 
-**Pipeline shape**: Full HIGH pipeline — `problem → spec → plan+test-spec (parallel) → staged implement → critique → validate → review`. 9+ cycles.
+**Pipeline shape**: Full HIGH pipeline — `problem → spec → plan (+ test-spec because the prompt asked for tests) → staged implement → critique → validate → review`. 9+ cycles. Without an explicit test request in the prompt, the parallel `test-spec` would be omitted and Cycle 2 would be plan-only.
 
 ---
 
@@ -206,7 +208,7 @@ Action: complete — "Fixed WebSocket message loss during reconnection. Messages
 
 ## Example 2: Add API Rate Limiting
 
-**Starting task**: "Add rate limiting to the REST API — per-user, configurable limits"
+**Starting task**: "Add rate limiting to the REST API — per-user, configurable limits, with tests for the limit-enforcement and 429 response behavior"
 
 ### Cycle 1 — Problem exploration
 ```

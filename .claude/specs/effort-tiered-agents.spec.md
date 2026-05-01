@@ -349,3 +349,13 @@ The base prompt carries an `<effort-tiers>` section with three concerns:
 ## A Note on Process for This Session
 
 This is a wrapper-shaped + template-edit feature. The autopsy that motivated it found that sisyphus over-pipelines this exact shape. **This session should run at MEDIUM effort or LOW effort itself** — a single plan, no `test-spec`, no `review-plan`, implementor + validate. If the orchestrator's strategy reaches for parallel `test-spec` or multi-stage review-plan, that's exactly the smell this spec exists to fix. Dogfood the principle.
+
+## Update 2026-05-01: Spawn predicate simplified
+
+The original spec gated `sisyphus:test-spec` at MEDIUM on a "behavioral invariant" predicate (security, ordering, idempotency, data integrity) and at HIGH/XHIGH spawned it unconditionally. Autopsy of session `ddfabd77-…` (credit-counter feature) showed the predicate was still over-firing — a frontend pill + one endpoint generated a 96-invariant checklist that bound the validation cycle to a 96-item contract.
+
+The gating predicate has been replaced with a simpler rule across all tiers: **spawn `sisyphus:test-spec` only when the user's initial prompt or goal.md explicitly requested tests** (e.g. "with tests", "TDD", "include unit tests", "test coverage"). Silence is a "no" — the orchestrator does not proactively ask, does not infer from feature risk. Reviews and validation cover correctness without a test-spec.
+
+The agent's own LOW/MEDIUM/HIGH internal scaling (cap at 8 properties at LOW, full Edge Cases + Negative Properties at HIGH/XHIGH) is unchanged. Only the orchestrator-side spawn predicate moved.
+
+Files updated: `templates/orchestrator-planning.md`, `templates/orchestrator-plugin/skills/orchestration/strategy.md`, `…/task-patterns.md`, `…/workflow-examples.md`, `templates/agent-plugin/agents/test-spec.md` (description only).
