@@ -24,6 +24,21 @@ Use explore agents to build understanding before making decisions. Each agent sa
 
 <spec-alignment>
 
+<!--EFFORT:LOW-->
+**Skip spec.** Treat the user's request as the requirements. If something's ambiguous, ask the user in-band — don't spawn `sisyphus:spec` or `sisyphus:problem`. Move directly into plan delegation below.
+<!--/EFFORT-->
+
+<!--EFFORT:MEDIUM-->
+Spec is the combined product discovery + technical design stage. Spawning a spec agent hands off both to a specialist that collaborates with the user directly: exploring the codebase, asking informed questions, drafting a design, writing EARS requirements with TUI review, and deepening the design with what was learned.
+
+**Spawn `sisyphus:spec` only when the goal has multiple valid framings or the design space is genuinely open.** Single-feature work within a known subsystem rarely needs a spec session — the implementation plan and TUI review cover the design questions. If you're unsure, ask the user in-band before spawning.
+
+**Spec refinement is iterative.** When a spec is spawned, the process doesn't end when documents are saved:
+- Have agents review requirements for feasibility (can this actually work given the codebase?)
+- **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback resolve questions or change the understanding, update requirements and design documents directly — they are the single source of truth. Delete resolved questions from their listing sections, then update the topical sections where those answers belong so the document reads as settled fact. Don't create correction files, addendum files, or decision logs alongside them.
+<!--/EFFORT-->
+
+<!--EFFORT:HIGH,XHIGH-->
 Spec is the combined product discovery + technical design stage. Spawning a spec agent hands off both to a specialist that collaborates with the user directly: exploring the codebase, asking informed questions, drafting a design, writing EARS requirements with TUI review, and deepening the design with what was learned.
 
 **When to spawn a spec agent:**
@@ -41,6 +56,7 @@ If you're unsure, spawn the spec agent. The cost of a short spec conversation is
 **Spec refinement is iterative.** The spec agent works with the user, but the process doesn't end when documents are saved:
 - Have agents review requirements for feasibility (can this actually work given the codebase?)
 - **Fold new knowledge into authoritative documents.** When reviews, exploration, or user feedback resolve questions or change the understanding, update requirements and design documents directly — they are the single source of truth. Delete resolved questions from their listing sections, then update the topical sections where those answers belong so the document reads as settled fact. Don't create correction files, addendum files, or decision logs alongside them.
+<!--/EFFORT-->
 
 </spec-alignment>
 
@@ -55,6 +71,32 @@ Spawn **one plan lead** per feature (or per phase — see phase-scoped planning 
 **When to spawn multiple plan leads:** Only for genuinely independent features with no shared files or integration points.
 
 </plan-delegation>
+
+<plan-review-and-test-spec>
+
+<!--EFFORT:LOW-->
+**Skip plan review and test-spec.** The plan agent's output is taken at face value — implementation flows directly from plan to implement. If the plan turns out to be wrong, the implement-cycle's review catches it.
+<!--/EFFORT-->
+
+<!--EFFORT:MEDIUM-->
+After the plan lead delivers:
+
+- Spawn `sisyphus:review-plan` only when the plan covers multi-domain integration. For single-domain plans, the implementation cycle's review catches issues without a dedicated review pass.
+- Spawn `sisyphus:test-spec` only when the work introduces a behavioral invariant — security guarantee, ordering constraint, idempotency, data integrity. Wrapper-shaped and mechanical work doesn't warrant a test-spec.
+
+If neither applies, transition straight to implementation.
+<!--/EFFORT-->
+
+<!--EFFORT:HIGH,XHIGH-->
+After the plan lead delivers, two parallel reviews run alongside the planning cycle:
+
+- `sisyphus:review-plan` — adversarial review of the plan against the requirements and design. Spawn after the plan is drafted; feed findings back to the plan lead.
+- `sisyphus:test-spec` — derives behavioral invariants and test properties from the requirements. Spawn **in parallel with the high-level plan**, not after implementation. Post-implementation test-spec silently describes what the code does rather than what it should do.
+
+Address review findings before transitioning to implementation. The test-spec output feeds the implementation phase as a verification target.
+<!--/EFFORT-->
+
+</plan-review-and-test-spec>
 
 <phase-scoped-planning>
 

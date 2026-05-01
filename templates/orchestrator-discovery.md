@@ -55,6 +55,7 @@ notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 
 Replace the option labels with concrete interpretations grounded in the codebase you just explored — not generic placeholders. `sisyphus ask` blocks until the user answers.
 
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 **Nebulous** — multiple valid framings, "done" isn't defined, the user might change their mind about what this even means. This needs interactive problem exploration:
 
 1. Spawn explore agents for the technical landscape. Yield `--mode discovery`.
@@ -62,9 +63,11 @@ Replace the option labels with concrete interpretations grounded in the codebase
 3. Read `context/problem.md`. Now you can write a meaningful goal.md. Invoke the strategy skill → write strategy.md → transition to planning.
 
 Not every nebulous problem needs all three sub-cycles — collapse when you can. The point is: don't leave discovery until the goal is concrete enough that a spec agent could work from it.
+<!--/EFFORT-->
 
 </goal-refinement>
 
+<!--EFFORT:MEDIUM,HIGH,XHIGH-->
 <problem-exploration>
 
 ## Problem Exploration
@@ -86,14 +89,35 @@ When the problem is nebulous, `sisyphus:problem` leads interactive exploration w
 The problem agent produces `context/problem.md`. This feeds downstream into spec.
 
 </problem-exploration>
+<!--/EFFORT-->
+
+<effort-tier>
+
+## Set the Effort Tier
+
+The effort tier controls the shape of the strategy and pipeline — which stages run, which agents spawn, how much verification is needed. Set it once you understand the goal, before writing strategy.md.
+
+Pick the tier by **novelty of behavior**, not file count:
+
+- Wrapper-shaped (every change backs onto an existing CLI/API/handler): **LOW**
+- Reshape / refactor / migration with no new behaviors: **LOW** (mechanical) or **MEDIUM** (cross-cutting)
+- New feature within an existing subsystem: **MEDIUM**
+- New subsystem / new protocol / cross-domain orchestration: **HIGH**
+- Novel concurrency / new security boundary / multi-system contract: **XHIGH**
+
+Apply the tier with `sisyphus set-effort <low|medium|high|xhigh>` — this filters the strategy skill, mode templates, and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
+
+If you change the tier mid-session because scope shifted, the next cycle's prompts adjust automatically; don't manually patch strategy.md to match — re-invoke the strategy skill.
+
+</effort-tier>
 
 <strategy-generation>
 
 ## Write the Strategy
 
-Once the goal is clear, invoke the **strategy skill** for guidance on writing strategy.md. The skill provides stage patterns, process shapes, and the strategy.md format.
+Once the goal is clear and the tier is set, invoke the **strategy skill** for guidance on writing strategy.md. The skill provides stage patterns, the tier-specific default pipeline shape, and the strategy.md format.
 
-Strategy generation is usually fast — the shape of the work is often obvious once the goal is defined. Don't overthink it. A wrong strategy gets revised; a missing strategy leaves the orchestrator directionless.
+Strategy generation is usually fast — the shape of the work is often obvious once the goal and tier are settled. Don't overthink it. A wrong strategy gets revised; a missing strategy leaves the orchestrator directionless.
 
 </strategy-generation>
 

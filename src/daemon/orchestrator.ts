@@ -14,6 +14,7 @@ import { discoverAgentTypes, extractAgentBody } from './frontmatter.js';
 import { discoverOrchestratorModes } from './orchestrator-modes.js';
 import * as state from './state.js';
 import { renderEffortMarkers } from './lib/effort-render.js';
+import { renderPluginDir } from './lib/render-plugin.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 import { flushCycleTimer } from './pane-monitor.js';
@@ -387,7 +388,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     await state.drainMessages(cwd, sessionId, session.messages.length);
   }
 
-  const pluginPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
+  const pluginSrcPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
+  const pluginPath = join(sesDir, '.orchestrator-plugin');
+  renderPluginDir(pluginSrcPath, pluginPath, sessionEffort);
   const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'xhigh';

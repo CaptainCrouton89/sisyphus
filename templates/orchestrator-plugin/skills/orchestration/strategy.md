@@ -50,9 +50,31 @@ The second list is a roadmap of code work. Strategy.md collapses into a task lis
 
 When you're tempted to name a stage after a code area, that signals you're sketching the plan, not the strategy. Push that detail down into the plan agent's output and keep `strategy.md` at the process-shape layer.
 
-## Choosing Process Shape
+## Default Pipeline Shape
 
-Pick the shape that matches the problem. These canonical progressions are the strong default — start here and prune what's already clear, rather than inventing custom shapes:
+The session's effort tier dictates the default pipeline. **Use this shape unless the problem explicitly demands more or less.** The user can change tiers via `sisyphus set-effort <low|medium|high|xhigh>`.
+
+<!--EFFORT:LOW-->
+**Pipeline:** `plan → implement → validate`
+
+A single plan agent, a single implement agent, a single validate agent. No spec, problem, test-spec, or review-plan stages — the user's request is the requirement; ask in-band if anything's ambiguous. If the work is wrapper-shaped (every change backs onto an existing CLI/API/handler), move directly from discovery into implementation mode without a planning-mode cycle at all.
+<!--/EFFORT-->
+
+<!--EFFORT:MEDIUM-->
+**Pipeline:** `(spec, if behavior changes) → plan → implement → validate`
+
+Add `sisyphus:review-plan` only when the plan covers multi-domain integration. Add `sisyphus:test-spec` only when the work introduces a behavioral invariant — security guarantee, ordering constraint, idempotency, data integrity. Wrapper-shaped work and mechanical mappings don't warrant a test-spec. Spawn `sisyphus:spec` and `sisyphus:problem` only when the goal has multiple valid framings or the design space is genuinely open.
+<!--/EFFORT-->
+
+<!--EFFORT:HIGH,XHIGH-->
+**Pipeline:** `discovery → spec → planning (with parallel test-spec + review-plan) → phased implementation with critique/validate checkpoints → validation`
+
+`sisyphus:test-spec` spawns in parallel with the high-level plan at Cycle 2, not after implementation — post-implementation test-spec silently describes what the code does rather than what it should do. `sisyphus:review-plan` runs after the plan is drafted. `sisyphus:spec` spawns whenever a feature adds user-visible behavior. `sisyphus:problem` spawns when the goal is nebulous.
+<!--/EFFORT-->
+
+## Choosing a Different Shape
+
+If the default doesn't match the problem, these canonical progressions are the next-best starting points — pick the closest one and prune what's already clear, rather than inventing custom shapes:
 
 ```
 discovery → spec → planning → implementation → validation
