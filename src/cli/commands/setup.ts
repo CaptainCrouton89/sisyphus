@@ -82,6 +82,13 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
     console.log('  \u2717 /sisyphus:autopsy: Failed to install');
   }
 
+  // /configure-upload command
+  if (result.configureUpload.installed) {
+    console.log(`  \u2713 /sisyphus:configure-upload: ${result.configureUpload.path}${result.configureUpload.autoInstalled ? ' (just installed)' : ''}`);
+  } else {
+    console.log('  \u2717 /sisyphus:configure-upload: Failed to install');
+  }
+
   // Nvim
   if (result.nvim.installed) {
     const extra = result.nvim.autoInstalled ? ' (just installed)' : '';

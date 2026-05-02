@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
 import { ensureRequiredPlugins } from './plugins.js';
-import { installAutopsyCommand, installBeginCommand, type CommandInfo } from './onboard.js';
+import { installAutopsyCommand, installBeginCommand, installConfigureUploadCommand, type CommandInfo } from './onboard.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -63,6 +63,7 @@ export async function ensureDaemonInstalled(): Promise<void> {
   // these commands shipped self-heal the next time the daemon is unreachable.
   const beginResult = installBeginCommand();
   const autopsyResult = installAutopsyCommand();
+  installConfigureUploadCommand();
 
   if (!isInstalled()) {
     const nodePath = process.execPath;

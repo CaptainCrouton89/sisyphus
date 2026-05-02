@@ -43,6 +43,7 @@ export interface OnboardResult {
   nvim: NvimInfo;
   command: CommandInfo;
   autopsy: CommandInfo;
+  configureUpload: CommandInfo;
   termrender: TermrenderInfo;
 }
 
@@ -317,6 +318,14 @@ export function installAutopsyCommand(srcOverride?: string): CommandInfo {
   return result;
 }
 
+export function isConfigureUploadCommandInstalled(): boolean {
+  return existsSync(slashCommandPath('configure-upload'));
+}
+
+export function installConfigureUploadCommand(srcOverride?: string): CommandInfo {
+  return installSlashCommand('configure-upload', srcOverride);
+}
+
 function installAutopsyReference(): void {
   const dest = join(homedir(), '.claude', 'commands', 'sisyphus', 'autopsy-reference.md');
   if (existsSync(dest)) return;
@@ -417,11 +426,12 @@ export function runOnboarding(): OnboardResult {
   // Slash commands
   const command = installBeginCommand();
   const autopsy = installAutopsyCommand();
+  const configureUpload = installConfigureUploadCommand();
 
   // termrender (markdown rendering for TUI)
   const termrender = tryAutoInstallTermrender();
 
-  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command, autopsy, termrender };
+  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command, autopsy, configureUpload, termrender };
 }
 
 export function formatOnboardingMessages(result: OnboardResult): string[] {
