@@ -231,6 +231,13 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 #
 # Safe assumptions must satisfy the same EARS shape requirements as
 # regular requirements.
+#
+# ── BEHAVIORAL ONLY ──
+# Each requirement describes what the system does at its boundary —
+# what the user, caller, or tester observes. The design (already
+# approved) is the technical contract; the plan phase (later) handles
+# implementation breakdown. Do not write requirements that name files,
+# functions, libraries, data structures, or algorithms.
 
 {
   "meta": {
@@ -242,7 +249,8 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 
     "summary": "2-3 sentences: what is being built, who it's for, and the key constraint.",
     //          ^ Orients the reviewer before they see individual items.
-    //            Lead with the user-facing outcome, not the implementation.
+    //            Lead with the user-facing outcome only. The implementation
+    //            belongs in design.md (technical) and plan.md (steps).
 
     "version": 1,
     //          ^ Always 1. Reserved for future schema versioning.
@@ -299,8 +307,10 @@ const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
             "when": "When the user runs \`start\` with a task description",
             //       ^ Start with the EARS keyword: When/While/If/Where.
 
-            "shall": "the system shall create a session and spawn the orchestrator"
-            //        ^ Observable behavior. What the user sees or the system does.
+            "shall": "the system shall return a session ID and surface the orchestrator's first response"
+            //        ^ Observable behavior — what the caller sees at the boundary.
+            //          Not "spawn", "instantiate", "import", or any verb that
+            //          requires reading code to verify.
           },
 
           "criteria": [
