@@ -168,8 +168,9 @@ function renderResolutionFrame(buf: import('./render.js').FrameBuffer, state: Ap
     const midRow = Math.floor(bodyH / 2);
     for (let i = 0; i < bodyH; i++) {
       if (visualEntry?.visible && visualEntry.status === 'loading' && i === midRow) {
-        const placeholder = ansiDim('[generating visual…]');
-        const padL = Math.floor((state.cols - 20) / 2);
+        const placeholderText = '[generating visual… ~30s]';
+        const placeholder = ansiDim(placeholderText);
+        const padL = Math.floor((state.cols - placeholderText.length) / 2);
         buf.lines[i + 1] = ' '.repeat(Math.max(0, padL)) + placeholder;
       } else if (visualEntry?.visible && visualEntry.status === 'error' && i === midRow) {
         const errText = visualEntry.error ? visualEntry.error : 'unknown';
