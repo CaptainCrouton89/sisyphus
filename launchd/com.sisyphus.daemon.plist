@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/node</string>
-    <string>/Users/silasrhyneer/Code/claude-tools/sisyphus/dist/daemon.js</string>
+    <string>/Users/silasrhyneer/Code/cli/sisyphus/dist/daemon.js</string>
   </array>
 
   <key>KeepAlive</key>

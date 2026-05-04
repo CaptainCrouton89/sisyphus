@@ -2,9 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(sisyphusd restart:*)",
-      "Bash(cp /Users/silasrhyneer/Code/claude-tools/sisyphus/templates/autopsy.md /Users/silasrhyneer/.claude/commands/sisyphus/autopsy.md)",
+      "Bash(cp /Users/silasrhyneer/Code/cli/sisyphus/templates/autopsy.md /Users/silasrhyneer/.claude/commands/sisyphus/autopsy.md)",
       "Read(//Users/silasrhyneer/.claude/commands/sisyphus/**)",
-      "Bash(cp /Users/silasrhyneer/Code/claude-tools/sisyphus/templates/autopsy-reference.md /Users/silasrhyneer/.claude/commands/sisyphus/autopsy-reference.md)"
+      "Bash(cp /Users/silasrhyneer/Code/cli/sisyphus/templates/autopsy-reference.md /Users/silasrhyneer/.claude/commands/sisyphus/autopsy-reference.md)"
     ]
   },
   "spinnerTipsEnabled": false
