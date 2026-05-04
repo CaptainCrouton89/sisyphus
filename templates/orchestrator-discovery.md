@@ -27,33 +27,7 @@ The user's starting prompt is an input, not a goal. It may be vague, ambiguous, 
 
 **Unclear but bounded** — you know the domain but need to resolve ambiguity. Ask the user via `sisyphus ask` (propose interpretations as options; never ask open-ended questions). Spawn explore agents for technical context. Refine goal.md across 1-2 cycles. Then invoke the strategy skill → write strategy.md → transition to planning.
 
-Pattern for proposing interpretations:
-
-```bash
-deck="$SISYPHUS_SESSION_DIR/context/.ask-interpretation-$(date +%s).json"
-cat > "$deck" <<'EOF'
-{
-  "interactions": [{
-    "id": "interpretation",
-    "title": "Which scope did you mean?",
-    "subtitle": "Pick the framing closest to your intent — or describe what you actually mean",
-    "kind": "decision",
-    "options": [
-      {"id": "narrow",  "label": "Narrow: just X (the immediate symptom)"},
-      {"id": "medium",  "label": "Medium: X plus the related Y subsystem"},
-      {"id": "broad",   "label": "Broad: end-to-end flow including Z"}
-    ],
-    "allowFreetext": true,
-    "freetextLabel": "None of those — here's what I really mean"
-  }]
-}
-EOF
-result=$(sisyphus ask "$deck")
-choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
-notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
-```
-
-Replace the option labels with concrete interpretations grounded in the codebase you just explored — not generic placeholders. `sisyphus ask` blocks until the user answers.
+Before authoring the deck, **read the `humanloop` skill** — it covers when a deck is the right move, how to phrase options as concrete forks (not "yes/no/maybe"), and how to bundle related questions. The orchestrator submits blocking (`sisyphus ask "$deck"`); see `sisyphus ask -h` for syntax.
 
 <!--EFFORT:MEDIUM,HIGH,XHIGH-->
 **Nebulous** — multiple valid framings, "done" isn't defined, the user might change their mind about what this even means. This needs interactive problem exploration:

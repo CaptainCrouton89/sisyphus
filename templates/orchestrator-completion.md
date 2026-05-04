@@ -40,35 +40,17 @@ Use tables, diagrams, and structured markdown freely — the deck below renders 
 
 ## Ask for Sign-off via `sisyphus ask`
 
-Submit a structured deck. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sisyphus complete` until the user picks `approve`.**
+Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sisyphus complete` until the user picks `approve`.**
+
+Read the `humanloop` skill for option design and submission flow. The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
 
 ```bash
-deck="$SISYPHUS_SESSION_DIR/context/.ask-completion-$(date +%s).json"
-cat > "$deck" <<'EOF'
-{
-  "interactions": [{
-    "id": "signoff",
-    "title": "Approve completion?",
-    "subtitle": "Review the summary and choose how to proceed",
-    "bodyPath": "../completion-summary.md",
-    "kind": "validation",
-    "options": [
-      {"id": "approve",  "label": "Looks good — finalize"},
-      {"id": "minor",    "label": "Minor fixes needed (cosmetic, rename, typo)"},
-      {"id": "moderate", "label": "Bugs or gaps to address"},
-      {"id": "major",    "label": "Scope or approach rework"}
-    ],
-    "allowFreetext": true,
-    "freetextLabel": "Anything specific to fix?"
-  }]
-}
-EOF
 result=$(sisyphus ask "$deck")
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
 notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 ```
 
-`sisyphus ask` blocks internally — do not add any "wait for the user" step around it.
+Orchestrator blocks here — `sisyphus ask` waits internally; do not add any extra "wait for user" step. See `sisyphus ask -h` for CLI syntax.
 
 ## Handle Feedback
 

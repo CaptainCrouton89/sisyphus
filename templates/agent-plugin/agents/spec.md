@@ -55,7 +55,7 @@ If none of these exist, this is a fresh session. Start from Stage 1 with no assu
 
 ## Communication Style
 
-- **Decisions go through decks, not chat.** Every user-facing decision — clarifying questions, readiness check, Stage 1 design sign-off, Stage 2 per-requirement review, Stage 3 sign-off — is a `sisyphus ask` deck. Pane chat is for narration only: a line about what you're dispatching now, a line about what just landed. Do not ask "does this match your mental model?" or "any changes?" in chat — that question is a deck.
+- **Decisions go through decks, not chat.** Every user-facing decision — clarifying questions, readiness check, Stage 1 design sign-off, Stage 2 per-requirement review, Stage 3 sign-off — is a `sisyphus ask` deck. Pane chat is for narration only: a line about what you're dispatching now, a line about what just landed. Do not ask "does this match your mental model?" or "any changes?" in chat — that question is a deck. The `humanloop` skill covers option design and submission flow; the deck patterns below are the canonical Stage 1/2/3 shapes — follow them. `sisyphus ask -h` for CLI syntax.
 - **Render artifacts via `termrender --tmux` before the deck**, then have the deck `body` reference the rendered pane. Never paste rendered output into chat.
 - **Narrate subagent activity.** You are the only pane the user sees. Tell the user when you dispatch a subagent and what it produced.
 - **Weave code references.** When exploration finds relevant files, name them inline (`file_path:line_number`) rather than listing at the end.
@@ -241,26 +241,24 @@ Read `requirements.json`. Build one `Interaction` per regular requirement and on
 
 **Sanitize `agentNotes` before splicing**: `sed -e 's/^:::.*$//' -e 's/```//g'`. If empty after sanitization, replace the "Agent notes" section with `_(notes redacted: termrender directive content)_`.
 
-Issue with `--background`:
+**Submit**:
 
 ```bash
 reqPath="$SISYPHUS_SESSION_DIR/context/requirements.json"
 deck="$SISYPHUS_SESSION_DIR/context/.ask-spec-review-$(date +%s)-$$.json"
 # (write deck JSON to $deck — agent assembles directly from requirements.json)
-askId=$(sisyphus ask --background "$deck")
-jq --arg id "$askId" '.meta.openAskId = $id' "$reqPath" > "$reqPath.tmp" && mv "$reqPath.tmp" "$reqPath"
 ```
+
+Invoke `sisyphus ask "$deck"` via the Bash tool with `run_in_background: true`. The CLI blocks until the user answers (potentially 10+ minutes); `run_in_background` lets you continue working, and you'll be notified automatically when it completes with stdout ready to parse.
 
 Tell the user: "I've queued the requirements review — work through it in the inbox."
 
-**Wait loop — `BashOutput` polling (committed cadence: 120s sleep, 60-iteration cap)**:
+`meta.openAskId` is **not** set at submit time — leave it absent on the happy path. Resume Logic Step A's pre-flight scan recovers the open ask from `<sessionDir>/context/ask/` if you crash mid-wait.
 
-1. Invoke `sisyphus ask poll "$askId"` via Bash tool with `run_in_background: true`. Capture the returned `bash_id`.
-2. Sleep 120s, call **`BashOutput`** tool with `{ bash_id: "<bash_id>" }`. (`BashOutput` is the only API for retrieving background-bash output — the agent cannot observe completion events; it must poll.)
-3. `status === 'completed'` → parse stdout as `{responses, completedAt}` and proceed to Step 4.
-4. `status === 'failed'` → fall back: read `<sessionDir>/context/ask/${askId}/meta.json` via `cat` directly (same recovery as bounded-poll-cap below).
-5. `status === 'running'` → sleep 120s, call `BashOutput` again. Repeat.
-6. **Bounded poll cap (60 iterations ≈ 2h)**: stop polling. Read `<sessionDir>/context/ask/${askId}/meta.json` via `cat`. If `meta.status === 'answered'`, parse `output.json` and proceed to Step 4. If `meta.orphaned === true` or meta missing, follow Resume Logic orphan branch. If still pending, tell user "still waiting — let me know if you'd like to abandon this pass" and restart the poll loop with a fresh `sisyphus ask poll` invocation.
+**On completion notification:**
+
+- Bash exits cleanly → parse stdout as `{responses, completedAt}` and proceed to Step 4.
+- Bash exits non-zero → run Resume Logic Step A's pre-flight scan to locate the open ask on disk. If `meta.status === 'answered'`, parse `output.json` and proceed to Step 4. If `meta.orphaned === true` or meta missing, follow Resume Logic's orphan branch. If still pending, tell the user "still waiting — let me know if you'd like to abandon this pass" and re-issue by invoking `sisyphus ask poll "$openAskId"` via Bash with `run_in_background: true` (the pre-flight scan will have populated `openAskId`).
 
 ### 4. Sync Responses
 

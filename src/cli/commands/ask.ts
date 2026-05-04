@@ -22,11 +22,19 @@ function validateAskId(askId: string): void {
 export function registerAsk(program: Command): void {
   const ask = program
     .command('ask')
-    .description('Submit a structured question deck for the user to answer')
+    .description('Submit a structured question deck for the user to answer (blocks until answered)')
     .argument('[file]', 'Path to deck JSON (omit for poll/peek subcommands)')
-    .option('--background', 'Return askId immediately without blocking')
     .option('--session <id>', 'Session id (defaults to SISYPHUS_SESSION_ID)')
-    .action(async (file: string | undefined, opts: { background?: boolean; session?: string }) => {
+    .addHelpText('after', `
+Posts a deck of questions to the user's dashboard inbox. They walk through it and you read the structured JSON back from stdout.
+
+The CLI always blocks until the user answers (which can take 10+ minutes). Invoke through the Bash tool with \`run_in_background: true\` so your shell isn't tied up; you'll be notified automatically when the command completes, with the output ready to parse. Same pattern for orchestrators, sub-agents, and one-off Claude Code sessions.
+
+For guidance on when to use a deck, how to design options the user can actually choose between, and how to bundle related questions into one deck, read the \`humanloop\` skill before authoring.
+
+Deck JSON: an object with \`interactions: [{ id, title, options, kind?, allowFreetext?, body? | bodyPath?, ... }]\`. Validation errors at submit are precise — trust them.
+`)
+    .action(async (file: string | undefined, opts: { session?: string }) => {
       if (!file) {
         ask.help();
         return;
@@ -160,7 +168,7 @@ function waitForOutput(cwd: string, sessionId: string, askId: string, initialPpi
   });
 }
 
-async function submit(file: string, opts: { background?: boolean; session?: string }): Promise<void> {
+async function submit(file: string, opts: { session?: string }): Promise<void> {
   const { cwd, sessionId } = resolveSessionEnv(opts);
   const askedBy = process.env.SISYPHUS_AGENT_ID ?? ORCHESTRATOR_ASKED_BY;
 
@@ -181,14 +189,13 @@ async function submit(file: string, opts: { background?: boolean; session?: stri
   const initialPpid = process.ppid;
   const claudeSessionId = resolveClaudeSessionId(cwd, sessionId, askedBy);
   const askId = mintAskId();
-  const blocking = !opts.background;
 
   const q0 = decisions.interactions[0];
   createAsk(cwd, sessionId, {
     askId,
     askedBy,
-    blocking,
-    pid: blocking ? process.pid : undefined,
+    blocking: true,
+    pid: process.pid,
     claudeSessionId,
     cwd,
     title: decisions.title !== undefined ? decisions.title : q0?.title,
@@ -196,11 +203,6 @@ async function submit(file: string, opts: { background?: boolean; session?: stri
     kind: q0?.kind,
   });
   writeDecisions(cwd, sessionId, askId, decisions);
-
-  if (!blocking) {
-    process.stdout.write(askId + '\n');
-    return;
-  }
 
   const output = await waitForOutput(cwd, sessionId, askId, initialPpid);
   await markAnswered(cwd, sessionId, askId);

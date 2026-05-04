@@ -142,32 +142,7 @@ Before implementation begins, determine how to concretely verify the change work
 
 If you cannot determine a concrete verification method, **ask the user via `sisyphus ask`**. Propose 2-4 candidate verification approaches as options (not an open-ended question). Do not proceed to implementation without a verification plan.
 
-```bash
-deck="$SISYPHUS_SESSION_DIR/context/.ask-verification-$(date +%s).json"
-cat > "$deck" <<'EOF'
-{
-  "interactions": [{
-    "id": "verification",
-    "title": "How should we verify this works?",
-    "subtitle": "Pick the approach that gives the strongest signal — or describe an alternative",
-    "kind": "decision",
-    "options": [
-      {"id": "manual-ui",      "label": "Manual UI walkthrough — operator agent runs the flow"},
-      {"id": "integration",    "label": "Integration test against staging API"},
-      {"id": "log-inspection", "label": "Trigger event, inspect logs for expected side effect"},
-      {"id": "metric-check",   "label": "Run, then check metric/dashboard delta"}
-    ],
-    "allowFreetext": true,
-    "freetextLabel": "Different approach — describe it"
-  }]
-}
-EOF
-result=$(sisyphus ask "$deck")
-choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
-notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
-```
-
-Replace the option labels with concrete approaches that match this feature's surface — not generic placeholders. `sisyphus ask` blocks until the user answers.
+Before authoring the deck, **read the `humanloop` skill** for option-design guidance and submission flow. Ground options in this feature's actual surface (manual UI? integration test? log inspection? metric delta?) — not generic placeholders. `sisyphus ask -h` covers CLI syntax.
 
 Write the recipe to `context/e2e-recipe.md` with setup steps, exact commands or interactions to verify, and what success looks like. Make it executable, not aspirational. Implementation agents and validation agents both reference this file.
 

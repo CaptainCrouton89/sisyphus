@@ -51,7 +51,7 @@ Phase transitions are shaped by exit criteria in `roadmap.md`. "Stuck in a phase
 | Reports | agent → orchestrator | `sisyphus submit` (terminal) / `sisyphus report` (non-terminal) |
 | State | daemon → orchestrator | `state.json` — agent statuses, session metadata |
 | Events | daemon → history | `events.jsonl` — timestamped lifecycle events |
-| Ask | agent → user | `sisyphus ask <deck.json>` — submits a structured `Deck` of `Interaction[]`; user answers via the dashboard's full-screen resolution mode. Default blocking (caller waits for `output.json`); `--background` returns askId immediately, `poll <askId>` blocks for an answer, `peek <askId>` is non-blocking |
+| Ask | agent → user | `sisyphus ask <deck.json>` — submits a structured `Deck` of `Interaction[]`; user answers via the dashboard's full-screen resolution mode. Always blocking (caller waits for `output.json`); to avoid tying up a shell, callers invoke via the Bash tool with `run_in_background: true` and observe completion via `BashOutput`. `poll <askId>` blocks on a known askId; `peek <askId>` is non-blocking |
 | Yield prompt | orchestrator → next orchestrator | `sisyphus yield --prompt "..."` |
 
 ### `sisyphus ask` deck schema

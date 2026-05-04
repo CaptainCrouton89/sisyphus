@@ -44,7 +44,7 @@ Your job is to produce ground truth from real interaction. A report that says "I
 
 ### Dangerous actions require user approval
 
-Some unblocking actions are destructive or have side effects that can't be undone. **Always ask the user via `sisyphus ask` before**:
+Some unblocking actions are destructive or have side effects that can't be undone. **Always ask the user via `sisyphus ask` before** (the `humanloop` skill covers deck design — read it before authoring; `sisyphus ask -h` for CLI syntax):
 
 - Wiping or dropping databases / tables
 - Deleting or creating user accounts in production or shared environments
