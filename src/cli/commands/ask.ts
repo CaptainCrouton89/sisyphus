@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { existsSync, readFileSync, watchFile, unwatchFile } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { ulid } from 'ulid';
 import { parseDeck } from '../../shared/ask-schema.js';
 import { createAsk, readMeta, updateMeta, writeDecisions } from '../../daemon/ask-store.js';
@@ -9,6 +9,8 @@ import { askOutputPath, statePath } from '../../shared/paths.js';
 import * as state from '../../daemon/state.js';
 import { ORCHESTRATOR_ASKED_BY } from '../../shared/types.js';
 import type { AskOutput, AskStatus } from '../../shared/types.js';
+import { execSafe } from '../../shared/exec.js';
+import { shellQuote } from '../../shared/shell.js';
 
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
@@ -168,6 +170,29 @@ function waitForOutput(cwd: string, sessionId: string, askId: string, initialPpi
   });
 }
 
+/**
+ * Spawn a tmux pane next to the caller showing the deck so the user can answer
+ * inline without leaving the agent's pane. The dashboard inbox remains a valid
+ * second surface — both write through the same on-disk ask-store paths.
+ *
+ * No-op outside tmux, when the user opts out, or if the split fails (the
+ * dashboard is still a valid answering surface, so we never want to break the
+ * ask itself for a UX nicety).
+ */
+function maybeSpawnAskPane(cwd: string, sessionId: string, askId: string): void {
+  const callerPane = process.env.TMUX_PANE;
+  if (!callerPane) return;
+  if (process.env.SISYPHUS_DISABLE_ASK_PANE === '1') return;
+
+  const tuiPath = join(import.meta.dirname, 'tui.js');
+  const cmd = `node ${shellQuote(tuiPath)} --cwd ${shellQuote(cwd)} --session-id ${shellQuote(sessionId)} --ask ${shellQuote(askId)}`;
+
+  // -d: don't auto-focus the new pane (caller stays focused)
+  // -h: horizontal split (new pane sits to the right)
+  // -t: target the caller's pane so the split is adjacent
+  execSafe(`tmux split-window -d -h -t ${shellQuote(callerPane)} -c ${shellQuote(cwd)} ${shellQuote(cmd)}`);
+}
+
 async function submit(file: string, opts: { session?: string }): Promise<void> {
   const { cwd, sessionId } = resolveSessionEnv(opts);
   const askedBy = process.env.SISYPHUS_AGENT_ID ?? ORCHESTRATOR_ASKED_BY;
@@ -203,6 +228,8 @@ async function submit(file: string, opts: { session?: string }): Promise<void> {
     kind: q0?.kind,
   });
   writeDecisions(cwd, sessionId, askId, decisions);
+
+  maybeSpawnAskPane(cwd, sessionId, askId);
 
   const output = await waitForOutput(cwd, sessionId, askId, initialPpid);
   await markAnswered(cwd, sessionId, askId);

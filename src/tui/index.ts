@@ -14,6 +14,18 @@ function getArg(name: string): string | undefined {
 }
 
 const cwd = getArg('cwd') ?? process.cwd();
+
+const askId = getArg('ask');
+const sessionId = getArg('session-id');
+if (askId && sessionId) {
+  // Single-ask mode — used by the parallel ask-pane spawned from `sisyphus ask`.
+  // Skips the dashboard inbox and renders only the deck for this one ask.
+  // Must NOT call registerDashboardWindow() — would clobber the real dashboard.
+  const { runSingleAsk } = await import('./single-ask.js');
+  await runSingleAsk({ cwd, sessionId, askId });
+  process.exit(0);
+}
+
 registerDashboardWindow();
 const cleanup = setupTerminal();
 const state = createAppState(cwd);
