@@ -150,15 +150,24 @@ function createAgentPlugin(
     copyFileSync(`${srcHooks}/${hookScript}`, `${base}/hooks/${hookScript}`);
   }
 
-  // Plan agent gets an additional PreToolUse gate on `sisyphus submit`
-  // that blocks submission when context/plan-*.md files violate the
-  // 200-line master-plan limit.
+  // Plan agent gets two additional PreToolUse gates:
+  //   - `plan-validate.sh` blocks `sisyphus submit` when master plans exceed 200 lines.
+  //   - `plan-write-path.sh` blocks Write/Edit/MultiEdit on `plan-*.md` files
+  //     whose path doesn't anchor at $SISYPHUS_SESSION_DIR/context/$SISYPHUS_AGENT_ID/.
+  //     The pane cwd is the project root, so a bare relative `context/...` would
+  //     leak the file outside the session — recurring bug worth structural enforcement.
   if (normalizedType === 'plan') {
     (hooksConfig.PreToolUse as unknown[]).push({
       matcher: 'Bash',
       hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-validate.sh' }],
     });
     copyFileSync(`${srcHooks}/plan-validate.sh`, `${base}/hooks/plan-validate.sh`);
+
+    (hooksConfig.PreToolUse as unknown[]).push({
+      matcher: 'Write|Edit|MultiEdit',
+      hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-write-path.sh' }],
+    });
+    copyFileSync(`${srcHooks}/plan-write-path.sh`, `${base}/hooks/plan-write-path.sh`);
   }
 
   writeFileSync(`${base}/hooks/hooks.json`, JSON.stringify({ hooks: hooksConfig }, null, 2), 'utf-8');

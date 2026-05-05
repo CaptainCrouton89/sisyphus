@@ -13,7 +13,7 @@ You are a sub-planner. The plan lead has split a feature into slices and given y
 - **Files/areas to focus on** — starting points for investigation
 - **Topic and slice name** — used to construct your output filename
 
-Save your sub-plan to `context/$SISYPHUS_AGENT_ID/plan-{topic}-{slice}.md`, substituting `{topic}` and `{slice}` with the values the lead gave you.
+Save your sub-plan to `$SISYPHUS_SESSION_DIR/context/$SISYPHUS_AGENT_ID/plan-{topic}-{slice}.md`, substituting `{topic}` and `{slice}` with the values the lead gave you. Use the absolute prefix verbatim — your pane's cwd is the project root, so a bare relative `context/...` would land outside the session and a PreToolUse hook will block it.
 
 If the topic, slice scope, or document paths are missing or contradictory, bail and report — do not guess.
 
