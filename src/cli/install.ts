@@ -6,8 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
-import { ensureRequiredPlugins } from './plugins.js';
-import { installAutopsyCommand, installBeginCommand, installConfigureUploadCommand, type CommandInfo } from './onboard.js';
+import { ensureRequiredPlugins, ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugins.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -58,12 +57,10 @@ export function isInstalled(): boolean {
 export async function ensureDaemonInstalled(): Promise<void> {
   if (process.platform !== 'darwin') return;
 
-  // Idempotent: early-return if the target slash command file already exists.
-  // Placed outside the !isInstalled() guard so users whose daemon was installed before
-  // these commands shipped self-heal the next time the daemon is unreachable.
-  const beginResult = installBeginCommand();
-  const autopsyResult = installAutopsyCommand();
-  installConfigureUploadCommand();
+  // Idempotent: ensures the user-facing slash-command plugin is available.
+  // Placed outside the !isInstalled() guard so users whose daemon was installed
+  // before this plugin shipped self-heal the next time the daemon is unreachable.
+  const sisyphusPlugin = ensureSisyphusPluginInstalled();
 
   if (!isInstalled()) {
     const nodePath = process.execPath;
@@ -82,7 +79,7 @@ export async function ensureDaemonInstalled(): Promise<void> {
 
     await ensureRequiredPlugins(process.cwd());
 
-    printGettingStarted(keybindResult, beginResult, autopsyResult);
+    printGettingStarted(keybindResult, sisyphusPlugin);
   }
 
   await waitForDaemon();
@@ -120,8 +117,7 @@ export async function uninstallDaemon(purge: boolean): Promise<void> {
 
 function printGettingStarted(
   keybindResult: SetupResult,
-  beginResult: CommandInfo,
-  autopsyResult: CommandInfo,
+  sisyphusPlugin: SisyphusPluginInfo,
 ): void {
   const lines = [
     '',
@@ -135,16 +131,10 @@ function printGettingStarted(
     lines.push(`Keybind: ${keybindResult.message}`, '');
   }
 
-  if (beginResult.installed && beginResult.autoInstalled) {
-    lines.push(`/sisyphus:begin command installed: ${beginResult.path}`, '');
-  } else if (!beginResult.installed) {
-    lines.push('/sisyphus:begin command: failed to install (run `sisyphus setup` to retry)', '');
-  }
-
-  if (autopsyResult.installed && autopsyResult.autoInstalled) {
-    lines.push(`/sisyphus:autopsy command installed: ${autopsyResult.path}`, '');
-  } else if (!autopsyResult.installed) {
-    lines.push('/sisyphus:autopsy command: failed to install (run `sisyphus setup` to retry)', '');
+  if (sisyphusPlugin.installed && sisyphusPlugin.autoInstalled) {
+    lines.push(`Sisyphus plugin installed: sisyphus@sisyphus → ${sisyphusPlugin.installPath}`, '');
+  } else if (!sisyphusPlugin.installed) {
+    lines.push('Sisyphus plugin: failed to install (run `sisyphus setup` to retry; needs `claude` CLI)', '');
   }
 
   lines.push(

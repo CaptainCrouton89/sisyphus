@@ -68,25 +68,12 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
   console.log('  \u2713 Status bar: daemon-rendered via @sisyphus_status');
   console.log('    Add to status-right: #{@sisyphus_status}');
 
-  // /begin command
-  if (result.command.installed) {
-    console.log(`  \u2713 /sisyphus:begin: ${result.command.path}${result.command.autoInstalled ? ' (just installed)' : ''}`);
+  // Sisyphus user plugin (slash commands: /sisyphus:begin, /sisyphus:autopsy, /sisyphus:configure-upload)
+  if (result.sisyphusPlugin.installed && result.sisyphusPlugin.installPath) {
+    const suffix = result.sisyphusPlugin.autoInstalled ? ' (just installed)' : '';
+    console.log(`  \u2713 sisyphus@sisyphus plugin: ${result.sisyphusPlugin.installPath}${suffix}`);
   } else {
-    console.log('  \u2717 /sisyphus:begin: Failed to install');
-  }
-
-  // /autopsy command
-  if (result.autopsy.installed) {
-    console.log(`  \u2713 /sisyphus:autopsy: ${result.autopsy.path}${result.autopsy.autoInstalled ? ' (just installed)' : ''}`);
-  } else {
-    console.log('  \u2717 /sisyphus:autopsy: Failed to install');
-  }
-
-  // /configure-upload command
-  if (result.configureUpload.installed) {
-    console.log(`  \u2713 /sisyphus:configure-upload: ${result.configureUpload.path}${result.configureUpload.autoInstalled ? ' (just installed)' : ''}`);
-  } else {
-    console.log('  \u2717 /sisyphus:configure-upload: Failed to install');
+    console.log('  \u2717 sisyphus@sisyphus plugin: Failed to install (needs `claude` CLI)');
   }
 
   // Nvim

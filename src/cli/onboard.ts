@@ -1,8 +1,9 @@
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugins.js';
 
 export interface TerminalInfo {
   name: string;
@@ -23,12 +24,6 @@ export interface NvimInfo {
   baleiaInstalled: boolean;
 }
 
-export interface CommandInfo {
-  installed: boolean;
-  autoInstalled: boolean;
-  path: string;
-}
-
 export interface TermrenderInfo {
   installed: boolean;
   autoInstalled: boolean;
@@ -41,9 +36,7 @@ export interface OnboardResult {
   itermOptionKey: ItermOptionKeyResult;
   tmuxDefaultsWritten: boolean;
   nvim: NvimInfo;
-  command: CommandInfo;
-  autopsy: CommandInfo;
-  configureUpload: CommandInfo;
+  sisyphusPlugin: SisyphusPluginInfo;
   termrender: TermrenderInfo;
 }
 
@@ -273,72 +266,6 @@ export function tryAutoInstallNvim(): NvimInfo {
   return { installed: true, autoInstalled: true, version: getNvimVersion(), lazyVimInstalled, baleiaInstalled };
 }
 
-function slashCommandPath(name: string): string {
-  return join(homedir(), '.claude', 'commands', 'sisyphus', `${name}.md`);
-}
-
-function bundledSlashCommandPath(name: string): string {
-  const distDir = dirname(fileURLToPath(import.meta.url));
-  return join(distDir, 'templates', `${name}.md`);
-}
-
-function installSlashCommand(name: string, srcOverride?: string): CommandInfo {
-  const dest = slashCommandPath(name);
-  if (existsSync(dest)) {
-    return { installed: true, autoInstalled: false, path: dest };
-  }
-  const src = srcOverride ?? bundledSlashCommandPath(name);
-  if (!existsSync(src)) {
-    return { installed: false, autoInstalled: false, path: dest };
-  }
-  try {
-    mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, readFileSync(src, 'utf-8'), 'utf8');
-    return { installed: true, autoInstalled: true, path: dest };
-  } catch {
-    return { installed: false, autoInstalled: false, path: dest };
-  }
-}
-
-export function isBeginCommandInstalled(): boolean {
-  return existsSync(slashCommandPath('begin'));
-}
-
-export function installBeginCommand(srcOverride?: string): CommandInfo {
-  return installSlashCommand('begin', srcOverride);
-}
-
-export function isAutopsyCommandInstalled(): boolean {
-  return existsSync(slashCommandPath('autopsy'));
-}
-
-export function installAutopsyCommand(srcOverride?: string): CommandInfo {
-  const result = installSlashCommand('autopsy', srcOverride);
-  installAutopsyReference();
-  return result;
-}
-
-export function isConfigureUploadCommandInstalled(): boolean {
-  return existsSync(slashCommandPath('configure-upload'));
-}
-
-export function installConfigureUploadCommand(srcOverride?: string): CommandInfo {
-  return installSlashCommand('configure-upload', srcOverride);
-}
-
-function installAutopsyReference(): void {
-  const dest = join(homedir(), '.claude', 'commands', 'sisyphus', 'autopsy-reference.md');
-  if (existsSync(dest)) return;
-  const src = join(dirname(fileURLToPath(import.meta.url)), 'templates', 'autopsy-reference.md');
-  if (!existsSync(src)) return;
-  try {
-    mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, readFileSync(src, 'utf-8'), 'utf8');
-  } catch {
-    // non-fatal — command still works, just without the bundled mental-model ref
-  }
-}
-
 export function isTermrenderAvailable(): boolean {
   try {
     execSync('which termrender', { stdio: 'pipe' });
@@ -423,15 +350,14 @@ export function runOnboarding(): OnboardResult {
   // Nvim
   const nvim = tryAutoInstallNvim();
 
-  // Slash commands
-  const command = installBeginCommand();
-  const autopsy = installAutopsyCommand();
-  const configureUpload = installConfigureUploadCommand();
+  // User-facing slash commands ship as a Claude Code plugin from the
+  // `sisyphus@sisyphus` marketplace. Best-effort: failures warn but don't abort setup.
+  const sisyphusPlugin = ensureSisyphusPluginInstalled();
 
   // termrender (markdown rendering for TUI)
   const termrender = tryAutoInstallTermrender();
 
-  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, command, autopsy, configureUpload, termrender };
+  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, sisyphusPlugin, termrender };
 }
 
 export function formatOnboardingMessages(result: OnboardResult): string[] {

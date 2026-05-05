@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "sisyphus",
+  "version": "1.0.0",
+  "owner": {
+    "name": "Silas Rhyneer"
+  },
+  "description": "Sisyphus user-facing slash commands",
+  "plugins": [
+    {
+      "name": "sisyphus",
+      "source": "./plugins/sisyphus",
+      "description": "User-facing slash commands for sisyphus (begin, autopsy, configure-upload)",
+      "version": "1.0.0",
+      "keywords": [
+        "sisyphus",
+        "orchestration",
+        "agents"
+      ]
+    }
+  ]
+}

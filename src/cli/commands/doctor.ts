@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import type { Command } from 'commander';
 import { daemonLogPath, daemonPidPath, globalDir, socketPath } from '../../shared/paths.js';
 import { isInstalled } from '../install.js';
-import { detectTerminal, checkItermOptionKey, isNvimAvailable, isBeginCommandInstalled, isTermrenderAvailable } from '../onboard.js';
+import { detectTerminal, checkItermOptionKey, isNvimAvailable, isTermrenderAvailable } from '../onboard.js';
+import { resolveInstalledPlugin } from '../../daemon/plugins.js';
 import { cycleScriptPath, DEFAULT_CYCLE_KEY, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath } from '../tmux-setup.js';
 
 interface Check {
@@ -225,14 +226,15 @@ function checkItermRightOptionKey(): Check | null {
   };
 }
 
-function checkBeginCommand(): Check {
-  if (isBeginCommandInstalled()) {
-    return { name: '/begin command', status: 'ok', detail: 'Installed' };
+function checkSisyphusPlugin(): Check {
+  const installPath = resolveInstalledPlugin('sisyphus@sisyphus');
+  if (installPath) {
+    return { name: 'sisyphus@sisyphus plugin', status: 'ok', detail: installPath };
   }
   return {
-    name: '/begin command',
+    name: 'sisyphus@sisyphus plugin',
     status: 'warn',
-    detail: 'Not installed',
+    detail: 'Not installed (slash commands /sisyphus:begin, /sisyphus:autopsy, /sisyphus:configure-upload unavailable)',
     fix: 'sisyphus setup',
   };
 }
@@ -303,7 +305,7 @@ export function registerDoctor(program: Command): void {
         checkDaemonRunning(),
         checkCycleScript(),
         checkTmuxKeybind(),
-        checkBeginCommand(),
+        checkSisyphusPlugin(),
         checkNvim(),
         ...(notifyCheck ? [notifyCheck] : []),
         checkTermrender(),

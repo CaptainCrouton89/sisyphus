@@ -1,0 +1,8 @@
+{
+  "name": "sisyphus",
+  "version": "1.0.0",
+  "description": "User-facing slash commands for sisyphus (begin, autopsy, configure-upload)",
+  "author": {
+    "name": "Silas Rhyneer"
+  }
+}

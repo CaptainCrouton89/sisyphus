@@ -9,7 +9,7 @@ The user handed you this session because something needs explaining — a failur
 
 **Argument:** `$0` — a session ID (full or prefix), session name, or absolute path to a session directory or packaged export dump.
 
-**Runtime reference (read first):** @~/.claude/commands/sisyphus/autopsy-reference.md — the sisyphus mental model. Essential context if you're running outside the sisyphus project directory.
+**Runtime reference (read first):** @autopsy-reference.md — the sisyphus mental model. Essential context if you're running outside the sisyphus project directory.
 
 ## Three-phase workflow
 
@@ -96,7 +96,7 @@ For non-trivial sessions (≥3 cycles or ≥5 agents — check `state.json`'s `a
 Each subagent acts as a **first-pass surveyor**: its job is to flag candidate inflections, not to explain them. Explanation happens in Phase 2 on the main thread. Give each subagent:
 
 1. The absolute session paths (project session dir + history dir, or the packaged dump root).
-2. An @-ref to `~/.claude/commands/sisyphus/autopsy-reference.md` so it has the sisyphus mental model.
+2. An @-ref to `autopsy-reference.md` (sibling file in this command's directory) so each surveyor has the sisyphus mental model.
 3. A specific read-set (files/globs it should consume).
 4. An instruction to return a **punch list of specific citations** (`reports/agent-004-final.md:12`) with one sentence of context each. Flag anomalies; leave interpretation to the main thread.
 5. Brief surveyors with the evidence (file lists, line counts, timestamps), not with your hypotheses about what it means. A surveyor handed a hypothesis confirms it; one handed evidence tests it. *"8 docs in `context/agent-004/` totaling 1,290 lines"* is evidence; *"agent-004 spawned 4 review sub-agents"* is a hypothesis — handing the latter contaminates the report.
