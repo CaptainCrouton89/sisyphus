@@ -34,3 +34,21 @@ Currently the orchestrator only wakes up when ALL agents finish. Instead, agents
 - What if the agent made tasks for itself, and marking them complete had haiku determine if it was "actually done" or smth?
 - Dynamic goals?
 
+## Self Evolving Harness
+- System where you define what a successful system as a whole looks like, and the evaluator and evolution agents update teh ahrness as it goes
+- Maybe autopsy automatically runs?
+
+## Lessons/Grading/Rubric Idea Savings
+- Have user define rubric of quality? For research, if user defines what a good research paper looks like, the agent can grade and autonomously gather more
+https://blog.sylph.ai/posts/autoscholar-harness
+
+## Other Ideas
+- Cron, open-claw-ify sisyphus??
+Or maybe they always yield, and we always let the orchestrator decide if it wants to yield—it can yield after reports come back, or just keep going?
+
+## Misc
+keep tools narrow
+keep policy editable
+keep memory explicit
+keep the loop small
+keep progress versioned
