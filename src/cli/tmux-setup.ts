@@ -263,7 +263,7 @@ tmux select-window -t "$HOME_DWID"
 }
 
 const KILL_PANE_SCRIPT = `#!/bin/bash
-# prefix-x override for sisyphus sessions.
+# Smart kill-pane invoked via the sisyphus prefix menu (C-s x).
 # If this is the last pane, switch to the home session before killing.
 ${RESOLVE_HOME}
 session_id=$(tmux display-message -p '#{session_id}')
@@ -1430,8 +1430,8 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     generateTopLevelBinding(prefixKey, KEYMAP.topLevel, scriptsDir),
     // M-s → cycle (unchanged)
     `bind-key -T root ${cycleKey} run-shell ${cycleScriptPath()}`,
-    // prefix-x smart kill (unchanged — users invoke via tmux prefix, not C-s)
-    `bind-key -T prefix x if-shell "tmux display-message -p '#{session_name}' | grep -q '^ssyph_'" "run-shell ${killPaneScriptPath()}" "kill-pane \\; select-layout even-horizontal"`,
+    // smart-kill is reachable via the sisyphus prefix menu (C-s x) — see KEYMAP.topLevel.
+    // We deliberately don't override `prefix x` so users keep their default tmux kill-pane.
   ];
 
   const confPath = sisyphusTmuxConfPath();
@@ -1506,7 +1506,6 @@ export function removeTmuxKeybind(): void {
         execSync(`tmux unbind-key -T ${KEY_TABLE} ${parts[3]}`, { stdio: 'pipe' });
       }
     }
-    execSync('tmux bind-key -T prefix x kill-pane \\; select-layout even-horizontal', { stdio: 'pipe' });
   } catch {
     // tmux not running
   }
