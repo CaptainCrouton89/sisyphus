@@ -1,7 +1,7 @@
 ---
 name: humanloop
 description: >
-  Read before calling `sisyphus ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to invoke via the Bash tool's `run_in_background` so a 10+ minute wait doesn't tie up the shell.
+  Read before calling `sisyphus ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to submit via the Bash tool's `run_in_background` so you can end your turn while the user takes their time answering.
 ---
 
 # Talking to the user via decks
@@ -25,7 +25,7 @@ This skill covers **what to put in a deck** and **how to invoke it**. Run `sisyp
 
 ## How to invoke
 
-The CLI **always blocks** until the user resolves the deck (potentially 10+ minutes). Submit through the Bash tool with `run_in_background: true` and continue working — you'll get a completion notification with stdout ready to parse. Same pattern for orchestrator, sub-agents, and one-off Claude Code sessions.
+The CLI **always blocks** until the user resolves the deck (potentially 10+ minutes). Submit through the Bash tool with `run_in_background: true` and **end your turn**. Do not peek, poll, or output filler chat between submit and answer — the bash completion notification is the only signal you need; it will wake you with stdout ready to parse. Same pattern for orchestrator, sub-agents, and one-off Claude Code sessions.
 
 ```
 Bash tool call:
@@ -35,7 +35,7 @@ Bash tool call:
 
 Stdout on completion is one line of JSON: `{responses: [{id, selectedOptionId?, freetext?}, ...], completedAt}`. Branch on each response by its interaction `id`.
 
-If you already hold an `askId` (e.g. resuming a flow that previously surfaced one), `sisyphus ask poll <askId>` blocks on it and `sisyphus ask peek <askId>` returns status without blocking. See `sisyphus ask -h`.
+If you already hold an `askId` from a prior cycle (e.g. respawned mid-wait), `sisyphus ask poll <askId>` blocks on it and `sisyphus ask peek <askId>` returns status without blocking. Use these only for respawn-recovery — **never to monitor a deck you just submitted in the current turn**. See `sisyphus ask -h`.
 
 ## Designing interactions
 

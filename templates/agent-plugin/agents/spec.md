@@ -249,7 +249,7 @@ deck="$SISYPHUS_SESSION_DIR/context/.ask-spec-review-$(date +%s)-$$.json"
 # (write deck JSON to $deck — agent assembles directly from requirements.json)
 ```
 
-Invoke `sisyphus ask "$deck"` via the Bash tool with `run_in_background: true`. The CLI blocks until the user answers (potentially 10+ minutes); `run_in_background` lets you continue working, and you'll be notified automatically when it completes with stdout ready to parse.
+Invoke `sisyphus ask "$deck"` via the Bash tool with `run_in_background: true`, then **end your turn**. The CLI blocks for as long as the user takes (potentially 10+ minutes); the bash completion notification will wake you with stdout ready to parse — do not peek, poll, or narrate while you wait.
 
 Tell the user: "I've queued the requirements review — work through it in the inbox."
 
@@ -258,7 +258,7 @@ Tell the user: "I've queued the requirements review — work through it in the i
 **On completion notification:**
 
 - Bash exits cleanly → parse stdout as `{responses, completedAt}` and proceed to Step 4.
-- Bash exits non-zero → run Resume Logic Step A's pre-flight scan to locate the open ask on disk. If `meta.status === 'answered'`, parse `output.json` and proceed to Step 4. If `meta.orphaned === true` or meta missing, follow Resume Logic's orphan branch. If still pending, tell the user "still waiting — let me know if you'd like to abandon this pass" and re-issue by invoking `sisyphus ask poll "$openAskId"` via Bash with `run_in_background: true` (the pre-flight scan will have populated `openAskId`).
+- Bash exits non-zero → run Resume Logic Step A's pre-flight scan to locate the open ask on disk. If `meta.status === 'answered'`, parse `output.json` and proceed to Step 4. If `meta.orphaned === true` or meta missing, follow Resume Logic's orphan branch. If still pending, **end your turn** — Step A will re-attach on the next respawn. Do not re-issue `sisyphus ask poll` from this turn.
 
 ### 4. Sync Responses
 
