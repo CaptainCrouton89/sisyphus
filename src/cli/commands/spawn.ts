@@ -94,6 +94,7 @@ export function registerSpawn(program: Command): void {
       if (response.ok) {
         const agentId = response.data?.agentId as string;
         console.log(`Agent spawned: ${agentId}`);
+        console.log(`Tip: \`sisyphus await ${agentId}\` blocks for the report and consumes it inline (won't appear in next cycle).`);
         console.log("Run `sisyphus yield` when done spawning agents.");
       } else {
         console.error(`Error: ${response.error}`);

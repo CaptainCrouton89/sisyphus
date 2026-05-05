@@ -204,23 +204,31 @@ function formatStateForOrchestrator(session: Session, mode: string): string {
     : '';
 
 
-  // Most recent cycle: agent reports as file references
+  // Most recent cycle: agent reports as file references.
+  // Agents marked `consumedInline` (via `sisyphus await`) are filtered out — their reports
+  // were already absorbed inline during the previous cycle and shouldn't reappear here.
   let mostRecentCycleSection = '';
   const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
   if (lastCycle && lastCycle.agentsSpawned.length > 0) {
     const agentMap = new Map(session.agents.map((a: Agent) => [a.id, a]));
-    const agentLines = lastCycle.agentsSpawned.map(id => {
-      const agent = agentMap.get(id);
-      if (!agent) return `- **${id}**: unknown (no agent data)`;
+    const visibleSpawned = lastCycle.agentsSpawned.filter(id => {
+      const a = agentMap.get(id);
+      return !a || !a.consumedInline;
+    });
+    if (visibleSpawned.length > 0) {
+      const agentLines = visibleSpawned.map(id => {
+        const agent = agentMap.get(id);
+        if (!agent) return `- **${id}**: unknown (no agent data)`;
 
-      const finalReport = agent.reports.find(r => r.type === 'final');
-      const reportToUse = finalReport ?? agent.reports[agent.reports.length - 1];
-      const reportRef = reportToUse ? `@${relative(session.cwd, reportToUse.filePath)}` : '(no reports)';
+        const finalReport = agent.reports.find(r => r.type === 'final');
+        const reportToUse = finalReport ?? agent.reports[agent.reports.length - 1];
+        const reportRef = reportToUse ? `@${relative(session.cwd, reportToUse.filePath)}` : '(no reports)';
 
-      return `- **${id}** (${agent.name}) [${agent.status}]: ${reportRef}`;
-    }).join('\n');
+        return `- **${id}** (${agent.name}) [${agent.status}]: ${reportRef}`;
+      }).join('\n');
 
-    mostRecentCycleSection = `\n### Most Recent Cycle\n\n${agentLines}\n`;
+      mostRecentCycleSection = `\n### Most Recent Cycle\n\n${agentLines}\n`;
+    }
   }
 
   // Strategy section

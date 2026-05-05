@@ -307,6 +307,10 @@ Agents can invoke slash commands via `/skill:name` syntax to load specialized me
 sisyphus spawn --name "debug-auth" --agent-type sisyphus:debug "/devcore:debugging Investigate why session tokens expire prematurely. Check src/middleware/auth.ts and src/session/store.ts."
 ```
 
+### Inline Understanding via Explore
+
+For open-ended understanding questions mid-flow — "why does this agent behave this way?", "how does the worker queue fill up the dashboard?", "what's the contract between X and Y?" — spawn `sisyphus:explore` agent(s) and consume their results inline (the spawn output shows you how). For multi-system questions, spawn one explore per system in parallel, then await them concurrently via parallel `Bash` calls. You get synthesized answers; raw code/search noise stays out of your context. Reserve direct `Grep`/`Glob`/`Read` for narrow lookups where you know exactly what you're after. Don't await long-running implementation agents — you'll burn your turn waiting.
+
 </spawning>
 
 <reference>

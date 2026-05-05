@@ -597,3 +597,45 @@ function allAgentsDone(session: import('../shared/types.js').Session): boolean {
   return running.length === 0 && session.agents.length > 0;
 }
 
+export interface AwaitResult {
+  status: import('../shared/types.js').AgentStatus;
+  reportPath: string | null;
+  agentName: string;
+  agentType: string;
+}
+
+/**
+ * Block until the named agent reaches a terminal status, then mark it
+ * `consumedInline` so its report is suppressed from the next cycle's prompt.
+ * Returns null when the agent ID is unknown for the session.
+ */
+export async function handleAwait(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+): Promise<AwaitResult | null> {
+  const initial = state.getSession(cwd, sessionId);
+  const initialAgent = initial.agents.find(a => a.id === agentId);
+  if (!initialAgent) return null;
+
+  const POLL_MS = 250;
+  let agent = initialAgent;
+  while (agent.status === 'running') {
+    await new Promise<void>(resolve => setTimeout(resolve, POLL_MS));
+    const session = state.getSession(cwd, sessionId);
+    const found = session.agents.find(a => a.id === agentId);
+    if (!found) return null;
+    agent = found;
+  }
+
+  await state.setAgentConsumedInline(cwd, sessionId, agentId);
+
+  const finalReport = agent.reports.find(r => r.type === 'final');
+  return {
+    status: agent.status,
+    reportPath: finalReport?.filePath ?? null,
+    agentName: agent.name,
+    agentType: agent.agentType,
+  };
+}
+

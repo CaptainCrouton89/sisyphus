@@ -2,11 +2,11 @@ import type { Request, Response } from '../shared/protocol.js';
 import { rawSend as sharedRawSend } from '../shared/client.js';
 import { ensureDaemonInstalled, waitForDaemon } from './install.js';
 
-export function rawSend(request: Request): Promise<Response> {
-  return sharedRawSend(request, 10_000);
+export function rawSend(request: Request, timeoutMs = 10_000): Promise<Response> {
+  return sharedRawSend(request, timeoutMs);
 }
 
-export async function sendRequest(request: Request): Promise<Response> {
+export async function sendRequest(request: Request, timeoutMs?: number): Promise<Response> {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const MAX_ATTEMPTS = 5;
   const RETRY_DELAY_MS = 2000;
@@ -15,7 +15,7 @@ export async function sendRequest(request: Request): Promise<Response> {
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      return await rawSend(request);
+      return await rawSend(request, timeoutMs);
     } catch (err) {
       lastErr = err;
       const code = (err as NodeJS.ErrnoException).code;

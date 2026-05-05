@@ -17,6 +17,7 @@ import { listAsks, readMeta, readDecisions } from './ask-store.js';
 import { resolveOrchestratorOrphanAsks } from './orphan-asks.js';
 import { recomputeDots } from './status-dots.js';
 import * as orchestrator from './orchestrator.js';
+import * as agent from './agent.js';
 import * as tmux from './tmux.js';
 import type { AggregateInboxItem } from '../shared/inbox-types.js';
 
@@ -247,6 +248,22 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!tracking) return unknownSessionError(req.sessionId);
         await sessionManager.handleYield(req.sessionId, tracking.cwd, req.nextPrompt, req.mode);
         return { ok: true };
+      }
+
+      case 'await': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const result = await agent.handleAwait(tracking.cwd, req.sessionId, req.agentId);
+        if (!result) return { ok: false, error: `Unknown agent: ${req.agentId} in session ${req.sessionId}` };
+        return {
+          ok: true,
+          data: {
+            status: result.status,
+            reportPath: result.reportPath,
+            agentName: result.agentName,
+            agentType: result.agentType,
+          },
+        };
       }
 
       case 'complete': {

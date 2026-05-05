@@ -6,6 +6,7 @@ export type Request =
   | { type: 'submit'; sessionId: string; agentId: string; report: string }
   | { type: 'report'; sessionId: string; agentId: string; content: string }
   | { type: 'yield'; sessionId: string; agentId: string; nextPrompt?: string; mode?: string }
+  | { type: 'await'; sessionId: string; agentId: string }
   | { type: 'complete'; sessionId: string; report: string }
   | { type: 'clone'; sessionId: string; goal: string; context?: string; name?: string; strategy?: boolean }
   | { type: 'continue'; sessionId: string }

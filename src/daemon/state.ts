@@ -184,6 +184,17 @@ export async function setAgentPid(
   });
 }
 
+export async function setAgentConsumedInline(cwd: string, sessionId: string, agentId: string): Promise<void> {
+  return withSessionLock(sessionId, () => {
+    const session = getSession(cwd, sessionId);
+    const agent = session.agents.slice().reverse().find((a: Agent) => a.id === agentId);
+    if (!agent) throw new Error(`Agent ${agentId} not found in session ${sessionId}`);
+    if (agent.consumedInline) return;
+    agent.consumedInline = true;
+    saveSession(session);
+  });
+}
+
 export async function addOrchestratorCycle(cwd: string, sessionId: string, cycle: OrchestratorCycle): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);
