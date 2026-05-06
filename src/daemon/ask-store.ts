@@ -158,3 +158,33 @@ export function listAsks(cwd: string, sessionId: string): string[] {
     .filter(e => e.isDirectory())
     .map(e => e.name);
 }
+
+export interface PendingAskRef {
+  askId: string;
+  status: AskStatus;
+  title?: string;
+}
+
+/**
+ * Open asks (pending or in-progress) attributed to a specific caller. Used to gate
+ * yield/submit so a deck can't be abandoned mid-flight — terminating the caller's
+ * pane orphans any answer the user produces afterward.
+ *
+ * Skips: meta.orphaned, status === 'answered', and decks where output.json already
+ * exists (the user resolved the deck but markAnswered hasn't run yet, e.g. because
+ * the original waiter died before observing the output). Treating those as still-open
+ * would otherwise block yield permanently.
+ */
+export function listOpenAsksFor(cwd: string, sessionId: string, askedBy: string): PendingAskRef[] {
+  const out: PendingAskRef[] = [];
+  for (const askId of listAsks(cwd, sessionId)) {
+    const meta = readMeta(cwd, sessionId, askId);
+    if (!meta) continue;
+    if (meta.askedBy !== askedBy) continue;
+    if (meta.orphaned) continue;
+    if (meta.status !== 'pending' && meta.status !== 'in-progress') continue;
+    if (existsSync(askOutputPath(cwd, sessionId, askId))) continue;
+    out.push({ askId, status: meta.status, ...(meta.title !== undefined ? { title: meta.title } : {}) });
+  }
+  return out;
+}

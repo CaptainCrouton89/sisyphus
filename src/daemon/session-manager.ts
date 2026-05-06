@@ -28,6 +28,8 @@ import { runSessionUploadAndPersist } from './uploader.js';
 import { isUploadConfigured } from '../shared/upload.js';
 import { getSisyphusVersion } from '../shared/version.js';
 import { markAgentAsksOrphan, orphanRunningAgentAsks, resolveOrchestratorOrphanAsks } from './orphan-asks.js';
+import { listOpenAsksFor } from './ask-store.js';
+import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
 import { formatDuration } from '../shared/format.js';
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -755,6 +757,10 @@ export async function handleSpawn(
 }
 
 export async function handleSubmit(cwd: string, sessionId: string, agentId: string, report: string, windowId: string): Promise<void> {
+  const open = listOpenAsksFor(cwd, sessionId, agentId);
+  if (open.length > 0) {
+    throw new Error(formatPendingAskError('submit', agentId, open));
+  }
   const allDone = await handleAgentSubmit(cwd, sessionId, agentId, report);
   try { recomputeDots(); } catch { /* best-effort */ }
   if (allDone) {
@@ -762,11 +768,36 @@ export async function handleSubmit(cwd: string, sessionId: string, agentId: stri
   }
 }
 
+/**
+ * Yield/submit guard: an open deck (`pending`/`in-progress`) attributed to the caller
+ * means the user is mid-answer or hasn't started. Letting the caller terminate now
+ * orphans the answer — the pane closes, no one is left to read `output.json`.
+ *
+ * Backgrounded vs foreground doesn't change the calculus on the daemon side. The
+ * orchestrator pattern is foreground (this guard fires only on bug paths). The
+ * agent pattern is background-then-end-turn — `require-submit.sh` lets the agent
+ * Stop normally; this guard fires only if the agent calls `sisyphus submit`
+ * (terminal) before the deck resolves, which would close the pane.
+ */
+function formatPendingAskError(verb: 'yield' | 'submit', askedBy: string, open: ReturnType<typeof listOpenAsksFor>): string {
+  const lines = open.map(a => `  - ${a.askId} (${a.status})${a.title ? ': ' + a.title : ''}`);
+  const who = askedBy === ORCHESTRATOR_ASKED_BY ? 'orchestrator' : `agent ${askedBy}`;
+  const recovery = verb === 'yield'
+    ? `Resolve before yielding: \`sisyphus ask poll <askId>\` blocks until the user answers, then process the response and yield with a continuation prompt that names the answered branch.`
+    : `Resolve before submitting: \`sisyphus ask poll <askId>\` blocks until the user answers, parse the response, then call \`sisyphus submit\` with your final report.`;
+  return `Cannot ${verb}: ${who} owns ${open.length} open deck${open.length === 1 ? '' : 's'}:\n${lines.join('\n')}\n\n${recovery}`;
+}
+
 export async function handleReport(cwd: string, sessionId: string, agentId: string, content: string): Promise<void> {
   await handleAgentReport(cwd, sessionId, agentId, content);
 }
 
 export async function handleYield(sessionId: string, cwd: string, nextPrompt?: string, mode?: string): Promise<void> {
+  const open = listOpenAsksFor(cwd, sessionId, ORCHESTRATOR_ASKED_BY);
+  if (open.length > 0) {
+    throw new Error(formatPendingAskError('yield', ORCHESTRATOR_ASKED_BY, open));
+  }
+
   // Re-activate paused sessions so respawn can proceed
   const pre = state.getSession(cwd, sessionId);
   if (pre.status === 'paused') {
