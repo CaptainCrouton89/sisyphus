@@ -135,7 +135,12 @@ export function buildCompletionContent(session: Session): string {
     lines.push('');
   }
 
-  // Inline cycle logs
+  // Inline cycle logs, collapsing runs of consecutive idle (zero-agent) cycles into
+  // a single summary line. Without compaction a long completion-mode hold (e.g. 90+
+  // peek-and-yield cycles waiting on a deck) inflates this section past 1k lines and
+  // the orchestrator's user prompt past 4k lines. We preserve the last 5 cycles
+  // verbatim — they're load-bearing for "what just happened" — and any cycle that
+  // actually spawned agents.
   const logsDirPath = logsDir(session.cwd, session.id);
   if (existsSync(logsDirPath)) {
     const logFiles = readdirSync(logsDirPath)
@@ -143,11 +148,49 @@ export function buildCompletionContent(session: Session): string {
       .sort();
     if (logFiles.length > 0) {
       lines.push('### Cycle Logs\n');
-      for (const file of logFiles) {
-        const content = readFileSync(join(logsDirPath, file), 'utf-8').trim();
-        if (content) {
-          lines.push(content);
-          lines.push('');
+      const cycleByNum = new Map(session.orchestratorCycles.map(c => [c.cycle, c]));
+      const totalCycles = session.orchestratorCycles.length;
+      const VERBATIM_TAIL = 5;
+
+      type Entry = { cycleNum: number; file: string; idle: boolean; mode?: string };
+      const entries: Entry[] = logFiles.map(file => {
+        const m = file.match(/^cycle-(\d+)\.md$/);
+        const cycleNum = m && m[1] ? parseInt(m[1], 10) : NaN;
+        const meta = cycleByNum.get(cycleNum);
+        const isTail = !isNaN(cycleNum) && cycleNum > totalCycles - VERBATIM_TAIL;
+        const idle = !!meta && meta.agentsSpawned.length === 0 && !isTail;
+        const result: Entry = { cycleNum, file, idle };
+        if (meta?.mode) result.mode = meta.mode;
+        return result;
+      });
+
+      let i = 0;
+      while (i < entries.length) {
+        const e = entries[i]!;
+        if (e.idle) {
+          // Collapse a run of consecutive idle cycles. Group strictly by matching
+          // mode value (an undefined mode breaks the run — mixed modes don't get
+          // pooled into one summary).
+          let j = i + 1;
+          while (j < entries.length && entries[j]!.idle && entries[j]!.mode === e.mode) j++;
+          const runEntries = entries.slice(i, j);
+          if (runEntries.length === 1) {
+            const content = readFileSync(join(logsDirPath, e.file), 'utf-8').trim();
+            if (content) { lines.push(content); lines.push(''); }
+          } else {
+            const first = runEntries[0]!;
+            const last = runEntries[runEntries.length - 1]!;
+            const modeTag = e.mode ? `${e.mode}, ` : '';
+            lines.push(`#### Cycles ${first.cycleNum}–${last.cycleNum} — ${runEntries.length} idle cycles (${modeTag}0 agents each)`);
+            lines.push('');
+            lines.push(`Collapsed for prompt size. Per-cycle detail on disk: \`logs/cycle-${String(first.cycleNum).padStart(3, '0')}.md\` … \`logs/cycle-${String(last.cycleNum).padStart(3, '0')}.md\`.`);
+            lines.push('');
+          }
+          i = j;
+        } else {
+          const content = readFileSync(join(logsDirPath, e.file), 'utf-8').trim();
+          if (content) { lines.push(content); lines.push(''); }
+          i++;
         }
       }
     }
