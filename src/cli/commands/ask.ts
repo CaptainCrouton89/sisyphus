@@ -30,7 +30,10 @@ export function registerAsk(program: Command): void {
     .addHelpText('after', `
 Posts a deck of questions to the user's dashboard inbox. They walk through it and you read the structured JSON back from stdout.
 
-The CLI always blocks until the user answers (which can take 10+ minutes). Invoke through the Bash tool with \`run_in_background: true\` so your shell isn't tied up; you'll be notified automatically when the command completes, with the output ready to parse. Same pattern for orchestrators, sub-agents, and one-off Claude Code sessions.
+The CLI always blocks until the user answers (which can take 10+ minutes).
+
+- **Orchestrator:** invoke synchronously so the orchestrator's pane stays alive while the bash blocks. Daemon refuses \`sisyphus yield\` while orchestrator owns a pending deck; foreground is the supported pattern.
+- **Agents / one-off Claude Code sessions:** invoke through the Bash tool with \`run_in_background: true\` and end your turn — the bash completion notification wakes you with stdout ready to parse.
 
 For guidance on when to use a deck, how to design options the user can actually choose between, and how to bundle related questions into one deck, read the \`humanloop\` skill before authoring.
 

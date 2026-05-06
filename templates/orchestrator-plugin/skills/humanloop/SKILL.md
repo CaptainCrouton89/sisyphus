@@ -1,7 +1,7 @@
 ---
 name: humanloop
 description: >
-  Read before calling `sisyphus ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to submit via the Bash tool's `run_in_background` so you can end your turn while the user takes their time answering.
+  Read before calling `sisyphus ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to invoke synchronously so the orchestrator's process blocks until the user answers.
 ---
 
 # Talking to the user via decks
@@ -25,17 +25,19 @@ This skill covers **what to put in a deck** and **how to invoke it**. Run `sisyp
 
 ## How to invoke
 
-The CLI **always blocks** until the user resolves the deck (potentially 10+ minutes). Submit through the Bash tool with `run_in_background: true` and **end your turn**. Do not peek, poll, or output filler chat between submit and answer — the bash completion notification is the only signal you need; it will wake you with stdout ready to parse. Same pattern for orchestrator, sub-agents, and one-off Claude Code sessions.
+**Run `sisyphus ask` in the foreground — let the Bash tool block.** The CLI waits internally for the user to resolve the deck (potentially 10+ minutes). Your pane stays alive in tmux for the duration; the daemon will not respawn you while a tool call is in flight. When the user answers, the bash returns stdout and you parse it inline.
 
+```bash
+result=$(sisyphus ask "$deck")
+choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
+notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 ```
-Bash tool call:
-  command:           sisyphus ask "$deck"
-  run_in_background: true
-```
+
+**Do not `run_in_background` and yield** — yielding kills your pane and any backgrounded bash with it; the next cycle's fresh orchestrator can only peek the on-disk deck (`sisyphus ask peek`) and yield again, producing a polling loop. The daemon now refuses `sisyphus yield` while a deck owned by orchestrator is pending; the supported pattern is foreground.
 
 Stdout on completion is one line of JSON: `{responses: [{id, selectedOptionId?, freetext?}, ...], completedAt}`. Branch on each response by its interaction `id`.
 
-If you already hold an `askId` from a prior cycle (e.g. respawned mid-wait), `sisyphus ask poll <askId>` blocks on it and `sisyphus ask peek <askId>` returns status without blocking. Use these only for respawn-recovery — **never to monitor a deck you just submitted in the current turn**. See `sisyphus ask -h`.
+If you respawn mid-wait and find a pending deck on disk (e.g. after a daemon restart that orphaned the prior bash), block on it with `sisyphus ask poll <askId>` to re-attach. `sisyphus ask peek <askId>` is non-blocking and reserved for respawn-recovery diagnostics. See `sisyphus ask -h`.
 
 ## Designing interactions
 
@@ -135,7 +137,7 @@ cat > "$deck" <<'EOF'
   ]
 }
 EOF
-# Then invoke `sisyphus ask "$deck"` via the Bash tool with run_in_background: true.
+# Then invoke `sisyphus ask "$deck"` synchronously (foreground bash) — blocks until answered.
 # Each interaction returns its own selectedOptionId / freetext in output.responses[], indexed by id.
 ```
 
