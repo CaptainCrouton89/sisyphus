@@ -107,7 +107,7 @@ function createAgentPlugin(
   }
 
   const srcHooks = resolve(import.meta.dirname, '../templates/agent-plugin/hooks');
-  for (const f of ['require-submit.sh', 'intercept-send-message.sh', 'register-bg-task.sh']) {
+  for (const f of ['require-submit.sh', 'intercept-send-message.sh', 'register-bg-task.sh', 'ask-background-guard.sh']) {
     copyFileSync(`${srcHooks}/${f}`, `${base}/hooks/${f}`);
   }
 
@@ -116,6 +116,7 @@ function createAgentPlugin(
   const hooksConfig: Record<string, unknown[]> = {
     PreToolUse: [
       { matcher: 'SendMessage', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/intercept-send-message.sh' }] },
+      { matcher: 'Bash', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/ask-background-guard.sh' }] },
     ],
     PostToolUse: [
       { matcher: 'Task', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/register-bg-task.sh' }] },
