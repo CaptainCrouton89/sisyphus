@@ -52,3 +52,22 @@ keep policy editable
 keep memory explicit
 keep the loop small
 keep progress versioned
+
+Brain wave: All “tools” should be replaced with clis as well, and should be extensible. Tools and commands are kinda like “file systems” where you drill down on command for more and more specific versions of it (i.e. sisyphus spawn -h  gets help for just that command specifically). Agent would not have any “normal” tools—just fucking bash pretty much. Major benefit of this system is the agent would be able to string together tools in interesting programmatic ways, like feeding output of one tool directly into the propmt-argument for a subagent. Then, make it so clis that implement this protocol must have some “to-system-prompt” method or wtvr (or some other layer) that lets the agent know about it.
+Then, if this was how claude code native tools worked, then you make the clis extensible. Now you have fucking magic. Tools are hard to extend, but I think you could make clis much more modularly extensible. That way you could expose new “sub-paths” of search tool or wtvr else. imagine extending its search tool so it could pass an extra argument that made it do a semantic search instead or something. Rather than giving it a whole new-ass fucking tool, you just tweak one of its existing ones and don’t bloat the agent;
+
+Clarifications:
+- By having tool be a cli, you can have top layer/most common layer described by the tool, but then also have further "drilling down" the agent can do via `-h`.
+- CLI can pipe between things
+- Can have super nuanced edits/tweaks/logs/etc on agents
+
+Architecting this:
+- Needs to make it easy to make any CLI comply
+- Can view custom logs, jq over them
+- Virtual Bash environment? 
+
+Forking with context (btw style).
+  Hooks with memory
+  More hackability. I've built a system around the claude code
+  ecosystem for stringing full claude code sessions together.
+  Can we make tools more like CLIs that users can extend?
