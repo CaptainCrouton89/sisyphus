@@ -170,10 +170,11 @@ export interface PendingAskRef {
  * yield/submit so a deck can't be abandoned mid-flight — terminating the caller's
  * pane orphans any answer the user produces afterward.
  *
- * Skips: meta.orphaned, status === 'answered', and decks where output.json already
+ * Skips: meta.orphaned, status === 'answered', decks where output.json already
  * exists (the user resolved the deck but markAnswered hasn't run yet, e.g. because
- * the original waiter died before observing the output). Treating those as still-open
- * would otherwise block yield permanently.
+ * the original waiter died before observing the output), and non-blocking decks
+ * (mode-transition notifications, heartbeat asks, orphan-recovery surfaces — these
+ * have no CLI waiter, so terminating the caller doesn't orphan anything).
  */
 export function listOpenAsksFor(cwd: string, sessionId: string, askedBy: string): PendingAskRef[] {
   const out: PendingAskRef[] = [];
@@ -182,6 +183,7 @@ export function listOpenAsksFor(cwd: string, sessionId: string, askedBy: string)
     if (!meta) continue;
     if (meta.askedBy !== askedBy) continue;
     if (meta.orphaned) continue;
+    if (!meta.blocking) continue;
     if (meta.status !== 'pending' && meta.status !== 'in-progress') continue;
     if (existsSync(askOutputPath(cwd, sessionId, askId))) continue;
     out.push({ askId, status: meta.status, ...(meta.title !== undefined ? { title: meta.title } : {}) });
