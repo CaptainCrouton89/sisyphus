@@ -1,0 +1,5 @@
+#!/bin/sh
+# pbcopy compatibility shim for Linux. Loads stdin into the tmux paste
+# buffer and pushes via OSC 52 (-w) so the selection escapes out to the
+# user's local terminal clipboard. Requires an active tmux session.
+exec tmux load-buffer -w -

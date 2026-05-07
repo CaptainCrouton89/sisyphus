@@ -16,6 +16,13 @@ __pycache__/
 tmp/
 package-lock.json
 
+# Terraform provider binaries (downloaded on `terraform init`)
+deploy/**/.terraform/
+deploy/**/terraform.tfstate
+deploy/**/terraform.tfstate.backup
+deploy/**/*.tfvars
+deploy/**/*.env
+
 # Cloudflare Workers
 .dev.vars
 .wrangler/

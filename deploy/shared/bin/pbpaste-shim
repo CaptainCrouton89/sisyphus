@@ -1,0 +1,4 @@
+#!/bin/sh
+# pbpaste compatibility shim for Linux. Emits the current tmux paste
+# buffer to stdout. Requires an active tmux session.
+exec tmux save-buffer -
