@@ -19,6 +19,7 @@ export type Request =
   | { type: 'restart-agent'; sessionId: string; agentId: string }
   | { type: 'pane-exited'; paneId: string }
   | { type: 'message'; sessionId: string; content: string; source?: MessageSource; agentId?: string }
+  | { type: 'tell'; sessionId: string; target: { kind: 'orchestrator' } | { kind: 'agent'; agentId: string }; text: string; submit: boolean; source?: MessageSource }
   | { type: 'update-task'; sessionId: string; task: string }
   | { type: 'set-effort'; sessionId: string; effort: 'low' | 'medium' | 'high' | 'xhigh' }
   | { type: 'set-upload-status'; sessionId: string; cwd: string; status: UploadStatus; storageKey?: string; error?: string }

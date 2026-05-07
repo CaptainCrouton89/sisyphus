@@ -1,5 +1,6 @@
+import { execSync } from 'node:child_process';
 import { shellQuote } from '../shared/shell.js';
-import { exec, execSafe } from '../shared/exec.js';
+import { exec, execSafe, EXEC_ENV } from '../shared/exec.js';
 export { EXEC_ENV } from '../shared/exec.js';
 
 // Escape tmux -t targets for shell. Session IDs like $34 contain $ which
@@ -73,6 +74,42 @@ export function sendKeys(paneTarget: string, command: string): void {
     execSafe(`tmux send-keys -t ${t(paneTarget)} -X cancel`, undefined, TMUX_TIMEOUT_MS);
   }
   exec(`tmux send-keys -t ${t(paneTarget)} ${shellQuote(command)} Enter`, undefined, TMUX_TIMEOUT_MS);
+}
+
+/**
+ * Type arbitrary text into a pane via tmux paste-buffer so multi-line input is
+ * preserved as a single bracketed paste (Claude treats it as one user turn).
+ * Optionally presses Enter to submit. Same preflight as `sendKeys`.
+ *
+ * Uses a named, randomized buffer + `-d` (delete after paste) so the user's
+ * default `0` paste-buffer is left alone.
+ */
+export function pasteToPane(paneTarget: string, text: string, submit: boolean): void {
+  const state = getPaneState(paneTarget);
+  const { action } = planSendKeys(state);
+  if (action === 'abort') throw new PaneUnavailableError(paneTarget, state);
+  if (action === 'cancel-then-send') {
+    execSafe(`tmux send-keys -t ${t(paneTarget)} -X cancel`, undefined, TMUX_TIMEOUT_MS);
+  }
+  const bufName = `sisyphus-tell-${Math.random().toString(36).slice(2, 10)}`;
+  // load-buffer reads from stdin via `-`; pipe text in directly so newlines/quotes are preserved
+  // verbatim (no shell escaping). Bypasses the `exec()` wrapper because it doesn't take stdin.
+  execSync(`tmux load-buffer -b ${shellQuote(bufName)} -`, {
+    input: text,
+    env: EXEC_ENV,
+    timeout: TMUX_TIMEOUT_MS,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  try {
+    exec(`tmux paste-buffer -t ${t(paneTarget)} -b ${shellQuote(bufName)} -d`, undefined, TMUX_TIMEOUT_MS);
+  } catch (err) {
+    // Best-effort cleanup if paste-buffer failed before -d kicked in.
+    execSafe(`tmux delete-buffer -b ${shellQuote(bufName)}`);
+    throw err;
+  }
+  if (submit) {
+    exec(`tmux send-keys -t ${t(paneTarget)} Enter`, undefined, TMUX_TIMEOUT_MS);
+  }
 }
 
 export function killPane(paneTarget: string): void {

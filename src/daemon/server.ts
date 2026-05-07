@@ -582,6 +582,60 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true };
       }
 
+      case 'tell': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const session = state.getSession(tracking.cwd, req.sessionId);
+
+        let paneId: string | undefined;
+        let targetLabel: string;
+        if (req.target.kind === 'orchestrator') {
+          // Most-recent live cycle (no completedAt). Falls back to the trailing cycle's
+          // paneId if all are completed but the pane is somehow still around.
+          const liveCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt);
+          paneId = liveCycle?.paneId ?? session.orchestratorCycles.at(-1)?.paneId;
+          targetLabel = 'orchestrator';
+          if (!paneId) return { ok: false, error: 'No orchestrator pane found for this session' };
+        } else {
+          const agentId = req.target.agentId;
+          const ag = session.agents.find(a => a.id === agentId);
+          if (!ag) return { ok: false, error: `Unknown agent: ${agentId} in session ${req.sessionId}` };
+          if (ag.status !== 'running') {
+            return { ok: false, error: `Agent ${agentId} is ${ag.status}, not running — cannot tell` };
+          }
+          paneId = ag.paneId;
+          targetLabel = agentId;
+        }
+
+        try {
+          tmux.pasteToPane(paneId, req.text, req.submit);
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+
+        // Record in session.messages for debuggability — the typed prompt won't otherwise
+        // appear in any sisyphus log. Reuse the same id counter as `message`.
+        tracking.messageCounter += 1;
+        const id = `tell-${String(tracking.messageCounter).padStart(3, '0')}`;
+        const source: MessageSource = req.source ?? { type: 'user' };
+        const summary = req.text.length > 200 ? req.text.slice(0, 200) + '...' : req.text;
+        await state.appendMessage(tracking.cwd, req.sessionId, {
+          id,
+          source,
+          content: req.text,
+          summary,
+          timestamp: new Date().toISOString(),
+        });
+        emitHistoryEvent(req.sessionId, 'message', {
+          source: source.type,
+          delivery: 'tell',
+          target: targetLabel,
+          submit: req.submit,
+          content: req.text,
+        });
+        return { ok: true, data: { paneId, target: targetLabel } };
+      }
+
       case 'companion': {
         const companion = loadCompanion();
         if (req.name !== undefined) {
