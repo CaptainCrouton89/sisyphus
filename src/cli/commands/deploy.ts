@@ -24,6 +24,7 @@ interface RawUpOptions {
   chromium?: boolean; // commander exposes --no-chromium as opts.chromium = false
   autoUpdate?: boolean;
   name?: string;
+  yes?: boolean;
 }
 
 interface DownOptions {
@@ -52,7 +53,8 @@ function resolveUpOptions(provider: Provider, raw: RawUpOptions): UpOptions {
   // commander: --no-chromium → chromium === false; absent → undefined (default install on)
   const withChromium = raw.chromium !== false;
   const enableAutoUpdate = raw.autoUpdate !== false;
-  return { region, arch, size, sshKey: raw.sshKey, name: raw.name, withChromium, enableAutoUpdate };
+  const yes = raw.yes === true;
+  return { region, arch, size, sshKey: raw.sshKey, name: raw.name, withChromium, enableAutoUpdate, yes };
 }
 
 export function registerDeploy(program: Command): void {
@@ -92,6 +94,7 @@ export function registerDeploy(program: Command): void {
       .option('--no-chromium', 'Skip headless Chromium install.')
       .option('--no-auto-update', 'Skip the daily auto-update systemd timer.')
       .option('--name <name>', 'Box hostname / Tailscale node name.', 'sisyphus')
+      .option('-y, --yes', 'Skip the re-provision confirmation prompt when state already exists.')
       .action(async (raw: RawUpOptions) => {
         const opts = resolveUpOptions(provider, raw);
         await deployUp(provider, opts);

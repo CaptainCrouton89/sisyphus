@@ -61,9 +61,10 @@ async function firstRunPrompt(): Promise<TailscaleEnv> {
   console.log('');
   console.log('Tailscale credentials not configured. Pick one:');
   console.log('');
-  console.log('  1) OAuth client (recommended) — mints fresh ephemeral keys per box.');
+  console.log('  1) OAuth client (recommended) — mints fresh ephemeral keys per box');
+  console.log('     and auto-cleans stale offline nodes so hostnames don\'t get suffixed.');
   console.log('     Create at https://login.tailscale.com/admin/settings/oauth');
-  console.log('     with scope `auth_keys:write` and tag `tag:sisyphus`.');
+  console.log('     with scopes `auth_keys:write` + `devices:write` and tag `tag:sisyphus`.');
   console.log('  2) Reusable auth key (simpler) — paste from');
   console.log('     https://login.tailscale.com/admin/settings/keys');
   console.log('');
@@ -94,6 +95,19 @@ async function mintViaOAuth(
   hostname: string,
 ): Promise<string> {
   const token = await fetchAccessToken(clientId, clientSecret);
+
+  // Best-effort: clear out stale offline devices that share the requested
+  // hostname so Tailscale doesn't suffix the new node with `-1`. Requires
+  // the `devices:write` scope on the OAuth client; failures here are not
+  // fatal because the new mint still works (just with a suffix).
+  try {
+    const removed = await deleteStaleDevicesForHostname(token, hostname);
+    if (removed > 0) {
+      console.log(`Tailscale: removed ${removed} stale offline node(s) named "${hostname}".`);
+    }
+  } catch (err) {
+    console.log(`Tailscale: skipped stale-node cleanup (${(err as Error).message}). Add 'devices:write' scope to clean up automatically.`);
+  }
 
   const body = {
     capabilities: {
@@ -127,6 +141,41 @@ async function mintViaOAuth(
   const data = (await res.json()) as CreateKeyResponse;
   if (!data.key) throw new Error('Tailscale API returned no key.');
   return data.key;
+}
+
+interface TailscaleDevice {
+  id: string;
+  hostname: string;
+  lastSeen: string;
+}
+
+async function deleteStaleDevicesForHostname(token: string, hostname: string): Promise<number> {
+  const res = await fetch(`${TS_API}/tailnet/-/devices`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} listing devices`);
+  }
+
+  const data = (await res.json()) as { devices: TailscaleDevice[] };
+  const STALE_AFTER_MS = 5 * 60 * 1000;
+  const now = Date.now();
+  const stale = data.devices.filter((d) => {
+    if (d.hostname !== hostname) return false;
+    const seen = Date.parse(d.lastSeen);
+    if (Number.isNaN(seen)) return false;
+    return now - seen > STALE_AFTER_MS;
+  });
+
+  let removed = 0;
+  for (const device of stale) {
+    const r = await fetch(`${TS_API}/device/${device.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) removed++;
+  }
+  return removed;
 }
 
 async function fetchAccessToken(clientId: string, clientSecret: string): Promise<string> {

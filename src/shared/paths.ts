@@ -208,6 +208,10 @@ export function deployStateBackupPath(provider: string): string {
   return join(deployProviderDir(provider), 'terraform.tfstate.bak');
 }
 
+export function deployRuntimePath(provider: string): string {
+  return join(deployProviderDir(provider), 'runtime.json');
+}
+
 export function deployCredsPath(provider: string): string {
   return join(deployDir(), `${provider}.env`);
 }

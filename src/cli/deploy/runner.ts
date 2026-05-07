@@ -8,6 +8,8 @@ import {
 import { EXEC_ENV } from '../../shared/exec.js';
 import { ensureDeployDir, loadProviderCreds, type Provider } from './creds.js';
 import { formatCostLine } from './pricing.js';
+import { clearRuntimeState, readRuntimeState, writeRuntimeState } from './runtime.js';
+import { discoverNodeWithRetry, isTailscaleAvailable } from './tailnet.js';
 import { providerModuleDir } from './templates.js';
 import { mintTailscaleKey } from './tailscale.js';
 
@@ -24,6 +26,7 @@ export interface UpOptions {
   name: string;
   withChromium: boolean;
   enableAutoUpdate: boolean;
+  yes: boolean;
 }
 
 export interface DeployOutputs {
@@ -122,6 +125,13 @@ function isProvisioned(provider: Provider): boolean {
 // ── Actions ──────────────────────────────────────────────────────────────────
 
 export async function deployUp(provider: Provider, opts: UpOptions): Promise<void> {
+  // Bail before minting a Tailscale key — re-running `up` on a live box has
+  // surprising provider-specific behavior, and a single-use OAuth key would
+  // be wasted if the user backs out.
+  if (isProvisioned(provider) && !(await confirmReprovision(provider, opts.yes))) {
+    return;
+  }
+
   const sshPubkey = readSshPubkey(opts.sshKey);
 
   const creds = await loadProviderCreds(provider);
@@ -171,9 +181,37 @@ export async function deployUp(provider: Provider, opts: UpOptions): Promise<voi
   console.log('');
   console.log('Box provisioned. Cloud-init will run for ~3–5 minutes before the daemon is reachable.');
   console.log('');
-  console.log(`  IP:                  ${outputs.ipv4}`);
-  console.log(`  Tailscale hostname:  ${outputs.tailscale_hostname}`);
-  console.log(`  SSH:                 ${outputs.ssh_command}`);
+  console.log(`  Public IP:           ${outputs.ipv4}`);
+  console.log(`  Requested hostname:  ${outputs.tailscale_hostname}`);
+
+  // Discover the box on the user's tailnet so subsequent ssh/logs/update
+  // calls reach the right node even if Tailscale suffixed the hostname
+  // (`sisyphus-1`) due to a stale offline node squatting the requested
+  // name. Skip silently when local Tailscale isn't available.
+  if (isTailscaleAvailable()) {
+    process.stdout.write('  Waiting for tailnet join...');
+    const node = await discoverNodeWithRetry(opts.name);
+    if (node) {
+      writeRuntimeState(provider, {
+        tailscaleHostname: node.shortName,
+        tailscaleFqdn: node.magicDnsName,
+        tailscaleIpv4: node.ipv4,
+        discoveredAt: new Date().toISOString(),
+      });
+      process.stdout.write(` joined as ${node.shortName} (${node.ipv4})\n`);
+      if (node.shortName !== opts.name) {
+        console.log(`  Note: Tailscale suffixed the hostname because "${opts.name}" was already`);
+        console.log('        claimed by an offline node. Delete the stale node at');
+        console.log('        https://login.tailscale.com/admin/machines to reuse the original name.');
+      }
+    } else {
+      process.stdout.write(' no peer matched after 60s\n');
+      console.log('  (Cloud-init may still be installing Tailscale. Re-run `status` later.)');
+    }
+  } else {
+    console.log('  (Local `tailscale` CLI not on PATH — skipping tailnet discovery.)');
+  }
+
   console.log('');
   console.log(`  Tail provisioning:   sisyphus deploy ${provider} logs`);
   console.log(`  Verify daemon:       sisyphus deploy ${provider} ssh -- sisyphus admin doctor`);
@@ -215,6 +253,7 @@ export async function deployDown(provider: Provider, opts: { yes: boolean }): Pr
     creds,
   );
   if (code !== 0) throw new Error(`terraform destroy failed (exit ${code})`);
+  clearRuntimeState(provider);
   console.log(`\n${provider} box destroyed.`);
 }
 
@@ -228,10 +267,22 @@ export function deployStatus(provider: Provider): void {
     console.log(`${provider}: state present but outputs unreadable. Try \`sisyphus deploy ${provider} up\` to reconcile.`);
     return;
   }
+  const runtime = readRuntimeState(provider);
+  const effectiveHost = runtime ? runtime.tailscaleHostname : outputs.tailscale_hostname;
+
   console.log(`${provider}: provisioned`);
-  console.log(`  IP:                  ${outputs.ipv4}`);
-  console.log(`  Tailscale hostname:  ${outputs.tailscale_hostname}`);
-  console.log(`  SSH:                 ${outputs.ssh_command}`);
+  console.log(`  Public IP:           ${outputs.ipv4}`);
+  console.log(`  Tailscale hostname:  ${effectiveHost}`);
+  if (runtime) {
+    console.log(`  Tailscale IPv4:      ${runtime.tailscaleIpv4}`);
+    console.log(`  MagicDNS FQDN:       ${runtime.tailscaleFqdn}`);
+    if (runtime.tailscaleHostname !== outputs.tailscale_hostname) {
+      console.log(`  (Requested "${outputs.tailscale_hostname}" but Tailscale assigned "${runtime.tailscaleHostname}".)`);
+    }
+  } else {
+    console.log('  (No tailnet runtime state — re-run `up` or check that local tailscale is logged in.)');
+  }
+  console.log(`  SSH:                 ssh sisyphus@${effectiveHost}`);
   console.log(`  Instance type:       ${outputs.instance_type}`);
   console.log(`  ${formatCostLine(provider, outputs.instance_type)}`);
 }
@@ -246,17 +297,23 @@ export function deployListProviders(): void {
 
 // ── ssh / logs / update ──────────────────────────────────────────────────────
 
-function requireOutputs(provider: Provider): DeployOutputs {
-  const o = readOutputs(provider);
-  if (!o) {
+/**
+ * Pick the host to SSH to: runtime state's discovered hostname (handles
+ * Tailscale `-1` suffix) when present, otherwise the Terraform output.
+ */
+function effectiveSshTarget(provider: Provider): string {
+  const runtime = readRuntimeState(provider);
+  if (runtime) return `sisyphus@${runtime.tailscaleHostname}`;
+
+  const outputs = readOutputs(provider);
+  if (!outputs) {
     throw new Error(`${provider} not provisioned. Run \`sisyphus deploy ${provider} up\`.`);
   }
-  return o;
+  return `sisyphus@${outputs.tailscale_hostname}`;
 }
 
 export function deploySsh(provider: Provider, remoteCmd: string[]): void {
-  const outputs = requireOutputs(provider);
-  const target = `sisyphus@${outputs.tailscale_hostname}`;
+  const target = effectiveSshTarget(provider);
 
   const moshAvailable = spawnSync('mosh', ['--version'], { stdio: 'pipe', env: EXEC_ENV }).status === 0;
   const bin = moshAvailable && remoteCmd.length === 0 ? 'mosh' : 'ssh';
@@ -267,8 +324,7 @@ export function deploySsh(provider: Provider, remoteCmd: string[]): void {
 }
 
 export function deployLogs(provider: Provider): void {
-  const outputs = requireOutputs(provider);
-  const target = `sisyphus@${outputs.tailscale_hostname}`;
+  const target = effectiveSshTarget(provider);
   // tail -F survives log rotation; -n 200 gives recent context.
   const remoteCmd = 'tail -F -n 200 /var/log/cloud-init-output.log ~/.sisyphus/daemon.log 2>/dev/null';
   const child = spawn('ssh', [target, remoteCmd], { stdio: 'inherit', env: EXEC_ENV });
@@ -276,8 +332,7 @@ export function deployLogs(provider: Provider): void {
 }
 
 export function deployUpdate(provider: Provider): void {
-  const outputs = requireOutputs(provider);
-  const target = `sisyphus@${outputs.tailscale_hostname}`;
+  const target = effectiveSshTarget(provider);
   const remoteCmd = 'sudo npm i -g sisyphi@latest && systemctl --user restart sisyphusd && sisyphusd --version || true';
   const child = spawn('ssh', [target, remoteCmd], { stdio: 'inherit', env: EXEC_ENV });
   child.on('exit', (code) => process.exit(code === null ? 1 : code));
@@ -289,4 +344,39 @@ async function confirm(prompt: string): Promise<boolean> {
   const { promptLine } = await import('./creds.js');
   const answer = await promptLine(`${prompt} `, false);
   return answer.toLowerCase() === 'yes';
+}
+
+/**
+ * Warn before re-running `up` on an already-provisioned box. Behavior is
+ * very different per provider:
+ *   - Hetzner: `user_data` is ForceNew, so a fresh `ts_authkey` triggers
+ *     destroy-and-recreate. All on-box state is lost.
+ *   - AWS: `user_data` updates in place by default; cloud-init won't re-run
+ *     on a live instance, so the freshly-minted Tailscale key is wasted.
+ * Either way, `update` is the right tool for software pushes and `down`
+ * + `up` is the right tool for an explicit rebuild.
+ */
+async function confirmReprovision(provider: Provider, yes: boolean): Promise<boolean> {
+  const outputs = readOutputs(provider);
+  console.log('');
+  if (outputs) {
+    console.log(`${provider} is already provisioned: "${outputs.tailscale_hostname}" (${outputs.instance_type}, ${outputs.ipv4}).`);
+  } else {
+    console.log(`${provider} state already exists at ${deployStatePath(provider)}.`);
+  }
+  if (provider === 'hetzner') {
+    console.log('Re-running `up` on Hetzner will DESTROY and RECREATE the box (user_data is ForceNew).');
+    console.log('All on-box state — daemon history, sessions, anything not in your repo — will be lost.');
+  } else {
+    console.log('Re-running `up` on AWS updates user_data in state but does NOT recreate the instance.');
+    console.log('Cloud-init won\'t re-run on the live box, and the freshly-minted Tailscale key will be wasted.');
+  }
+  console.log('');
+  console.log(`To push a new sisyphus version:  sisyphus deploy ${provider} update`);
+  console.log(`To rebuild from scratch:         sisyphus deploy ${provider} down && sisyphus deploy ${provider} up`);
+  console.log('');
+  if (yes) return true;
+  const confirmed = await confirm('Type "yes" to proceed anyway:');
+  if (!confirmed) console.log('Aborted.');
+  return confirmed;
 }
