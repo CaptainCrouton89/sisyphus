@@ -21,22 +21,22 @@ write_files:
   - path: /etc/systemd/user/sisyphusd.service
     permissions: '0644'
     content: |
-${indent(6, sisyphusd_unit)}
+      ${indent(6, sisyphusd_unit)}
 
   - path: /etc/sisyphus/tmux-osc52.conf
     permissions: '0644'
     content: |
-${indent(6, tmux_osc52_conf)}
+      ${indent(6, tmux_osc52_conf)}
 
   - path: /usr/local/bin/pbcopy
     permissions: '0755'
     content: |
-${indent(6, pbcopy_shim)}
+      ${indent(6, pbcopy_shim)}
 
   - path: /usr/local/bin/pbpaste
     permissions: '0755'
     content: |
-${indent(6, pbpaste_shim)}
+      ${indent(6, pbpaste_shim)}
 
   - path: /etc/systemd/system/sisyphusd-update.service
     permissions: '0644'
