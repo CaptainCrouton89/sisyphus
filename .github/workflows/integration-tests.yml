@@ -12,13 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - run: npm run build
+      - run: pnpm run build
 
       # run.sh builds Docker image and executes integration tests inside containers
       - run: bash test/integration/run.sh
@@ -29,13 +34,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - run: npm run build
+      - run: pnpm run build
 
       # Pack to tarball so we exercise the published package surface (postinstall included)
       - run: npm pack

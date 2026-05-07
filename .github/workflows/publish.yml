@@ -18,12 +18,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
-      - run: npm install -g npm@latest
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Bump version
         run: |
