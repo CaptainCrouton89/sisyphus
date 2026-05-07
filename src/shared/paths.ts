@@ -190,6 +190,32 @@ export function historySessionSummaryPath(sessionId: string): string {
   return join(historySessionDir(sessionId), 'session.json');
 }
 
+// ── sisyphus deploy: per-provider Terraform state + creds ────────────────────
+
+export function deployDir(): string {
+  return join(globalDir(), 'deploy');
+}
+
+export function deployProviderDir(provider: string): string {
+  return join(deployDir(), provider);
+}
+
+export function deployStatePath(provider: string): string {
+  return join(deployProviderDir(provider), 'terraform.tfstate');
+}
+
+export function deployStateBackupPath(provider: string): string {
+  return join(deployProviderDir(provider), 'terraform.tfstate.bak');
+}
+
+export function deployCredsPath(provider: string): string {
+  return join(deployDir(), `${provider}.env`);
+}
+
+export function deployTailscaleEnvPath(): string {
+  return join(deployDir(), 'tailscale.env');
+}
+
 export function isSisyphusSession(name: string): boolean {
   return name.startsWith('ssyph_');
 }
