@@ -52,7 +52,7 @@ When you're tempted to name a stage after a code area, that signals you're sketc
 
 ## Default Pipeline Shape
 
-The session's effort tier dictates the default pipeline. **Use this shape unless the problem explicitly demands more or less.** The user can change tiers via `sisyphus set-effort <low|medium|high|xhigh>`.
+The session's effort tier dictates the default pipeline. **Use this shape unless the problem explicitly demands more or less.** The user can change tiers via `sisyphus session effort <low|medium|high|xhigh>`.
 
 <!--EFFORT:LOW-->
 **Pipeline:** `plan → implement → validate`
@@ -72,6 +72,8 @@ Add `sisyphus:review-plan` only when the plan covers multi-domain integration. A
 `sisyphus:review-plan` runs after the plan is drafted. `sisyphus:spec` spawns whenever a feature adds user-visible behavior. `sisyphus:problem` spawns when the goal is nebulous. Append `+ test-spec` to the planning stage **only when the user's initial prompt or goal.md explicitly requested tests** (e.g. "with tests", "TDD", "include unit tests", "test coverage"); silence is a "no." When justified, `sisyphus:test-spec` spawns in parallel with the high-level plan at Cycle 2, not after implementation — post-implementation test-spec silently describes what the code does rather than what it should do.
 <!--/EFFORT-->
 
+**Re-evaluate the tier when scope shifts mid-session.** A MEDIUM feature that uncovers a new subsystem may have crossed into HIGH; a HIGH feature whose scope was narrowed may have dropped to MEDIUM. Re-run `sisyphus session effort` and re-invoke this skill rather than continuing under the old tier's pipeline.
+
 ## Choosing a Different Shape
 
 If the default doesn't match the problem, these canonical progressions are the next-best starting points — pick the closest one and prune what's already clear, rather than inventing custom shapes:
@@ -89,6 +91,13 @@ Add a new stage *type* only when the problem demands a kind of work the patterns
 ## Stage Patterns
 
 Use these as starting points. Invent new stage types when the problem demands it. Add backtrack edges where you can foresee things going wrong.
+
+### discovery
+**Use when:** Goal is undefined, ambiguous, or has shifted — need to clarify what "done" looks like before any other stage runs. Also re-entered mid-session when a pivot invalidates the current goal.
+- Process: read prior context (goal.md, prior strategy if any) → if the goal is provably clear, write goal.md and run the clarity-confirmation deck → otherwise spawn `sisyphus:problem` for interactive exploration → user iterates → fold result into goal.md → set effort tier → write or revise strategy.md
+- Exit: goal.md is current and confirmed; effort tier is set; strategy.md exists for this iteration
+- Produces: goal.md, strategy.md, optionally context/problem.md or context/problem-bifurcation.md
+- Backtrack: if scope reveals multiple independent projects, issue a decomposition deck and let the user pick a lead — record the others under "Known follow-ups" in goal.md
 
 ### exploration
 **Use when:** Need to understand the technical landscape before committing to an approach.
@@ -130,6 +139,17 @@ Use these as starting points. Invent new stage types when the problem demands it
 - Exit: all recipe steps pass with concrete evidence, original goal satisfied
 - Produces: validation report with evidence
 - Backtrack: if bugs found → implementation; if architectural issues → spec
+
+## Mid-session shape revisions
+
+When the work in flight reveals the strategy itself is off, escalate up this ladder — reach for the lowest-cost move that fits.
+
+1. **Revise in place.** Stage detail evolved but the pipeline shape holds. Edit `strategy.md` and `roadmap.md`; continue.
+2. **`sisyphus:strategize`.** Approach is wrong but artifacts (specs, explorations, reports) still apply. Annotates the pivot into `strategy.md` and yields `--mode discovery` with a fresh orchestrator.
+3. **`sisyphus session clone <goal>`.** The session is actually two (or more) independent projects. Forks scope into a new top-level session; update `goal.md`/`roadmap.md` here to drop what was cloned.
+4. **`sisyphus session rollback <sessionId> <cycle>`.** A specific cycle introduced state to discard. Rewinds and pauses the session — cycles after the target are lost. Last resort; the others preserve history.
+
+When the user is the source of the change, update `goal.md` first — strategy revision is downstream of goal.
 
 ## Design Philosophy
 
