@@ -671,7 +671,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
     const treeFocused = state.mode === 'navigate' && state.focusPane === 'tree';
     const treeInputs = `${state.treeCacheKey}:${state.cursorIndex}:${treeFocused}`;
     const bottomInputs = `${state.notification}:${state.error}:${state.mode}:${state.searchText}:${cursorNode?.type}`;
-    const overlayMode = (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'open-menu' || state.mode === 'agent-menu' || state.mode === 'session-menu' || state.mode === 'go-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') ? state.mode : '';
+    const overlayMode = (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'open-menu' || state.mode === 'agent-menu' || state.mode === 'session-menu' || state.mode === 'go-menu' || state.mode === 'companion-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') ? state.mode : '';
     let companionFP = '';
     if (state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
       const c = getCompanion();
@@ -757,6 +757,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
         agent: 'blue',
         session: 'red',
         go: 'yellow',
+        companion: 'magenta',
       };
       const menuId = MENU_FOR_MODE[state.mode];
       if (menuId) {

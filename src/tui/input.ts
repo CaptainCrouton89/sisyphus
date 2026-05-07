@@ -42,6 +42,8 @@ export type LeaderAction =
   | { type: 'help' }
   | { type: 'companion-overlay' }
   | { type: 'companion-debug' }
+  | { type: 'companion-pane' }
+  | { type: 'enter-companion-menu' }
   | { type: 'shell-command' }
   | { type: 'jump-to-pane' }
   | { type: 'export-session' }
@@ -221,18 +223,22 @@ export function dispatchComposeAction(
 
 // Maps submenu ref → the LeaderAction type that enters it
 const ENTER_FOR_REF: Record<string, LeaderAction['type']> = {
-  copy:    'enter-copy-menu',
-  open:    'enter-open-menu',
-  agent:   'enter-agent-menu',
-  session: 'enter-session-menu',
-  go:      'enter-go-menu',
+  copy:      'enter-copy-menu',
+  open:      'enter-open-menu',
+  agent:     'enter-agent-menu',
+  session:   'enter-session-menu',
+  go:        'enter-go-menu',
+  companion: 'enter-companion-menu',
 };
 
 // Maps tuiAction strings (from MenuItem.tuiAction) to LeaderAction types
 const TUI_ACTION_FOR_NAME: Record<string, LeaderAction['type']> = {
-  'search':           'search',
-  'edit-context-file':'edit-context-file',
-  'show-leader':      'help',
+  'search':            'search',
+  'edit-context-file': 'edit-context-file',
+  'show-leader':       'help',
+  'companion-overlay': 'companion-overlay',
+  'companion-debug':   'companion-debug',
+  'companion-pane':    'companion-pane',
 };
 
 // Hand-maintained mapping from script/popup name → LeaderAction type.
@@ -534,6 +540,11 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
       requestRender();
       return;
 
+    case 'enter-companion-menu':
+      state.mode = 'companion-menu';
+      requestRender();
+      return;
+
     case 'companion-overlay':
       state.mode = 'companion-overlay';
       requestRender();
@@ -542,6 +553,14 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'companion-debug':
       state.mode = 'companion-debug';
       requestRender();
+      return;
+
+    case 'companion-pane':
+      try {
+        actions.openCompanionPane(state.cwd);
+      } catch {
+        notify(state, 'Failed to open companion pane');
+      }
       return;
 
     case 'shell-command': {
@@ -833,7 +852,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'clone-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       try {
-        actions.openShellPopup(state.cwd, `sisyphus clone ${selectedSessionId}`);
+        actions.openShellPopup(state.cwd, `sisyphus session clone ${selectedSessionId}`);
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -842,7 +861,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'history': {
       try {
-        actions.openShellPopup(state.cwd, 'sisyphus history');
+        actions.openShellPopup(state.cwd, 'sisyphus admin history');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -869,7 +888,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'reconnect': {
       try {
-        actions.openShellPopup(state.cwd, 'sisyphus reconnect');
+        actions.openShellPopup(state.cwd, 'sisyphus session reconnect');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -1473,7 +1492,7 @@ export function handleKeypress(input: string, key: Key, state: AppState, actions
   }
   if (state.mode === 'search') {
     handleSearchKey(input, key, state);
-  } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'open-menu' || state.mode === 'agent-menu' || state.mode === 'session-menu' || state.mode === 'go-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
+  } else if (state.mode === 'leader' || state.mode === 'copy-menu' || state.mode === 'open-menu' || state.mode === 'agent-menu' || state.mode === 'session-menu' || state.mode === 'go-menu' || state.mode === 'companion-menu' || state.mode === 'help' || state.mode === 'companion-overlay' || state.mode === 'companion-debug') {
     handleLeaderKey(input, key, state, actions);
   } else if (state.mode === 'report-detail') {
     handleReportDetailKey(input, key, state, actions);

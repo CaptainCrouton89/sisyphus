@@ -89,12 +89,13 @@ export function formatHelpForKeymap(km: KeyMap): string {
 
 // Maps TUI overlay mode → KEYMAP menu key. Shared between input dispatcher and renderer.
 export const MENU_FOR_MODE: Record<string, string | undefined> = {
-  'leader':       'topLevel',
-  'copy-menu':    'copy',
-  'open-menu':    'open',
-  'agent-menu':   'agent',
-  'session-menu': 'session',
-  'go-menu':      'go',
+  'leader':            'topLevel',
+  'copy-menu':         'copy',
+  'open-menu':         'open',
+  'agent-menu':        'agent',
+  'session-menu':      'session',
+  'go-menu':           'go',
+  'companion-menu':    'companion',
 };
 
 export const KEYMAP: KeyMap = {
@@ -113,7 +114,8 @@ export const KEYMAP: KeyMap = {
       { key: '?', label: '  Full help reference', action: { type: 'popup', name: 'sisyphus-help', popup: { w: '80', h: '32', title: ' Keybindings ' } } },
       { key: '/', label: '  Search / filter', action: { type: 'script', name: 'sisyphus-search-reports' }, tuiAction: 'search' },
       { key: ' ', label: '  Open popup explicitly', action: { type: 'tui', action: 'show-leader' } },
-      { key: 'c', label: '  Copy ›', action: { type: 'submenu', ref: 'copy' } },
+      { key: 'y', label: '  Yank ›', action: { type: 'submenu', ref: 'copy' } },
+      { key: 'c', label: '  Companion ›', action: { type: 'submenu', ref: 'companion' } },
       { key: 'o', label: '  Open ›', action: { type: 'submenu', ref: 'open' } },
       { key: 'a', label: '  Agent ›', action: { type: 'submenu', ref: 'agent' } },
       { key: 'S', label: '  Session ›', action: { type: 'submenu', ref: 'session' } },
@@ -121,6 +123,14 @@ export const KEYMAP: KeyMap = {
     ],
   },
   submenus: {
+    companion: {
+      title: ' Companion ',
+      items: [
+        { key: 'p', label: '  profile (overlay)',    action: { type: 'tui', action: 'companion-overlay' } },
+        { key: 'd', label: '  debug (mood signals)', action: { type: 'tui', action: 'companion-debug' } },
+        { key: 't', label: '  open in tmux pane',    action: { type: 'tui', action: 'companion-pane' } },
+      ],
+    },
     copy: {
       title: ' Copy ',
       items: [
@@ -171,7 +181,7 @@ export const KEYMAP: KeyMap = {
         { key: 'd', label: '  delete (confirms)', action: { type: 'popup', name: 'sisyphus-delete-session', popup: { w: '40', h: '5', borderStyle: 'fg=red', title: ' Delete Session ', cwd: 'current' } } },
         { key: 'e', label: '  export to ~/Downloads', action: { type: 'popup', name: 'sisyphus-export-session', popup: { w: '60', h: '8', title: ' Export Session ', cwd: 'current' } } },
         { key: 'w', label: '  go to session window', action: { type: 'popup', name: 'sisyphus-go-to-window', popup: { w: '70%', h: '60%', cwd: 'current' } } },
-        { key: 'C', label: '  clone (sisyphus clone)', action: { type: 'popup', name: 'sisyphus-clone-session', popup: { w: '60%', h: '60%', cwd: 'current' } } },
+        { key: 'C', label: '  clone (sisyphus session clone)', action: { type: 'popup', name: 'sisyphus-clone-session', popup: { w: '60%', h: '60%', cwd: 'current' } } },
         { key: 'i', label: '  history', action: { type: 'popup', name: 'sisyphus-history', popup: { w: '95%', h: '95%', cwd: 'current' } } },
       ],
     },

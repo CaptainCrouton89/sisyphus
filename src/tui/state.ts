@@ -42,6 +42,7 @@ export type InputMode =
   | 'agent-menu'
   | 'session-menu'
   | 'go-menu'
+  | 'companion-menu'
   | 'help'
   | 'companion-overlay'
   | 'companion-debug'
