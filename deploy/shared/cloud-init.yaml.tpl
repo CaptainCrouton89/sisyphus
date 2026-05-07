@@ -119,4 +119,4 @@ runcmd:
 %{ endif ~}
 
   # Done — marker for `sisyphus deploy <provider> up` polling loop.
-  - echo "sisyphus-cloud-init: done" >> /var/log/cloud-init-output.log
+  - echo "sisyphus cloud-init done" >> /var/log/cloud-init-output.log
