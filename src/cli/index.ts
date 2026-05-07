@@ -38,6 +38,7 @@ import { registerSegmentRegister } from './commands/register-segment.js';
 import { registerSegmentUnregister } from './commands/unregister-segment.js';
 import { registerSetup } from './commands/setup.js';
 import { registerSetupKeybind } from './commands/setup-keybind.js';
+import { registerHomeInit } from './commands/home-init.js';
 import { registerDoctor } from './commands/doctor.js';
 import { registerInit } from './commands/init.js';
 import { registerUninstall } from './commands/uninstall.js';
@@ -50,6 +51,7 @@ import { registerScratch } from './commands/scratch.js';
 import { registerReview } from './commands/review.js';
 import { registerCompanion } from './commands/companion.js';
 import { registerDeploy } from './commands/deploy.js';
+import { registerCloud } from './commands/cloud.js';
 import { attachNotify } from './commands/notify.js';
 import { attachTmuxStatus } from './commands/tmux-status.js';
 import { attachTmuxSessions } from './commands/tmux-sessions.js';
@@ -58,7 +60,7 @@ import { globalDir } from '../shared/paths.js';
 const program = new Command();
 
 program
-  .name('sisyphus')
+  .name('sis')
   .description('tmux-integrated orchestration daemon for Claude Code')
   .version(
     JSON.parse(
@@ -116,6 +118,7 @@ registerSegmentUnregister(segment);
 const admin = program.command('admin').description('Admin / setup commands');
 registerSetup(admin);
 registerSetupKeybind(admin);
+registerHomeInit(admin);
 registerDoctor(admin);
 registerInit(admin);
 registerUninstall(admin);
@@ -133,6 +136,9 @@ registerCompanion(program);
 // deploy group (Terraform-wrapped cloud provisioning)
 registerDeploy(program);
 
+// cloud group (per-repo workflow on the deployed box)
+registerCloud(program);
+
 // diagnostic group (hidden)
 const diagnostic = program.command('diagnostic', { hidden: true });
 attachNotify(diagnostic);
@@ -141,13 +147,13 @@ attachTmuxSessions(diagnostic);
 
 program.addHelpText('after', `
 Examples:
-  $ sisyphus start "Implement auth system"     Start a new session
-  $ sisyphus start "Build @reqs.md" -n auth    Start with name + requirements
-  $ sisyphus status                            Check current sessions
-  $ sisyphus dashboard                         Open the TUI
-  $ sisyphus admin doctor                      Verify installation
+  $ sis start "Implement auth system"     Start a new session
+  $ sis start "Build @reqs.md" -n auth    Start with name + requirements
+  $ sis status                            Check current sessions
+  $ sis dashboard                         Open the TUI
+  $ sis admin doctor                      Verify installation
 
-Run 'sisyphus admin getting-started' for a complete usage guide.
+Run 'sis admin getting-started' for a complete usage guide.
 `);
 
 // Show welcome on first run (before ~/.sisyphus exists)
@@ -157,7 +163,7 @@ const skipWelcome = ['admin', 'help', '--help', '-h', '--version', '-V'];
 if (!existsSync(globalDir()) && firstArg && !skipWelcome.includes(firstArg)) {
   mkdirSync(globalDir(), { recursive: true });
   console.log('');
-  console.log("  Welcome to Sisyphus. Run 'sisyphus admin setup' to get started.");
+  console.log("  Welcome to Sisyphus. Run 'sis admin setup' to get started.");
   console.log('');
 }
 

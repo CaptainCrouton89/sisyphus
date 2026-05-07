@@ -117,7 +117,7 @@ function readOutputs(provider: Provider): DeployOutputs | null {
   }
 }
 
-function isProvisioned(provider: Provider): boolean {
+export function isProvisioned(provider: Provider): boolean {
   if (!existsSync(deployStatePath(provider))) return false;
   return readOutputs(provider) !== null;
 }
@@ -174,7 +174,7 @@ export async function deployUp(provider: Provider, opts: UpOptions): Promise<voi
 
   const outputs = readOutputs(provider);
   if (!outputs) {
-    console.log(`\nApplied — but could not parse outputs. Run \`sisyphus deploy ${provider} status\`.`);
+    console.log(`\nApplied — but could not parse outputs. Run \`sis deploy ${provider} status\`.`);
     return;
   }
 
@@ -213,8 +213,8 @@ export async function deployUp(provider: Provider, opts: UpOptions): Promise<voi
   }
 
   console.log('');
-  console.log(`  Tail provisioning:   sisyphus deploy ${provider} logs`);
-  console.log(`  Verify daemon:       sisyphus deploy ${provider} ssh -- sisyphus admin doctor`);
+  console.log(`  Tail provisioning:   sis deploy ${provider} logs`);
+  console.log(`  Verify daemon:       sis deploy ${provider} ssh -- sis admin doctor`);
   console.log('');
 }
 
@@ -264,7 +264,7 @@ export function deployStatus(provider: Provider): void {
   }
   const outputs = readOutputs(provider);
   if (!outputs) {
-    console.log(`${provider}: state present but outputs unreadable. Try \`sisyphus deploy ${provider} up\` to reconcile.`);
+    console.log(`${provider}: state present but outputs unreadable. Try \`sis deploy ${provider} up\` to reconcile.`);
     return;
   }
   const runtime = readRuntimeState(provider);
@@ -301,13 +301,13 @@ export function deployListProviders(): void {
  * Pick the host to SSH to: runtime state's discovered hostname (handles
  * Tailscale `-1` suffix) when present, otherwise the Terraform output.
  */
-function effectiveSshTarget(provider: Provider): string {
+export function effectiveSshTarget(provider: Provider): string {
   const runtime = readRuntimeState(provider);
   if (runtime) return `sisyphus@${runtime.tailscaleHostname}`;
 
   const outputs = readOutputs(provider);
   if (!outputs) {
-    throw new Error(`${provider} not provisioned. Run \`sisyphus deploy ${provider} up\`.`);
+    throw new Error(`${provider} not provisioned. Run \`sis deploy ${provider} up\`.`);
   }
   return `sisyphus@${outputs.tailscale_hostname}`;
 }
@@ -372,8 +372,8 @@ async function confirmReprovision(provider: Provider, yes: boolean): Promise<boo
     console.log('Cloud-init won\'t re-run on the live box, and the freshly-minted Tailscale key will be wasted.');
   }
   console.log('');
-  console.log(`To push a new sisyphus version:  sisyphus deploy ${provider} update`);
-  console.log(`To rebuild from scratch:         sisyphus deploy ${provider} down && sisyphus deploy ${provider} up`);
+  console.log(`To push a new sisyphus version:  sis deploy ${provider} update`);
+  console.log(`To rebuild from scratch:         sis deploy ${provider} down && sis deploy ${provider} up`);
   console.log('');
   if (yes) return true;
   const confirmed = await confirm('Type "yes" to proceed anyway:');

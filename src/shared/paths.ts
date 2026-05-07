@@ -220,6 +220,30 @@ export function deployTailscaleEnvPath(): string {
   return join(deployDir(), 'tailscale.env');
 }
 
+// ── sisyphus cloud: per-repo box-side paths (remote, not local fs) ───────────
+
+/**
+ * Path on the cloud box where a repo's working tree is rsync'd to.
+ * `~/projects/<repo>` — interpreted by the box's shell, so this is a string
+ * template, not for local fs use.
+ */
+export function boxRepoPath(repo: string): string {
+  return `~/projects/${repo}`;
+}
+
+/**
+ * Path on the cloud box where the per-repo cloud-state sidecar lives. Mirrors
+ * the local `~/.sisyphus/deploy/<provider>/runtime.json` convention but for
+ * the box's own `~/.sisyphus/cloud/<repo>.json`.
+ */
+export function boxCloudSidecarPath(repo: string): string {
+  return `~/.sisyphus/cloud/${repo}.json`;
+}
+
+export function boxCloudSidecarDir(): string {
+  return `~/.sisyphus/cloud`;
+}
+
 export function isSisyphusSession(name: string): boolean {
   return name.startsWith('ssyph_');
 }

@@ -9,6 +9,12 @@ import {
 
 export type Provider = 'hetzner' | 'aws';
 
+export const PROVIDERS: readonly Provider[] = ['hetzner', 'aws'];
+
+export function isValidProvider(value: string): value is Provider {
+  return (PROVIDERS as readonly string[]).includes(value);
+}
+
 interface CredsSpec {
   provider: Provider;
   required: readonly string[];
@@ -53,7 +59,7 @@ function parseEnvFile(text: string): Record<string, string> {
 }
 
 function serializeEnvFile(values: Record<string, string>): string {
-  const lines: string[] = ['# Managed by `sisyphus deploy`. Do not edit unless you know what you are doing.'];
+  const lines: string[] = ['# Managed by `sis deploy`. Do not edit unless you know what you are doing.'];
   for (const [k, v] of Object.entries(values)) {
     lines.push(`${k}=${v}`);
   }

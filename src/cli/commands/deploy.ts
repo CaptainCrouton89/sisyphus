@@ -11,10 +11,8 @@ import {
   deployUpdate,
   type UpOptions,
 } from '../deploy/runner.js';
-import type { Provider } from '../deploy/creds.js';
+import { PROVIDERS, type Provider } from '../deploy/creds.js';
 import { authTailscale } from '../deploy/tailscale.js';
-
-const PROVIDERS: readonly Provider[] = ['hetzner', 'aws'];
 
 interface RawUpOptions {
   region?: string;
