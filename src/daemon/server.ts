@@ -90,7 +90,7 @@ export function registerSessionTmux(sessionId: string, tmuxSession: string, wind
 }
 
 function unknownSessionError(sessionId: string): Response {
-  return { ok: false, error: `Unknown session: ${sessionId}. Run \`sisyphus list --all\` to see available sessions.` };
+  return { ok: false, error: `Unknown session: ${sessionId}. Run \`sis list --all\` to see available sessions.` };
 }
 
 /**
@@ -360,7 +360,7 @@ async function handleRequest(req: Request): Promise<Response> {
             sessionTrackingMap.set(req.sessionId, tracking);
             persistSessionRegistry();
           } else {
-            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sisyphus list --all\` to see available sessions.` };
+            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sis list --all\` to see available sessions.` };
           }
         }
         const session = await sessionManager.resumeSession(req.sessionId, tracking.cwd, req.message);

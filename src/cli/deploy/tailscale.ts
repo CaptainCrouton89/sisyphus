@@ -45,7 +45,7 @@ export async function mintTailscaleKey(opts: MintOptions): Promise<string> {
 
   if (env.oauthClientId && env.oauthClientSecret) {
     if (!env.tag) {
-      throw new Error('Tailscale tag is missing from ~/.sisyphus/deploy/tailscale.env. Re-run `sisyphus deploy auth tailscale`.');
+      throw new Error('Tailscale tag is missing from ~/.sisyphus/deploy/tailscale.env. Re-run `sis deploy auth tailscale`.');
     }
     return mintViaOAuth(env.oauthClientId, env.oauthClientSecret, env.tag, opts.hostname);
   }
@@ -54,7 +54,7 @@ export async function mintTailscaleKey(opts: MintOptions): Promise<string> {
     return env.authKey;
   }
 
-  throw new Error('Tailscale not configured. Run `sisyphus deploy auth tailscale`.');
+  throw new Error('Tailscale not configured. Run `sis deploy auth tailscale`.');
 }
 
 async function firstRunPrompt(): Promise<TailscaleEnv> {
@@ -200,7 +200,7 @@ async function fetchAccessToken(clientId: string, clientSecret: string): Promise
 }
 
 /**
- * Interactive setup for `sisyphus deploy auth tailscale`. Walks the user
+ * Interactive setup for `sis deploy auth tailscale`. Walks the user
  * through OAuth client creation or manual key paste, then persists.
  */
 export async function authTailscale(): Promise<void> {
@@ -217,7 +217,7 @@ export async function authTailscale(): Promise<void> {
     // message and exits non-zero. We don't catch + re-log because that
     // double-prints the failure to stderr.
     await fetchAccessToken(env.oauthClientId, env.oauthClientSecret);
-    console.log('OAuth client verified — `sisyphus deploy <provider> up` will mint ephemeral keys.');
+    console.log('OAuth client verified — `sis deploy <provider> up` will mint ephemeral keys.');
   } else {
     console.log('');
     console.log('Auth key saved. Note: reusable auth keys are less secure than OAuth clients.');

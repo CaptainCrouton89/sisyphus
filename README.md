@@ -61,7 +61,7 @@ npm install -g sisyphi
 Then run setup once:
 
 ```bash
-sisyphus admin setup
+sis admin setup
 ```
 
 This installs the background daemon (macOS launchd), tmux keybindings (`M-s` to cycle sessions, `M-S` for dashboard), and checks your environment. The daemon auto-updates when new versions are published.
@@ -69,15 +69,15 @@ This installs the background daemon (macOS launchd), tmux keybindings (`M-s` to 
 Verify:
 
 ```bash
-sisyphus admin doctor
+sis admin doctor
 ```
 
 ## Quick start
 
 ```bash
-sisyphus start "your task description"    # Start a session
-sisyphus dashboard                        # Open the TUI (auto-opens on start)
-sisyphus status                           # Check session state from the CLI
+sis start "your task description"    # Start a session
+sis dashboard                        # Open the TUI (auto-opens on start)
+sis status                           # Check session state from the CLI
 ```
 
 Sisyphus is a CLI that Claude Code calls for you. Tell Claude to use it and it handles the rest.
@@ -86,24 +86,24 @@ In Claude Code, say something like:
 
 > Use sisyphus to migrate our REST API from Express to Hono. The API lives in src/api/ with 14 route files...
 
-Claude calls `sisyphus start` with a detailed task description, and tmux panes start appearing with parallel agents working on your codebase.
+Claude calls `sis start` with a detailed task description, and tmux panes start appearing with parallel agents working on your codebase.
 
 ### Slash command (recommended)
 
 Create `.claude/commands/sisyphus-begin.md` in your project:
 
 ~~~markdown
-Run `sisyphus start` with a detailed task description:
+Run `sis start` with a detailed task description:
 
 ```bash
-sisyphus start "your task description"
+sis start "your task description"
 ```
 
 Write a thorough task description. Include what needs to be built or fixed, where relevant code lives, what done looks like, constraints, and adjacent concerns (don't break X, keep Y working). More context produces better results. The orchestrator figures out how to break it down.
 
 Example:
 ```bash
-sisyphus start "Rip out our hand-rolled RBAC system and replace it with a proper policy engine. Current implementation is scattered across 20+ middleware files in src/middleware/auth/ that each do their own role checks with hardcoded string comparisons. Replace with a centralized policy engine in src/auth/policies/ using a declarative permission model — define resources, actions, and role mappings in a single config, then write one middleware that evaluates policies. Migrate every route that currently calls requireRole() or checkPermission() to the new system. The admin panel (src/routes/admin/) has the most complex rules including org-scoped permissions and delegated access — those need to work exactly as before. Add integration tests that cover the full matrix: superadmin, org-admin, member, and guest across every protected endpoint. Don't break the public API routes in src/routes/v1/public/. The existing test suite (npm test) must pass when you're done."
+sis start "Rip out our hand-rolled RBAC system and replace it with a proper policy engine. Current implementation is scattered across 20+ middleware files in src/middleware/auth/ that each do their own role checks with hardcoded string comparisons. Replace with a centralized policy engine in src/auth/policies/ using a declarative permission model — define resources, actions, and role mappings in a single config, then write one middleware that evaluates policies. Migrate every route that currently calls requireRole() or checkPermission() to the new system. The admin panel (src/routes/admin/) has the most complex rules including org-scoped permissions and delegated access — those need to work exactly as before. Add integration tests that cover the full matrix: superadmin, org-admin, member, and guest across every protected endpoint. Don't break the public API routes in src/routes/v1/public/. The existing test suite (npm test) must pass when you're done."
 ```
 ~~~
 
@@ -113,8 +113,8 @@ Or just add a note to your `CLAUDE.md`:
 
 ```markdown
 ## Sisyphus
-For large tasks, use the `sisyphus` CLI to orchestrate parallel agents.
-Run `sisyphus start "detailed task description"` inside tmux.
+For large tasks, use the `sis` CLI to orchestrate parallel agents.
+Run `sis start "detailed task description"` inside tmux.
 ```
 
 ### Interactive tutorial
@@ -122,7 +122,7 @@ Run `sisyphus start "detailed task description"` inside tmux.
 New to tmux or sisyphus? Run the guided walkthrough:
 
 ```bash
-sisyphus admin getting-started
+sis admin getting-started
 ```
 
 Covers tmux basics, neovim essentials, sisyphus concepts, and a live demo session.
@@ -132,10 +132,10 @@ Covers tmux basics, neovim essentials, sisyphus concepts, and a live demo sessio
 Full-screen TUI for watching and controlling sessions.
 
 ```bash
-sisyphus dashboard    # or press M-S (Alt-Shift-S)
+sis dashboard    # or press M-S (Alt-Shift-S)
 ```
 
-Auto-opens when you `sisyphus start`.
+Auto-opens when you `sis start`.
 
 Left panel is a session tree (sessions, cycles, agents, reports) with status indicators. Right panel shows detail for whatever's selected: roadmap, agent instructions, report content, live pane output. If neovim is available, files open in an embedded editor. Bottom bar has mode and keybinding hints.
 
@@ -251,7 +251,7 @@ Updates every 5 seconds. Focused session is highlighted.
 
 ### Keybindings
 
-Installed by `sisyphus admin setup` into `~/.sisyphus/tmux.conf`. Requires tmux ≥ 3.2.
+Installed by `sis admin setup` into `~/.sisyphus/tmux.conf`. Requires tmux ≥ 3.2.
 
 | Key | Action |
 |-----|--------|
@@ -277,9 +277,9 @@ A persistent character that tracks your work across sessions. Earns XP, levels u
 Shows up as a mood-colored face in the tmux status bar, generates commentary on lifecycle events via Haiku, and has 66 unlockable badges.
 
 ```bash
-sisyphus companion              # View profile, stats, and achievements
-sisyphus companion --badges     # Full achievement gallery
-sisyphus companion --name Bub   # Rename your companion
+sis companion              # View profile, stats, and achievements
+sis companion --badges     # Full achievement gallery
+sis companion --name Bub   # Rename your companion
 ```
 
 Press `c` in the dashboard (nav mode) to open the companion overlay.
@@ -317,7 +317,7 @@ Project `.sisyphus/config.json` overrides global `~/.sisyphus/config.json`:
 
 ### Session upload (optional)
 
-On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sisyphus admin upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sisyphus admin export` is unchanged; upload is purely additive.
+On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sis admin upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sis admin export` is unchanged; upload is purely additive.
 
 **Token workflow** — the operator mints a per-user token and shares a URL of the form:
 
@@ -329,13 +329,13 @@ Run `configure-upload` with that URL to write credentials to `~/.sisyphus/config
 
 ```bash
 # Safest — no argv leak:
-pbpaste | sisyphus admin configure-upload --stdin
+pbpaste | sis admin configure-upload --stdin
 
 # Interactive prompt:
-sisyphus admin configure-upload
+sis admin configure-upload
 
 # Direct argv (triggers a leak warning — token visible via `ps` and shell history):
-sisyphus admin configure-upload "https://<worker-host>/upload?token=sisyphus_pat_..."
+sis admin configure-upload "https://<worker-host>/upload?token=sisyphus_pat_..."
 ```
 
 **Config** — `configure-upload` always writes to `~/.sisyphus/config.json`. The `upload` block is only honored from the global config; a project-local `.sisyphus/config.json` with an `upload` block is ignored with a warning (security hardening — prevents project files from redirecting your uploads).
@@ -365,8 +365,8 @@ sisyphus admin configure-upload "https://<worker-host>/upload?token=sisyphus_pat
 **Manual retry:**
 
 ```bash
-sisyphus admin upload <session-id>     # re-uploads any session (active or completed)
-sisyphus admin upload                  # uploads the active session in this cwd
+sis admin upload <session-id>     # re-uploads any session (active or completed)
+sis admin upload                  # uploads the active session in this cwd
 ```
 
 **Disable** — omit the `upload` config block. Daemon skips silently.
@@ -388,10 +388,10 @@ Setup: `admin setup`, `admin init`, `admin doctor`, `admin getting-started`, `co
 Browse session history and metrics.
 
 ```bash
-sisyphus admin history                        # List recent sessions
-sisyphus admin history <session-id>           # Inspect a specific session
-sisyphus admin history --stats                # Aggregate statistics
-sisyphus admin history --events               # Raw event timeline
+sis admin history                        # List recent sessions
+sis admin history <session-id>           # Inspect a specific session
+sis admin history --stats                # Aggregate statistics
+sis admin history --events               # Raw event timeline
 ```
 
 | Option | Description |
@@ -410,9 +410,9 @@ sisyphus admin history --events               # Raw event timeline
 Clone a session into a new independent session with a different goal.
 
 ```bash
-sisyphus session clone "new goal"
-sisyphus session clone "new goal" --strategy    # carry over strategy.md from source
-sisyphus session clone "new goal" --name my-clone --context "extra context"
+sis session clone "new goal"
+sis session clone "new goal" --strategy    # carry over strategy.md from source
+sis session clone "new goal" --name my-clone --context "extra context"
 ```
 
 Useful for branching off a variant approach without starting from scratch.
@@ -422,7 +422,7 @@ Useful for branching off a variant approach without starting from scratch.
 Reconnect the daemon to an orphaned tmux session (e.g. after a daemon restart). Makes no state changes and does not spawn the orchestrator.
 
 ```bash
-sisyphus session reconnect <session-id>
+sis session reconnect <session-id>
 ```
 
 ### delete
@@ -430,13 +430,13 @@ sisyphus session reconnect <session-id>
 Delete a session and all its data.
 
 ```bash
-sisyphus session delete <session-id>
-sisyphus session delete <session-id> --cwd /path/to/project
+sis session delete <session-id>
+sis session delete <session-id> --cwd /path/to/project
 ```
 
 ---
 
-`sisyphus --help` or `sisyphus <command> --help` for full usage.
+`sis --help` or `sis <command> --help` for full usage.
 
 ## License
 

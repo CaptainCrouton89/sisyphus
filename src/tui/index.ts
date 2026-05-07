@@ -18,7 +18,7 @@ const cwd = getArg('cwd') ?? process.cwd();
 const askId = getArg('ask');
 const sessionId = getArg('session-id');
 if (askId && sessionId) {
-  // Single-ask mode — used by the parallel ask-pane spawned from `sisyphus ask`.
+  // Single-ask mode — used by the parallel ask-pane spawned from `sis ask`.
   // Skips the dashboard inbox and renders only the deck for this one ask.
   // Must NOT call registerDashboardWindow() — would clobber the real dashboard.
   const { runSingleAsk } = await import('./single-ask.js');

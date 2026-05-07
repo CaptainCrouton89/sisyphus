@@ -1,6 +1,6 @@
-# `sisyphus ask` — Spec
+# `sis ask` — Spec
 
-Unified ask/present command. Replaces `sisyphus present`. Agents and the orchestrator submit decks of structured questions (validation / choice / freetext) with optional rich termrender bodies. The user triages a queue of asks in the dashboard TUI, optionally pressing space to materialize haiku-generated termrender visuals on demand. Default blocking; `--background` opt-in.
+Unified ask/present command. Replaces `sis present`. Agents and the orchestrator submit decks of structured questions (validation / choice / freetext) with optional rich termrender bodies. The user triages a queue of asks in the dashboard TUI, optionally pressing space to materialize haiku-generated termrender visuals on demand. Default blocking; `--background` opt-in.
 
 Routes through the humanloop library (refactored to be embeddable) so sisyphus and the standalone `humanloop` CLI share render/input/persistence.
 
@@ -14,7 +14,7 @@ Routes through the humanloop library (refactored to be embeddable) so sisyphus a
 
 ## CLI Surface
 
-### `sisyphus ask <file.json>` (default: blocking)
+### `sis ask <file.json>` (default: blocking)
 
 Reads `file.json`, validates the schema (see below), mints `askId` (ULID), creates `<sessionDir>/context/ask/<askId>/`, copies/inlines `bodyPath` references, writes `decisions.json` + `meta.json`, then watches `output.json` and **blocks** until it appears.
 
@@ -22,15 +22,15 @@ On unblock: prints `output.json` JSON (`{responses: InteractionResponse[], compl
 
 Caller identity from env: `$SISYPHUS_AGENT_ID` if set, else `"orchestrator"`. Stored in `meta.askedBy`. The CLI process pid is recorded in `meta.pid` so daemon restart can detect dead waiters.
 
-### `sisyphus ask <file.json> --background`
+### `sis ask <file.json> --background`
 
 Same setup, but prints `askId` to stdout and exits 0 immediately. No watcher.
 
-### `sisyphus ask poll <askId>`
+### `sis ask poll <askId>`
 
 Blocks until `output.json` exists, prints it, exits 0. Same waiter implementation as the blocking form.
 
-### `sisyphus ask peek <askId>`
+### `sis ask peek <askId>`
 
 Non-blocking. Prints JSON: `{askId, status, completedAt?, output?}`. Exits 0 regardless of status.
 
@@ -63,7 +63,7 @@ Zod rules:
 - `body` (when present) passes `termrender --check`.
 - Interaction ids unique within the file.
 
-`bodyPath` is **inlined into `decisions.json` as `body`** at submit time so the askId dir is self-contained. Caller may delete the source files after `sisyphus ask` returns the askId (or after blocking unblocks).
+`bodyPath` is **inlined into `decisions.json` as `body`** at submit time so the askId dir is self-contained. Caller may delete the source files after `sis ask` returns the askId (or after blocking unblocks).
 
 ## Disk Layout
 
@@ -256,7 +256,7 @@ Ordered to keep each phase shippable:
 4. **Sisyphus TUI integration** (`src/tui/`) — `Needs You` virtual node, cross-session inbox detail mode, full-screen resolution mode, `space`/`R`/`Shift+J`/`Shift+K` layered keys.
 5. **Orphan handling** — wire into kill/complete paths + daemon startup scan.
 6. **Templates** — `termrender-haiku-system.md`.
-7. **Migration** — drop `sisyphus present`. Update agent prompt templates to teach `sisyphus ask` with v2 `Deck`/`InteractionResponse[]`.
+7. **Migration** — drop `sis present`. Update agent prompt templates to teach `sis ask` with v2 `Deck`/`InteractionResponse[]`.
 
 ## Out of Scope (Explicit)
 

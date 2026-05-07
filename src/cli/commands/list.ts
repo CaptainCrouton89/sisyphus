@@ -45,7 +45,7 @@ export function registerList(program: Command): void {
         if (sessions.length === 0) {
           if (filtered && totalCount && totalCount > 0) {
             console.log(`No sessions in this project. ${totalCount} session(s) in other projects.`);
-            console.log(`${DIM}Run ${RESET}sisyphus list --all${DIM} to show all.${RESET}`);
+            console.log(`${DIM}Run ${RESET}sis list --all${DIM} to show all.${RESET}`);
           } else {
             console.log('No sessions');
           }
@@ -64,7 +64,7 @@ export function registerList(program: Command): void {
 
         if (filtered && totalCount && totalCount > sessions.length) {
           const otherCount = totalCount - sessions.length;
-          console.log(`\n${DIM}${otherCount} more session(s) in other projects. Run ${RESET}sisyphus list --all${DIM} to show all.${RESET}`);
+          console.log(`\n${DIM}${otherCount} more session(s) in other projects. Run ${RESET}sis list --all${DIM} to show all.${RESET}`);
         }
       } else {
         console.error(`Error: ${response.error}`);

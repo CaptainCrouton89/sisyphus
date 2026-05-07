@@ -852,7 +852,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'clone-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       try {
-        actions.openShellPopup(state.cwd, `sisyphus session clone ${selectedSessionId}`);
+        actions.openShellPopup(state.cwd, `sis session clone ${selectedSessionId}`);
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -861,7 +861,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'history': {
       try {
-        actions.openShellPopup(state.cwd, 'sisyphus admin history');
+        actions.openShellPopup(state.cwd, 'sis admin history');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -870,7 +870,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'pick-session': {
       try {
-        actions.openShellPopup(state.cwd, 'sisyphus pick-session');
+        actions.openShellPopup(state.cwd, 'sis pick-session');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -879,7 +879,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'cycle-session': {
       try {
-        actions.openShellPopup(state.cwd, 'sisyphus cycle');
+        actions.openShellPopup(state.cwd, 'sis cycle');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -888,7 +888,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'reconnect': {
       try {
-        actions.openShellPopup(state.cwd, 'sisyphus session reconnect');
+        actions.openShellPopup(state.cwd, 'sis session reconnect');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -903,7 +903,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'show-status': {
       try {
-        actions.openShellPopup(state.cwd, `sisyphus status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
+        actions.openShellPopup(state.cwd, `sis status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
       } catch {
         notify(state, 'Failed to open status');
       }

@@ -95,7 +95,7 @@ export function registerCompanion(program: Command): void {
     .command('companion')
     .description('Show companion profile and stats');
 
-  // Default action — preserves existing bare `sisyphus companion` behavior
+  // Default action — preserves existing bare `sis companion` behavior
   companion
     .option('--name <name>', 'Set companion name')
     .option('--badges', 'Show badge gallery')

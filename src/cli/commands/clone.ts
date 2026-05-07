@@ -22,7 +22,7 @@ export function registerClone(program: Command): void {
 
       const agentId = process.env.SISYPHUS_AGENT_ID;
       if (agentId !== 'orchestrator') {
-        console.error('Error: clone can only be called by the orchestrator. Use sisyphus message to ask the orchestrator to clone.');
+        console.error('Error: clone can only be called by the orchestrator. Use sis message to ask the orchestrator to clone.');
         process.exit(1);
       }
 

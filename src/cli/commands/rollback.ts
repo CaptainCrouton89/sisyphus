@@ -19,7 +19,7 @@ export function registerRollback(program: Command): void {
       if (response.ok) {
         const data = response.data as { restoredToCycle: number };
         console.log(`Session ${sessionId} rolled back to cycle ${data.restoredToCycle}.`);
-        console.log(`Session is now paused. Use 'sisyphus session resume ${sessionId}' to respawn the orchestrator.`);
+        console.log(`Session is now paused. Use 'sis session resume ${sessionId}' to respawn the orchestrator.`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

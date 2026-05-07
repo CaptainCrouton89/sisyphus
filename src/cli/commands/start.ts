@@ -88,7 +88,7 @@ export function registerStart(program: Command): void {
           console.log(`Tmux session: ${tmuxSessionName}`);
           console.log(`  tmux attach -t ${tmuxSessionName}`);
         }
-        console.log(`Monitor: sisyphus status ${sessionId}`);
+        console.log(`Monitor: sis status ${sessionId}`);
         return;
       }
 
@@ -149,6 +149,6 @@ export function registerStart(program: Command): void {
         attachToTmuxSession(tmuxSession);
       }
 
-      console.log(`Monitor: sisyphus status ${sessionId}`);
+      console.log(`Monitor: sis status ${sessionId}`);
     });
 }

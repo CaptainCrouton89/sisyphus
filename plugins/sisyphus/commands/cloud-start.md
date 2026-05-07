@@ -57,4 +57,4 @@ If you think you need any of these, ask the user first with the specific command
 When the new tmux window is open, briefly confirm to the user:
 - Repo synced to `~/projects/<repo>` on `<provider>`
 - Any apt packages you installed during recovery
-- The session name they're now in (so they can re-attach later with `sisyphus cloud attach --name <repo>`)
+- The session name they're now in (so they can re-attach later with `sis cloud attach --name <repo>`)

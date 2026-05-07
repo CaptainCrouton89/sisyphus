@@ -429,7 +429,7 @@ const PERSONA_INSTRUCTION = `You are a small ASCII creature who pushes boulders 
 **Files touched:** `src/cli/commands/companion.ts` (new), `src/cli/index.ts` (register), `src/shared/protocol.ts` (add request/response types)
 **Depends on:** Packages A + B (reads companion state, renders full profile)
 **Deliverables:**
-- `sisyphus companion` command: full profile dump
+- `sis companion` command: full profile dump
 - `--name <name>` flag to set companion name
 - Multi-line formatted output: ASCII art, stats bars, achievement list, repo history, XP progress
 - Protocol types: `CompanionRequest` / `CompanionResponse` in protocol.ts
@@ -596,7 +596,7 @@ Levels 21-24 use "The Absurd Hero". Levels 26-29 use "One Must Imagine Him Happy
 
 ## 6. Achievement Definitions
 
-35 total. The spec lists 33 explicitly; 2 additional are defined below to reach the 35 count shown in the `sisyphus companion` output example.
+35 total. The spec lists 33 explicitly; 2 additional are defined below to reach the 35 count shown in the `sis companion` output example.
 
 ### Milestone Achievements (8)
 

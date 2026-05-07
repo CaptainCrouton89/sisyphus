@@ -34,14 +34,14 @@ export function registerUpload(program: Command): void {
 
       if (!sessionId) {
         console.error('Error: No session ID provided and no active session found.');
-        console.error('Usage: sisyphus admin upload [session-id]');
+        console.error('Usage: sis admin upload [session-id]');
         process.exit(1);
       }
 
       const config = loadConfig(cwd);
       if (!isUploadConfigured(config.upload)) {
         console.error(
-          "Error: upload not configured. Run 'sisyphus admin configure-upload <url-with-token>' or set { upload: { url, token } } in .sisyphus/config.json.",
+          "Error: upload not configured. Run 'sis admin configure-upload <url-with-token>' or set { upload: { url, token } } in .sisyphus/config.json.",
         );
         process.exit(1);
       }

@@ -64,7 +64,7 @@ export interface Session {
   orphaned?: boolean;
   /** Reason string passed to markSessionOrphan — mirrors agent.killedReason. */
   orphanReason?: string;
-  /** Cumulative time blocked on `sisyphus ask` (blocking asks only). Subtracted from wallClockMs to compute efficiency. */
+  /** Cumulative time blocked on `sis ask` (blocking asks only). Subtracted from wallClockMs to compute efficiency. */
   userBlockedMs?: number;
   agents: Agent[];
   orchestratorCycles: OrchestratorCycle[];
@@ -121,7 +121,7 @@ export interface Agent {
   spawnedAt: string;
   completedAt: string | null;
   activeMs: number;
-  /** Cumulative time this agent was blocked on its own `sisyphus ask` calls (blocking only). Subset of activeMs. */
+  /** Cumulative time this agent was blocked on its own `sis ask` calls (blocking only). Subset of activeMs. */
   userBlockedMs?: number;
   reports: AgentReport[];
   paneId: string;
@@ -137,7 +137,7 @@ export interface Agent {
   pid?: number;
   /** `ps -o lstart=` output captured at spawn. Compared during pid-sweep to detect PID recycling. */
   pidLstart?: string;
-  /** Set true when `sisyphus agent await` consumed this agent's report inline. Suppresses it from the next-cycle orchestrator prompt; one-way. */
+  /** Set true when `sis agent await` consumed this agent's report inline. Suppresses it from the next-cycle orchestrator prompt; one-way. */
   consumedInline?: boolean;
 }
 
@@ -146,7 +146,7 @@ export interface OrchestratorCycle {
   timestamp: string;
   completedAt?: string;
   activeMs: number;
-  /** Cumulative time blocked on `sisyphus ask` during this cycle (blocking asks only). */
+  /** Cumulative time blocked on `sis ask` during this cycle (blocking asks only). */
   userBlockedMs?: number;
   interCycleGapMs?: number;
   agentsSpawned: string[];

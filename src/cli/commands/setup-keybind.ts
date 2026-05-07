@@ -23,9 +23,9 @@ export function registerSetupKeybind(program: Command): void {
           console.log(`  ${result.existingBinding}`);
           console.log('');
           console.log('Use a different key, e.g.:');
-          console.log('  sisyphus admin setup-keybind M-S');
-          console.log('  sisyphus admin setup-keybind M-w');
-          console.log('  sisyphus admin setup-keybind M-j');
+          console.log('  sis admin setup-keybind M-S');
+          console.log('  sis admin setup-keybind M-w');
+          console.log('  sis admin setup-keybind M-j');
           break;
         case 'unsupported-tmux':
           console.log(result.message);

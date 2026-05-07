@@ -46,7 +46,7 @@ export interface SessionSummaryAgent {
   agentType: string | null;
   status: string;
   activeMs: number;
-  /** Time this agent was blocked on its own blocking `sisyphus ask` calls. Subset of activeMs. */
+  /** Time this agent was blocked on its own blocking `sis ask` calls. Subset of activeMs. */
   userBlockedMs?: number;
   spawnedAt: string;
   completedAt: string | null;
@@ -58,7 +58,7 @@ export interface SessionSummaryCycle {
   mode: string | null;
   agentsSpawned: number;
   activeMs: number;
-  /** Time the orchestrator was blocked on blocking `sisyphus ask` calls during this cycle. */
+  /** Time the orchestrator was blocked on blocking `sis ask` calls during this cycle. */
   userBlockedMs?: number;
   startedAt: string;
   completedAt: string | null;

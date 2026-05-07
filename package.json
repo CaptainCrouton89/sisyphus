@@ -27,6 +27,7 @@
     "README.md"
   ],
   "bin": {
+    "sis": "dist/cli.js",
     "sisyphus": "dist/cli.js",
     "sisyphusd": "dist/daemon.js"
   },

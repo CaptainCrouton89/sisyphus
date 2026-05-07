@@ -15,7 +15,7 @@ interface RunSingleAskOpts {
  * Standalone single-ask runner — opens a humanloop deck for one ask in the
  * current pane and exits when answered (locally or by the dashboard).
  *
- * Designed for the parallel ask-pane spawned by `sisyphus ask`: the pane has
+ * Designed for the parallel ask-pane spawned by `sis ask`: the pane has
  * no inbox, no tree, just the deck. Both this pane and the dashboard write
  * through the same on-disk ask-store paths, so whichever surface answers
  * first wins; the loser detects the resolution via output.json and exits.
@@ -74,7 +74,7 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
         await updateMeta(cwd, sessionId, askId, { status: 'answered', completedAt });
       } catch {
         // Race: dashboard updated meta concurrently. output.json is written; the
-        // blocked `sisyphus ask` will still pick up the result.
+        // blocked `sis ask` will still pick up the result.
       }
       exit(0);
     })();

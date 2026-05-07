@@ -2,12 +2,12 @@
 description: Hand off a task to sisyphus multi-agent orchestration
 ---
 
-!`sisyphus -h`
+!`sis -h`
 
-Run `sisyphus start` with a concise task/goal and optional background context:
+Run `sis start` with a concise task/goal and optional background context:
 
 ```bash
-sisyphus start "your task description" -c "background context"
+sis start "your task description" -c "background context"
 ```
 
 **Task description** — the goal. Keep it focused: what needs to be built or fixed and what done looks like. This is the persistent objective the orchestrator sees every cycle.
@@ -18,5 +18,5 @@ sisyphus start "your task description" -c "background context"
 
 **Example:**
 ```bash
-sisyphus start "Fix the JWT refresh bug — app shows blank screen on token expiry instead of redirecting to login" -c "Auth system lives in src/auth/. Key files: interceptor.ts (HTTP interceptor), token-store.ts (token persistence), refresh.ts (refresh flow). Tests in src/auth/__tests__/. Don't break the logout flow."
+sis start "Fix the JWT refresh bug — app shows blank screen on token expiry instead of redirecting to login" -c "Auth system lives in src/auth/. Key files: interceptor.ts (HTTP interceptor), token-store.ts (token persistence), refresh.ts (refresh flow). Tests in src/auth/__tests__/. Don't break the logout flow."
 ```

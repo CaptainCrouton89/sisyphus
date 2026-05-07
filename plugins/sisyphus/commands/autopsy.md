@@ -39,7 +39,7 @@ prompts/           # orchestrator-system-N.md, orchestrator-user-N.md, agent-NNN
 snapshots/         # cycle-N/ — filesystem snapshots at cycle boundaries (for rollback)
 ```
 
-**2. Global history dir:** `~/.sisyphus/history/{sessionId}/`. Exists for every session the daemon has seen, independent of the project dir. Structured, queryable via `sisyphus admin history`:
+**2. Global history dir:** `~/.sisyphus/history/{sessionId}/`. Exists for every session the daemon has seen, independent of the project dir. Structured, queryable via `sis admin history`:
 
 ```
 session.json       # SessionSummary — final state, agents, cycles, messages,
@@ -53,7 +53,7 @@ events.jsonl       # ordered timeline: session-start, agent-spawned, agent-compl
 
 The project dir has the **content** (what agents wrote, what was decided). The history dir has the **timeline** (what happened and when). You usually want both.
 
-**3. Packaged export dumps.** `sisyphus admin export` zips a session as `sisyphus-<label>-<date>.zip`, extracting to a dir with this layout:
+**3. Packaged export dumps.** `sis admin export` zips a session as `sisyphus-<label>-<date>.zip`, extracting to a dir with this layout:
 
 ```
 <dump-root>/
@@ -62,30 +62,30 @@ The project dir has the **content** (what agents wrote, what was decided). The h
   history/        # everything from ~/.sisyphus/history/{id}/
 ```
 
-If the user hands you a `<dump-root>` path (e.g. under `~/Downloads/`), `sisyphus admin history <id>` **will not work** — the local daemon has no record of it. Fall back to reading `<dump-root>/history/session.json` + `history/events.jsonl` directly for the timeline, and treat `<dump-root>/session/` exactly like the project session dir below. Everything session-scoped is in the zip; nothing else needs to be fetched.
+If the user hands you a `<dump-root>` path (e.g. under `~/Downloads/`), `sis admin history <id>` **will not work** — the local daemon has no record of it. Fall back to reading `<dump-root>/history/session.json` + `history/events.jsonl` directly for the timeline, and treat `<dump-root>/session/` exactly like the project session dir below. Everything session-scoped is in the zip; nothing else needs to be fetched.
 
-## `sisyphus admin history` CLI
+## `sis admin history` CLI
 
 Start here for orientation. It's fast and gives structured views.
 
 ```bash
-sisyphus admin history                              # list recent sessions (newest first)
-sisyphus admin history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
-sisyphus admin history <id-or-name> --events        # raw event timeline
-sisyphus admin history <id-or-name> --json          # full SessionSummary as JSON
-sisyphus admin history <id-or-name> --events --json # events array as JSON (useful for grep/jq)
-sisyphus admin history --stats                      # aggregate metrics across sessions
-sisyphus admin history --search "<query>"           # substring search across task/messages
-sisyphus admin history --cwd <path>                 # filter by project dir
-sisyphus admin history --since 7d                   # filter by recency (7d, 24h, 2w, 30m)
-sisyphus admin history --status killed              # filter by terminal status
+sis admin history                              # list recent sessions (newest first)
+sis admin history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
+sis admin history <id-or-name> --events        # raw event timeline
+sis admin history <id-or-name> --json          # full SessionSummary as JSON
+sis admin history <id-or-name> --events --json # events array as JSON (useful for grep/jq)
+sis admin history --stats                      # aggregate metrics across sessions
+sis admin history --search "<query>"           # substring search across task/messages
+sis admin history --cwd <path>                 # filter by project dir
+sis admin history --since 7d                   # filter by recency (7d, 24h, 2w, 30m)
+sis admin history --status killed              # filter by terminal status
 ```
 
 **Session resolution:** `<id-or-name>` matches in order: exact UUID → UUID prefix → exact name → name substring. Short substrings can be ambiguous.
 
 **Interactive agents:** `sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec` have their `activeMs` bucketed as **interactive (TUI wait time), not compute**. Don't count their activeMs as wasted work in efficiency analysis — the user was sitting at a TUI.
 
-**User-ask wait time:** `userBlockedMs` (session-, cycle-, and agent-level) is time the decision-maker was blocked on a `sisyphus ask` waiting for the user to answer. **Subtract it from `activeMs` before judging "long-running" or "stalled."** The CLI surfaces this as a `Waiting on user:` header line and `· Xm waiting` suffixes per agent and cycle. Long inter-event gaps in `events.jsonl` that fall inside a matching `ask-issued` → `ask-answered` pair are user wait time, not stalled work — check the askedBy field on the events to attribute waits to the right decision-maker. Treat it like interactive TUI time: not a smell.
+**User-ask wait time:** `userBlockedMs` (session-, cycle-, and agent-level) is time the decision-maker was blocked on a `sis ask` waiting for the user to answer. **Subtract it from `activeMs` before judging "long-running" or "stalled."** The CLI surfaces this as a `Waiting on user:` header line and `· Xm waiting` suffixes per agent and cycle. Long inter-event gaps in `events.jsonl` that fall inside a matching `ask-issued` → `ask-answered` pair are user wait time, not stalled work — check the askedBy field on the events to attribute waits to the right decision-maker. Treat it like interactive TUI time: not a smell.
 
 **Efficiency field:** may be `null` for older sessions even when `wallClockMs` exists — the CLI recomputes inline. Don't assume null means "no data."
 
@@ -138,8 +138,8 @@ Path conventions are not authorship. `context/{agent-id}/` is where that agent's
 
 **Resource map for reconstruction** (which file answers which question):
 
-- Completion report + agent status block + counters (`crashCount`, `lostCount`, `killedAgentCount`, `rollbackCount`): `sisyphus admin history <id>`, or directly `history/session.json`.
-- Event timeline: `sisyphus admin history <id> --events`, or directly `history/events.jsonl`. Relevant events: `agent-killed`, `agent-restarted`, `rollback` (with `fromCycle → toCycle`), `session-resumed` (with `lostAgentCount`), repeated `cycle-boundary` at same mode, `signals-snapshot` phase transitions, long inter-event gaps.
+- Completion report + agent status block + counters (`crashCount`, `lostCount`, `killedAgentCount`, `rollbackCount`): `sis admin history <id>`, or directly `history/session.json`.
+- Event timeline: `sis admin history <id> --events`, or directly `history/events.jsonl`. Relevant events: `agent-killed`, `agent-restarted`, `rollback` (with `fromCycle → toCycle`), `session-resumed` (with `lostAgentCount`), repeated `cycle-boundary` at same mode, `signals-snapshot` phase transitions, long inter-event gaps.
 - Agent's own view of its work: `reports/{agentId}-final.md` — richer than any orchestrator summary of it.
 - Agent's instructions: `prompts/{agentId}-system.md` and `prompts/{agentId}-run.sh`. A bad agent outcome often traces to prompt framing.
 - Orchestrator's per-cycle view and decision: `logs/cycle-NNN.md` for what it observed, `prompts/orchestrator-system-N.md` + `prompts/orchestrator-user-N.md` for what it was fed.
@@ -155,10 +155,10 @@ Path conventions are not authorship. `context/{agent-id}/` is where that agent's
 - **Stuck in a phase.** Multiple cycles with the same mode in events. Orchestrator can't find the exit criteria. Check `roadmap.md` for current exit criteria; check recent cycle logs for what the orchestrator thought it was waiting on.
 - **Thrashing on the same code.** Repeated fix agents across cycles hitting the same files. Indicates a missed root cause — check the earliest failing agent's report, not the latest.
 - **Bad plan.** Implementation agents hit unexpected complexity. Go back to `context/*/plan-stage-*.md` (one subdir per plan-lead agent) — is the plan actually complete? Does it match the design?
-- **Rollback loop.** `rollback` events in the timeline. `sisyphus session rollback` is destructive — it rewinds to a prior cycle boundary. If there are multiple, the orchestrator gave up and retried repeatedly. Check what changed between the retried cycles.
+- **Rollback loop.** `rollback` events in the timeline. `sis session rollback` is destructive — it rewinds to a prior cycle boundary. If there are multiple, the orchestrator gave up and retried repeatedly. Check what changed between the retried cycles.
 - **Killed/crashed agents.** `agent-killed` with a reason; `agent-restarted` means it was respawned. The kill event may be mechanical (OOM, timeout, process died) but the smell is in *how the orchestrator responded* — did it respawn blindly, fail to read why the agent died, or miss that the kill indicated the scope was wrong? Check the agent's report (if any), the cycle log around the kill, and the prompt the respawn got.
 - **Session resumed mid-work.** `session-resumed` + non-zero `lostAgentCount` — daemon restarted. The restart is mechanical; the smell is how the orchestrator's next cycle handled the lost work (did it re-spawn, silently drop it, pretend it completed?).
-- **Wasted interactive time — not a smell.** High `activeMs` on `sisyphus:requirements`/`sisyphus:design`/`sisyphus:spec` is user think-time at a TUI, not compute. Treat it as neutral. Same goes for `userBlockedMs` on any agent or cycle — that's wait time on `sisyphus ask`, not stalled work.
+- **Wasted interactive time — not a smell.** High `activeMs` on `sisyphus:requirements`/`sisyphus:design`/`sisyphus:spec` is user think-time at a TUI, not compute. Treat it as neutral. Same goes for `userBlockedMs` on any agent or cycle — that's wait time on `sis ask`, not stalled work.
 
 ## Artifact-visible smells
 
@@ -206,7 +206,7 @@ The orchestrator makes judgment calls about *how* to structure the work — what
 **Orchestrator hygiene:**
 
 - **Orch-only cycles.** Several cycles running with zero agents spawned.
-- **Yield-prompt stagnation.** Consecutive `sisyphus orch yield --prompt` contents near-identical — orchestrator not learning.
+- **Yield-prompt stagnation.** Consecutive `sis orch yield --prompt` contents near-identical — orchestrator not learning.
 - **Yield-prompt monologue.** Yield prompt contains extensive reasoning that should have been written to `strategy.md` / `roadmap.md`. Yield is ephemeral; reasoning in it evaporates.
 - **Strategy never updated.** `strategy.md` mtime unchanged after cycle 1 despite multiple cycles (`stat -f %m` vs cycle log timestamps). Algorithmically detectable.
 - **Goal rewritten mid-session.** `goal.md` modified after strategy phase. Rare but a strong smell — algorithmically detectable via git history in the session dir or mtime.

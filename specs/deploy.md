@@ -1,10 +1,10 @@
-# `sisyphus deploy` — Spec
+# `sis deploy` — Spec
 
 A CLI-wrapped Terraform deployment flow that provisions a Linux box pre-configured to run sisyphus, reachable only via the user's Tailscale tailnet. Two providers ship day one: Hetzner Cloud (cost-leader) and AWS EC2 (familiar / fleet-friendly). Users SSH in (or `mosh`) and attach to tmux for the same workflow they have locally.
 
 ## Goals
 
-- One verb (`sisyphus deploy`) provisions a sisyphus-ready box from a clean cloud account, no Terraform knowledge required.
+- One verb (`sis deploy`) provisions a sisyphus-ready box from a clean cloud account, no Terraform knowledge required.
 - Linux deployment is supported via the path `client.ts:39–67` already documents — cloud-init writes the systemd unit; we don't need to land Linux support inside `install.ts` first.
 - Box is reachable only over Tailscale; no public SSH port.
 - The user's tmux keybinds (`M-s`, `M-S`, `C-s` which-key, `prefix-x`) work on the remote box. Clipboard popups (`pbcopy`/`pbpaste`) round-trip to the user's local machine via OSC 52.
@@ -12,15 +12,15 @@ A CLI-wrapped Terraform deployment flow that provisions a Linux box pre-configur
 
 ## Non-goals
 
-- Multi-tenant SaaS. Each user runs `sisyphus deploy` against their own cloud account (BYO-cloud, option 2 from architecture discussion).
+- Multi-tenant SaaS. Each user runs `sis deploy` against their own cloud account (BYO-cloud, option 2 from architecture discussion).
 - Fleet management. One box per provider per user. Multi-box / capability-tagged dispatch is out of scope.
-- Backwards compat with non-darwin auto-install in `install.ts`. That's a separate refactor; if/when it lands, cloud-init can collapse to a single `sisyphus admin setup` call.
+- Backwards compat with non-darwin auto-install in `install.ts`. That's a separate refactor; if/when it lands, cloud-init can collapse to a single `sis admin setup` call.
 - Native macOS notification parity. Linux loses `SisyphusNotify.app`; tmux activity flags are the substitute.
 - Persistent backups of `~/.sisyphus`. Sessions are ephemeral on the box; user rsyncs out if they care.
 
 ## CLI Surface
 
-### `sisyphus deploy <provider> <action>`
+### `sis deploy <provider> <action>`
 
 Providers: `hetzner`, `aws`. Actions:
 
@@ -33,7 +33,7 @@ Providers: `hetzner`, `aws`. Actions:
 | `update` | SSHes via Tailscale, runs `npm i -g sisyphi@latest && systemctl --user restart sisyphusd`. |
 | `logs` | Tails `/var/log/cloud-init-output.log` and `~/.sisyphus/daemon.log` over SSH. |
 
-### `sisyphus deploy --providers`
+### `sis deploy --providers`
 
 Lists available providers + status (provisioned/not).
 
@@ -115,16 +115,16 @@ The `cloud-init.yaml.tpl` is templated by Terraform with: SSH pubkey, Tailscale 
 7. **Daemon as systemd user service.** Write `~sisyphus/.config/systemd/user/sisyphusd.service` from the template (lifted verbatim from `client.ts:46–62`). `systemctl --user enable --now sisyphusd`.
 8. **Auto-update timer.** Daily `sisyphusd-update.service` + `.timer`: `npm i -g sisyphi@latest && systemctl --user restart sisyphusd`. Skipped if `--no-auto-update` was passed at provision time.
 9. **Tmux config.** Source `tmux-osc52.conf` from `~sisyphus/.tmux.conf`. Install `pbcopy-shim` / `pbpaste-shim` (which `exec tmux load-buffer -w -` and `tmux save-buffer -` respectively) to `/usr/local/bin/{pbcopy,pbpaste}`. Order matters — this runs before step 10 so the keybind popup scripts can resolve `pbcopy`/`pbpaste` from PATH at install time.
-10. **Keybinds.** Run `sudo -u sisyphus sisyphus admin setup-keybind`. Verified portable: `setup-keybind.ts` has no platform branches, and the popup scripts that `tmux-setup.ts` writes resolve `pbcopy`/`pbpaste` at runtime via the shims installed in step 9.
+10. **Keybinds.** Run `sudo -u sisyphus sis admin setup-keybind`. Verified portable: `setup-keybind.ts` has no platform branches, and the popup scripts that `tmux-setup.ts` writes resolve `pbcopy`/`pbpaste` at runtime via the shims installed in step 9.
 11. **Chromium.** Default on. Install via apt with the Playwright dep stack (`chromium`, `libxss1`, `libnss3`, `libgbm1`, `libxkbcommon0`, `libasound2`). Skipped if `--no-chromium` was passed.
 
-Cloud-init logs land at `/var/log/cloud-init-output.log`. `sisyphus deploy <provider> logs` tails this for debugging first-boot failures.
+Cloud-init logs land at `/var/log/cloud-init-output.log`. `sis deploy <provider> logs` tails this for debugging first-boot failures.
 
 ### Tailscale auth flow
 
 Two paths:
 
-**Recommended: OAuth client.** User runs `sisyphus deploy auth tailscale` once; CLI walks them through creating an OAuth client at https://login.tailscale.com/admin/settings/oauth with `auth_keys:write` scope. Client ID + secret stored in `~/.sisyphus/deploy/tailscale.env` (0600). Each `up` mints an ephemeral, single-use, tagged auth key via the API — no human-readable key ever touches Terraform state plaintext. Keys expire after 90 days; tagged for sisyphus boxes so users can revoke fleet-wide if needed.
+**Recommended: OAuth client.** User runs `sis deploy auth tailscale` once; CLI walks them through creating an OAuth client at https://login.tailscale.com/admin/settings/oauth with `auth_keys:write` scope. Client ID + secret stored in `~/.sisyphus/deploy/tailscale.env` (0600). Each `up` mints an ephemeral, single-use, tagged auth key via the API — no human-readable key ever touches Terraform state plaintext. Keys expire after 90 days; tagged for sisyphus boxes so users can revoke fleet-wide if needed.
 
 **Fallback: manual auth key.** User pastes a reusable auth key from the admin UI. Stored same place. Less secure (key sits in env), but zero-config.
 
@@ -165,16 +165,16 @@ Two paths:
 |---|---|---|
 | Terraform binary missing | `runner.ts` startup check | Error with install hint |
 | Provider creds missing | Pre-apply check | Prompt to set, save to env file |
-| Cloud-init failure (e.g., npm install fails mid-boot) | `up` polls `/var/log/cloud-init-output.log` for `cloud-init: done` or error | `sisyphus deploy <provider> logs` shows tail; user can SSH and `cloud-init status --long` |
+| Cloud-init failure (e.g., npm install fails mid-boot) | `up` polls `/var/log/cloud-init-output.log` for `cloud-init: done` or error | `sis deploy <provider> logs` shows tail; user can SSH and `cloud-init status --long` |
 | Tailscale not connecting | Post-apply health check pings tailnet hostname | Fall back to SSH on public IP only if firewall didn't yet apply (race window) |
-| Daemon fails to start under systemd | `up` runs `sisyphus deploy <provider> ssh -- sisyphus admin doctor` after provisioning | Surface doctor output; common cause is Node path / version |
+| Daemon fails to start under systemd | `up` runs `sis deploy <provider> ssh -- sis admin doctor` after provisioning | Surface doctor output; common cause is Node path / version |
 
 ## Implementation phasing
 
 Suggested order, each shippable independently:
 
 1. Cloud-init template + Hetzner module wired manually (no CLI) — prove the box boots sisyphus-ready end to end.
-2. `runner.ts` + `sisyphus deploy hetzner up/down/status` — wrap the manual flow.
+2. `runner.ts` + `sis deploy hetzner up/down/status` — wrap the manual flow.
 3. Tailscale OAuth client integration + ephemeral auth keys.
 4. AWS module (mostly mechanical once Hetzner is solid; same cloud-init).
 5. `update`, `ssh`, `logs` actions.

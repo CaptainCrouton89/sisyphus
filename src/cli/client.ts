@@ -64,7 +64,7 @@ export async function sendRequest(request: Request, timeoutMs?: number): Promise
     }
     lines.push(
       '',
-      '  Diagnose: sisyphus admin doctor',
+      '  Diagnose: sis admin doctor',
       '  Logs: tail -f ~/.sisyphus/daemon.log',
     );
     throw new Error(lines.join('\n'));

@@ -353,7 +353,7 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
     console.log(`${DIM}Compute:${RESET} ${formatDuration(computeMs)}  ${DIM}Interactive:${RESET} ${formatDuration(interactiveMs)} ${DIM}(TUI wait time, not compute)${RESET}`);
   }
   if (s.userBlockedMs > 0) {
-    console.log(`${DIM}Waiting on user:${RESET} ${formatDuration(s.userBlockedMs)} ${DIM}(blocked on sisyphus ask, not compute)${RESET}`);
+    console.log(`${DIM}Waiting on user:${RESET} ${formatDuration(s.userBlockedMs)} ${DIM}(blocked on sis ask, not compute)${RESET}`);
   }
   console.log('');
 

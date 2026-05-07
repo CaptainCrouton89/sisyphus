@@ -21,7 +21,7 @@ If the recipe doesn't exist or doesn't cover what was implemented:
 If you genuinely cannot determine how to verify the feature — transition back to planning:
 
 ```bash
-sisyphus orch yield --mode planning --prompt "Cannot determine verification method for [feature] — need to establish e2e recipe"
+sis orch yield --mode planning --prompt "Cannot determine verification method for [feature] — need to establish e2e recipe"
 ```
 
 ## The Operator Is Not Optional

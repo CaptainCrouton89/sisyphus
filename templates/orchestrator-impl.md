@@ -103,7 +103,7 @@ A clean report ("No concerns") is a valid and common outcome. When you get one, 
 Aggregate reviewer findings. Spawn fix agents and **point them at the review report** — don't rewrite findings as line-by-line instructions. You triage (skip false positives, note architectural constraints) — they implement.
 
 ```bash
-sisyphus agent spawn --name "fix-review-issues" --agent-type sisyphus:implement \
+sis agent spawn --name "fix-review-issues" --agent-type sisyphus:implement \
   "Fix the issues in reports/agent-003-final.md. Skip item #5 (false positive). Run type-check after."
 ```
 
@@ -121,7 +121,7 @@ This is a deliberate choice, not an oversight. Re-reviewing has two failure mode
 If the fix agent's own report flags that it hit unexpected complexity or introduced something it wasn't comfortable with, address that specifically — read the code, decide, don't spawn another reviewer. If the single review pass surfaces findings that suggest an architectural problem rather than code-level issues, backtrack to planning instead of patching:
 
 ```bash
-sisyphus orch yield --mode planning --prompt "Review surfaced architectural issue: [summary]. Needs replan, not fixes."
+sis orch yield --mode planning --prompt "Review surfaced architectural issue: [summary]. Needs replan, not fixes."
 ```
 
 Real regressions from fix agents are caught by e2e validation (next step), not by a second review pass.
@@ -146,7 +146,7 @@ If the project lacks validation tooling, **create it** — a smoke-test script, 
 **Phase-scoped plans:** if the current plan only covers one phase of a multi-phase feature (the plan-lead convention when `strategy.md` has multiple phases), yield back to planning after this phase's validation passes — not to validation mode. Plan files live under `context/{plan-lead-agent-id}/`; use the paths the plan lead reported when dispatching implement agents.
 
 ```bash
-sisyphus orch yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."
+sis orch yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."
 ```
 
 The next cycle's plan lead incorporates what you learned here before committing phase N+1 to paper.
@@ -154,7 +154,7 @@ The next cycle's plan lead incorporates what you learned here before committing 
 When all implementation phases are complete (the final phase has been planned, implemented, and stage-validated), transition to validation mode for the comprehensive final pass:
 
 ```bash
-sisyphus orch yield --mode validation --prompt "All stages implemented — validate against context/e2e-recipe.md"
+sis orch yield --mode validation --prompt "All stages implemented — validate against context/e2e-recipe.md"
 ```
 
 Validation mode shifts the orchestrator's entire focus to proving the feature works. Stage-level validation during implementation catches issues early; the final validation pass proves the whole thing holds together.
@@ -166,7 +166,7 @@ Validation mode shifts the orchestrator's entire focus to proving the feature wo
 If the approach is wrong mid-implementation, don't keep pushing. Return to planning:
 
 ```bash
-sisyphus orch yield --mode planning --prompt "Discovered X mid-implementation — approach needs rework. See cycle log and roadmap.md."
+sis orch yield --mode planning --prompt "Discovered X mid-implementation — approach needs rework. See cycle log and roadmap.md."
 ```
 
 Concrete triggers:
@@ -183,9 +183,9 @@ Update roadmap.md to reflect you're back in an earlier phase. Log the discovery 
 ## Implementation CLI
 
 ```bash
-sisyphus session task "revised goal"                      # update the session goal mid-flight
-sisyphus agent restart <agentId>                         # respawn a failed/killed agent in a new pane
-sisyphus session rollback <sessionId> <cycle>            # rewind state to a prior cycle boundary
+sis session task "revised goal"                      # update the session goal mid-flight
+sis agent restart <agentId>                         # respawn a failed/killed agent in a new pane
+sis session rollback <sessionId> <cycle>            # rewind state to a prior cycle boundary
 ```
 
 </impl-cli>

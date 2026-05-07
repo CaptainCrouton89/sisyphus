@@ -11,7 +11,7 @@ export function rawSend(request: Request, timeoutMs = 10_000): Promise<Response>
 
     const timeout = setTimeout(() => {
       socket.destroy();
-      reject(new Error(`Request timed out after ${(timeoutMs / 1000).toFixed(0)}s. The daemon may be overloaded.\n  Check: sisyphus admin doctor\n  Logs: tail -20 ~/.sisyphus/daemon.log`));
+      reject(new Error(`Request timed out after ${(timeoutMs / 1000).toFixed(0)}s. The daemon may be overloaded.\n  Check: sis admin doctor\n  Logs: tail -20 ~/.sisyphus/daemon.log`));
     }, timeoutMs);
 
     socket.on('connect', () => {
