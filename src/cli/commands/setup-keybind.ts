@@ -5,9 +5,10 @@ export function registerSetupKeybind(program: Command): void {
   program
     .command('setup-keybind [cycle-key]')
     .description('Install sisyphus tmux keybindings (default: M-s cycle, C-s prefix)')
-    .action(async (key: string | undefined) => {
+    .option('-y, --yes', 'Skip confirmation prompt before modifying ~/.tmux.conf')
+    .action(async (key: string | undefined, opts: { yes?: boolean }) => {
       const resolvedKey = key ?? DEFAULT_CYCLE_KEY;
-      const result = setupTmuxKeybind(resolvedKey);
+      const result = await setupTmuxKeybind(resolvedKey, undefined, { assumeYes: opts.yes });
 
       switch (result.status) {
         case 'installed':
@@ -28,6 +29,11 @@ export function registerSetupKeybind(program: Command): void {
           break;
         case 'unsupported-tmux':
           console.log(result.message);
+          break;
+        case 'conf-modification-declined':
+          console.log(result.message);
+          console.log('');
+          console.log('Re-run with --yes to skip the prompt.');
           break;
       }
     });

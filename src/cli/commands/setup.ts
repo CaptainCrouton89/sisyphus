@@ -102,7 +102,8 @@ export function registerSetup(program: Command): void {
   program
     .command('setup')
     .description('One-time setup: install dependencies, daemon, keybindings, and commands')
-    .action(async () => {
+    .option('-y, --yes', 'Skip confirmation prompts (e.g. before modifying ~/.tmux.conf)')
+    .action(async (opts: { yes?: boolean }) => {
       // 1. Onboarding (tmux, terminal, iterm, nvim, plugin)
       const result = runOnboarding();
 
@@ -116,7 +117,11 @@ export function registerSetup(program: Command): void {
       }
 
       // 3. Keybindings
-      const keybindResult = setupTmuxKeybind();
+      const keybindResult = await setupTmuxKeybind(
+        DEFAULT_CYCLE_KEY,
+        DEFAULT_PREFIX_KEY,
+        { assumeYes: opts.yes },
+      );
       let keybindMsg: string;
       if (keybindResult.status === 'installed' || keybindResult.status === 'already-installed') {
         keybindMsg = `${DEFAULT_CYCLE_KEY} cycle, ${DEFAULT_PREFIX_KEY} prefix (h=dashboard, x=kill)`;

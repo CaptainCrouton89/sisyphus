@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { globalDir } from '../shared/paths.js';
 import { KEYMAP, formatHelpForKeymap, type MenuDef, type MenuItem, type Action } from '../shared/keymap.js';
 
@@ -1395,9 +1396,36 @@ export type SetupResult =
   | { status: 'installed'; message: string }
   | { status: 'already-installed'; message: string }
   | { status: 'conflict'; message: string; existingBinding: string }
-  | { status: 'unsupported-tmux'; message: string };
+  | { status: 'unsupported-tmux'; message: string }
+  | { status: 'conf-modification-declined'; message: string; manualLine: string; userConf: string };
 
-export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey: string = DEFAULT_PREFIX_KEY): SetupResult {
+export interface SetupOptions {
+  /** Skip the confirmation prompt before appending to the user's tmux.conf. */
+  assumeYes?: boolean;
+}
+
+async function confirmConfAppend(userConf: string, line: string): Promise<boolean> {
+  // Don't block scripted/non-TTY callers; they can opt in with assumeYes.
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    const question =
+      `\nSisyphus needs to append one line to ${userConf} so its tmux keybindings persist:\n` +
+      `  ${line}\n\n` +
+      `Append it now? (y/N) `;
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === 'y');
+    });
+  });
+}
+
+export async function setupTmuxKeybind(
+  cycleKey: string = DEFAULT_CYCLE_KEY,
+  prefixKey: string = DEFAULT_PREFIX_KEY,
+  opts: SetupOptions = {},
+): Promise<SetupResult> {
   installAllScripts();
 
   // Version check — hard requirement for display-menu flags used
@@ -1441,14 +1469,24 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
   const userConf = userTmuxConfPath();
   const markedSourceLine = `source-file ${confPath} ${SISYPHUS_CONF_MARKER}`;
   let persistedToConf = false;
+  let appendDeclined = false;
 
   if (userConf !== null) {
     const contents = readFileSync(userConf, 'utf8');
-    if (!contents.includes(confPath)) {
-      const separator = contents.endsWith('\n') ? '' : '\n';
-      writeFileSync(userConf, `${contents}${separator}${markedSourceLine}\n`, 'utf8');
+    if (contents.includes(confPath)) {
+      persistedToConf = true;
+    } else {
+      const shouldAppend = opts.assumeYes
+        ? true
+        : await confirmConfAppend(userConf, markedSourceLine);
+      if (shouldAppend) {
+        const separator = contents.endsWith('\n') ? '' : '\n';
+        writeFileSync(userConf, `${contents}${separator}${markedSourceLine}\n`, 'utf8');
+        persistedToConf = true;
+      } else {
+        appendDeclined = true;
+      }
     }
-    persistedToConf = true;
   }
 
   // Apply bindings live
@@ -1458,6 +1496,17 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     }
   } catch {
     // tmux not running
+  }
+
+  if (appendDeclined && userConf !== null) {
+    return {
+      status: 'conf-modification-declined',
+      message:
+        `Tmux keybindings applied to the live session, but not persisted.\n` +
+        `To persist them, add this line to ${userConf}:\n  ${markedSourceLine}`,
+      manualLine: markedSourceLine,
+      userConf,
+    };
   }
 
   if (getExistingBinding(cycleKey) !== null && isSisyphusBinding(getExistingBinding(cycleKey)!)) {

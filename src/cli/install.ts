@@ -75,7 +75,7 @@ export async function ensureDaemonInstalled(): Promise<void> {
 
     execSync(`launchctl load -w ${plistPath()}`);
 
-    const keybindResult = setupTmuxKeybind();
+    const keybindResult = await setupTmuxKeybind();
 
     await ensureRequiredPlugins(process.cwd());
 
@@ -129,6 +129,8 @@ function printGettingStarted(
     lines.push(`Tmux keybind: ${keybindResult.message}`, '');
   } else if (keybindResult.status === 'conflict') {
     lines.push(`Keybind: ${keybindResult.message}`, '');
+  } else if (keybindResult.status === 'conf-modification-declined') {
+    lines.push(keybindResult.message, '');
   }
 
   if (sisyphusPlugin.installed && sisyphusPlugin.autoInstalled) {
