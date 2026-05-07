@@ -44,6 +44,7 @@ export interface CreateAskParams {
   subtitle?: string;
   kind?: InteractionKind;
   orphanTarget?: AskMeta['orphanTarget'];
+  modeTransition?: true;
 }
 
 export function createAsk(cwd: string, sessionId: string, params: CreateAskParams): AskMeta {
@@ -64,6 +65,7 @@ export function createAsk(cwd: string, sessionId: string, params: CreateAskParam
     ...(params.subtitle !== undefined ? { subtitle: params.subtitle } : {}),
     ...(params.kind !== undefined ? { kind: params.kind } : {}),
     ...(params.orphanTarget !== undefined ? { orphanTarget: params.orphanTarget } : {}),
+    ...(params.modeTransition !== undefined ? { modeTransition: params.modeTransition } : {}),
   };
 
   atomicWrite(askMetaPath(cwd, sessionId, params.askId), JSON.stringify(meta, null, 2));

@@ -65,6 +65,14 @@ describe('emitModeTransitionNotify — mode change', () => {
     assert.equal(deck!.source?.askedBy, ORCHESTRATOR_ASKED_BY);
     assert.ok(deck!.title.includes('discovery'));
     assert.ok(deck!.title.includes('planning'));
+
+    // Aggregation discriminator + structured chain are present from the first emit
+    assert.equal(meta!.modeTransition, true, 'meta should carry modeTransition discriminator');
+    assert.deepEqual(
+      deck!.source?.modeChain,
+      [{ mode: 'discovery' }, { mode: 'planning' }],
+      'source.modeChain seeds with [prev, next]',
+    );
   });
 
   it('includes prev-mode cycle/duration footer when stats are provided', async () => {
@@ -166,5 +174,99 @@ describe('emitModeTransitionNotify — getSession throws', () => {
     await assert.doesNotReject(
       () => emitModeTransitionNotify(testDir, missingStateSessionId, 'discovery', 'execution'),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Aggregation: subsequent transitions fold into the existing open ask
+// ---------------------------------------------------------------------------
+describe('emitModeTransitionNotify — aggregation', () => {
+  it('folds a second transition into the existing pending ask', async () => {
+    const sessionId = randomUUID();
+    createSession(sessionId, 'test task', testDir);
+
+    await emitModeTransitionNotify(testDir, sessionId, 'discovery', 'planning', {
+      cycles: 2,
+      activeMs: 14 * 60 * 1000,
+    });
+    await emitModeTransitionNotify(testDir, sessionId, 'planning', 'execution', {
+      cycles: 3,
+      activeMs: 30 * 60 * 1000,
+    });
+
+    const asks = askStore.listAsks(testDir, sessionId);
+    assert.equal(asks.length, 1, 'second transition should not create a new ask');
+
+    const askId = asks[0]!;
+    const meta = askStore.readMeta(testDir, sessionId, askId);
+    assert.equal(meta!.modeTransition, true);
+    assert.equal(meta!.subtitle, 'discovery → planning → execution');
+
+    const deck = askStore.readDecisions(testDir, sessionId, askId);
+    assert.deepEqual(deck!.source?.modeChain, [
+      { mode: 'discovery', cycles: 2, activeMs: 14 * 60 * 1000 },
+      { mode: 'planning', cycles: 3, activeMs: 30 * 60 * 1000 },
+      { mode: 'execution' },
+    ]);
+
+    const body = deck!.interactions[0]!.body!;
+    assert.ok(/\*\*Execution\*\*/.test(body) || /Now in \*\*Execution\*\*/.test(body),
+      'body lead should name the current mode');
+    assert.ok(/Discovery: 2 cycles · 14m active/.test(body), 'body lists stats for first segment');
+    assert.ok(/Planning: 3 cycles · 30m active/.test(body), 'body lists stats for second segment');
+  });
+
+  it('bumps askedAt when aggregating', async () => {
+    const sessionId = randomUUID();
+    createSession(sessionId, 'test task', testDir);
+
+    await emitModeTransitionNotify(testDir, sessionId, 'discovery', 'planning');
+    const askId = askStore.listAsks(testDir, sessionId)[0]!;
+    const firstAskedAt = askStore.readMeta(testDir, sessionId, askId)!.askedAt;
+
+    await new Promise(r => setTimeout(r, 10));
+    await emitModeTransitionNotify(testDir, sessionId, 'planning', 'execution');
+
+    const secondAskedAt = askStore.readMeta(testDir, sessionId, askId)!.askedAt;
+    assert.ok(
+      Date.parse(secondAskedAt) > Date.parse(firstAskedAt),
+      'aggregated transition should refresh askedAt',
+    );
+  });
+
+  it('starts a fresh aggregator after the user acks (status=answered)', async () => {
+    const sessionId = randomUUID();
+    createSession(sessionId, 'test task', testDir);
+
+    await emitModeTransitionNotify(testDir, sessionId, 'discovery', 'planning');
+    const firstAskId = askStore.listAsks(testDir, sessionId)[0]!;
+    await askStore.updateMeta(testDir, sessionId, firstAskId, {
+      status: 'answered',
+      completedAt: new Date().toISOString(),
+    });
+
+    await emitModeTransitionNotify(testDir, sessionId, 'planning', 'execution');
+
+    const asks = askStore.listAsks(testDir, sessionId);
+    assert.equal(asks.length, 2, 'a fresh ask should be created once the prior one is acked');
+
+    const otherId = asks.find(id => id !== firstAskId)!;
+    const otherMeta = askStore.readMeta(testDir, sessionId, otherId);
+    assert.equal(otherMeta!.status, 'pending');
+    assert.equal(otherMeta!.subtitle, 'planning → execution');
+  });
+
+  it('does not aggregate into an orphaned ask', async () => {
+    const sessionId = randomUUID();
+    createSession(sessionId, 'test task', testDir);
+
+    await emitModeTransitionNotify(testDir, sessionId, 'discovery', 'planning');
+    const firstAskId = askStore.listAsks(testDir, sessionId)[0]!;
+    await askStore.updateMeta(testDir, sessionId, firstAskId, { orphaned: true });
+
+    await emitModeTransitionNotify(testDir, sessionId, 'planning', 'execution');
+
+    const asks = askStore.listAsks(testDir, sessionId);
+    assert.equal(asks.length, 2, 'orphaned asks must not be reused for aggregation');
   });
 });

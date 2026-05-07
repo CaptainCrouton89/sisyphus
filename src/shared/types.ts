@@ -181,10 +181,20 @@ export interface Interaction {
   kind?: InteractionKind;
 }
 
+export interface ModeChainEntry {
+  mode: string;
+  /** Cycles spent in this segment. Absent for the trailing (current) entry. */
+  cycles?: number;
+  /** Active ms accumulated in this segment. Absent for the trailing entry. */
+  activeMs?: number;
+}
+
 export interface DeckSource {
   sessionName?: string;
   askedBy?: string;
   blockedSince?: string;
+  /** For orchestrator mode-transition notify decks: ordered chain of modes visited. Trailing entry is the current mode. */
+  modeChain?: ModeChainEntry[];
 }
 
 export interface Deck {
@@ -233,4 +243,6 @@ export interface AskMeta {
   kind?: InteractionKind;
   /** Set on system-emitted error-kind asks; carries the takeover-dispatch context. */
   orphanTarget?: { kind: 'agent'; agentId: string; paneId?: string } | { kind: 'orchestrator' };
+  /** Set on orchestrator mode-transition notify asks; aggregation key for rolling mode-change notifications. */
+  modeTransition?: true;
 }
