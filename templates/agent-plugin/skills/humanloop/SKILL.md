@@ -142,6 +142,7 @@ EOF
 ## Submission notes
 
 - The deck is validated at submit (precise errors — trust them).
-- `bodyPath` lets an interaction point at a markdown file (e.g. a completion summary) instead of inlining the markdown in JSON.
+- `kind` is an enum: `notify` | `validation` | `decision` | `context` | `error`. No other values accepted (see the table above for which to pick).
+- `bodyPath` points at a markdown file instead of inlining the body in JSON. The path is resolved **relative to the deck JSON's directory** and must stay inside it (no `..`, no symlinks out, no absolute paths pointing elsewhere). Practical pattern: write the deck JSON next to its body file — e.g. both inside `$SISYPHUS_SESSION_DIR/context/` — and use a basename like `"completion-summary.md"`. Mutually exclusive with `body`.
 - On completion, stdout is one line of JSON: `{responses, completedAt}`. Parse `responses[]` and dispatch on each interaction's `id`.
 - See `sisyphus ask -h` for the full CLI surface.

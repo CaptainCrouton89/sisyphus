@@ -82,12 +82,14 @@ function inlineBodyPath(deckPath: string, bodyPath: string): string {
 
   // STEP 1: existence + lstat BEFORE realpath to catch symlinks and directories.
   if (!existsSync(joined)) {
-    throw new Error(`bodyPath does not exist: ${bodyPath}`);
+    throw new Error(
+      `bodyPath does not exist: '${bodyPath}' (resolved against deck dir '${deckDir}'). bodyPath is interpreted relative to the deck JSON's directory; place the body file there and use a relative path (e.g. "completion-summary.md").`,
+    );
   }
   const stat = lstatSync(joined);
   if (!stat.isFile()) {
     // Catches symlinks, directories, FIFOs — lstat does not follow symlinks.
-    throw new Error(`bodyPath must be a regular file: ${bodyPath}`);
+    throw new Error(`bodyPath must be a regular file (not a symlink, directory, or special file): ${bodyPath}`);
   }
 
   // STEP 2: realpath both sides, prefix-check (defense-in-depth for .. traversal).
@@ -96,7 +98,9 @@ function inlineBodyPath(deckPath: string, bodyPath: string): string {
   const realDeckDir = realpathSync(deckDir);
   const prefix = realDeckDir + sep;
   if (realResolved !== realDeckDir && !realResolved.startsWith(prefix)) {
-    throw new Error(`bodyPath escapes deck directory (outside): ${bodyPath}`);
+    throw new Error(
+      `bodyPath '${bodyPath}' escapes the deck's directory ('${realDeckDir}'). bodyPath is resolved relative to the deck JSON file and must stay inside its directory (no '..', absolute paths pointing elsewhere, or symlinks out). Fix: write the deck JSON next to the body file (e.g. both inside $SISYPHUS_SESSION_DIR/context/) and use a relative path like "completion-summary.md".`,
+    );
   }
 
   // STEP 3: read. lstat confirmed regular file; realpath confirmed in-tree.

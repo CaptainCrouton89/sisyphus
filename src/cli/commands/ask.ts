@@ -37,7 +37,42 @@ The CLI always blocks until the user answers (which can take 10+ minutes).
 
 For guidance on when to use a deck, how to design options the user can actually choose between, and how to bundle related questions into one deck, read the \`humanloop\` skill before authoring.
 
-Deck JSON: an object with \`interactions: [{ id, title, options, kind?, allowFreetext?, body? | bodyPath?, ... }]\`. Validation errors at submit are precise — trust them.
+DECK JSON SCHEMA
+  { "title"?: string, "interactions": Interaction[] }    // interactions[] non-empty
+
+  Interaction:
+    id              string, /^[A-Za-z0-9_-]+$/, max 64 chars, unique within deck
+    title           string (required, non-empty)
+    subtitle?       string
+    body?           string                    // markdown rendered in dashboard
+    bodyPath?       string                    // path RELATIVE to the deck JSON's directory
+                                              // and must resolve INSIDE that directory
+                                              // (no '..', no symlinks out, no absolute
+                                              // paths pointing elsewhere). Mutually
+                                              // exclusive with 'body'. To use bodyPath,
+                                              // write the deck JSON next to the markdown
+                                              // file (e.g. both in
+                                              // \$SISYPHUS_SESSION_DIR/context/) and pass
+                                              // a basename like "summary.md".
+    kind?           "notify" | "validation" | "decision" | "context" | "error"
+                                              // display hint for inbox icon/sort weight.
+                                              // No other values accepted.
+    options         Option[]                  // 2–4 options recommended (see humanloop)
+    allowFreetext?  boolean
+    freetextLabel?  string
+
+  Option:
+    id              string (required)
+    label           string (required)
+    description?    string
+    shortcut?       string
+
+OUTPUT
+  On answer, stdout is one line of JSON:
+    { "responses": [{ "id", "selectedOptionId"?, "freetext"? }, ...], "completedAt" }
+  Branch on each response by its interaction \`id\`.
+
+Validation errors at submit are precise — read them, don't guess.
 `)
     .action(async (file: string | undefined, opts: { session?: string }) => {
       if (!file) {
