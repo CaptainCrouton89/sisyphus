@@ -76,7 +76,7 @@ If a report says "all checks pass" but the evidence is thin or missing — that'
 When validation surfaces real bugs:
 
 ```bash
-sisyphus orch yield --mode implementation --prompt "Validation failed — [specific failures]. See reports/agent-XXX-final.md for details."
+sis orch yield --mode implementation --prompt "Validation failed — [specific failures]. See reports/agent-XXX-final.md for details."
 ```
 
 Log what failed and why before yielding. The implementation cycle needs clear context on what to fix.
@@ -84,7 +84,7 @@ Log what failed and why before yielding. The implementation cycle needs clear co
 When validation reveals that the approach itself is flawed — not bugs, but architectural issues or fundamental misunderstandings:
 
 ```bash
-sisyphus orch yield --mode planning --prompt "Validation revealed [architectural issue] — approach needs rethinking. See cycle log."
+sis orch yield --mode planning --prompt "Validation revealed [architectural issue] — approach needs rethinking. See cycle log."
 ```
 
 **Do not attempt fixes in validation mode** beyond trivial issues (a missed import, a config typo). If the fix requires design decisions or touches multiple files, transition to implementation mode where the orchestrator has the right guidance for managing that work.
@@ -92,7 +92,7 @@ sisyphus orch yield --mode planning --prompt "Validation revealed [architectural
 ## Validation CLI
 
 ```bash
-sisyphus agent restart <agentId>                         # respawn a failed/killed validation agent
+sis agent restart <agentId>                         # respawn a failed/killed validation agent
 ```
 
 ## Transition to Completion
@@ -100,7 +100,7 @@ sisyphus agent restart <agentId>                         # respawn a failed/kill
 When all validation passes, yield to completion mode for user sign-off:
 
 ```bash
-sisyphus orch yield --mode completion --prompt "Validation passed — all recipe steps verified. Ready for user review."
+sis orch yield --mode completion --prompt "Validation passed — all recipe steps verified. Ready for user review."
 ```
 
 Only yield when every recipe step has been executed with evidence of success. If the recipe was updated during validation, re-validate against the updated version.

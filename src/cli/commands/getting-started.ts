@@ -445,7 +445,7 @@ Wait for them to confirm they're back, then start live commentary.
 
 **This is the most important part of the demo.** Don't just launch and wait — actively narrate.
 
-Once the user is back, start a polling loop. Every ~45 seconds, run \`sisyphus status --verbose <session-id>\` and provide SHORT, contextual commentary about what's happening. The \`--verbose\` flag shows agent instructions, full roadmap, cycle logs, and live pane output from the orchestrator and running agents — use this rich data to narrate what's actually happening, not just phase names.
+Once the user is back, start a polling loop. Every ~45 seconds, run \`sis status --verbose <session-id>\` and provide SHORT, contextual commentary about what's happening. The \`--verbose\` flag shows agent instructions, full roadmap, cycle logs, and live pane output from the orchestrator and running agents — use this rich data to narrate what's actually happening, not just phase names.
 
 **How to narrate each phase:**
 
@@ -561,7 +561,7 @@ This is the most important part. Explain clearly:
 The easiest way is the \`/sisyphus:begin\` slash command inside Claude Code. Just tell Claude
 what you want to build and it'll hand it off to sisyphus with the right context.
 
-Or directly: \`sisyphus start "your task" -c "any background context"\`
+Or directly: \`sis start "your task" -c "any background context"\`
 
 ### 4. Suggest real tasks for THEIR codebase
 
@@ -583,7 +583,7 @@ Tell them:
 > to understand the philosophy, or you want a deeper rundown on the dashboard,
 > monitoring, configuration, or how to steer sessions — just ask and I'll explain.
 
-If the user says yes or asks to learn more, run \`sisyphus admin getting-started --explain\`
+If the user says yes or asks to learn more, run \`sis admin getting-started --explain\`
 and use its output to explain the system to them conversationally. Don't dump the whole
 thing — answer what they're curious about, using the reference as your source material.
 </claude-instructions>
@@ -808,7 +808,7 @@ This means it never runs out of context, no matter how many cycles a session tak
 
 ## The Dashboard
 
-The dashboard is a real-time TUI that shows session state. Launch with \`sisyphus dashboard\`
+The dashboard is a real-time TUI that shows session state. Launch with \`sis dashboard\`
 or it auto-opens when a session starts.
 
 **Dashboard sections:**
@@ -847,14 +847,14 @@ Sisyphus sessions should be actively monitored. Here's what to watch for:
 
 **When to intervene:**
 - Use \`m\` in the dashboard to message the orchestrator with corrections
-- Use \`sisyphus session kill <id>\` to stop a runaway session
-- Use \`sisyphus session resume <id> "new instructions"\` to restart with different direction
+- Use \`sis session kill <id>\` to stop a runaway session
+- Use \`sis session resume <id> "new instructions"\` to restart with different direction
 
 **Useful monitoring commands:**
 \`\`\`
-sisyphus status <id>              # Quick status check
-sisyphus status --verbose <id>    # Full detail: roadmap, pane output, agent instructions
-sisyphus dashboard                # Interactive TUI
+sis status <id>              # Quick status check
+sis status --verbose <id>    # Full detail: roadmap, pane output, agent instructions
+sis dashboard                # Interactive TUI
 tail -f ~/.sisyphus/daemon.log    # Daemon activity log
 \`\`\`
 
@@ -920,11 +920,11 @@ Then describe your task. Claude will hand it off with the right context.
 
 **Direct CLI:**
 \`\`\`
-sisyphus start "task description" -c "background context"
-sisyphus start "Implement @requirements.md" -n my-feature
+sis start "task description" -c "background context"
+sis start "Implement @requirements.md" -n my-feature
 \`\`\`
 
-**Reference files with @**: \`sisyphus start "Build @docs/spec.md"\` — the orchestrator
+**Reference files with @**: \`sis start "Build @docs/spec.md"\` — the orchestrator
 will read the referenced file as part of its planning.
 
 **The -c flag** adds background context the orchestrator sees but doesn't act on directly.
@@ -946,10 +946,10 @@ sisyphusd restart
 **Keybinds not working (special characters appear):**
 iTerm2 → Settings → Profiles → Keys → Right Option Key → Esc+
 
-**Agents stuck:** Check \`sisyphus status --verbose <id>\` to see pane output. If an
+**Agents stuck:** Check \`sis status --verbose <id>\` to see pane output. If an
 agent is waiting for input, kill the session and restart with clearer instructions.
 
-**Dashboard not opening:** Run \`sisyphus dashboard\` manually. Must be inside tmux.
+**Dashboard not opening:** Run \`sis dashboard\` manually. Must be inside tmux.
 
 **Session seems hung:** Check \`tail -20 ~/.sisyphus/daemon.log\` for errors.
 The daemon polls panes every 2s — if a pane dies unexpectedly, it'll be detected.
