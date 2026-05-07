@@ -18,6 +18,8 @@ import type {
   RunningStats,
   UnlockedAchievement,
 } from '../shared/companion-types.js';
+import { defaultBaselines, emptyStats, normalizeCompanion } from '../shared/companion-normalize.js';
+export { defaultBaselines, emptyStats } from '../shared/companion-normalize.js';
 export { ACHIEVEMENTS } from '../shared/companion-types.js';
 
 // ---------------------------------------------------------------------------
@@ -44,22 +46,6 @@ const COLD_START_DEFAULTS: Record<BaselineMetric, { mean: number; stddev: number
   sessionsPerDay:         { mean: 3,         stddev: 2 },
   recentAgentThroughput:  { mean: 8,         stddev: 6 },
 };
-
-export function emptyStats(): RunningStats {
-  return { count: 0, mean: 0, m2: 0 };
-}
-
-export function defaultBaselines(): CompanionBaselines {
-  return {
-    sessionMs: emptyStats(),
-    cycleCount: emptyStats(),
-    agentCount: emptyStats(),
-    sessionsPerDay: emptyStats(),
-    recentAgentThroughput: emptyStats(),
-    lastCountedDay: null,
-    pendingDayCount: 0,
-  };
-}
 
 export function welfordUpdate(stats: RunningStats, value: number): void {
   stats.count++;
@@ -101,22 +87,7 @@ export function loadCompanion(): CompanionState {
   }
   const raw = readFileSync(path, 'utf-8');
   const state = JSON.parse(raw) as CompanionState;
-  // Forward-compat: fill missing fields
-  if (state.consecutiveCleanSessions == null) state.consecutiveCleanSessions = 0;
-  if (state.consecutiveDaysActive == null) state.consecutiveDaysActive = 0;
-  if (state.lastActiveDate == null) state.lastActiveDate = null;
-  if (state.taskHistory == null) state.taskHistory = {};
-  if (state.dailyRepos == null) state.dailyRepos = {};
-  if (state.recentCompletions == null) state.recentCompletions = [];
-  if (state.lifetimeAgentsSpawned == null) state.lifetimeAgentsSpawned = 0;
-  if (state.consecutiveEfficientSessions == null) state.consecutiveEfficientSessions = 0;
-  if (state.consecutiveHighCycleSessions == null) state.consecutiveHighCycleSessions = 0;
-  if (state.spinnerVerbIndex == null) state.spinnerVerbIndex = 0;
-  if (state.baselines == null) state.baselines = defaultBaselines();
-  if (state.baselines.recentAgentThroughput == null) state.baselines.recentAgentThroughput = emptyStats();
-  if (state.commentaryHistory == null) state.commentaryHistory = [];
-  if (state.feedbackHistory == null) state.feedbackHistory = [];
-  return state;
+  return normalizeCompanion(state);
 }
 
 export function saveCompanion(state: CompanionState): void {

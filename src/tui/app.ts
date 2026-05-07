@@ -45,6 +45,7 @@ import { renderSubmenuOverlay, renderHelpOverlay, renderCompanionOverlay, render
 import { KEYMAP, MENU_FOR_MODE } from '../shared/keymap.js';
 import { companionPath } from '../shared/paths.js';
 import type { CompanionState } from '../shared/companion-types.js';
+import { normalizeCompanion } from '../shared/companion-normalize.js';
 import { composeViaPopup, ensureSisyphusInitLua } from './lib/popup-compose.js';
 import { loadConfig } from '../shared/config.js';
 import { roadmapPath, goalPath, strategyPath, logsDir, contextDir, digestPath } from '../shared/paths.js';
@@ -62,7 +63,7 @@ function getCompanion(): CompanionState | null {
     const { mtimeMs } = statSync(companionPath());
     if (_cachedCompanion && mtimeMs === _companionMtime) return _cachedCompanion;
     _companionMtime = mtimeMs;
-    _cachedCompanion = JSON.parse(readFileSync(companionPath(), 'utf-8')) as CompanionState;
+    _cachedCompanion = normalizeCompanion(JSON.parse(readFileSync(companionPath(), 'utf-8')) as CompanionState);
     return _cachedCompanion;
   } catch {
     return _cachedCompanion;
