@@ -248,7 +248,7 @@ export async function cloneSession(
   // 1. Validate source
   const sourceSession = state.getSession(cwd, sourceId);
   if (sourceSession.status === 'completed') {
-    throw new Error('Cannot clone completed session. Use `sisyphus continue` to resume it first.');
+    throw new Error('Cannot clone completed session. Use `sisyphus session continue` to resume it first.');
   }
 
   // 2. Generate clone identity
@@ -399,7 +399,7 @@ export async function reconnectSession(sessionId: string, cwd: string): Promise<
 
   // Find the tmux session by name (since $N ID may be stale/missing)
   if (!tmux.sessionNameTaken(tmuxName)) {
-    throw new Error(`No tmux session named "${tmuxName}" exists. Use \`sisyphus resume\` to create a new one.`);
+    throw new Error(`No tmux session named "${tmuxName}" exists. Use \`sisyphus session resume\` to create a new one.`);
   }
 
   const tmuxSessId = tmux.resolveSessionId(tmuxName);
@@ -776,7 +776,7 @@ export async function handleSubmit(cwd: string, sessionId: string, agentId: stri
  * Backgrounded vs foreground doesn't change the calculus on the daemon side. The
  * orchestrator pattern is foreground (this guard fires only on bug paths). The
  * agent pattern is background-then-end-turn — `require-submit.sh` lets the agent
- * Stop normally; this guard fires only if the agent calls `sisyphus submit`
+ * Stop normally; this guard fires only if the agent calls `sisyphus agent submit`
  * (terminal) before the deck resolves, which would close the pane.
  */
 function formatPendingAskError(verb: 'yield' | 'submit', askedBy: string, open: ReturnType<typeof listOpenAsksFor>): string {
@@ -784,7 +784,7 @@ function formatPendingAskError(verb: 'yield' | 'submit', askedBy: string, open: 
   const who = askedBy === ORCHESTRATOR_ASKED_BY ? 'orchestrator' : `agent ${askedBy}`;
   const recovery = verb === 'yield'
     ? `Resolve before yielding: \`sisyphus ask poll <askId>\` blocks until the user answers, then process the response and yield with a continuation prompt that names the answered branch.`
-    : `Resolve before submitting: \`sisyphus ask poll <askId>\` blocks until the user answers, parse the response, then call \`sisyphus submit\` with your final report.`;
+    : `Resolve before submitting: \`sisyphus ask poll <askId>\` blocks until the user answers, parse the response, then call \`sisyphus agent submit\` with your final report.`;
   return `Cannot ${verb}: ${who} owns ${open.length} open deck${open.length === 1 ? '' : 's'}:\n${lines.join('\n')}\n\n${recovery}`;
 }
 
@@ -1165,7 +1165,7 @@ export async function handlePaneExited(
     const agent = session.agents.find(a => a.id === agentId);
     if (!agent || agent.status !== 'running') return;
 
-    // Agent exited without calling `sisyphus submit` — orphan-ask emission
+    // Agent exited without calling `sisyphus agent submit` — orphan-ask emission
     // (kind:'error') fires the banner via ask-store's gate.
     const allDone = await handleAgentKilled(cwd, sessionId, agentId, 'pane exited');
 

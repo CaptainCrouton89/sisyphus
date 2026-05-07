@@ -113,7 +113,7 @@ plan phase 1 → implement phase 1 → validate phase 1 → plan phase 2 → imp
 After a phase's implementation passes e2e validation, yield back to planning mode for the next phase:
 
 ```bash
-sisyphus yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."
+sisyphus orch yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."
 ```
 
 When spawning the phase-scoped plan lead, name in the prompt:
@@ -153,7 +153,7 @@ Write the recipe to `context/e2e-recipe.md` with setup steps, exact commands or 
 ## Planning CLI
 
 ```bash
-sisyphus requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
+sisyphus admin requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
 ```
 
 The requirements export renders a `requirements.json` to markdown without consuming LLM tokens.
@@ -165,7 +165,7 @@ The requirements export renders a `requirements.json` to markdown without consum
 When you have enough understanding, a reviewed plan, and a verification recipe — transition explicitly:
 
 ```bash
-sisyphus yield --mode implementation --prompt "Begin implementation — see roadmap.md and the plan file path the plan lead reported (under context/{plan-lead-agent-id}/)."
+sisyphus orch yield --mode implementation --prompt "Begin implementation — see roadmap.md and the plan file path the plan lead reported (under context/{plan-lead-agent-id}/)."
 ```
 
 The `--mode implementation` flag loads implementation-phase guidance for the next cycle.
@@ -173,7 +173,7 @@ The `--mode implementation` flag loads implementation-phase guidance for the nex
 After implementation is complete, transition to validation mode to prove the feature works:
 
 ```bash
-sisyphus yield --mode validation --prompt "Implementation complete — validate against context/e2e-recipe.md"
+sisyphus orch yield --mode validation --prompt "Implementation complete — validate against context/e2e-recipe.md"
 ```
 
 </transition>

@@ -42,9 +42,9 @@ function tmuxExec(cmd: string): string | null {
   }
 }
 
-export function registerTmuxSessions(program: Command): void {
-  program
-    .command('tmux-sessions', { hidden: true })
+export function attachTmuxSessions(diagnostic: Command): void {
+  diagnostic
+    .command('tmux-sessions')
     .description('Output sisyphus session list for tmux status bar')
     .action(() => {
       const manifest = readManifest();

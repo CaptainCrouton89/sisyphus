@@ -61,7 +61,7 @@ npm install -g sisyphi
 Then run setup once:
 
 ```bash
-sisyphus setup
+sisyphus admin setup
 ```
 
 This installs the background daemon (macOS launchd), tmux keybindings (`M-s` to cycle sessions, `M-S` for dashboard), and checks your environment. The daemon auto-updates when new versions are published.
@@ -69,7 +69,7 @@ This installs the background daemon (macOS launchd), tmux keybindings (`M-s` to 
 Verify:
 
 ```bash
-sisyphus doctor
+sisyphus admin doctor
 ```
 
 ## Quick start
@@ -122,7 +122,7 @@ Run `sisyphus start "detailed task description"` inside tmux.
 New to tmux or sisyphus? Run the guided walkthrough:
 
 ```bash
-sisyphus getting-started
+sisyphus admin getting-started
 ```
 
 Covers tmux basics, neovim essentials, sisyphus concepts, and a live demo session.
@@ -251,7 +251,7 @@ Updates every 5 seconds. Focused session is highlighted.
 
 ### Keybindings
 
-Installed by `sisyphus setup` into `~/.sisyphus/tmux.conf`. Requires tmux ≥ 3.2.
+Installed by `sisyphus admin setup` into `~/.sisyphus/tmux.conf`. Requires tmux ≥ 3.2.
 
 | Key | Action |
 |-----|--------|
@@ -317,7 +317,7 @@ Project `.sisyphus/config.json` overrides global `~/.sisyphus/config.json`:
 
 ### Session upload (optional)
 
-On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sisyphus upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sisyphus export` is unchanged; upload is purely additive.
+On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sisyphus admin upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sisyphus admin export` is unchanged; upload is purely additive.
 
 **Token workflow** — the operator mints a per-user token and shares a URL of the form:
 
@@ -329,13 +329,13 @@ Run `configure-upload` with that URL to write credentials to `~/.sisyphus/config
 
 ```bash
 # Safest — no argv leak:
-pbpaste | sisyphus configure-upload --stdin
+pbpaste | sisyphus admin configure-upload --stdin
 
 # Interactive prompt:
-sisyphus configure-upload
+sisyphus admin configure-upload
 
 # Direct argv (triggers a leak warning — token visible via `ps` and shell history):
-sisyphus configure-upload "https://<worker-host>/upload?token=sisyphus_pat_..."
+sisyphus admin configure-upload "https://<worker-host>/upload?token=sisyphus_pat_..."
 ```
 
 **Config** — `configure-upload` always writes to `~/.sisyphus/config.json`. The `upload` block is only honored from the global config; a project-local `.sisyphus/config.json` with an `upload` block is ignored with a warning (security hardening — prevents project files from redirecting your uploads).
@@ -365,8 +365,8 @@ sisyphus configure-upload "https://<worker-host>/upload?token=sisyphus_pat_..."
 **Manual retry:**
 
 ```bash
-sisyphus upload <session-id>     # re-uploads any session (active or completed)
-sisyphus upload                  # uploads the active session in this cwd
+sisyphus admin upload <session-id>     # re-uploads any session (active or completed)
+sisyphus admin upload                  # uploads the active session in this cwd
 ```
 
 **Disable** — omit the `upload` config block. Daemon skips silently.
@@ -375,23 +375,23 @@ Operator setup (token minting, Worker deployment, R2 provisioning): see [`worker
 
 ## CLI reference
 
-Session lifecycle: `start`, `kill`, `resume`, `continue`, `rollback`, `complete`
+Session lifecycle: `session kill`, `session resume`, `session continue`, `session rollback`, `session complete`
 
-Agent and orchestrator: `spawn`, `submit`, `report`, `yield`, `message`, `restart-agent`, `update-task`
+Agent and orchestrator: `agent spawn`, `agent submit`, `agent report`, `orch yield`, `message`, `agent restart`, `session task`
 
 Monitoring: `status` (`--verbose`), `list` (`--all`), `dashboard`
 
-Setup: `setup`, `init`, `doctor`, `getting-started`, `companion`, `uninstall`
+Setup: `admin setup`, `admin init`, `admin doctor`, `admin getting-started`, `companion`, `admin uninstall`
 
 ### history
 
 Browse session history and metrics.
 
 ```bash
-sisyphus history                        # List recent sessions
-sisyphus history <session-id>           # Inspect a specific session
-sisyphus history --stats                # Aggregate statistics
-sisyphus history --events               # Raw event timeline
+sisyphus admin history                        # List recent sessions
+sisyphus admin history <session-id>           # Inspect a specific session
+sisyphus admin history --stats                # Aggregate statistics
+sisyphus admin history --events               # Raw event timeline
 ```
 
 | Option | Description |
@@ -410,9 +410,9 @@ sisyphus history --events               # Raw event timeline
 Clone a session into a new independent session with a different goal.
 
 ```bash
-sisyphus clone "new goal"
-sisyphus clone "new goal" --strategy    # carry over strategy.md from source
-sisyphus clone "new goal" --name my-clone --context "extra context"
+sisyphus session clone "new goal"
+sisyphus session clone "new goal" --strategy    # carry over strategy.md from source
+sisyphus session clone "new goal" --name my-clone --context "extra context"
 ```
 
 Useful for branching off a variant approach without starting from scratch.
@@ -422,7 +422,7 @@ Useful for branching off a variant approach without starting from scratch.
 Reconnect the daemon to an orphaned tmux session (e.g. after a daemon restart). Makes no state changes and does not spawn the orchestrator.
 
 ```bash
-sisyphus reconnect <session-id>
+sisyphus session reconnect <session-id>
 ```
 
 ### delete
@@ -430,8 +430,8 @@ sisyphus reconnect <session-id>
 Delete a session and all its data.
 
 ```bash
-sisyphus delete <session-id>
-sisyphus delete <session-id> --cwd /path/to/project
+sisyphus session delete <session-id>
+sisyphus session delete <session-id> --cwd /path/to/project
 ```
 
 ---

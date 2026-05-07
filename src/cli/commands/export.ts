@@ -29,7 +29,7 @@ export function registerExport(program: Command): void {
 
       if (!sessionId) {
         console.error('Error: No session ID provided and no active session found.');
-        console.error('Usage: sisyphus export [session-id]');
+        console.error('Usage: sisyphus admin export [session-id]');
         process.exit(1);
       }
 

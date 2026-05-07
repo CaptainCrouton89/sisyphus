@@ -16,7 +16,7 @@ function isClaudeCode(): boolean {
 function printNonClaudeMessage(): void {
   console.log(`
   ╔══════════════════════════════════════════════════╗
-  ║   sisyphus getting-started — Interactive Tutorial ║
+  ║   sisyphus admin getting-started — Interactive Tutorial ║
   ╚══════════════════════════════════════════════════╝
 
   This command provides an interactive tutorial best experienced
@@ -24,11 +24,11 @@ function printNonClaudeMessage(): void {
 
   To start:
     1. Open Claude Code:  claude
-    2. Run:               sisyphus getting-started
+    2. Run:               sisyphus admin getting-started
 
   If you just want the quick reference, run:
     sisyphus --help
-    sisyphus doctor
+    sisyphus admin doctor
 `);
 }
 
@@ -60,14 +60,14 @@ This tutorial has 6 steps. Share this overview so the user knows what's coming a
 
 | Step | Topic | Command |
 |------|-------|---------|
-| 0 | Entry & tmux gate (you are here) | \`sisyphus getting-started\` |
+| 0 | Entry & tmux gate (you are here) | \`sisyphus admin getting-started\` |
 | 1 | Tmux basics — sessions, panes, navigation | \`--tutorial 1\` |
 | 2 | Nvim basics — open, save, quit (optional) | \`--tutorial 2\` |
 | 3 | Sisyphus concepts — session model & keybinds | \`--tutorial 3\` |
 | 4 | Live demo — launch and observe a real session | \`--tutorial 4\` |
 | 5 | What's next — real usage guidance & suggestions | \`--tutorial 5\` |
 
-Tell the user they can skip to any step with \`sisyphus getting-started --tutorial <N>\`.
+Tell the user they can skip to any step with \`sisyphus admin getting-started --tutorial <N>\`.
 
 ## Instructions for Claude
 
@@ -78,7 +78,7 @@ You are guiding a user through the Sisyphus interactive tutorial.
 Ask the user if they'd like the interactive walkthrough. If they decline, give this quick summary and stop:
 
 > Sisyphus is a multi-agent orchestrator for Claude Code. Start a session with \`sisyphus start "task"\`,
-> monitor with \`sisyphus dashboard\`, and check health with \`sisyphus doctor\`.
+> monitor with \`sisyphus dashboard\`, and check health with \`sisyphus admin doctor\`.
 
 ### If they want the tutorial:
 
@@ -100,17 +100,17 @@ Ask the user if they'd like the interactive walkthrough. If they decline, give t
 - Tell them to install tmux:
   - macOS: \`brew install tmux\`
   - Linux: \`apt install tmux\` or their package manager
-- After install, re-run: \`sisyphus getting-started --tutorial 0\` to verify
+- After install, re-run: \`sisyphus admin getting-started --tutorial 0\` to verify
 
 **Case 2: tmux installed but NOT in a tmux session (inTmux: false)**
 - Tell the user they need to be inside a tmux session for the tutorial
 - Have them run: \`tmux new-session\`
 - Then resume the conversation with Claude in the new tmux session: \`claude\`
-- Then re-run: \`sisyphus getting-started --tutorial 0\` to verify
+- Then re-run: \`sisyphus admin getting-started --tutorial 0\` to verify
 
 **Case 3: In tmux (inTmux: true)**
 - Tell the user they're all set — tmux is running
-- Proceed by running: \`sisyphus getting-started --tutorial 1\`
+- Proceed by running: \`sisyphus admin getting-started --tutorial 1\`
 </claude-instructions>
 `);
 }
@@ -189,7 +189,7 @@ Ask the user to confirm: "Can you navigate between panes with Ctrl+h and Ctrl+l?
 
 Once confirmed, proceed:
 \`\`\`
-sisyphus getting-started --tutorial 2
+sisyphus admin getting-started --tutorial 2
 \`\`\`
 </claude-instructions>
 `);
@@ -233,7 +233,7 @@ Ask if they were able to edit and save the file (or if they skipped).
 
 Proceed:
 \`\`\`
-sisyphus getting-started --tutorial 3
+sisyphus admin getting-started --tutorial 3
 \`\`\`
 </claude-instructions>
 `);
@@ -297,7 +297,7 @@ function printStep3(): void {
   > typing special characters (accents, symbols). The right Option key
   > becomes your "Meta" key for tmux/sisyphus keybinds.
 
-  After they change it, have them verify by re-running \`sisyphus doctor\` — look for "Right Option Key: Esc+".
+  After they change it, have them verify by re-running \`sisyphus admin doctor\` — look for "Right Option Key: Esc+".
 
 - **rightOptionKeyStatus: not-iterm** — They're not using iTerm2. Explain:
   > Sisyphus keybinds use Option as Meta. In iTerm2 this is configured via
@@ -343,12 +343,12 @@ Two keybinds to remember (both use the RIGHT Option key):
 
 ### 4. Verify keybinds are installed
 
-Run \`sisyphus doctor\` and check the output. Look for:
+Run \`sisyphus admin doctor\` and check the output. Look for:
 - "Cycle script" — should be ✓
 - "Tmux keybind" — should be ✓
 - "Right Option Key" — should be "Esc+"
 
-If cycle script or keybind is missing, run: \`sisyphus setup-keybind\`
+If cycle script or keybind is missing, run: \`sisyphus admin setup-keybind\`
 
 ### 5. Test the keybind
 
@@ -360,12 +360,12 @@ If they see \`ß\` or similar, circle back to the Right Option Key setup above.
 
 Confirm:
 - They understand the two-session model (their session vs sisyphus session)
-- \`sisyphus doctor\` shows keybinds installed AND Right Option Key: Esc+
+- \`sisyphus admin doctor\` shows keybinds installed AND Right Option Key: Esc+
 - Right Option + s doesn't produce a special character
 
 Proceed:
 \`\`\`
-sisyphus getting-started --tutorial 4
+sisyphus admin getting-started --tutorial 4
 \`\`\`
 </claude-instructions>
 `);
@@ -382,7 +382,7 @@ This is the grand finale — a live demo session.
 
 ### 1. Health check
 
-Run \`sisyphus doctor\` first. If any checks are failing, help the user fix them before proceeding.
+Run \`sisyphus admin doctor\` first. If any checks are failing, help the user fix them before proceeding.
 All core checks (tmux, daemon, keybinds) should be ✓.
 
 ### 2. BEFORE launching: Teach navigation
@@ -484,7 +484,7 @@ Once the session shows "completed":
 
 Tell the user the demo is done. Then run:
 \`\`\`
-sisyphus getting-started --tutorial 5
+sisyphus admin getting-started --tutorial 5
 \`\`\`
 </claude-instructions>
 `);
@@ -583,7 +583,7 @@ Tell them:
 > to understand the philosophy, or you want a deeper rundown on the dashboard,
 > monitoring, configuration, or how to steer sessions — just ask and I'll explain.
 
-If the user says yes or asks to learn more, run \`sisyphus getting-started --explain\`
+If the user says yes or asks to learn more, run \`sisyphus admin getting-started --explain\`
 and use its output to explain the system to them conversationally. Don't dump the whole
 thing — answer what they're curious about, using the reference as your source material.
 </claude-instructions>
@@ -591,17 +591,33 @@ thing — answer what they're curious about, using the reference as your source 
 }
 
 function buildCommandTable(program: Command): string {
-  const lines: string[] = [];
-  lines.push('| Command | Purpose |');
-  lines.push('|---------|---------|');
+  const lines: string[] = ['| Command | Purpose |', '|---------|---------|'];
   for (const cmd of program.commands) {
     if ((cmd as unknown as { _hidden: boolean })._hidden) continue;
     if (cmd.name() === 'help') continue;
-    const name = cmd.name();
-    const desc = cmd.description();
-    const args = cmd.registeredArguments?.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ') ?? '';
-    const usage = args ? `sisyphus ${name} ${args}` : `sisyphus ${name}`;
-    lines.push(`| \`${usage}\` | ${desc} |`);
+    const subs = cmd.commands.filter(c => !(c as unknown as { _hidden: boolean })._hidden && c.name() !== 'help');
+    const hasOwnAction = (cmd as unknown as { _actionHandler?: unknown })._actionHandler != null;
+    const fmtArgs = (c: typeof cmd) =>
+      c.registeredArguments.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
+    if (subs.length === 0) {
+      // flat or argument-only command
+      const args = fmtArgs(cmd);
+      const usage = args ? `sisyphus ${cmd.name()} ${args}` : `sisyphus ${cmd.name()}`;
+      lines.push(`| \`${usage}\` | ${cmd.description()} |`);
+    } else {
+      // group: if it has its own root action (e.g. `companion`), emit a row for the bare invocation first
+      if (hasOwnAction) {
+        const args = fmtArgs(cmd);
+        const usage = args ? `sisyphus ${cmd.name()} ${args}` : `sisyphus ${cmd.name()}`;
+        lines.push(`| \`${usage}\` | ${cmd.description()} |`);
+      }
+      // then one row per subcommand
+      for (const sub of subs) {
+        const args = fmtArgs(sub);
+        const usage = args ? `sisyphus ${cmd.name()} ${sub.name()} ${args}` : `sisyphus ${cmd.name()} ${sub.name()}`;
+        lines.push(`| \`${usage}\` | ${sub.description()} |`);
+      }
+    }
   }
   return lines.join('\n');
 }
@@ -757,7 +773,7 @@ code that looks right and code that works.
   │  │ plans   │     then yields      │  in parallel │               │
   │  └────┬────┘                      └──────┬───────┘               │
   │       │                                  │ each calls            │
-  │       │ orchestrator                     │ sisyphus submit       │
+  │       │ orchestrator                     │ sisyphus agent submit │
   │       │ is KILLED                        │ when done             │
   │       │                                  ▼                       │
   │       │                           ┌──────────────┐               │
@@ -831,8 +847,8 @@ Sisyphus sessions should be actively monitored. Here's what to watch for:
 
 **When to intervene:**
 - Use \`m\` in the dashboard to message the orchestrator with corrections
-- Use \`sisyphus kill <id>\` to stop a runaway session
-- Use \`sisyphus resume <id> "new instructions"\` to restart with different direction
+- Use \`sisyphus session kill <id>\` to stop a runaway session
+- Use \`sisyphus session resume <id> "new instructions"\` to restart with different direction
 
 **Useful monitoring commands:**
 \`\`\`

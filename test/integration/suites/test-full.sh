@@ -28,7 +28,7 @@ test_doctor_full() {
 test_full_setup() {
   tmux new-session -d -s setup-test 2>/dev/null || true
   start_daemon
-  sisyphus setup >/dev/null 2>&1 || true
+  sisyphus admin setup >/dev/null 2>&1 || true
   assert_file_exists "setup-begin-cmd" "$HOME/.claude/commands/sisyphus/begin.md"
   assert_file_exists "setup-autopsy-cmd" "$HOME/.claude/commands/sisyphus/autopsy.md"
   stop_daemon
@@ -280,7 +280,7 @@ test_setup_idempotency() {
   fi
 
   # First run
-  sisyphus setup >/dev/null 2>&1 || true
+  sisyphus admin setup >/dev/null 2>&1 || true
   assert_file_exists "setup-idempotent-first-run" "$BEGIN_FILE"
   assert_file_exists "setup-idempotent-first-run-autopsy" "$AUTOPSY_FILE"
 
@@ -289,7 +289,7 @@ test_setup_idempotency() {
   echo "# CUSTOM AUTOPSY MARKER" >> "$AUTOPSY_FILE"
 
   # Second run
-  sisyphus setup >/dev/null 2>&1 || true
+  sisyphus admin setup >/dev/null 2>&1 || true
 
   # Markers must survive (files not overwritten)
   local content

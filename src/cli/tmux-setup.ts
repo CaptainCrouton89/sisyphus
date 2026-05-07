@@ -364,7 +364,7 @@ const KILL_SESSION_SCRIPT = `#!/bin/bash
 # Kill the sisyphus session associated with the current tmux session
 ${SESSION_RESOLVE}
 
-sisyphus kill "$session_id" >/dev/null 2>&1
+sisyphus session kill "$session_id" >/dev/null 2>&1
 ${GO_HOME_AFTER}
 `;
 
@@ -375,7 +375,7 @@ ${SESSION_RESOLVE}
 printf "\\033[31mType 'yes' to confirm:\\033[0m "
 read -r answer
 [ "$answer" = "yes" ] || exit 0
-sisyphus delete "$session_id" --cwd "$cwd" >/dev/null 2>&1
+sisyphus session delete "$session_id" --cwd "$cwd" >/dev/null 2>&1
 ${GO_HOME_AFTER}
 `;
 
@@ -474,7 +474,7 @@ short_id="\${session_id:0:8}"
 printf "\\033[33mContinue session %s...?\\033[0m (y/n) " "$short_id"
 read -r answer
 [ "$answer" = "y" ] || [ "$answer" = "yes" ] || exit 0
-sisyphus continue --session "$session_id"
+sisyphus session continue --session "$session_id"
 sleep 1
 `;
 
@@ -501,7 +501,7 @@ const EXPORT_SESSION_SCRIPT = `#!/bin/bash
 ${SESSION_RESOLVE}
 
 echo "Exporting session \${session_id:0:8}..."
-sisyphus export "$session_id" --cwd "$cwd"
+sisyphus admin export "$session_id" --cwd "$cwd"
 echo ""
 read -n 1 -s -r -p "Press a key to close."
 `;
@@ -550,7 +550,7 @@ if [ "\${statuses[$idx]}" = "running" ]; then
   [ "$answer" = "yes" ] || exit 0
 fi
 
-sisyphus restart-agent "\${ids[$idx]}" --session "$session_id"
+sisyphus agent restart "\${ids[$idx]}" --session "$session_id"
 echo ""
 read -n 1 -s -r -p "Press a key to close."
 `;
@@ -606,9 +606,9 @@ nvim "$tmpfile"
 body=$(grep -v '^[[:space:]]*#' "$tmpfile" | sed '/^[[:space:]]*$/d')
 
 if [ -z "$body" ]; then
-  exec sisyphus resume "$session_id"
+  exec sisyphus session resume "$session_id"
 else
-  exec sisyphus resume "$session_id" "$body"
+  exec sisyphus session resume "$session_id" "$body"
 fi
 `;
 
@@ -636,7 +636,7 @@ if [ "$cycle_input" -lt 1 ]; then
   exit 0
 fi
 
-sisyphus rollback "$session_id" "$cycle_input"
+sisyphus session rollback "$session_id" "$cycle_input"
 echo ""
 echo "Rolled back to cycle $cycle_input — use [C-s S r] to resume."
 read -n 1 -s -r -p "Press a key to close."
@@ -674,12 +674,12 @@ fi
 
 # Fallback: orchestrator window is gone. Open last claude session in a popup.
 state="$cwd/.sisyphus/sessions/$session_id/state.json"
-[ ! -f "$state" ] && { tmux display-message "Window dead and no state.json — try sisyphus resume"; exit 0; }
+[ ! -f "$state" ] && { tmux display-message "Window dead and no state.json — try sisyphus session resume"; exit 0; }
 
 claude_sid=$(jq -r '[.orchestratorCycles[].claudeSessionId] | last // empty' "$state")
 
 if [ -z "$claude_sid" ]; then
-  tmux display-message "No orchestrator claude session id found — try sisyphus resume"
+  tmux display-message "No orchestrator claude session id found — try sisyphus session resume"
   exit 0
 fi
 
@@ -702,7 +702,7 @@ nvim "$tmpfile"
 body=$(grep -v '^[[:space:]]*#' "$tmpfile" | sed '/^[[:space:]]*$/d')
 [ -z "$body" ] && exit 0
 
-exec sisyphus spawn --session "$session_id" --name "agent" --instruction "$body"
+exec sisyphus agent spawn --session "$session_id" --name "agent" --instruction "$body"
 `;
 
 const SEARCH_REPORTS_SCRIPT = `#!/bin/bash
@@ -884,7 +884,7 @@ if [ "\${#instr}" -lt 20 ]; then
   exit 1
 fi
 
-exec sisyphus spawn --session "$session_id" --agent-type "\${atypes[$idx]}" --name "\${anames[$idx]}-retry-$(date +%s)" --instruction "$instr"
+exec sisyphus agent spawn --session "$session_id" --agent-type "\${atypes[$idx]}" --name "\${anames[$idx]}-retry-$(date +%s)" --instruction "$instr"
 `;
 
 const OPEN_CLAUDE_AGENT_SCRIPT = `#!/bin/bash
@@ -981,7 +981,7 @@ tmux capture-pane -t "$target_pane" -p -S -2000 | less +G
 
 const KILL_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and kill it (with red confirmation prompt).
-# Assumes macOS (fzf optional). Requires \`sisyphus status --json\` and \`sisyphus kill-agent\`.
+# Assumes macOS (fzf optional). Requires \`sisyphus status --json\` and \`sisyphus agent kill\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -1018,7 +1018,7 @@ fi
 printf '\\033[31mKill %s? (yes/no): \\033[0m' "\${ids[$idx]}"
 read -r answer
 [ "$answer" = "yes" ] || exit 0
-sisyphus kill-agent "\${ids[$idx]}" --session "$session_id"
+sisyphus agent kill "\${ids[$idx]}" --session "$session_id"
 echo ""
 read -n 1 -s -r -p "Press a key to close."
 `;
@@ -1110,10 +1110,10 @@ tmux display-message "Copied session ID"
 
 const COPY_CONTEXT_SCRIPT = `#!/bin/bash
 # Copy the session context XML to clipboard.
-# Assumes macOS (pbcopy). Requires \`sisyphus print-context\`.
+# Assumes macOS (pbcopy). Requires \`sisyphus session context\`.
 ${SESSION_RESOLVE}
 
-sisyphus print-context "$session_id" --cwd "$cwd" | pbcopy
+sisyphus session context "$session_id" --cwd "$cwd" | pbcopy
 tmux display-message "Copied session context (XML)"
 `;
 
@@ -1180,7 +1180,7 @@ if [ "\${#instruction}" -lt 20 ]; then
 fi
 
 name="explore-$(date +%s)"
-sisyphus spawn \\
+sisyphus agent spawn \\
   --agent-type sisyphus:explore \\
   --name "$name" \\
   --session "$session_id" \\
@@ -1215,7 +1215,7 @@ if [ "\${#instruction}" -lt 20 ]; then
 fi
 
 name="debug-$(date +%s)"
-sisyphus spawn \\
+sisyphus agent spawn \\
   --agent-type sisyphus:debug \\
   --name "$name" \\
   --session "$session_id" \\
@@ -1265,7 +1265,7 @@ args=()
 [ -n "$clone_name" ] && args+=(--name "$clone_name")
 [ "$copy_strategy" = "y" ] || [ "$copy_strategy" = "Y" ] && args+=(--strategy)
 
-sisyphus clone "\${args[@]}" "$goal"
+sisyphus session clone "\${args[@]}" "$goal"
 exit_code=$?
 read -n 1 -s -r -p "Press a key to close."
 exit $exit_code
@@ -1274,13 +1274,13 @@ exit $exit_code
 const HISTORY_SCRIPT = `#!/bin/bash
 # Show rich session detail (history command's per-session view) in a popup.
 ${SESSION_RESOLVE}
-sisyphus history "$session_id" 2>&1 | less -R
+sisyphus admin history "$session_id" 2>&1 | less -R
 `;
 
 const RECONNECT_SCRIPT = `#!/bin/bash
 # Reconnect daemon to an orphaned tmux session for the current cwd.
 ${SESSION_RESOLVE}
-sisyphus reconnect "$session_id"
+sisyphus session reconnect "$session_id"
 exit_code=$?
 read -n 1 -s -r -p "Press a key to close."
 exit $exit_code
@@ -1289,7 +1289,7 @@ exit $exit_code
 const OPEN_SCRATCH_SCRIPT = `#!/bin/bash
 # Open a standalone Claude scratch window in the home tmux session for this cwd.
 # scratch resolves the home session itself via @sisyphus_cwd; no session_id needed.
-exec sisyphus scratch
+exec sisyphus admin scratch
 `;
 
 // === end Stage 4 script constants ===
@@ -1416,7 +1416,7 @@ export function setupTmuxKeybind(cycleKey: string = DEFAULT_CYCLE_KEY, prefixKey
     if (existing !== null && !isSisyphusBinding(existing)) {
       return {
         status: 'conflict',
-        message: `Tmux key ${key} (${label}) is already bound to something else. Run "sisyphus setup-keybind <key>" to use a different key.`,
+        message: `Tmux key ${key} (${label}) is already bound to something else. Run "sisyphus admin setup-keybind <key>" to use a different key.`,
         existingBinding: existing,
       };
     }

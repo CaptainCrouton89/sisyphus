@@ -22,7 +22,7 @@ export function registerComplete(program: Command): void {
       if (response.ok) {
         console.log('Session completed.');
         console.log(`\nTo keep working in this session:`);
-        console.log(`  sisyphus continue   # reactivate session and clear roadmap for new work`);
+        console.log(`  sisyphus session continue   # reactivate session and clear roadmap for new work`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

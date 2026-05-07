@@ -24,7 +24,7 @@ pnpm admin mint <userId>
 The plaintext token is printed **once**. Share it with the user:
 
 ```bash
-sisyphus configure-upload \
+sisyphus admin configure-upload \
   "https://sisyphus-upload-proxy.rhyneer-silas.workers.dev/upload?token=<plaintext>"
 ```
 

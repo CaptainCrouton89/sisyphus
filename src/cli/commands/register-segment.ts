@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 
-export function registerRegisterSegment(program: Command): void {
+export function registerSegmentRegister(program: Command): void {
   program
-    .command('register-segment', { hidden: true })
+    .command('register')
     .description('Register or update an external status bar segment')
     .requiredOption('--id <id>', 'Segment identifier')
     .requiredOption('--side <side>', 'Side to render on: left or right')

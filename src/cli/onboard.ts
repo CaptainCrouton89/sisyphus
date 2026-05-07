@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugins.js';
+import { sisyphusTmuxConfPath } from './tmux-setup.js';
 
 export interface TerminalInfo {
   name: string;
@@ -115,14 +116,18 @@ function hasExistingTmuxConf(): boolean {
   );
 }
 
-const TMUX_DEFAULTS = `# Sensible tmux defaults (installed by sisyphus)
+const SISYPHUS_DEFAULTS_MARKER = '# sisyphus-managed — do not edit';
+
+function buildTmuxDefaults(): string {
+  const sisyphusConf = sisyphusTmuxConfPath();
+  return `# Sensible tmux defaults (installed by sisyphus)
 # Customize freely — sisyphus won't overwrite this file.
 
 # Enable mouse (click panes, scroll, resize)
 set -g mouse on
 
 # Scrollback history
-set -g history-limit 50000
+set -g history-limit 100000
 
 # 256 color + true color support
 set -g default-terminal "tmux-256color"
@@ -144,23 +149,32 @@ set -g set-clipboard on
 # Focus events (for editors)
 set -g focus-events on
 
+# Don't detach the client when the last session is destroyed
+set -g detach-on-destroy off
+
+# Vim-style copy mode
+setw -g mode-keys vi
+bind -T copy-mode-vi v send-keys -X begin-selection
+bind -T copy-mode-vi y send-keys -X copy-selection-and-cancel
+
 # --- Pane navigation (no prefix needed) ---
 bind -n C-h select-pane -L
-bind -n C-j select-pane -D
-bind -n C-k select-pane -U
 bind -n C-l select-pane -R
 
 # --- Window navigation (no prefix needed) ---
 bind -n C-n next-window
 bind -n C-p previous-window
 
-# --- New window / splits preserve cwd ---
-bind c new-window -c "#{pane_current_path}"
+# --- Splits / new window / new session in current directory ---
 bind '"' split-window -v -c "#{pane_current_path}"
-bind % split-window -h -c "#{pane_current_path}"
+bind % split-window -h -c "#{pane_current_path}" \\; select-layout even-horizontal
+bind -n M-= split-window -h -c "#{pane_current_path}" \\; select-layout even-horizontal
+bind n new-window -c "#{pane_current_path}"
+bind N new-session -c "#{pane_current_path}"
 
 # --- Kill pane + rebalance ---
 bind x kill-pane \\; select-layout even-horizontal
+bind -n M-- kill-pane \\; select-layout even-horizontal
 
 # --- Auto-rebalance on pane close ---
 set-hook -g after-kill-pane "select-layout even-horizontal"
@@ -169,19 +183,53 @@ set-hook -g pane-exited "select-layout even-horizontal"
 # --- Manual re-tile ---
 bind = select-layout even-horizontal
 
-# --- Scroll (no prefix needed) ---
-bind -n C-u copy-mode \\; send-keys -X halfpage-up
-bind -n C-d copy-mode \\; send-keys -X halfpage-down
+# --- Resize panes (repeatable with prefix) ---
+bind -r H resize-pane -L 5
+bind -r J resize-pane -D 5
+bind -r K resize-pane -U 5
+bind -r L resize-pane -R 5
 
-# --- Vi copy mode ---
-setw -g mode-keys vi
-bind -T copy-mode-vi v send-keys -X begin-selection
-bind -T copy-mode-vi y send-keys -X copy-selection-and-cancel
+# --- Reload config (prefix + Ctrl-r) ---
+bind C-r source-file ~/.tmux.conf \\; display "Reloaded!"
+
+# --- Half-page scroll (no prefix; -e exits copy mode at bottom) ---
+bind -n C-u copy-mode -e \\; send-keys -X halfpage-up
+bind -n C-d copy-mode -e \\; send-keys -X halfpage-down
+
+# --- Line scroll (no prefix; -e exits copy mode at bottom) ---
+bind -n C-k copy-mode -e \\; send -X scroll-up
+bind -n C-j copy-mode -e \\; send -X scroll-down
+bind -T copy-mode-vi C-k send -X scroll-up
+bind -T copy-mode-vi C-j send -X scroll-down
+
+# --- Status bar (gloam palette) ---
+set -g status on
+set -g status-style "bg=#1d1e21,fg=#d4cbb8"
+set -g status-position bottom
+set -g status-left "#[fg=#d4cbb8,bold] #{session_name}  #[default]"
+set -g status-left-length 30
+set -g status-right "#{E:@sisyphus_status}#[fg=#2d2f33]#[bg=#2d2f33,fg=#b0a898] %H:%M "
+set -g status-right-length 250
+set -g status-interval 2
+
+# Hide window list (session name on left + sisyphus pills on right cover it)
+set -g window-status-format ""
+set -g window-status-current-format ""
+set -g window-status-separator ""
+
+# --- Pane borders ---
+set -g pane-border-style fg=default
+set -g pane-active-border-style fg=green
+
+# Source the sisyphus-managed conf (C-s prefix menu, M-s session cycle)
+# -q so missing file is silent if sisyphus hasn't been set up yet
+source-file -q ${sisyphusConf} ${SISYPHUS_DEFAULTS_MARKER}
 `;
+}
 
 function writeTmuxDefaults(): void {
   const confPath = join(homedir(), '.tmux.conf');
-  writeFileSync(confPath, TMUX_DEFAULTS, 'utf8');
+  writeFileSync(confPath, buildTmuxDefaults(), 'utf8');
 }
 
 export function isNvimAvailable(): boolean {
@@ -245,21 +293,38 @@ export function tryAutoInstallNvim(): NvimInfo {
   if (!isNvimAvailable()) {
     return { installed: false, autoInstalled: false, version: '', lazyVimInstalled: false, baleiaInstalled: false };
   }
-  // Clone LazyVim starter config if no nvim config exists
+  // Clone LazyVim starter config if no nvim config exists.
+  // Neutralize global LFS filters and hooks — users with stale `git-lfs` config
+  // (filter installed, binary missing) or broken `core.hooksPath` would otherwise
+  // hit "git-lfs: command not found" or hook errors during clone.
   const nvimConfigDir = join(homedir(), '.config', 'nvim');
   let lazyVimInstalled = false;
   if (!existsSync(nvimConfigDir)) {
+    const cloneCmd = [
+      'git',
+      '-c core.hooksPath=/dev/null',
+      '-c filter.lfs.smudge=cat',
+      '-c filter.lfs.process=',
+      '-c filter.lfs.required=false',
+      'clone --depth=1 https://github.com/LazyVim/starter',
+      nvimConfigDir,
+    ].join(' ');
     try {
       console.log('  Cloning LazyVim starter config...');
-      execSync(`git clone https://github.com/LazyVim/starter ${nvimConfigDir}`, { stdio: 'inherit' });
-      // Remove .git so user owns the config
+      execSync(cloneCmd, {
+        stdio: 'inherit',
+        env: { ...process.env, GIT_LFS_SKIP_SMUDGE: '1' },
+      });
       const gitDir = join(nvimConfigDir, '.git');
       if (existsSync(gitDir)) {
         execSync(`rm -rf "${gitDir}"`, { stdio: 'pipe' });
       }
       lazyVimInstalled = true;
-    } catch {
-      // Non-fatal — nvim is installed, just no starter config
+    } catch (err) {
+      const detail = err instanceof Error && err.message ? err.message : String(err);
+      console.warn(`  ⚠ LazyVim starter clone failed: ${detail.split('\n')[0]}`);
+      console.warn('    nvim is installed; clone manually:');
+      console.warn(`      git clone https://github.com/LazyVim/starter ${nvimConfigDir}`);
     }
   }
   const baleiaInstalled = installBaleiaPlugin();

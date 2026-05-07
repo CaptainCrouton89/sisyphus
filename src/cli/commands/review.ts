@@ -57,14 +57,14 @@ File resolution (first match wins):
   3. Most recent session with a requirements.json
 
 Examples:
-  $ sisyphus requirements                              Auto-detect from current session
-  $ sisyphus requirements path/to/requirements.json    Open a specific file
-  $ sisyphus requirements --session-id abc123           Target a specific session
-  $ sisyphus requirements --schema                     Print the JSON schema
-  $ sisyphus requirements --annotated                  Print schema with writing guidance
-  $ sisyphus requirements --export                       Render requirements.md from JSON
-  $ sisyphus requirements --export --session-id abc123   Target a specific session
-  $ sisyphus requirements --export --force               Overwrite even if hand-edited
+  $ sisyphus admin requirements                              Auto-detect from current session
+  $ sisyphus admin requirements path/to/requirements.json    Open a specific file
+  $ sisyphus admin requirements --session-id abc123           Target a specific session
+  $ sisyphus admin requirements --schema                     Print the JSON schema
+  $ sisyphus admin requirements --annotated                  Print schema with writing guidance
+  $ sisyphus admin requirements --export                       Render requirements.md from JSON
+  $ sisyphus admin requirements --export --session-id abc123   Target a specific session
+  $ sisyphus admin requirements --export --force               Overwrite even if hand-edited
 `)
     .action(async (file, opts) => {
       if (opts.force && !opts.export) {
@@ -226,7 +226,7 @@ const REQUIREMENTS_SCHEMA = {
 const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 #
 # This is NOT valid JSON — it's a reference showing every field with
-# inline guidance. Run \`sisyphus requirements --schema\` for the raw
+# inline guidance. Run \`sisyphus admin requirements --schema\` for the raw
 # JSON Schema.
 #
 # Safe assumptions must satisfy the same EARS shape requirements as

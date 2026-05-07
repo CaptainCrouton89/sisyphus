@@ -27,7 +27,7 @@ export function registerConfigureUpload(program: Command): void {
     .command('configure-upload')
     .description('Configure the upload proxy from a token-bearing URL (writes ~/.sisyphus/config.json)')
     .argument('[url]', 'Worker URL with embedded ?token= query (https://worker/upload?token=sisyphus_pat_...); omit to read from stdin')
-    .option('--stdin', 'Read URL from stdin (pipe-friendly: pbpaste | sisyphus configure-upload --stdin)')
+    .option('--stdin', 'Read URL from stdin (pipe-friendly: pbpaste | sisyphus admin configure-upload --stdin)')
     .action(async (urlArg: string | undefined, opts: { stdin?: boolean }) => {
       let rawUrl: string;
 
@@ -39,7 +39,7 @@ export function registerConfigureUpload(program: Command): void {
       } else {
         rawUrl = urlArg!;
         console.warn(
-          'warning: passing the token on argv exposes it via `ps` and shell history; pipe it on stdin instead: `pbpaste | sisyphus configure-upload --stdin`',
+          'warning: passing the token on argv exposes it via `ps` and shell history; pipe it on stdin instead: `pbpaste | sisyphus admin configure-upload --stdin`',
         );
       }
 

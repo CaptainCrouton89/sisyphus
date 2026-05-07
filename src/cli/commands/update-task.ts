@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 
-export function registerUpdateTask(program: Command): void {
+export function registerSessionTask(program: Command): void {
   program
-    .command('update-task <task>')
+    .command('task <task>')
     .description('Update the session task/goal')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
     .action(async (task: string, opts: { session?: string }) => {

@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 
-export function registerRestartAgent(program: Command): void {
+export function registerAgentRestart(program: Command): void {
   program
-    .command('restart-agent <agentId>')
+    .command('restart <agentId>')
     .description('Restart a failed/killed/lost agent in a new tmux pane')
     .option('-s, --session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID)')
     .action(async (agentId: string, opts: { session?: string }) => {

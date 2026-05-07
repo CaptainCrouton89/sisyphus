@@ -15,15 +15,36 @@ CONTENTS="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 BINARY="$MACOS_DIR/sisyphus-notify"
 
+print_first_install_banner() {
+  if [ ! -f "$HOME/Library/LaunchAgents/com.sisyphus.daemon.plist" ]; then
+    cat <<'EOF'
+
+════════════════════════════════════════════════════════════
+sisyphus installed — daemon not yet running.
+
+Next: `sisyphus admin setup` installs the launchd daemon,
+tmux keybinds, and the sisyphus@sisyphus Claude plugin.
+
+After setup, `sisyphus admin getting-started` runs an
+interactive tutorial (best inside Claude Code — emits
+<claude-instructions> blocks designed for Claude to follow).
+════════════════════════════════════════════════════════════
+
+EOF
+  fi
+}
+
 # Check for swiftc
 if ! command -v swiftc &>/dev/null; then
   echo "Error: swiftc not found. Install Xcode Command Line Tools: xcode-select --install" >&2
+  print_first_install_banner
   exit 1
 fi
 
 # Only rebuild if source is newer than binary
 if [ -f "$BINARY" ] && [ "$SRC_DIR/main.swift" -ot "$BINARY" ] && [ "$SRC_DIR/Info.plist" -ot "$BINARY" ]; then
   echo "SisyphusNotify.app is up to date"
+  print_first_install_banner
   exit 0
 fi
 
@@ -56,3 +77,5 @@ fi
 codesign -s - --force "$APP_BUNDLE"
 
 echo "Built: $APP_BUNDLE"
+
+print_first_install_banner

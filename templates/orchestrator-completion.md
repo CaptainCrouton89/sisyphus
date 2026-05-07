@@ -40,7 +40,7 @@ Use tables, diagrams, and structured markdown freely — the deck below renders 
 
 ## Ask for Sign-off via `sisyphus ask`
 
-Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sisyphus complete` until the user picks `approve`.**
+Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sisyphus session complete` until the user picks `approve`.**
 
 Read the `humanloop` skill for option design and submission flow. The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
 
@@ -57,7 +57,7 @@ Orchestrator blocks here — `sisyphus ask` waits internally; do not add any ext
 Branch on `$choice`:
 
 ### `approve` — finalize
-Call `sisyphus complete` (see Finalizing below). `$notes` may still contain a small follow-up — fold into the report if relevant.
+Call `sisyphus session complete` (see Finalizing below). `$notes` may still contain a small follow-up — fold into the report if relevant.
 
 ### `minor` — typo, rename, small fix, cosmetic tweak
 Fix it yourself directly using `$notes` as the spec. Then update `completion-summary.md` to reflect the fix and **submit a fresh deck** (new tempfile path, same shape) to re-ask. Multiple rounds of minor fixes are fine — stay in the loop.
@@ -72,7 +72,7 @@ These need agents. Use `$notes` to capture the items raised, then:
 3. Yield back to implementation (or planning if the fix requires design):
 
 ```bash
-sisyphus yield --mode implementation --prompt "User review surfaced issues to fix: $notes. See roadmap.md for details."
+sisyphus orch yield --mode implementation --prompt "User review surfaced issues to fix: $notes. See roadmap.md for details."
 ```
 
 If a single deck round surfaces multiple moderate items, capture them all in `$notes` (the freetext field) — don't ask again in the same cycle to collect more.
@@ -85,7 +85,7 @@ These change the goal itself:
 3. Yield to discovery mode:
 
 ```bash
-sisyphus yield --mode discovery --prompt "User requested significant scope change: $notes. Goal and strategy updated — re-evaluate approach."
+sisyphus orch yield --mode discovery --prompt "User requested significant scope change: $notes. Goal and strategy updated — re-evaluate approach."
 ```
 
 ## Context Management
@@ -93,7 +93,7 @@ sisyphus yield --mode discovery --prompt "User requested significant scope chang
 If the conversation runs long (many rounds of minor fixes, extended discussion), yield back to completion mode with a progress summary so you get fresh context:
 
 ```bash
-sisyphus yield --mode completion --prompt "User review in progress. Fixed: [list]. Still discussing: [list]. Awaiting final confirmation."
+sisyphus orch yield --mode completion --prompt "User review in progress. Fixed: [list]. Still discussing: [list]. Awaiting final confirmation."
 ```
 
 ## Finalizing
@@ -101,7 +101,7 @@ sisyphus yield --mode completion --prompt "User review in progress. Fixed: [list
 Only after `$choice == "approve"` — call:
 
 ```bash
-sisyphus complete --report "summary of what was accomplished"
+sisyphus session complete --report "summary of what was accomplished"
 ```
 
 The report should be a concise summary suitable for session history. Reference the full completion report you presented if needed.
@@ -109,6 +109,6 @@ The report should be a concise summary suitable for session history. Reference t
 ## Completion CLI
 
 ```bash
-sisyphus complete --report "summary of what was accomplished"  # finalize session (only after user confirms)
-sisyphus continue "new instructions"                           # reactivate a completed session
+sisyphus session complete --report "summary of what was accomplished"  # finalize session (only after user confirms)
+sisyphus session continue "new instructions"                           # reactivate a completed session
 ```

@@ -27,7 +27,7 @@ spawn → read disk state → decide → spawn agents → wait → read results 
 Diagnostic consequences:
 
 - Everything the orchestrator "knows" across cycles is in files. If a fact isn't on disk, it was lost.
-- Yield prompt (`sisyphus yield --prompt "..."`) is the only direct orchestrator → future-orchestrator channel, and it's ephemeral.
+- Yield prompt (`sisyphus orch yield --prompt "..."`) is the only direct orchestrator → future-orchestrator channel, and it's ephemeral.
 - Cycle logs (`logs/cycle-NNN.md`) are the orchestrator's memory of its own decisions.
 
 ## Orchestrator modes (phases)
@@ -48,11 +48,11 @@ Phase transitions are shaped by exit criteria in `roadmap.md`. "Stuck in a phase
 | Channel | Direction | Mechanism |
 |---|---|---|
 | Context artifacts | agent → future agents | Files in `context/` — designs, requirements, plans, explorations |
-| Reports | agent → orchestrator | `sisyphus submit` (terminal) / `sisyphus report` (non-terminal) |
+| Reports | agent → orchestrator | `sisyphus agent submit` (terminal) / `sisyphus agent report` (non-terminal) |
 | State | daemon → orchestrator | `state.json` — agent statuses, session metadata |
 | Events | daemon → history | `events.jsonl` — timestamped lifecycle events |
 | Ask | agent → user | `sisyphus ask <deck.json>` — submits a structured `Deck` of `Interaction[]`; user answers via the dashboard's full-screen resolution mode. Always blocking (caller waits for `output.json`); to avoid tying up a shell, callers invoke via the Bash tool with `run_in_background: true` and observe completion via `BashOutput`. `poll <askId>` blocks on a known askId; `peek <askId>` is non-blocking |
-| Yield prompt | orchestrator → next orchestrator | `sisyphus yield --prompt "..."` |
+| Yield prompt | orchestrator → next orchestrator | `sisyphus orch yield --prompt "..."` |
 
 ### `sisyphus ask` deck schema
 
@@ -118,19 +118,19 @@ The project dir has the **content** (what agents wrote, what was decided). The g
 
 If invoked outside the project: the global history dir is always accessible at `~/.sisyphus/history/<uuid>/`. To find the project dir for a given session, read `session.json` — it usually records `cwd`. If the project dir isn't accessible, you can still do a lot from the global timeline alone (events, summary, completion report, mood, efficiency).
 
-## `sisyphus history` CLI
+## `sisyphus admin history` CLI
 
 ```bash
-sisyphus history                              # list recent sessions (newest first)
-sisyphus history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
-sisyphus history <id-or-name> --events        # raw event timeline
-sisyphus history <id-or-name> --json          # full SessionSummary as JSON
-sisyphus history <id-or-name> --events --json # events array as JSON (for grep/jq)
-sisyphus history --stats                      # aggregate metrics
-sisyphus history --search "<query>"           # substring search across task/messages
-sisyphus history --cwd <path>                 # filter by project dir
-sisyphus history --since 7d                   # filter by recency
-sisyphus history --status killed              # filter by terminal status
+sisyphus admin history                              # list recent sessions (newest first)
+sisyphus admin history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
+sisyphus admin history <id-or-name> --events        # raw event timeline
+sisyphus admin history <id-or-name> --json          # full SessionSummary as JSON
+sisyphus admin history <id-or-name> --events --json # events array as JSON (for grep/jq)
+sisyphus admin history --stats                      # aggregate metrics
+sisyphus admin history --search "<query>"           # substring search across task/messages
+sisyphus admin history --cwd <path>                 # filter by project dir
+sisyphus admin history --since 7d                   # filter by recency
+sisyphus admin history --status killed              # filter by terminal status
 ```
 
 Session resolution order: exact UUID → UUID prefix → exact name → name substring. Short substrings can be ambiguous — prefer UUID prefixes when the name isn't unique.
@@ -161,8 +161,8 @@ Interactive agents (`sisyphus:requirements`, `sisyphus:design`, `sisyphus:spec`)
 
 ## Recovery mechanics
 
-- `sisyphus restart-agent <id>` — respawn a killed/failed agent in a new pane (preserves session)
-- `sisyphus rollback <sessionId> <cycle>` — destructive rewind to a prior cycle boundary
+- `sisyphus agent restart <id>` — respawn a killed/failed agent in a new pane (preserves session)
+- `sisyphus session rollback <sessionId> <cycle>` — destructive rewind to a prior cycle boundary
 - Agent failures don't kill the session; orchestrator reads the failure next cycle and decides
 - If the orchestrator dies mid-cycle, agents keep working
 

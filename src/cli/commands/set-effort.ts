@@ -5,9 +5,9 @@ import type { Request } from '../../shared/protocol.js';
 const VALID_TIERS = ['low', 'medium', 'high', 'xhigh'] as const;
 type EffortTier = typeof VALID_TIERS[number];
 
-export function registerSetEffort(program: Command): void {
+export function registerSessionEffort(program: Command): void {
   program
-    .command('set-effort <sessionId> <tier>')
+    .command('effort <sessionId> <tier>')
     .description('Set the pipeline effort tier for a session (future cycles only; running agents keep their original prompt)')
     .action(async (sessionId: string, tier: string) => {
       if (!VALID_TIERS.includes(tier as EffortTier)) {

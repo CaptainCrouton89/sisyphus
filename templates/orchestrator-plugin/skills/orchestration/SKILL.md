@@ -22,7 +22,7 @@ How to structure sisyphus sessions for common task types. This skill helps the o
 
 ## Agent Types
 
-Available agent types are listed under **Available Agent Types** in your prompt. Use `--agent-type` with `sisyphus spawn`.
+Available agent types are listed under **Available Agent Types** in your prompt. Use `--agent-type` with `sisyphus agent spawn`.
 
 For task breakdown patterns per workflow type, see [task-patterns.md](task-patterns.md).
 For end-to-end workflow examples, see [workflow-examples.md](workflow-examples.md).

@@ -60,7 +60,7 @@ test_daemon_lifecycle() {
 
 test_doctor_base() {
   DOCTOR_OUTPUT=$(run_doctor)
-  assert_cmd "doctor-runs" sisyphus doctor
+  assert_cmd "doctor-runs" sisyphus admin doctor
   assert_contains "doctor-node-ok" "$DOCTOR_OUTPUT" '✓.*Node'
 }
 
@@ -86,7 +86,7 @@ test_unknown_command_fails() {
 }
 
 test_doctor_exit_code() {
-  sisyphus doctor >/dev/null 2>&1
+  sisyphus admin doctor >/dev/null 2>&1
   local exit_code=$?
   if [ "$exit_code" -eq 0 ]; then
     assert_pass "doctor-exit-code"

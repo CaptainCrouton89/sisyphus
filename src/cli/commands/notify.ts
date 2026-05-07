@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { rawSend } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 
-export function registerNotify(program: Command): void {
-  const notify = program
-    .command('notify', { hidden: true })
+export function attachNotify(diagnostic: Command): void {
+  const notify = diagnostic
+    .command('notify')
     .description('Internal notifications (fire-and-forget)');
 
   notify

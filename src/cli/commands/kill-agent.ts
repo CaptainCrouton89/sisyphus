@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 
-export function registerKillAgent(program: Command): void {
+export function registerAgentKill(program: Command): void {
   program
-    .command('kill-agent <agentId>')
+    .command('kill <agentId>')
     .description('Kill a running agent')
     .option('-s, --session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID)')
     .action(async (agentId: string, opts: { session?: string }) => {

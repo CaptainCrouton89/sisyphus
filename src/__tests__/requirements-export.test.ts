@@ -79,6 +79,7 @@ function runRequirementsExport(requirementsPath: string, force = false): Buffer 
     '--import',
     'tsx',
     shellQuote(cliEntry),
+    'admin',
     'requirements',
     '--export',
     shellQuote(requirementsPath),

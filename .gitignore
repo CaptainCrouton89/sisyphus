@@ -16,6 +16,9 @@ __pycache__/
 tmp/
 package-lock.json
 
+# Claude Code runtime lock
+.claude/scheduled_tasks.lock
+
 # Terraform provider binaries (downloaded on `terraform init`)
 deploy/**/.terraform/
 deploy/**/terraform.tfstate

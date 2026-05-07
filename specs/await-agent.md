@@ -1,27 +1,27 @@
-# `sisyphus await` — Spec
+# `sisyphus agent await` — Spec
 
 Lets the orchestrator consume an agent's report inline (same turn) instead of yielding and waiting for the next cycle. Targets the case where the orchestrator has an open-ended understanding question mid-flow ("why does this agent behave this way?", "how does the worker queue fill the dashboard?") that's currently answered with manual `Grep`/`Glob`/`Read` — which dumps raw search noise into the orchestrator's context.
 
-The mechanism is intentionally minimal: a new `sisyphus await <agentId>` CLI verb that blocks until the agent reaches a terminal status, prints the same submit report the next-cycle orchestrator would have seen, and flags the agent as consumed-inline so its report is suppressed from the next cycle's prompt.
+The mechanism is intentionally minimal: a new `sisyphus agent await <agentId>` CLI verb that blocks until the agent reaches a terminal status, prints the same submit report the next-cycle orchestrator would have seen, and flags the agent as consumed-inline so its report is suppressed from the next cycle's prompt.
 
 ## Goals
 
 - Orchestrator can ask cycle-internal questions without yielding.
 - Synthesized answer in, raw search/code-read noise out — the orchestrator gets a short submit report, not 50+ lines of grep output.
-- Zero new system-prompt machinery for the mechanism. The `sisyphus spawn` output itself teaches the next move via a tip line.
+- Zero new system-prompt machinery for the mechanism. The `sisyphus agent spawn` output itself teaches the next move via a tip line.
 - Pure mechanism, no daemon-side policy. Any agent can be awaited; orchestrator decides whether it's worth doing.
 - Cycle hygiene preserved: awaited agents leave no trace in the next cycle's report list.
 
 ## Non-Goals
 
 - No `--timeout` flag in v1. Block until terminal status. Add later if a real case emerges.
-- No multi-arg CLI form (`sisyphus await id1 id2 id3`). Orchestrator uses parallel `Bash` tool calls if it wants concurrent waits — daemon handles each socket connection independently.
+- No multi-arg CLI form (`sisyphus agent await id1 id2 id3`). Orchestrator uses parallel `Bash` tool calls if it wants concurrent waits — daemon handles each socket connection independently.
 - No change to the explore agent's behavior. It still writes `context/explore-{topic}.md` and submits its short report. Whether it gets awaited is invisible to the agent.
 - No retroactive "un-consume" of a previously awaited agent. `consumedInline` is one-way.
 
 ## CLI Surface
 
-### `sisyphus await <agentId> [--session <id>]`
+### `sisyphus agent await <agentId> [--session <id>]`
 
 Sends `{ type: 'await', sessionId, agentId }` to the daemon over the existing Unix socket. Daemon responds when the agent's status leaves `running` (i.e., reaches `completed`, `crashed`, `killed`, or `lost`). CLI then:
 
@@ -44,14 +44,14 @@ Exit code non-zero is reserved for *command* errors:
 
 Idempotent: a second `await` on the same agent returns the same content. `consumedInline` stays `true`.
 
-### `sisyphus spawn` — output change
+### `sisyphus agent spawn` — output change
 
 Adds one tip line between the existing "Agent spawned" line and the yield reminder (`src/cli/commands/spawn.ts:96-97`):
 
 ```
 Agent spawned: explore-foo-abc123
-Tip: `sisyphus await explore-foo-abc123` blocks for the report and consumes it inline (won't appear in next cycle).
-Run `sisyphus yield` when done spawning agents.
+Tip: `sisyphus agent await explore-foo-abc123` blocks for the report and consumes it inline (won't appear in next cycle).
+Run `sisyphus orch yield` when done spawning agents.
 ```
 
 Tip prints on every spawn — no agent-type gating. Slight redundancy when spawning multiple agents in a batch is acceptable; the orchestrator learns the pattern.
@@ -80,7 +80,7 @@ Concurrent `await` calls on different agents are independent (each runs on its o
 `src/shared/types.ts` — `Agent` gains:
 
 ```ts
-consumedInline: boolean;  // default false; set true when sisyphus await returns
+consumedInline: boolean;  // default false; set true when sisyphus agent await returns
 ```
 
 `src/daemon/orchestrator.ts:216-220` — `formatStateForOrchestrator` filters the agent report list:

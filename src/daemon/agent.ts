@@ -152,7 +152,7 @@ function createAgentPlugin(
   }
 
   // Plan agent gets two additional PreToolUse gates:
-  //   - `plan-validate.sh` blocks `sisyphus submit` when master plans exceed 200 lines.
+  //   - `plan-validate.sh` blocks `sisyphus agent submit` when master plans exceed 200 lines.
   //   - `plan-write-path.sh` blocks Write/Edit/MultiEdit on `plan-*.md` files
   //     whose path doesn't anchor at $SISYPHUS_SESSION_DIR/context/$SISYPHUS_AGENT_ID/.
   //     The pane cwd is the project root, so a bare relative `context/...` would
@@ -329,12 +329,12 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
       try {
         execSync(`which ${fallbackCli}`, { stdio: 'pipe', env: execEnv() });
       } catch {
-        throw new Error(`Neither ${cliToCheck} (model: ${agentConfig?.frontmatter.model}) nor ${fallbackCli} (fallback: ${fallback}) CLI found on PATH. Run \`sisyphus doctor\` to diagnose.`);
+        throw new Error(`Neither ${cliToCheck} (model: ${agentConfig?.frontmatter.model}) nor ${fallbackCli} (fallback: ${fallback}) CLI found on PATH. Run \`sisyphus admin doctor\` to diagnose.`);
       }
       if (agentConfig) agentConfig.frontmatter.model = fallback;
       provider = fallbackProvider;
     } else {
-      throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sisyphus doctor\` to diagnose.`);
+      throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sisyphus admin doctor\` to diagnose.`);
     }
   }
 
@@ -600,7 +600,7 @@ export async function handleAgentKilled(
 }
 
 // Note: this checks ALL running agents in the session, not just orchestrator-spawned ones.
-// Agents can also call `sisyphus spawn`, and those child agents are included here —
+// Agents can also call `sisyphus agent spawn`, and those child agents are included here —
 // the orchestrator won't respawn until every agent (including agent-spawned ones) finishes.
 function allAgentsDone(session: import('../shared/types.js').Session): boolean {
   const running = session.agents.filter(a => a.status === 'running');

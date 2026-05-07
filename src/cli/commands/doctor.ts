@@ -138,7 +138,7 @@ function checkCycleScript(): Check {
       name: 'Cycle script',
       status: 'fail',
       detail: `Not found at ${path}`,
-      fix: 'sisyphus setup-keybind',
+      fix: 'sisyphus admin setup-keybind',
     };
   }
   try {
@@ -170,7 +170,7 @@ function checkTmuxKeybind(): Check {
       name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
       status: 'fail',
       detail: 'Not bound',
-      fix: 'sisyphus setup-keybind',
+      fix: 'sisyphus admin setup-keybind',
     };
   }
   if (isSisyphusBinding(existing)) {
@@ -180,7 +180,7 @@ function checkTmuxKeybind(): Check {
     name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
     status: 'warn',
     detail: `Bound to something else: ${existing}`,
-    fix: 'sisyphus setup-keybind M-S  (or another free key)',
+    fix: 'sisyphus admin setup-keybind M-S  (or another free key)',
   };
 }
 
@@ -235,7 +235,7 @@ function checkSisyphusPlugin(): Check {
     name: 'sisyphus@sisyphus plugin',
     status: 'warn',
     detail: 'Not installed (slash commands /sisyphus:begin, /sisyphus:autopsy, /sisyphus:configure-upload unavailable)',
-    fix: 'sisyphus setup',
+    fix: 'sisyphus admin setup',
   };
 }
 

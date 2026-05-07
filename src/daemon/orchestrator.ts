@@ -248,7 +248,7 @@ function formatStateForOrchestrator(session: Session, mode: string): string {
 
 
   // Most recent cycle: agent reports as file references.
-  // Agents marked `consumedInline` (via `sisyphus await`) are filtered out — their reports
+  // Agents marked `consumedInline` (via `sisyphus agent await`) are filtered out — their reports
   // were already absorbed inline during the previous cycle and shouldn't reappear here.
   let mostRecentCycleSection = '';
   const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
@@ -309,7 +309,7 @@ function formatStateForOrchestrator(session: Session, mode: string): string {
 
     // Spawn syntax hint for multi-repo
     if (repos.length > 1) {
-      repositoriesSection += '\nTarget agents at specific repos:\n```bash\nsisyphus spawn --name "impl" --repo <repo-name> "task"\n```\n';
+      repositoriesSection += '\nTarget agents at specific repos:\n```bash\nsisyphus agent spawn --name "impl" --repo <repo-name> "task"\n```\n';
     }
   }
 
@@ -347,7 +347,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   try {
     execSync('which claude', { stdio: 'pipe', env: tmux.EXEC_ENV });
   } catch {
-    throw new Error('Claude CLI not found on PATH. Run `sisyphus doctor` to diagnose.');
+    throw new Error('Claude CLI not found on PATH. Run `sisyphus admin doctor` to diagnose.');
   }
 
   const session = state.getSession(cwd, sessionId);

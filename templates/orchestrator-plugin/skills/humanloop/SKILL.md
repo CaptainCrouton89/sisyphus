@@ -33,7 +33,7 @@ choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
 notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 ```
 
-**Do not `run_in_background` and yield** — yielding kills your pane and any backgrounded bash with it; the next cycle's fresh orchestrator can only peek the on-disk deck (`sisyphus ask peek`) and yield again, producing a polling loop. The daemon now refuses `sisyphus yield` while a deck owned by orchestrator is pending; the supported pattern is foreground.
+**Do not `run_in_background` and yield** — yielding kills your pane and any backgrounded bash with it; the next cycle's fresh orchestrator can only peek the on-disk deck (`sisyphus ask peek`) and yield again, producing a polling loop. The daemon now refuses `sisyphus orch yield` while a deck owned by orchestrator is pending; the supported pattern is foreground.
 
 Stdout on completion is one line of JSON: `{responses: [{id, selectedOptionId?, freetext?}, ...], completedAt}`. Branch on each response by its interaction `id`.
 

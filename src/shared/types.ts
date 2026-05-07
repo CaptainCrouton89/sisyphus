@@ -137,7 +137,7 @@ export interface Agent {
   pid?: number;
   /** `ps -o lstart=` output captured at spawn. Compared during pid-sweep to detect PID recycling. */
   pidLstart?: string;
-  /** Set true when `sisyphus await` consumed this agent's report inline. Suppresses it from the next-cycle orchestrator prompt; one-way. */
+  /** Set true when `sisyphus agent await` consumed this agent's report inline. Suppresses it from the next-cycle orchestrator prompt; one-way. */
   consumedInline?: boolean;
 }
 

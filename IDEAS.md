@@ -7,10 +7,10 @@ Currently the orchestrator only wakes up when ALL agents finish. Instead, agents
 **Core concept:** An "inbox" where agent reports accumulate. The orchestrator wakes up when new reports arrive (not just when all agents complete).
 
 **How it works:**
-- Agent calls `sisyphus report` → report saved + queued as "unseen"
+- Agent calls `sisyphus agent report` → report saved + queued as "unseen"
 - If orchestrator is NOT running → spawn it after a short debounce (3-5s to batch rapid reports)
 - If orchestrator IS running → queue the report; when orchestrator yields, check inbox — if new reports exist, respawn immediately
-- `sisyphus submit` still works as today (report + "I'm done")
+- `sisyphus agent submit` still works as today (report + "I'm done")
 - `allAgentsDone` remains as a trigger, just not the only one
 
 **What this enables:**
@@ -53,7 +53,7 @@ keep memory explicit
 keep the loop small
 keep progress versioned
 
-Brain wave: All “tools” should be replaced with clis as well, and should be extensible. Tools and commands are kinda like “file systems” where you drill down on command for more and more specific versions of it (i.e. sisyphus spawn -h  gets help for just that command specifically). Agent would not have any “normal” tools—just fucking bash pretty much. Major benefit of this system is the agent would be able to string together tools in interesting programmatic ways, like feeding output of one tool directly into the propmt-argument for a subagent. Then, make it so clis that implement this protocol must have some “to-system-prompt” method or wtvr (or some other layer) that lets the agent know about it.
+Brain wave: All “tools” should be replaced with clis as well, and should be extensible. Tools and commands are kinda like “file systems” where you drill down on command for more and more specific versions of it (i.e. sisyphus agent spawn -h  gets help for just that command specifically). Agent would not have any “normal” tools—just fucking bash pretty much. Major benefit of this system is the agent would be able to string together tools in interesting programmatic ways, like feeding output of one tool directly into the propmt-argument for a subagent. Then, make it so clis that implement this protocol must have some “to-system-prompt” method or wtvr (or some other layer) that lets the agent know about it.
 Then, if this was how claude code native tools worked, then you make the clis extensible. Now you have fucking magic. Tools are hard to extend, but I think you could make clis much more modularly extensible. That way you could expose new “sub-paths” of search tool or wtvr else. imagine extending its search tool so it could pass an extra argument that made it do a semantic search instead or something. Rather than giving it a whole new-ass fucking tool, you just tweak one of its existing ones and don’t bloat the agent;
 
 Clarifications:

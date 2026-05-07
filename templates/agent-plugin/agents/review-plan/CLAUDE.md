@@ -1,6 +1,6 @@
 # review-plan/
 
-Sub-agent templates dispatched by `agents/review-plan.md` via Agent tool (`subagent_type`). Not spawnable via `sisyphus spawn` — same constraint as `review/`.
+Sub-agent templates dispatched by `agents/review-plan.md` via Agent tool (`subagent_type`). Not spawnable via `sisyphus agent spawn` — same constraint as `review/`.
 
 ## Dispatch Differences from `review/`
 

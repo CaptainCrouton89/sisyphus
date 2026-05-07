@@ -1,9 +1,9 @@
 import { execSync } from 'node:child_process';
 import type { Command } from 'commander';
 
-export function registerTmuxStatus(program: Command): void {
-  program
-    .command('tmux-status', { hidden: true })
+export function attachTmuxStatus(diagnostic: Command): void {
+  diagnostic
+    .command('tmux-status')
     .description('Output session status dots for tmux status bar')
     .action(() => {
       try {

@@ -94,7 +94,7 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
   }
 
   console.log('');
-  console.log("Run 'sisyphus getting-started' for a usage guide.");
+  console.log("Run 'sisyphus admin getting-started' for a usage guide.");
   console.log('');
 }
 

@@ -4,9 +4,9 @@ import type { Request } from '../../shared/protocol.js';
 import type { Session } from '../../shared/types.js';
 import { buildSessionContext } from '../../tui/lib/context.js';
 
-export function registerPrintContext(program: Command): void {
+export function registerSessionContext(program: Command): void {
   program
-    .command('print-context <sessionId>')
+    .command('context <sessionId>')
     .description('Print session context XML (same as dashboard space y C)')
     .requiredOption('--cwd <path>', 'Working directory of the session')
     .action(async (sessionId: string, opts: { cwd: string }) => {

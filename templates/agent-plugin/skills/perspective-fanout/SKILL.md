@@ -88,8 +88,8 @@ cat > "$synth_deck" <<EOF
   }]
 }
 EOF
-result=$(sisyphus ask "$synth_deck") || { sisyphus submit "Synthesis deck failed — deck: $synth_deck"; exit 1; }
-[ -n "$result" ] || { sisyphus submit "Synthesis deck: empty result — deck: $synth_deck"; exit 1; }
+result=$(sisyphus ask "$synth_deck") || { sisyphus agent submit "Synthesis deck failed — deck: $synth_deck"; exit 1; }
+[ -n "$result" ] || { sisyphus agent submit "Synthesis deck: empty result — deck: $synth_deck"; exit 1; }
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId // empty')
 notes=$(echo  "$result" | jq -r '.responses[0].freetext // ""')
 ```

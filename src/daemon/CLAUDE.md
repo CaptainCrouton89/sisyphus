@@ -1,4 +1,4 @@
-- `continueSession` clears last cycle's `completedAt` — orchestrator's `find(c => c.completedAt)` mode lookup returns undefined and defaults to `'discovery'`, losing the prior mode. Cross-file trap: `state.ts` + `orchestrator.ts`.
+- `continueSession` clears last cycle's `completedAt` — orchestrator's `.reverse().find(c => c.completedAt)` mode lookup skips it and falls back to the penultimate cycle's mode (or `'discovery'` if only one cycle exists), losing the completion-mode context. Cross-file trap: `state.ts` + `orchestrator.ts`.
 - `updateTask()` updates both state and `goal.md` inside the lock. `updateSession({task})` skips `goal.md`; orchestrator reads the old goal on the next cycle.
 - `reconnectSession()` does NOT call `resetAgentCounterFromState()` — silent agent-ID collision risk post-reconnect. `resume` and `clone` do call it.
 - Adding a new agent-termination path requires calling `gcBgTasks(cwd, sessionId, agentId)` — `register-bg-task.sh` records background-Task agentIds; `require-submit.sh` consumes them. Leftover entries from an unterminated path leak silently into the next cycle.
@@ -11,4 +11,3 @@
 
 - Async commentary callbacks must reload fresh companion state immediately before saving; never close over a captured companion reference across an `await` — concurrent fire-and-forget callbacks clobber each other.
 - `companionCredited{Cycles,ActiveMs,Strength,Wisdom}` are written to session state on `handleComplete()`. `onSessionComplete()` reads these to skip already-credited work if the session is continued and completed again — omitting the write causes double-counting.
-- `companion.sessionsCompleted` increments unconditionally in `onSessionComplete` — NOT delta-safe. A continue→re-complete inflates the count, unlike `strength`/`wisdom`/`endurance`/`patience` which use `companionCredited*` deltas.

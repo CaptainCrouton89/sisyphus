@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { basename } from 'node:path';
 import { sendRequest } from '../client.js';
+import { buildCompanionContext } from '../../tui/lib/context.js';
 import { renderCompanion } from '../../shared/companion-render.js';
 import { ACHIEVEMENTS } from '../../shared/companion-types.js';
 import type { CompanionState, CompanionMemoryState, ObservationCategory, ObservationRecord } from '../../shared/companion-types.js';
@@ -196,6 +197,15 @@ export function registerCompanion(program: Command): void {
     .option('--repo <path>', 'Filter observations by repo path')
     .action(async (opts: { repo?: string }) => {
       await runCompanionMemory(opts);
+    });
+
+  companion
+    .command('context')
+    .description('Output session context JSON for companion hook')
+    .option('--cwd <path>', 'Project directory', process.cwd())
+    .action((opts: { cwd: string }) => {
+      const context = buildCompanionContext(opts.cwd);
+      process.stdout.write(JSON.stringify({ additionalContext: context }));
     });
 
   companion

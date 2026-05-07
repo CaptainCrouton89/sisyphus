@@ -140,7 +140,7 @@ Pick the tier by **novelty of behavior**, not file count:
 - New subsystem / new protocol / cross-domain orchestration: **HIGH**
 - Novel concurrency / new security boundary / multi-system contract: **XHIGH**
 
-Apply the tier with `sisyphus set-effort <low|medium|high|xhigh>` — this filters the strategy skill, mode templates, and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
+Apply the tier with `sisyphus session effort <low|medium|high|xhigh>` — this filters the strategy skill, mode templates, and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
 
 If you change the tier mid-session because scope shifted, the next cycle's prompts adjust automatically; don't manually patch `strategy.md` to match — re-invoke the strategy skill.
 
@@ -171,13 +171,13 @@ After writing `goal.md` and `strategy.md`, initialize `roadmap.md`. Populate Cur
 Once `goal.md`, `strategy.md`, and `roadmap.md` are written and the goal is confirmed:
 
 ```bash
-sisyphus yield --mode planning --prompt "Discovery complete — goal.md, strategy.md, and roadmap.md initialized. Begin first stage."
+sisyphus orch yield --mode planning --prompt "Discovery complete — goal.md, strategy.md, and roadmap.md initialized. Begin first stage."
 ```
 
 If you're still working on goal clarity (waiting for problem agent, re-entering after bifurcation, iterating with user), stay in discovery:
 
 ```bash
-sisyphus yield --mode discovery --prompt "Goal still being refined — [what's happening, what's next]."
+sisyphus orch yield --mode discovery --prompt "Goal still being refined — [what's happening, what's next]."
 ```
 
 </transition>

@@ -18,9 +18,13 @@ Session context is injected automatically via hook on each prompt. Run `sisyphus
 ```
 sisyphus list                                    # List sessions for this project
 sisyphus status <session-id>                     # Show detailed session status
-sisyphus message "<content>" --session <id>      # Queue message for orchestrator
-sisyphus kill <session-id>                       # Kill a session and all its agents
-sisyphus resume <session-id> "instructions"      # Resume a completed/paused session
+sisyphus message "<content>" --session <id>      # Queue message for orchestrator (read on next cycle)
+sisyphus tell <target> "<text>" --session <id>   # Type prompt directly into a running pane (immediate); target = orchestrator | agent-NNN
+                                                 #   --no-submit pastes without pressing Enter; --text-from-stdin reads body from stdin
+sisyphus read <target> --session <id>            # Print Claude conversation transcript for a target
+                                                 #   --tail N / --head N to slice; --summary for one-line-per-turn; --cycle N for a specific orchestrator cycle
+sisyphus session kill <session-id>               # Kill a session and all its agents
+sisyphus session resume <session-id> "instructions"  # Resume a completed/paused session
 sisyphus start "task"                            # Start a new orchestrated session
 sisyphus start "task" -c "background context"    # Start with additional context
 ```

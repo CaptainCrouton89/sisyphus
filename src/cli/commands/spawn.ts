@@ -94,8 +94,8 @@ export function registerSpawn(program: Command): void {
       if (response.ok) {
         const agentId = response.data?.agentId as string;
         console.log(`Agent spawned: ${agentId}`);
-        console.log(`Tip: \`sisyphus await ${agentId}\` blocks for the report and consumes it inline (won't appear in next cycle).`);
-        console.log("Run `sisyphus yield` when done spawning agents.");
+        console.log(`Tip: \`sisyphus agent await ${agentId}\` blocks for the report and consumes it inline (won't appear in next cycle).`);
+        console.log("Run `sisyphus orch yield` when done spawning agents.");
       } else {
         console.error(`Error: ${response.error}`);
         if (response.error?.includes("Unknown session")) console.error("Hint: run `sisyphus list` to see active sessions.");

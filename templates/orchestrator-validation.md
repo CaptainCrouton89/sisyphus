@@ -21,7 +21,7 @@ If the recipe doesn't exist or doesn't cover what was implemented:
 If you genuinely cannot determine how to verify the feature — transition back to planning:
 
 ```bash
-sisyphus yield --mode planning --prompt "Cannot determine verification method for [feature] — need to establish e2e recipe"
+sisyphus orch yield --mode planning --prompt "Cannot determine verification method for [feature] — need to establish e2e recipe"
 ```
 
 ## The Operator Is Not Optional
@@ -76,7 +76,7 @@ If a report says "all checks pass" but the evidence is thin or missing — that'
 When validation surfaces real bugs:
 
 ```bash
-sisyphus yield --mode implementation --prompt "Validation failed — [specific failures]. See reports/agent-XXX-final.md for details."
+sisyphus orch yield --mode implementation --prompt "Validation failed — [specific failures]. See reports/agent-XXX-final.md for details."
 ```
 
 Log what failed and why before yielding. The implementation cycle needs clear context on what to fix.
@@ -84,7 +84,7 @@ Log what failed and why before yielding. The implementation cycle needs clear co
 When validation reveals that the approach itself is flawed — not bugs, but architectural issues or fundamental misunderstandings:
 
 ```bash
-sisyphus yield --mode planning --prompt "Validation revealed [architectural issue] — approach needs rethinking. See cycle log."
+sisyphus orch yield --mode planning --prompt "Validation revealed [architectural issue] — approach needs rethinking. See cycle log."
 ```
 
 **Do not attempt fixes in validation mode** beyond trivial issues (a missed import, a config typo). If the fix requires design decisions or touches multiple files, transition to implementation mode where the orchestrator has the right guidance for managing that work.
@@ -92,7 +92,7 @@ sisyphus yield --mode planning --prompt "Validation revealed [architectural issu
 ## Validation CLI
 
 ```bash
-sisyphus restart-agent <agentId>                         # respawn a failed/killed validation agent
+sisyphus agent restart <agentId>                         # respawn a failed/killed validation agent
 ```
 
 ## Transition to Completion
@@ -100,7 +100,7 @@ sisyphus restart-agent <agentId>                         # respawn a failed/kill
 When all validation passes, yield to completion mode for user sign-off:
 
 ```bash
-sisyphus yield --mode completion --prompt "Validation passed — all recipe steps verified. Ready for user review."
+sisyphus orch yield --mode completion --prompt "Validation passed — all recipe steps verified. Ready for user review."
 ```
 
 Only yield when every recipe step has been executed with evidence of success. If the recipe was updated during validation, re-validate against the updated version.

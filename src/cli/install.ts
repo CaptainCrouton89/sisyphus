@@ -134,11 +134,11 @@ function printGettingStarted(
   if (sisyphusPlugin.installed && sisyphusPlugin.autoInstalled) {
     lines.push(`Sisyphus plugin installed: sisyphus@sisyphus → ${sisyphusPlugin.installPath}`, '');
   } else if (!sisyphusPlugin.installed) {
-    lines.push('Sisyphus plugin: failed to install (run `sisyphus setup` to retry; needs `claude` CLI)', '');
+    lines.push('Sisyphus plugin: failed to install (run `sisyphus admin setup` to retry; needs `claude` CLI)', '');
   }
 
   lines.push(
-    'Run `sisyphus getting-started` for a complete usage guide.',
+    'Run `sisyphus admin getting-started` for a complete usage guide.',
     '',
   );
 

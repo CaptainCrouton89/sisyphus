@@ -1,6 +1,6 @@
 -- Sisyphus: ANSI escape code rendering for neovim
 -- Auto-detects buffers containing ANSI escape codes and colorizes them.
--- Installed by `sisyphus setup`. Safe to customize or remove.
+-- Installed by `sisyphus admin setup`. Safe to customize or remove.
 return {
   "m00qek/baleia.nvim",
   version = "*",
