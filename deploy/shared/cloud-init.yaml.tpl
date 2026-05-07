@@ -73,9 +73,12 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   - DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
 
-  # 3. Tailscale. --ssh enables Tailscale SSH on top of system SSH.
+  # 3. Tailscale. We deliberately do NOT pass --ssh: Tailscale SSH would
+  # intercept port 22 on the tailscale0 interface and require a browser-
+  # based check (per the user's tailnet ACL), blocking key-based access.
+  # System OpenSSH on tailscale0 with the user's pubkey is simpler.
   - curl -fsSL https://tailscale.com/install.sh | sh
-  - tailscale up --authkey='${ts_authkey}' --hostname='${hostname}' --ssh
+  - tailscale up --authkey='${ts_authkey}' --hostname='${hostname}'
 
   # 4. Firewall. Public 22 stays denied; tailscale0 fully open.
   - ufw default deny incoming

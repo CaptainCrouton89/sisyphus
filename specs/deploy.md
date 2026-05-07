@@ -108,7 +108,7 @@ The `cloud-init.yaml.tpl` is templated by Terraform with: SSH pubkey, Tailscale 
 
 1. **Base packages.** `apt update && apt install -y curl git tmux fzf neovim build-essential ufw mosh`. (`mosh` is the default the `ssh` action prefers; Tailscale's default ACL allows UDP 60000–61000 between own-tailnet nodes, so no extra firewall config is needed.)
 2. **Node 22.** NodeSource setup script, install `nodejs`. Verify `node --version` ≥ 22.
-3. **Tailscale.** Install via `curl -fsSL https://tailscale.com/install.sh | sh`. Join with provided auth key: `tailscale up --authkey=$TS_AUTHKEY --hostname=$NAME --ssh`. (`--ssh` enables Tailscale SSH on top of system SSH; user can use either.)
+3. **Tailscale.** Install via `curl -fsSL https://tailscale.com/install.sh | sh`. Join with provided auth key: `tailscale up --authkey=$TS_AUTHKEY --hostname=$NAME`. (We deliberately omit `--ssh`: Tailscale SSH would intercept port 22 on the tailscale0 interface and force a browser-based check per the user's tailnet ACL, blocking key-based access. System OpenSSH on tailscale0 with the user's pubkey via cloud-init `users:` is the canonical path.)
 4. **Firewall.** `ufw default deny incoming; ufw allow in on tailscale0; ufw enable`. Public 22 stays closed.
 5. **User.** Create `sisyphus` user, add SSH pubkey to `~sisyphus/.ssh/authorized_keys` (also keyed for the Tailscale interface), enable `loginctl enable-linger sisyphus` so user systemd services survive logout.
 6. **Sisyphus install.** `sudo -u sisyphus npm i -g sisyphi@$VERSION`. Postinstall `build-notify.sh` no-ops gracefully on Linux.
