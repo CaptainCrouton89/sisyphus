@@ -33,7 +33,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "dev:daemon": "tsup --watch --onSuccess 'node dist/daemon.js restart'",
-    "test": "node --import tsx --test src/__tests__/*.test.ts",
+    "test": "NODE_ENV=test node --import tsx --test src/__tests__/*.test.ts",
     "postinstall": "bash native/build-notify.sh || true",
     "prepublishOnly": "npm run build && npm test"
   },

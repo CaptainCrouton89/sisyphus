@@ -16,6 +16,7 @@ const ACTIONABLE_KINDS: ReadonlySet<InteractionKind> = new Set([
 const HEARTBEAT_ASKED_BY = 'system:heartbeat';
 
 function maybeNotifyOnAskCreated(cwd: string, sessionId: string, meta: AskMeta): void {
+  if (process.env.NODE_ENV === 'test' || process.env.SISYPHUS_DISABLE_NOTIFY === '1') return;
   const isActionable = meta.kind !== undefined && ACTIONABLE_KINDS.has(meta.kind);
   const isHeartbeat = meta.askedBy === HEARTBEAT_ASKED_BY;
   if (!isActionable && !isHeartbeat) return;
