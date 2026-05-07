@@ -29,6 +29,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # termrender is a runtime dep of parseDeck (src/shared/ask-schema.ts) and
+      # is invoked by the ask-schema unit tests run via prepublishOnly.
+      - name: Install termrender
+        run: pipx install termrender
+
       - name: Bump version
         run: |
           git config user.name "github-actions[bot]"
