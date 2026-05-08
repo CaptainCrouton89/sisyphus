@@ -49,7 +49,10 @@ export async function cloudSync(provider: Provider, repo: string, opts: SyncOpti
 
   if (opts.fresh) {
     if (!localOrigin) {
-      throw new Error('--fresh requires an `origin` remote on the local repo.');
+      throw new Error(
+        '--fresh requires an `origin` remote on the local repo. ' +
+        'Not available when running from a non-git parent dir.',
+      );
     }
     if (!opts.yes) {
       console.log(`This will wipe ~/projects/${repo} on the box and re-clone from ${localOrigin}.`);

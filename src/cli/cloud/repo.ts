@@ -16,22 +16,18 @@ function captureGit(args: string[]): { stdout: string; ok: boolean } {
 
 /**
  * Infer the repo name from the local git working tree's top-level dir basename.
- * Throws if the cwd is not inside a git repo.
+ * Falls back to `basename(cwd)` when cwd is not inside a git repo — supports
+ * parent dirs that contain repos but aren't themselves a repo.
  */
 export function inferRepoName(): string {
   const { stdout, ok } = captureGit(['rev-parse', '--show-toplevel']);
-  if (!ok) {
-    throw new Error('Not inside a git repository. Run from a repo or pass --name.');
-  }
-  if (!stdout) {
-    throw new Error('git rev-parse returned empty toplevel.');
-  }
-  return basename(stdout);
+  if (ok && stdout) return basename(stdout);
+  return basename(process.cwd());
 }
 
 /**
  * Read the local repo's `origin` remote URL. Returns null if no `origin` is
- * configured.
+ * configured or cwd is not inside a git repo.
  */
 export function getOriginUrl(): string | null {
   const { stdout, ok } = captureGit(['remote', 'get-url', 'origin']);
@@ -40,14 +36,14 @@ export function getOriginUrl(): string | null {
 }
 
 /**
- * Path to the local git toplevel.
+ * Path to the local git toplevel, or cwd when cwd is not inside a git repo.
+ * Non-repo mode is intentional: enables syncing parent dirs that contain
+ * multiple child repos (each child's `.git/` rides along via rsync).
  */
 export function getRepoToplevel(): string {
   const { stdout, ok } = captureGit(['rev-parse', '--show-toplevel']);
-  if (!ok) {
-    throw new Error('Not inside a git repository.');
-  }
-  return stdout;
+  if (ok && stdout) return stdout;
+  return process.cwd();
 }
 
 /**
