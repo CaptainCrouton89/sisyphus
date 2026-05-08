@@ -23,7 +23,7 @@ echo "src/auth.ts:45 — session token not refreshed on redirect, circular dep b
 When done, submit your final report via the CLI. This is terminal — your pane closes after.
 
 ```bash
-echo "your full report here" | sisyphus agent submit
+echo "your full report here" | sis agent submit
 ```
 
 If you're blocked by ambiguity, contradictions, or unclear requirements — **don't guess**. Submit what you found instead. A clear report is more valuable than a wrong implementation.

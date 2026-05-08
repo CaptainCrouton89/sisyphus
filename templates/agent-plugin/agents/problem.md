@@ -90,7 +90,7 @@ Don't reserve fanout for convergence-only. The whole point of being a brainstorm
 - **Grep** for content search (not `grep`/`rg`)
 - **Edit** for modifying files (not `sed`/`awk`) — read the file first
 - **Write** only when creating new files (not `echo`/heredoc)
-- **Bash** for system operations — spawning sub-agents, `git log`/`blame`, `termrender --tmux`, `sisyphus` commands
+- **Bash** for system operations — spawning sub-agents, `git log`/`blame`, `termrender --tmux`, `sis` commands
 
 Fire independent tool calls in parallel — multiple `Glob`/`Grep`/`Read` in a single response while investigating.
 
@@ -158,7 +158,7 @@ On startup, read everything present in `$SISYPHUS_SESSION_DIR/context/`:
 
 | Disk state | Action |
 |---|---|
-| `context/problem.md` exists | Session complete — `sisyphus agent submit` with the path immediately, no further dialogue |
+| `context/problem.md` exists | Session complete — `sis agent submit` with the path immediately, no further dialogue |
 | `context/problem.draft.md` exists, no `problem.md` | Re-render via `termrender --tmux`, re-issue the sign-off deck |
 | Neither exists | Start from the explore phase below |
 
@@ -240,7 +240,7 @@ Inspect `(choice, notes)` after each turn:
 
 ```bash
 safe_notes=$(printf '%s' "$notes" | tr -d '`$"\\')
-sisyphus agent submit "Problem exploration stalled across 3 plateau breakers. Latest user freetext: $safe_notes. Re-spawn problem fresh or escalate."
+sis agent submit "Problem exploration stalled across 3 plateau breakers. Latest user freetext: $safe_notes. Re-spawn problem fresh or escalate."
 ```
 
 Counter is in-process; no disk persistence.
@@ -269,7 +269,7 @@ Bail on non-zero exit with the file path and exit code.
 Then issue the sign-off deck (template in `<signoff-deck>` below).
 
 **Branching:**
-- `choice == "approve"` → `mv "$SISYPHUS_SESSION_DIR/context/problem.draft.md" "$SISYPHUS_SESSION_DIR/context/problem.md"`; `sisyphus agent submit` with the path. Optional cleanup: `rm -f "$SISYPHUS_SESSION_DIR/context/.ask-problem-"*.json` (deck input files only — never touch `$SISYPHUS_SESSION_DIR/context/ask/`).
+- `choice == "approve"` → `mv "$SISYPHUS_SESSION_DIR/context/problem.draft.md" "$SISYPHUS_SESSION_DIR/context/problem.md"`; `sis agent submit` with the path. Optional cleanup: `rm -f "$SISYPHUS_SESSION_DIR/context/.ask-problem-"*.json` (deck input files only — never touch `$SISYPHUS_SESSION_DIR/context/ask/`).
 - `choice == "request-changes"` → edit `problem.draft.md` per `notes`, re-run `termrender --tmux`, re-issue the sign-off deck.
 
 </process>
@@ -310,8 +310,8 @@ cat > "$turn_deck" <<EOF
   }]
 }
 EOF
-result=$(sisyphus ask "$turn_deck") || { sisyphus agent submit "Problem turn deck failed — deck: $turn_deck"; exit 1; }
-[ -n "$result" ] || { sisyphus agent submit "Problem turn deck: empty result — deck: $turn_deck"; exit 1; }
+result=$(sis ask "$turn_deck") || { sis agent submit "Problem turn deck failed — deck: $turn_deck"; exit 1; }
+[ -n "$result" ] || { sis agent submit "Problem turn deck: empty result — deck: $turn_deck"; exit 1; }
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId // empty')
 notes=$(echo  "$result" | jq -r '.responses[0].freetext // ""')
 ```
@@ -345,8 +345,8 @@ cat > "$signoff_deck" <<EOF
   }]
 }
 EOF
-result=$(sisyphus ask "$signoff_deck") || { sisyphus agent submit "Problem sign-off deck failed — deck: $signoff_deck"; exit 1; }
-[ -n "$result" ] || { sisyphus agent submit "Problem sign-off deck: empty result — deck: $signoff_deck"; exit 1; }
+result=$(sis ask "$signoff_deck") || { sis agent submit "Problem sign-off deck failed — deck: $signoff_deck"; exit 1; }
+[ -n "$result" ] || { sis agent submit "Problem sign-off deck: empty result — deck: $signoff_deck"; exit 1; }
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId // empty')
 notes=$(echo  "$result" | jq -r '.responses[0].freetext // ""')
 ```

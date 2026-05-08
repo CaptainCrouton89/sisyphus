@@ -1,14 +1,14 @@
 ---
 name: humanloop
 description: >
-  Read before calling `sisyphus ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to submit via the Bash tool's `run_in_background` so you can end your turn while the user takes their time answering.
+  Read before calling `sis ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to submit via the Bash tool's `run_in_background` so you can end your turn while the user takes their time answering.
 ---
 
 # Talking to the user via decks
 
-`sisyphus ask` posts a structured deck of questions to the user's dashboard inbox. They walk through it on their own time and you read structured JSON back. Use it instead of dumping a wall of questions into chat.
+`sis ask` posts a structured deck of questions to the user's dashboard inbox. They walk through it on their own time and you read structured JSON back. Use it instead of dumping a wall of questions into chat.
 
-This skill covers **what to put in a deck** and **how to invoke it**. Run `sisyphus ask -h` for the CLI shape (file path, `--session`, the `poll` and `peek` subcommands).
+This skill covers **what to put in a deck** and **how to invoke it**. Run `sis ask -h` for the CLI shape (file path, `--session`, the `poll` and `peek` subcommands).
 
 ## Reach for a deck when
 
@@ -29,13 +29,13 @@ The CLI **always blocks** until the user resolves the deck (potentially 10+ minu
 
 ```
 Bash tool call:
-  command:           sisyphus ask "$deck"
+  command:           sis ask "$deck"
   run_in_background: true
 ```
 
 Stdout on completion is one line of JSON: `{responses: [{id, selectedOptionId?, freetext?}, ...], completedAt}`. Branch on each response by its interaction `id`.
 
-If you already hold an `askId` from a prior cycle (e.g. respawned mid-wait), `sisyphus ask poll <askId>` blocks on it and `sisyphus ask peek <askId>` returns status without blocking. Use these only for respawn-recovery — **never to monitor a deck you just submitted in the current turn**. See `sisyphus ask -h`.
+If you already hold an `askId` from a prior cycle (e.g. respawned mid-wait), `sis ask poll <askId>` blocks on it and `sis ask peek <askId>` returns status without blocking. Use these only for respawn-recovery — **never to monitor a deck you just submitted in the current turn**. See `sis ask -h`.
 
 ## Designing interactions
 
@@ -135,7 +135,7 @@ cat > "$deck" <<'EOF'
   ]
 }
 EOF
-# Then invoke `sisyphus ask "$deck"` via the Bash tool with run_in_background: true.
+# Then invoke `sis ask "$deck"` via the Bash tool with run_in_background: true.
 # Each interaction returns its own selectedOptionId / freetext in output.responses[], indexed by id.
 ```
 
@@ -145,4 +145,4 @@ EOF
 - `kind` is an enum: `notify` | `validation` | `decision` | `context` | `error`. No other values accepted (see the table above for which to pick).
 - `bodyPath` points at a markdown file instead of inlining the body in JSON. The path is resolved **relative to the deck JSON's directory** and must stay inside it (no `..`, no symlinks out, no absolute paths pointing elsewhere). Practical pattern: write the deck JSON next to its body file — e.g. both inside `$SISYPHUS_SESSION_DIR/context/` — and use a basename like `"completion-summary.md"`. Mutually exclusive with `body`.
 - On completion, stdout is one line of JSON: `{responses, completedAt}`. Parse `responses[]` and dispatch on each interaction's `id`.
-- See `sisyphus ask -h` for the full CLI surface.
+- See `sis ask -h` for the full CLI surface.

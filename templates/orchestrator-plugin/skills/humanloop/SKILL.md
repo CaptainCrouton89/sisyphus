@@ -1,14 +1,14 @@
 ---
 name: humanloop
 description: >
-  Read before calling `sisyphus ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to invoke synchronously so the orchestrator's process blocks until the user answers.
+  Read before calling `sis ask`. Triggers when surfacing multiple questions or decisions to the user, presenting work for review/sign-off, or proposing concrete alternatives. Covers when a deck beats chat, how to design options as real forks the user can pick between, how to bundle related questions into one deck, and how to invoke synchronously so the orchestrator's process blocks until the user answers.
 ---
 
 # Talking to the user via decks
 
-`sisyphus ask` posts a structured deck of questions to the user's dashboard inbox. They walk through it on their own time and you read structured JSON back. Use it instead of dumping a wall of questions into chat.
+`sis ask` posts a structured deck of questions to the user's dashboard inbox. They walk through it on their own time and you read structured JSON back. Use it instead of dumping a wall of questions into chat.
 
-This skill covers **what to put in a deck** and **how to invoke it**. Run `sisyphus ask -h` for the CLI shape (file path, `--session`, the `poll` and `peek` subcommands).
+This skill covers **what to put in a deck** and **how to invoke it**. Run `sis ask -h` for the CLI shape (file path, `--session`, the `poll` and `peek` subcommands).
 
 ## Reach for a deck when
 
@@ -25,19 +25,19 @@ This skill covers **what to put in a deck** and **how to invoke it**. Run `sisyp
 
 ## How to invoke
 
-**Run `sisyphus ask` in the foreground — let the Bash tool block.** The CLI waits internally for the user to resolve the deck (potentially 10+ minutes). Your pane stays alive in tmux for the duration; the daemon will not respawn you while a tool call is in flight. When the user answers, the bash returns stdout and you parse it inline.
+**Run `sis ask` in the foreground — let the Bash tool block.** The CLI waits internally for the user to resolve the deck (potentially 10+ minutes). Your pane stays alive in tmux for the duration; the daemon will not respawn you while a tool call is in flight. When the user answers, the bash returns stdout and you parse it inline.
 
 ```bash
-result=$(sisyphus ask "$deck")
+result=$(sis ask "$deck")
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
 notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 ```
 
-**Do not `run_in_background` and yield** — yielding kills your pane and any backgrounded bash with it; the next cycle's fresh orchestrator can only peek the on-disk deck (`sisyphus ask peek`) and yield again, producing a polling loop. The daemon now refuses `sisyphus orch yield` while a deck owned by orchestrator is pending; the supported pattern is foreground.
+**Do not `run_in_background` and yield** — yielding kills your pane and any backgrounded bash with it; the next cycle's fresh orchestrator can only peek the on-disk deck (`sis ask peek`) and yield again, producing a polling loop. The daemon now refuses `sis orch yield` while a deck owned by orchestrator is pending; the supported pattern is foreground.
 
 Stdout on completion is one line of JSON: `{responses: [{id, selectedOptionId?, freetext?}, ...], completedAt}`. Branch on each response by its interaction `id`.
 
-If you respawn mid-wait and find a pending deck on disk (e.g. after a daemon restart that orphaned the prior bash), block on it with `sisyphus ask poll <askId>` to re-attach. `sisyphus ask peek <askId>` is non-blocking and reserved for respawn-recovery diagnostics. See `sisyphus ask -h`.
+If you respawn mid-wait and find a pending deck on disk (e.g. after a daemon restart that orphaned the prior bash), block on it with `sis ask poll <askId>` to re-attach. `sis ask peek <askId>` is non-blocking and reserved for respawn-recovery diagnostics. See `sis ask -h`.
 
 ## Designing interactions
 
@@ -137,7 +137,7 @@ cat > "$deck" <<'EOF'
   ]
 }
 EOF
-# Then invoke `sisyphus ask "$deck"` synchronously (foreground bash) — blocks until answered.
+# Then invoke `sis ask "$deck"` synchronously (foreground bash) — blocks until answered.
 # Each interaction returns its own selectedOptionId / freetext in output.responses[], indexed by id.
 ```
 
@@ -147,4 +147,4 @@ EOF
 - `kind` is an enum: `notify` | `validation` | `decision` | `context` | `error`. No other values accepted (see the table above for which to pick).
 - `bodyPath` points at a markdown file instead of inlining the body in JSON. The path is resolved **relative to the deck JSON's directory** and must stay inside it (no `..`, no symlinks out, no absolute paths pointing elsewhere). Practical pattern: write the deck JSON next to its body file — e.g. both inside `$SISYPHUS_SESSION_DIR/context/` — and use a basename like `"completion-summary.md"`. Mutually exclusive with `body`.
 - On completion, stdout is one line of JSON: `{responses, completedAt}`. Parse `responses[]` and dispatch on each interaction's `id`.
-- See `sisyphus ask -h` for the full CLI surface.
+- See `sis ask -h` for the full CLI surface.

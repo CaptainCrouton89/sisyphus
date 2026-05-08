@@ -1,5 +1,5 @@
 #cloud-config
-# Provisioned by `sisyphus deploy` — turns a clean Ubuntu 24.04 box into
+# Provisioned by `sis deploy` — turns a clean Ubuntu 24.04 box into
 # a Tailscale-only sisyphus host. See specs/deploy.md.
 
 hostname: ${hostname}

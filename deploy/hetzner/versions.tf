@@ -10,6 +10,6 @@ terraform {
 }
 
 provider "hcloud" {
-  # HCLOUD_TOKEN env var is loaded by sisyphus deploy runner from
+  # HCLOUD_TOKEN env var is loaded by sis deploy runner from
   # ~/.sisyphus/deploy/hetzner.env before invoking terraform.
 }

@@ -12,5 +12,5 @@ terraform {
 provider "aws" {
   region = var.region
   # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env vars are loaded by the
-  # sisyphus deploy runner from ~/.sisyphus/deploy/aws.env.
+  # sis deploy runner from ~/.sisyphus/deploy/aws.env.
 }

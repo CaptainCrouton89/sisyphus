@@ -765,7 +765,7 @@ code that looks right and code that works.
   ┌──────────────────────────────────────────────────────────────────┐
   │                    SESSION LIFECYCLE                             │
   │                                                                  │
-  │  sisyphus start "task"                                           │
+  │  sis start "task"                                                │
   │       │                                                          │
   │       ▼                                                          │
   │  ┌─────────┐     spawn agents     ┌──────────────┐               │
@@ -773,7 +773,7 @@ code that looks right and code that works.
   │  │ plans   │     then yields      │  in parallel │               │
   │  └────┬────┘                      └──────┬───────┘               │
   │       │                                  │ each calls            │
-  │       │ orchestrator                     │ sisyphus agent submit │
+  │       │ orchestrator                     │ sis agent submit      │
   │       │ is KILLED                        │ when done             │
   │       │                                  ▼                       │
   │       │                           ┌──────────────┐               │

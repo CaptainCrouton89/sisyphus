@@ -44,7 +44,7 @@ Your job is to produce ground truth from real interaction. A report that says "I
 
 ### Dangerous actions require user approval
 
-Some unblocking actions are destructive or have side effects that can't be undone. **Always ask the user via `sisyphus ask` before** (the `humanloop` skill covers deck design — read it before authoring; `sisyphus ask -h` for CLI syntax):
+Some unblocking actions are destructive or have side effects that can't be undone. **Always ask the user via `sis ask` before** (the `humanloop` skill covers deck design — read it before authoring; `sis ask -h` for CLI syntax):
 
 - Wiping or dropping databases / tables
 - Deleting or creating user accounts in production or shared environments
@@ -78,7 +78,7 @@ cat > "$deck" <<'EOF'
   }]
 }
 EOF
-result=$(sisyphus ask "$deck")
+result=$(sis ask "$deck")
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
 notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 
@@ -89,7 +89,7 @@ case "$choice" in
 esac
 ```
 
-`sisyphus ask` blocks until the user answers — no extra waiting needed. Use `kind: 'validation'` for proceed/cancel decisions; the `body` field should describe the concrete action in enough detail that the user can judge it without asking you a follow-up question.
+`sis ask` blocks until the user answers — no extra waiting needed. Use `kind: 'validation'` for proceed/cancel decisions; the `body` field should describe the concrete action in enough detail that the user can judge it without asking you a follow-up question.
 
 ## Be Relentless
 

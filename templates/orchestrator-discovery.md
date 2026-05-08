@@ -41,7 +41,7 @@ cat > "$decomp_deck" <<'EOF'
   }]
 }
 EOF
-sisyphus ask "$decomp_deck"
+sis ask "$decomp_deck"
 ```
 
 If the user picks one, record the others in `goal.md` under a "Known follow-ups" section, then proceed with the chosen one through the rest of discovery.
@@ -116,7 +116,7 @@ cat > "$confirm_deck" <<'EOF'
   }]
 }
 EOF
-sisyphus ask "$confirm_deck"
+sis ask "$confirm_deck"
 ```
 
 **Branching:**
@@ -140,7 +140,7 @@ Pick the tier by **novelty of behavior**, not file count:
 - New subsystem / new protocol / cross-domain orchestration: **HIGH**
 - Novel concurrency / new security boundary / multi-system contract: **XHIGH**
 
-Apply the tier with `sisyphus session effort <low|medium|high|xhigh>` — this filters the strategy skill, mode templates, and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
+Apply the tier with `sis session effort <low|medium|high|xhigh>` — this filters the strategy skill, mode templates, and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
 
 If you change the tier mid-session because scope shifted, the next cycle's prompts adjust automatically; don't manually patch `strategy.md` to match — re-invoke the strategy skill.
 
@@ -171,13 +171,13 @@ After writing `goal.md` and `strategy.md`, initialize `roadmap.md`. Populate Cur
 Once `goal.md`, `strategy.md`, and `roadmap.md` are written and the goal is confirmed:
 
 ```bash
-sisyphus orch yield --mode planning --prompt "Discovery complete — goal.md, strategy.md, and roadmap.md initialized. Begin first stage."
+sis orch yield --mode planning --prompt "Discovery complete — goal.md, strategy.md, and roadmap.md initialized. Begin first stage."
 ```
 
 If you're still working on goal clarity (waiting for problem agent, re-entering after bifurcation, iterating with user), stay in discovery:
 
 ```bash
-sisyphus orch yield --mode discovery --prompt "Goal still being refined — [what's happening, what's next]."
+sis orch yield --mode discovery --prompt "Goal still being refined — [what's happening, what's next]."
 ```
 
 </transition>

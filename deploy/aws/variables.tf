@@ -35,7 +35,7 @@ variable "ssh_pubkey" {
 variable "ts_authkey" {
   type        = string
   sensitive   = true
-  description = "Tailscale auth key (ephemeral, single-use, tagged) — minted by sisyphus deploy runner."
+  description = "Tailscale auth key (ephemeral, single-use, tagged) — minted by sis deploy runner."
 }
 
 variable "sisyphus_version" {

@@ -1,1 +1,1 @@
-- `sisyphus orch yield --mode discovery`, `--mode validation`, etc. must be explicit at mode-transition cycles. Omitting silently defaults to `implementation` mode, skipping guardrails the subsequent cycle expects.
+- `sis orch yield --mode discovery`, `--mode validation`, etc. must be explicit at mode-transition cycles. Omitting silently defaults to `implementation` mode, skipping guardrails the subsequent cycle expects.

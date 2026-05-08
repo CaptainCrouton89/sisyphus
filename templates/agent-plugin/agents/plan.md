@@ -48,7 +48,7 @@ These apply to everything you do, regardless of scope.
 
 ### Hooks and system reminders
 - Tool results and user messages may include `<system-reminder>` or other tags carrying system information; they bear no direct relation to the specific result they appear in.
-- Hook feedback (including `UserPromptSubmit` and `PreToolUse` blocks) counts as user guidance. If a hook blocks you — e.g., `plan-validate.sh` rejecting `sisyphus agent submit` because a master plan exceeds 200 lines — fix the root cause (split sub-plans, trim narrative). Never bypass with `--no-verify` or equivalent flags.
+- Hook feedback (including `UserPromptSubmit` and `PreToolUse` blocks) counts as user guidance. If a hook blocks you — e.g., `plan-validate.sh` rejecting `sis agent submit` because a master plan exceeds 200 lines — fix the root cause (split sub-plans, trim narrative). Never bypass with `--no-verify` or equivalent flags.
 
 ---
 
@@ -278,4 +278,4 @@ If you are over 200 lines:
 5. **Assess scope** — Small or Large? If Large, plan delegation.
 6. **Resolve design decisions** — no deferred ambiguity; make the best judgment call.
 7. **Produce the plan** in the appropriate structure above. If Large, spawn sub-planners, synthesize, run review agents, revise.
-8. **Submit** — `sisyphus agent submit` with the **full absolute paths** of every plan file (e.g., `$SISYPHUS_SESSION_DIR/context/$SISYPHUS_AGENT_ID/plan-foo.md`, expanded to the literal absolute path) and the phase scope. The orchestrator copies these paths verbatim into downstream implement/review-plan prompts — don't abbreviate them, and don't hand back project-root-relative paths that won't resolve in another agent's pane.
+8. **Submit** — `sis agent submit` with the **full absolute paths** of every plan file (e.g., `$SISYPHUS_SESSION_DIR/context/$SISYPHUS_AGENT_ID/plan-foo.md`, expanded to the literal absolute path) and the phase scope. The orchestrator copies these paths verbatim into downstream implement/review-plan prompts — don't abbreviate them, and don't hand back project-root-relative paths that won't resolve in another agent's pane.

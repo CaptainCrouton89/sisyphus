@@ -101,7 +101,7 @@ Standard requirement JSON shape:
 }
 ```
 
-For the full schema and writing guidance, run `sisyphus admin requirements --annotated`.
+For the full schema and writing guidance, run `sis admin requirements --annotated`.
 
 ## Safe-Assumption Heuristic
 

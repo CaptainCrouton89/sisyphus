@@ -67,7 +67,7 @@ resource "aws_key_pair" "this" {
 
 resource "aws_security_group" "this" {
   name        = "${var.name}-sisyphus"
-  description = "sisyphus deploy: deny public 22, allow Tailscale UDP 41641 + ICMP"
+  description = "sis deploy: deny public 22, allow Tailscale UDP 41641 + ICMP"
   vpc_id      = local.effective_vpc_id
 
   # Tailscale WireGuard endpoint discovery. SG only sees public traffic

@@ -111,7 +111,7 @@ Follows Feature Build Large pattern:
   Cycle 5: critique stages 1-2 (foundation review before worker builds on it)
   Cycle 6: address critique + implement stage 3
   Cycle 7: implement stage 4 (integration + retry); validate stages 3-4
-  Cycle 8: sisyphus orch yield --mode validation — e2e: enqueue job, kill server, restart,
+  Cycle 8: sis orch yield --mode validation — e2e: enqueue job, kill server, restart,
     confirm job ran exactly once
   Cycle 9: final review agent; complete
 ```
