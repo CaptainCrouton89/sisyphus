@@ -1,5 +1,7 @@
-export function readStdin(): Promise<string | null> {
-  if (process.stdin.isTTY) return Promise.resolve(null);
+export function readStdin(opts: { force?: boolean } = {}): Promise<string | null> {
+  // Without `force`, skip stdin if attached to a TTY — caller is interactive,
+  // not piping. With `force`, read regardless: user explicitly asked via `--stdin`.
+  if (!opts.force && process.stdin.isTTY) return Promise.resolve(null);
 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];

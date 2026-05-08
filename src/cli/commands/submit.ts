@@ -9,8 +9,9 @@ export function registerSubmit(program: Command): void {
     .command('submit')
     .description('Submit work report and exit (agent only)')
     .option('--report <report>', 'Work report (or pipe via stdin)')
+    .option('--stdin', 'Force-read report from stdin (avoids shell escaping for long prompts)')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
-    .action(async (opts: { report?: string; session?: string }) => {
+    .action(async (opts: { report?: string; stdin?: boolean; session?: string }) => {
       assertTmux();
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       const agentId = process.env.SISYPHUS_AGENT_ID;
@@ -19,9 +20,22 @@ export function registerSubmit(program: Command): void {
         process.exit(1);
       }
 
-      const report = opts.report ?? await readStdin();
+      let report: string | null | undefined;
+      if (opts.stdin) {
+        report = await readStdin({ force: true });
+        if (!report) {
+          console.error('Error: --stdin set but no input received on stdin');
+          process.exit(1);
+        }
+        if (opts.report) {
+          console.error('Error: --stdin conflicts with --report; pass one source');
+          process.exit(1);
+        }
+      } else {
+        report = opts.report ?? await readStdin();
+      }
       if (!report) {
-        console.error('Error: provide --report or pipe content via stdin');
+        console.error('Error: provide --report, pipe content via stdin, or use --stdin');
         process.exit(1);
       }
 

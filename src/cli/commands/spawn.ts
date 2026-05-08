@@ -35,10 +35,11 @@ export function registerSpawn(program: Command): void {
     .option('--agent-type <type>', 'Agent type (e.g. sisyphus:debug, sisyphus:explore)', 'worker')
     .option('--name <name>', 'Agent name')
     .option('--instruction <instruction>', 'Task instruction for the agent (or pipe via stdin)')
+    .option('--stdin', 'Force-read instruction from stdin (avoids shell escaping for long prompts)')
     .option('--repo <name>', 'Repo subdirectory to use for this agent')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
     .option('--list-types', 'List available agent types and exit')
-    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name?: string; instruction?: string; repo?: string; session?: string; listTypes?: boolean }) => {
+    .action(async (positionalInstruction: string | undefined, opts: { agentType: string; name?: string; instruction?: string; stdin?: boolean; repo?: string; session?: string; listTypes?: boolean }) => {
       if (opts.listTypes) {
         listTypes();
         return;
@@ -57,9 +58,22 @@ export function registerSpawn(program: Command): void {
       }
 
       const positional = positionalInstruction === '-' ? undefined : positionalInstruction;
-      const instruction = opts.instruction ?? positional ?? await readStdin();
+      let instruction: string | null | undefined;
+      if (opts.stdin) {
+        instruction = await readStdin({ force: true });
+        if (!instruction) {
+          console.error('Error: --stdin set but no input received on stdin');
+          process.exit(1);
+        }
+        if (opts.instruction || positional) {
+          console.error('Error: --stdin conflicts with --instruction / [instruction]; pass one source');
+          process.exit(1);
+        }
+      } else {
+        instruction = opts.instruction ?? positional ?? await readStdin();
+      }
       if (!instruction) {
-        console.error('Error: --instruction is required (or pipe via stdin)');
+        console.error('Error: --instruction is required (or pipe via stdin / use --stdin)');
         process.exit(1);
       }
       if (instruction.trim().length < 20) {

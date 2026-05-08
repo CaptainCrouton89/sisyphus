@@ -8,7 +8,7 @@ interface TellOptions {
   session?: string;
   // Commander exposes `--no-submit` as `opts.submit`, defaulting to true.
   submit?: boolean;
-  textFromStdin?: boolean;
+  stdin?: boolean;
 }
 
 const ORCH_ALIASES = new Set(['orchestrator', 'orch', 'o']);
@@ -30,7 +30,7 @@ export function registerTell(program: Command): void {
     .description('Type a prompt directly into a running pane (orchestrator or agent-NNN). Submits immediately unlike `message`.')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID)')
     .option('--no-submit', 'Paste text but do not press Enter (caller can review/submit manually)')
-    .option('--text-from-stdin', 'Read prompt body from stdin instead of the [text] argument (avoids shell escaping)')
+    .option('--stdin', 'Read prompt body from stdin instead of the [text] argument (avoids shell escaping)')
     .action(async (targetRaw: string, textArg: string | undefined, opts: TellOptions) => {
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -45,15 +45,19 @@ export function registerTell(program: Command): void {
       }
 
       let text: string;
-      if (opts.textFromStdin) {
+      if (opts.stdin) {
         text = readStdin();
         if (text === '') {
-          console.error('Error: --text-from-stdin set but stdin was empty');
+          console.error('Error: --stdin set but stdin was empty');
+          process.exit(1);
+        }
+        if (textArg != null && textArg !== '') {
+          console.error('Error: --stdin conflicts with [text] argument; pass one source');
           process.exit(1);
         }
       } else {
         if (textArg == null || textArg === '') {
-          console.error('Error: provide [text] argument or use --text-from-stdin');
+          console.error('Error: provide [text] argument or use --stdin');
           process.exit(1);
         }
         text = textArg;

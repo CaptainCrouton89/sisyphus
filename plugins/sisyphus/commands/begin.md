@@ -20,3 +20,10 @@ sis start "your task description" -c "background context"
 ```bash
 sis start "Fix the JWT refresh bug — app shows blank screen on token expiry instead of redirecting to login" -c "Auth system lives in src/auth/. Key files: interceptor.ts (HTTP interceptor), token-store.ts (token persistence), refresh.ts (refresh flow). Tests in src/auth/__tests__/. Don't break the logout flow."
 ```
+
+**Long task or context?** Pipe via stdin to avoid shell escaping:
+```bash
+cat task.md | sis start --stdin -c "short context here"
+cat ctx.md  | sis start "short task"   --context-stdin
+```
+The same `--stdin` flag also exists on `sis agent spawn`, `sis message`, `sis tell`, `sis session resume`, and the agent-side `sis submit` / `sis report` / `sis orch yield`.

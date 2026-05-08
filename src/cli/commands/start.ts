@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { execSync, spawnSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { sendRequest } from '../client.js';
+import { readStdin } from '../stdin.js';
 import { getTmuxSessionInfo, isTmuxInstalled } from '../tmux.js';
 import { shellQuote } from '../../shared/shell.js';
 import { openDashboardWindow } from './dashboard.js';
@@ -47,13 +48,61 @@ export function registerStart(program: Command): void {
   program
     .command('start')
     .description('Start a new sisyphus session')
-    .argument('<task>', 'Task description for the orchestrator')
+    .argument('[task]', 'Task description for the orchestrator (omit when using --stdin)')
     .option('-c, --context <context>', 'Background context for the orchestrator')
     .option('-n, --name <name>', 'Human-readable name for the session')
     .option('--effort <tier>', 'Pipeline effort tier (low|medium|high|xhigh)')
     .option('--no-tmux-check', 'Skip the tmux session check')
-    .action(async (task: string, opts: { context?: string; name?: string; effort?: string; tmuxCheck?: boolean }) => {
+    .option('--stdin', 'Read the task description from stdin (avoids shell escaping for long prompts)')
+    .option('--context-stdin', 'Read the context from stdin (mutually exclusive with --stdin)')
+    .action(async (taskArg: string | undefined, opts: { context?: string; name?: string; effort?: string; tmuxCheck?: boolean; stdin?: boolean; contextStdin?: boolean }) => {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
+
+      if (opts.stdin && opts.contextStdin) {
+        console.error('Error: --stdin and --context-stdin cannot be combined; pipe one and pass the other on argv');
+        process.exit(1);
+      }
+
+      let task: string | undefined = taskArg;
+      let context: string | undefined = opts.context;
+
+      if (opts.stdin) {
+        const piped = await readStdin({ force: true });
+        if (!piped) {
+          console.error('Error: --stdin set but no input received on stdin');
+          process.exit(1);
+        }
+        if (taskArg !== undefined && taskArg !== '-') {
+          console.error('Error: --stdin conflicts with [task] positional; pass one or the other');
+          process.exit(1);
+        }
+        task = piped;
+      } else if (taskArg === '-') {
+        const piped = await readStdin({ force: true });
+        if (!piped) {
+          console.error("Error: task '-' means read stdin, but no input received");
+          process.exit(1);
+        }
+        task = piped;
+      }
+
+      if (opts.contextStdin) {
+        const piped = await readStdin({ force: true });
+        if (!piped) {
+          console.error('Error: --context-stdin set but no input received on stdin');
+          process.exit(1);
+        }
+        if (opts.context !== undefined) {
+          console.error('Error: --context-stdin conflicts with -c/--context; use one');
+          process.exit(1);
+        }
+        context = piped;
+      }
+
+      if (!task) {
+        console.error('Error: provide <task> argument, pipe via --stdin, or pass `-` as the task');
+        process.exit(1);
+      }
 
       if (opts.effort !== undefined) {
         const validTiers = ['low', 'medium', 'high', 'xhigh'];
@@ -71,7 +120,7 @@ export function registerStart(program: Command): void {
 
       // Send the start request — this is just a socket call, no tmux needed
       const effort = opts.effort as 'low' | 'medium' | 'high' | 'xhigh' | undefined;
-      const request: Request = { type: 'start', task, context: opts.context, cwd, name: opts.name, ...(effort !== undefined ? { effort } : {}) };
+      const request: Request = { type: 'start', task, context, cwd, name: opts.name, ...(effort !== undefined ? { effort } : {}) };
       const response = await sendRequest(request);
       if (!response.ok) {
         console.error(`Error: ${response.error}`);
