@@ -5,11 +5,15 @@ argument-hint: [--fresh] [--name <repo>] [--provider <hetzner|aws>]
 
 You are running `sis cloud start` against the user's shared cloud box and recovering from any setup failures until the box-side dashboard is healthy and the user is attached.
 
+`sis cloud start` has already been invoked for you — its output is below. Read it to determine which subcommand (if any) failed on non-zero exit (`sync`, `install`, or `session`).
+
+```!
+sis cloud start $ARGUMENTS
+```
+
 ## Workflow
 
-1. From the user's current cwd, run `sis cloud start $ARGUMENTS`. Watch the output to identify which subcommand failed on a non-zero exit (`sync`, `install`, or `session`).
-
-2. If `sis cloud start` exits 0, jump to step 5.
+1. If the command above exited 0, jump to step 5. Otherwise continue.
 
 3. **Failure recovery loop.** Re-run only the failed subcommand after fixing the root cause, then continue with the rest:
    - **`sync` failed** — usually network/SSH/disk:
