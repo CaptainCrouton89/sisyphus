@@ -65,8 +65,9 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
   console.log(`  \u2713 Keybindings: ${keybindMsg}`);
 
   // Session bar
-  console.log('  \u2713 Status bar: daemon-rendered via @sisyphus_status');
-  console.log('    Add to status-right: #{@sisyphus_status}');
+  console.log('  \u2713 Status bar: daemon-rendered via @sisyphus_left / @sisyphus_right');
+  console.log('    status-left:  #{E:@sisyphus_left}');
+  console.log('    status-right: #{E:@sisyphus_right}');
 
   // Sisyphus user plugin (slash commands: /sisyphus:begin, /sisyphus:autopsy, /sisyphus:configure-upload)
   if (result.sisyphusPlugin.installed && result.sisyphusPlugin.installPath) {

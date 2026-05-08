@@ -53,7 +53,6 @@ import { registerCompanion } from './commands/companion.js';
 import { registerDeploy } from './commands/deploy.js';
 import { registerCloud } from './commands/cloud.js';
 import { attachNotify } from './commands/notify.js';
-import { attachTmuxStatus } from './commands/tmux-status.js';
 import { attachTmuxSessions } from './commands/tmux-sessions.js';
 import { globalDir } from '../shared/paths.js';
 
@@ -142,7 +141,6 @@ registerCloud(program);
 // diagnostic group (hidden)
 const diagnostic = program.command('diagnostic', { hidden: true });
 attachNotify(diagnostic);
-attachTmuxStatus(diagnostic);
 attachTmuxSessions(diagnostic);
 
 program.addHelpText('after', `

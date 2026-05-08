@@ -206,9 +206,9 @@ bind -T copy-mode-vi C-j send -X scroll-down
 set -g status on
 set -g status-style "bg=#1d1e21,fg=#d4cbb8"
 set -g status-position bottom
-set -g status-left "#[fg=#d4cbb8,bold] #{session_name}  #[default]"
-set -g status-left-length 30
-set -g status-right "#{E:@sisyphus_status}#[fg=#2d2f33]#[bg=#2d2f33,fg=#b0a898] %H:%M "
+set -g status-left "#{E:@sisyphus_left}"
+set -g status-left-length 250
+set -g status-right "#{E:@sisyphus_right}#[fg=#2d2f33]#[bg=#2d2f33,fg=#b0a898] %H:%M "
 set -g status-right-length 250
 set -g status-interval 2
 

@@ -122,7 +122,6 @@ export class Compositor {
   private segments = new Map<string, Segment>();
   private external = new Map<string, ExternalSegment>();
   private config: StatusBarConfig;
-  private initialized = false;
 
   constructor(config: StatusBarConfig) {
     this.config = config;
@@ -147,33 +146,16 @@ export class Compositor {
   }
 
   render(): void {
-    if (!this.initialized) {
-      this.initialize();
-      this.initialized = true;
-    }
-
     const ctx = this.buildContext();
 
-    // Both sides are rendered per-session with all active-session highlights pre-resolved.
-    // Writing @sisyphus_left and @sisyphus_right as session options and pointing
-    // status-left/status-right at them means tmux never evaluates a session_name
-    // conditional — it just expands whichever session it's displaying.
+    // Per-session options only — never touch global tmux options. The user's
+    // ~/.tmux.conf wires these up via #{E:@sisyphus_left} / #{E:@sisyphus_right}.
+    // Writing globals here would clobber any tmux config edit the user makes.
     for (const session of ctx.allSessions) {
       const sessionCtx = this.buildSessionContext(ctx, session.name);
       tmux.setSessionOption(session.name, '@sisyphus_left', this.composeLeft(sessionCtx));
       tmux.setSessionOption(session.name, '@sisyphus_right', this.composeRight(sessionCtx));
     }
-    tmux.setGlobalOption('status-left', '#{E:@sisyphus_left}');
-    tmux.setGlobalOption('status-right', '#{E:@sisyphus_right}');
-  }
-
-  private initialize(): void {
-    // Disable built-in window list (we render it in the windows segment)
-    tmux.setGlobalOption('window-status-format', '');
-    tmux.setGlobalOption('window-status-current-format', '');
-    tmux.setGlobalOption('window-status-separator', '');
-    tmux.setGlobalOption('status-left-length', '250');
-    tmux.setGlobalOption('status-right-length', '250');
   }
 
   private buildContext(): RenderContext {
