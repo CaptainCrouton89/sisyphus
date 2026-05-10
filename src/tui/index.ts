@@ -26,7 +26,7 @@ if (askId && sessionId) {
   process.exit(0);
 }
 
-registerDashboardWindow();
+registerDashboardWindow(cwd);
 const cleanup = setupTerminal();
 const state = createAppState(cwd);
 startApp(state, cleanup);

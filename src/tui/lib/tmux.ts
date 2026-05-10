@@ -39,19 +39,40 @@ export function listAllWindowIds(): Set<string> {
 
 /**
  * Register this TUI window as the dashboard for the current tmux session.
- * Called on TUI startup so M-S (sisyphus-home) can find the dashboard window.
+ * Called on TUI startup so C-s h (sisyphus-home) and M-s (sisyphus-cycle) can
+ * locate the dashboard. Also stamps @sisyphus_cwd on the parent tmux session
+ * if it is currently unset — without it, resolve_home() and the cycle script
+ * silently exclude the home session, breaking jump/cycle from ssyph_ panes.
+ * If @sisyphus_cwd is already set to a different cwd we leave it alone so we
+ * don't hijack another project's home registration.
  */
-export function registerDashboardWindow(): void {
+export function registerDashboardWindow(cwd?: string): void {
   const wid = getWindowId();
   const pane = process.env['TMUX_PANE'];
+  let sessionTarget: string | null = null;
   if (pane) {
-    const session = execSafe(`tmux display-message -t ${shellQuote(pane)} -p "#{session_id}"`);
-    if (session) {
-      execSafe(`tmux set-option -t ${shellQuote(session)} @sisyphus_dashboard ${wid}`);
-      return;
+    sessionTarget = execSafe(`tmux display-message -t ${shellQuote(pane)} -p "#{session_id}"`)?.trim() || null;
+  }
+  if (sessionTarget) {
+    execSafe(`tmux set-option -t ${shellQuote(sessionTarget)} @sisyphus_dashboard ${wid}`);
+  } else {
+    execSafe(`tmux set-option @sisyphus_dashboard ${wid}`);
+  }
+
+  if (cwd) {
+    const normalizedCwd = cwd.replace(/\/+$/, '');
+    const target = sessionTarget;
+    const existing = target
+      ? execSafe(`tmux show-options -t ${shellQuote(target)} -v @sisyphus_cwd`)?.trim()
+      : execSafe(`tmux show-options -v @sisyphus_cwd`)?.trim();
+    if (!existing) {
+      if (target) {
+        execSafe(`tmux set-option -t ${shellQuote(target)} @sisyphus_cwd ${shellQuote(normalizedCwd)}`);
+      } else {
+        execSafe(`tmux set-option @sisyphus_cwd ${shellQuote(normalizedCwd)}`);
+      }
     }
   }
-  execSafe(`tmux set-option @sisyphus_dashboard ${wid}`);
 }
 
 let companionPaneId: string | null = null;
