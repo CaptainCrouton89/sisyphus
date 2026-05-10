@@ -1,5 +1,5 @@
 import { boxCloudSidecarPath, boxCloudSidecarDir } from '../../shared/paths.js';
-import { shellQuote } from '../../shared/shell.js';
+import { shellQuoteHomePath } from '../../shared/shell.js';
 import { runOnBox } from '../deploy/ssh-exec.js';
 import type { Provider } from '../deploy/creds.js';
 import type { PackageManager } from './repo.js';
@@ -19,7 +19,7 @@ export interface CloudSidecar {
 export function readSidecar(provider: Provider, repo: string): CloudSidecar | null {
   const path = boxCloudSidecarPath(repo);
   // `cat` returns non-zero if file missing — that's our "no sidecar" signal.
-  const result = runOnBox(provider, `cat ${shellQuote(path)} 2>/dev/null`);
+  const result = runOnBox(provider, `cat ${shellQuoteHomePath(path)} 2>/dev/null`);
   if (result.exitCode !== 0 || !result.stdout.trim()) return null;
   try {
     const parsed = JSON.parse(result.stdout) as CloudSidecar;
@@ -40,8 +40,8 @@ export function writeSidecar(provider: Provider, repo: string, data: CloudSideca
   // Heredoc with a fixed sentinel keeps the JSON payload from needing further
   // shell escaping. Sentinel is unlikely to appear in real payloads.
   const cmd = [
-    `mkdir -p ${shellQuote(dir)}`,
-    `cat > ${shellQuote(path)} <<'SISYPHUS_CLOUD_SIDECAR_EOF'`,
+    `mkdir -p ${shellQuoteHomePath(dir)}`,
+    `cat > ${shellQuoteHomePath(path)} <<'SISYPHUS_CLOUD_SIDECAR_EOF'`,
     json,
     'SISYPHUS_CLOUD_SIDECAR_EOF',
   ].join('\n');

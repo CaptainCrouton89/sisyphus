@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
 import { boxRepoPath } from '../../shared/paths.js';
-import { shellQuote } from '../../shared/shell.js';
+import { shellQuote, shellQuoteHomePath } from '../../shared/shell.js';
 import { EXEC_ENV } from '../../shared/exec.js';
 import { promptLine } from '../deploy/creds.js';
 import type { Provider } from '../deploy/creds.js';
@@ -64,15 +64,15 @@ export async function cloudSync(provider: Provider, repo: string, opts: SyncOpti
     }
     console.log(`→ wiping ${remoteDir} and cloning ${localOrigin} on box...`);
     const cloneCmd = [
-      `rm -rf ${shellQuote(remoteDir)}`,
-      `mkdir -p ${shellQuote('~/projects')}`,
-      `git clone ${shellQuote(localOrigin)} ${shellQuote(remoteDir)}`,
+      `rm -rf ${shellQuoteHomePath(remoteDir)}`,
+      `mkdir -p ${shellQuoteHomePath('~/projects')}`,
+      `git clone ${shellQuote(localOrigin)} ${shellQuoteHomePath(remoteDir)}`,
     ].join(' && ');
     const code = await runOnBoxStreaming(provider, cloneCmd);
     if (code !== 0) throw new Error(`fresh clone failed (exit ${code})`);
   } else {
     // Ensure the remote dir exists — rsync will create it but mkdir is harmless.
-    const mkdir = runOnBox(provider, `mkdir -p ${shellQuote(remoteDir)}`);
+    const mkdir = runOnBox(provider, `mkdir -p ${shellQuoteHomePath(remoteDir)}`);
     if (mkdir.exitCode !== 0) {
       throw new Error(`Failed to mkdir on box: ${mkdir.stderr}`);
     }
@@ -117,7 +117,7 @@ export async function cloudInstall(provider: Provider, repo: string): Promise<vo
   }
   console.log(`→ ${pm} install in ${remoteDir} on box...`);
   // `cd` then run; explicit shell wrapping is fine over ssh.
-  const remoteCmd = `cd ${shellQuote(remoteDir)} && ${cmd}`;
+  const remoteCmd = `cd ${shellQuoteHomePath(remoteDir)} && ${cmd}`;
   const code = await runOnBoxStreaming(provider, remoteCmd);
   if (code !== 0) throw new Error(`${pm} install failed (exit ${code})`);
 
@@ -140,7 +140,7 @@ export async function cloudSession(provider: Provider, repo: string): Promise<vo
   const remoteDir = boxRepoPath(repo);
   // home-init is a sisyphus admin subcommand on the box; runs against the
   // local tmux server there. `~` expands in the remote shell.
-  const cmd = `sis admin home-init ${shellQuote(repo)} ${shellQuote(remoteDir)}`;
+  const cmd = `sis admin home-init ${shellQuote(repo)} ${shellQuoteHomePath(remoteDir)}`;
   console.log(`→ initializing tmux home session "${repo}" on box...`);
   const result = runOnBox(provider, cmd);
   if (result.exitCode !== 0) {

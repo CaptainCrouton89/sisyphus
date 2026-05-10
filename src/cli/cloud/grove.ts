@@ -1,4 +1,4 @@
-import { shellQuote } from '../../shared/shell.js';
+import { shellQuote, shellQuoteHomePath } from '../../shared/shell.js';
 import { runOnBox } from '../deploy/ssh-exec.js';
 import type { Provider } from '../deploy/creds.js';
 
@@ -33,7 +33,7 @@ export function ensureGroveRegistered(
   repo: string,
   instancePath: string,
 ): void {
-  const cmd = `grove register --update --name ${shellQuote(repo)} ${shellQuote(instancePath)}`;
+  const cmd = `grove register --update --name ${shellQuote(repo)} ${shellQuoteHomePath(instancePath)}`;
   const result = runOnBox(provider, cmd);
   if (result.exitCode !== 0) {
     throw new Error(`Failed to register grove project ${repo}: ${result.stderr || result.stdout}`);

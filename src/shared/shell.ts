@@ -2,6 +2,18 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+/**
+ * Quote a path for a remote shell while preserving a leading `~` / `~/` so the
+ * remote shell still expands it. Plain `shellQuote('~/foo')` produces
+ * `'~/foo'`, and `~` does not expand inside single quotes — the remote `cd`
+ * then looks for a literal `~` directory and fails.
+ */
+export function shellQuoteHomePath(path: string): string {
+  if (path === '~') return '~';
+  if (path.startsWith('~/')) return `~/${shellQuote(path.slice(2))}`;
+  return shellQuote(path);
+}
+
 /** Validate that a session ID is a safe UUID-like string (no path traversal). */
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 export function validateSessionId(id: string): boolean {
