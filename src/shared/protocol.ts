@@ -22,6 +22,7 @@ export type Request =
   | { type: 'tell'; sessionId: string; target: { kind: 'orchestrator' } | { kind: 'agent'; agentId: string }; text: string; submit: boolean; source?: MessageSource }
   | { type: 'update-task'; sessionId: string; task: string }
   | { type: 'set-effort'; sessionId: string; effort: 'low' | 'medium' | 'high' | 'xhigh' }
+  | { type: 'set-dangerous-mode'; sessionId: string; enabled: boolean }
   | { type: 'set-upload-status'; sessionId: string; cwd: string; status: UploadStatus; storageKey?: string; error?: string }
   | { type: 'rollback'; sessionId: string; cwd: string; toCycle: number }
   | { type: 'delete'; sessionId: string; cwd: string }

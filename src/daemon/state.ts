@@ -90,6 +90,18 @@ function saveSession(session: Session): void {
   atomicWrite(statePath(session.cwd, session.id), JSON.stringify(session, null, 2));
 }
 
+/**
+ * Returns true when the session has dangerousMode enabled. Safe to call before
+ * the state file exists (e.g. mid-create) — returns false on any read error.
+ */
+export function isSessionDangerous(cwd: string, sessionId: string): boolean {
+  try {
+    return getSession(cwd, sessionId).dangerousMode === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function addAgent(cwd: string, sessionId: string, agent: Agent): Promise<void> {
   return withSessionLock(sessionId, () => {
     const session = getSession(cwd, sessionId);

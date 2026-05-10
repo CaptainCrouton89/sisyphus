@@ -13,7 +13,7 @@ import { emitHistoryEvent } from './history.js';
 import { getActiveTimers } from './pane-monitor.js';
 import type { Compositor } from './segments/index.js';
 import { generateVisualForQuestion } from './ask-visual.js';
-import { listAsks, readMeta, readDecisions } from './ask-store.js';
+import { listAsks, readMeta, readDecisions, autoResolveAsk } from './ask-store.js';
 import { resolveOrchestratorOrphanAsks } from './orphan-asks.js';
 import { recomputeDots } from './status-dots.js';
 import * as orchestrator from './orchestrator.js';
@@ -518,6 +518,24 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!tracking) return unknownSessionError(req.sessionId);
         await state.updateSession(tracking.cwd, req.sessionId, { effort: req.effort });
         return { ok: true };
+      }
+
+      case 'set-dangerous-mode': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        await state.updateSession(tracking.cwd, req.sessionId, { dangerousMode: req.enabled });
+        let flushed = 0;
+        if (req.enabled) {
+          for (const askId of listAsks(tracking.cwd, req.sessionId)) {
+            const meta = readMeta(tracking.cwd, req.sessionId, askId);
+            if (!meta) continue;
+            if (meta.status !== 'pending' && meta.status !== 'in-progress') continue;
+            if (meta.orphaned) continue;
+            const ok = await autoResolveAsk(tracking.cwd, req.sessionId, askId);
+            if (ok) flushed += 1;
+          }
+        }
+        return { ok: true, data: { enabled: req.enabled, flushed } };
       }
 
       case 'set-upload-status': {

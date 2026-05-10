@@ -5,6 +5,7 @@ import {
 import type { AskMeta, AskStatus, Deck, InteractionKind, InteractionResponse } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
 import { emitHistoryEvent } from './history.js';
+import { isSessionDangerous } from './state.js';
 import { atomicWrite, withLock } from './lib/atomic.js';
 import { sendTerminalNotification } from './notify.js';
 import * as state from './state.js';
@@ -81,6 +82,7 @@ export function createAsk(cwd: string, sessionId: string, params: CreateAskParam
 
 export function writeDecisions(cwd: string, sessionId: string, askId: string, deck: Deck): void {
   atomicWrite(askDecisionsPath(cwd, sessionId, askId), JSON.stringify(deck, null, 2));
+  void maybeAutoResolveAsk(cwd, sessionId, askId, deck);
 }
 
 export function readDecisions(cwd: string, sessionId: string, askId: string): Deck | null {
@@ -179,6 +181,63 @@ export interface PendingAskRef {
  * (mode-transition notifications, heartbeat asks, orphan-recovery surfaces — these
  * have no CLI waiter, so terminating the caller doesn't orphan anything).
  */
+/**
+ * Build auto-responses for a deck by selecting the first option of every
+ * interaction. Skips interactions with no options. Used by dangerous mode.
+ */
+function buildAutoResponses(deck: Deck): InteractionResponse[] {
+  const out: InteractionResponse[] = [];
+  for (const interaction of deck.interactions) {
+    const first = interaction.options[0];
+    if (!first) continue;
+    out.push({ id: interaction.id, selectedOptionId: first.id });
+  }
+  return out;
+}
+
+/**
+ * Unconditionally auto-resolve the given ask using the supplied (or just-read)
+ * deck. Skips when output.json already exists or no responses can be built.
+ * The flush path passes the deck directly; the writeDecisions hook also passes
+ * the deck so we never re-read it.
+ */
+export async function autoResolveAsk(
+  cwd: string, sessionId: string, askId: string, deck?: Deck,
+): Promise<boolean> {
+  try {
+    if (existsSync(askOutputPath(cwd, sessionId, askId))) return false;
+    const d = deck ?? readDecisions(cwd, sessionId, askId);
+    if (!d) return false;
+    const responses = buildAutoResponses(d);
+    if (responses.length === 0) return false;
+    writeOutput(cwd, sessionId, askId, responses);
+    await updateMeta(cwd, sessionId, askId, {
+      status: 'answered',
+      completedAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.warn(`[sisyphus] dangerous-mode auto-resolve failed for ask ${askId}:`, err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
+/**
+ * Auto-resolve hook called from writeDecisions. If dangerous mode is on for
+ * this session, auto-resolves the just-written deck. Failure is logged, never
+ * thrown — must not roll back the deck write.
+ */
+async function maybeAutoResolveAsk(
+  cwd: string, sessionId: string, askId: string, deck: Deck,
+): Promise<void> {
+  try {
+    if (!isSessionDangerous(cwd, sessionId)) return;
+    await autoResolveAsk(cwd, sessionId, askId, deck);
+  } catch {
+    // never roll back the deck write
+  }
+}
+
 export function listOpenAsksFor(cwd: string, sessionId: string, askedBy: string): PendingAskRef[] {
   const out: PendingAskRef[] = [];
   for (const askId of listAsks(cwd, sessionId)) {

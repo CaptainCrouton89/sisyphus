@@ -1458,6 +1458,36 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     return;
   }
 
+  // D: toggle DANGEROUS mode for the selected session (auto-accept default for every ask)
+  if (input === 'D') {
+    const sessionId = state.selectedSessionId;
+    const session = state.selectedSession;
+    if (!sessionId || !session) { notify(state, 'No session selected'); return; }
+    const next = !(session.dangerousMode === true);
+    session.dangerousMode = next;
+    requestRender();
+    void (async () => {
+      try {
+        const res = await actions.send({ type: 'set-dangerous-mode', sessionId, enabled: next });
+        if (!res.ok) {
+          if (state.selectedSession === session) session.dangerousMode = !next;
+          notify(state, `Dangerous mode toggle failed: ${res.error}`);
+          requestRender();
+          return;
+        }
+        const flushed = (res.data?.['flushed'] as number | undefined) ?? 0;
+        notify(state, next
+          ? (flushed > 0 ? `DANGEROUS mode ON — ${flushed} pending ask(s) auto-resolved` : 'DANGEROUS mode ON')
+          : 'DANGEROUS mode OFF');
+      } catch (err) {
+        if (state.selectedSession === session) session.dangerousMode = !next;
+        notify(state, `Dangerous mode toggle failed: ${(err as Error).message}`);
+        requestRender();
+      }
+    })();
+    return;
+  }
+
   // /: search (vim-like, direct from navigate)
   if (input === '/') {
     state.mode = 'search';

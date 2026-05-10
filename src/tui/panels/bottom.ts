@@ -8,6 +8,7 @@ import type { TreeNodeType } from '../types/tree.js';
 const B = ansiBold;
 const D = ansiDim;
 const SEP = D('│ ');
+const DANGER_BADGE = '\x1b[1;41;97m DANGEROUS \x1b[0m';
 
 export function renderStatusLine(
   buf: FrameBuffer,
@@ -82,6 +83,10 @@ export function renderStatusLine(
       B('[w]') + D(' tmux  ') +
       SEP +
       B('[q]') + D('uit');
+  }
+
+  if (state.selectedSession?.dangerousMode === true) {
+    content = `${DANGER_BADGE} ${content}`;
   }
 
   writeClipped(buf, 1, y, content, buf.width - 2);

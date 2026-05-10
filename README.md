@@ -160,6 +160,7 @@ Key bindings — navigate mode:
 | `e` | Edit context file |
 | `S` | Session info |
 | `F` | Filter / search |
+| `D` | Toggle DANGEROUS mode for the selected session (auto-accepts the default for every ask) |
 | `c` | Open companion overlay |
 | `/` | Search sessions |
 | `q` | Quit |

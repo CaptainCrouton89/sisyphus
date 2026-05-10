@@ -98,6 +98,12 @@ export interface Session {
   /** Daemon-local `new Date().toISOString()` at the moment the success was persisted. */
   uploadCompletedAt?: string;
   effort?: 'low' | 'medium' | 'high' | 'xhigh';
+  /**
+   * When true, the daemon auto-resolves every new ask in this session by
+   * picking the first option of each interaction. Toggleable per-session
+   * from the dashboard via the `D` key.
+   */
+  dangerousMode?: boolean;
 }
 
 export interface StatusDigest {
