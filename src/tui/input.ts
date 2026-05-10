@@ -304,7 +304,7 @@ function findLatestReport(cwd: string, sessionId: string): string | null {
   } catch { return null; }
 }
 
-function goToSessionWindow(state: AppState, actions: InputActions): void {
+async function goToSessionWindow(state: AppState, actions: InputActions): Promise<void> {
   const session = state.selectedSession;
   if (!session || !state.selectedSessionId) { notify(state, 'No session selected'); return; }
 
@@ -313,6 +313,26 @@ function goToSessionWindow(state: AppState, actions: InputActions): void {
     if (switchTarget) actions.switchToSession(switchTarget);
     actions.selectWindow(session.tmuxWindowId);
     return;
+  }
+
+  // Pane appears dead but the tmux session may still exist with stale IDs
+  // (window closed, daemon restarted, etc.) — try a daemon-side reconnect to
+  // refresh tmuxSessionId/tmuxWindowId, then switch using the fresh IDs.
+  // Falls through to a fresh `claude --resume` only if no tmux session by name exists.
+  if (session.status !== 'completed') {
+    const sessionId = state.selectedSessionId;
+    const res = await actions.send({ type: 'reconnect', sessionId, cwd: state.cwd });
+    if (res.ok) {
+      const data = res.data ?? {};
+      const tmuxName = (data['tmuxSessionName'] as string | undefined) ?? session.tmuxSessionName;
+      const tmuxWin = data['tmuxWindowId'] as string | undefined;
+      const tmuxId = data['tmuxSessionId'] as string | undefined;
+      const switchTarget = tmuxId ?? tmuxName;
+      if (switchTarget) actions.switchToSession(switchTarget);
+      if (tmuxWin) actions.selectWindow(tmuxWin);
+      notify(state, `Reconnected ${tmuxName ?? sessionId}`);
+      return;
+    }
   }
 
   const lastCycle = session.orchestratorCycles[session.orchestratorCycles.length - 1];
@@ -845,7 +865,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     }
 
     case 'go-to-window': {
-      goToSessionWindow(state, actions);
+      void goToSessionWindow(state, actions);
       break;
     }
 
@@ -1259,7 +1279,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
 
   // w: go to tmux window (or resume orchestrator Claude session if window is dead/completed)
   if (input === 'w') {
-    goToSessionWindow(state, actions);
+    void goToSessionWindow(state, actions);
     return;
   }
 
