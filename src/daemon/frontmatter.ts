@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
 import type { Provider } from '../shared/types.js';
+import { projectAgentPluginDir, userAgentPluginDir } from '../shared/paths.js';
 
 export interface AgentTypeFrontmatter {
   name?: string;
@@ -116,9 +117,13 @@ export function resolveAgentTypePath(agentType: string, pluginDir: string, cwd: 
       searchPaths.push(join(installPath, 'agents', `${name}.md`));
     }
   } else {
-    // Project-local
+    // Project-local sisyphus extension (carries hooks/skills, not just agent body)
+    searchPaths.push(join(projectAgentPluginDir(cwd), 'agents', `${name}.md`));
+    // User-global sisyphus extension
+    searchPaths.push(join(userAgentPluginDir(), 'agents', `${name}.md`));
+    // Project-local Claude convention
     searchPaths.push(join(cwd, '.claude', 'agents', `${name}.md`));
-    // User-global
+    // User-global Claude convention
     searchPaths.push(join(homedir(), '.claude', 'agents', `${name}.md`));
     // Bundled
     searchPaths.push(join(pluginDir, 'agents', `${name}.md`));
@@ -133,7 +138,7 @@ export function resolveAgentTypePath(agentType: string, pluginDir: string, cwd: 
 
 export interface DiscoveredAgentType {
   qualifiedName: string;
-  source: 'bundled' | 'plugin' | 'project' | 'user';
+  source: 'bundled' | 'plugin' | 'project' | 'user' | 'project-sis' | 'user-sis';
   description?: string;
   model?: string;
 }
@@ -166,7 +171,9 @@ export function discoverAgentTypes(pluginDir: string, cwd: string): DiscoveredAg
     }
   }
 
-  // Priority order: project > user > bundled > plugins
+  // Priority order: project-sis > user-sis > project > user > bundled > plugins
+  scanDir(join(projectAgentPluginDir(cwd), 'agents'), null, 'project-sis');
+  scanDir(join(userAgentPluginDir(), 'agents'), null, 'user-sis');
   scanDir(join(cwd, '.claude', 'agents'), null, 'project');
   scanDir(join(homedir(), '.claude', 'agents'), null, 'user');
   scanDir(join(pluginDir, 'agents'), 'sisyphus', 'bundled');

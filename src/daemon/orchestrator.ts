@@ -3,7 +3,12 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, join, relative } from 'node:path';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
-import { contextDir, goalPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath, projectOrchestratorPromptPath, promptsDir, sessionDir, reportsDir } from '../shared/paths.js';
+import {
+  contextDir, goalPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath,
+  projectOrchestratorPromptPath, userOrchestratorPromptPath,
+  projectOrchestratorSettingsPath, userOrchestratorSettingsPath,
+  promptsDir, sessionDir, reportsDir,
+} from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
 import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
 import type { Agent, Session } from '../shared/types.js';
@@ -15,6 +20,7 @@ import { discoverOrchestratorModes } from './orchestrator-modes.js';
 import * as state from './state.js';
 import { renderEffortMarkers } from './lib/effort-render.js';
 import { renderPluginDir } from './lib/render-plugin.js';
+import { orchestratorPluginLayers, renderLayeredPluginDir } from './extensions.js';
 import * as tmux from './tmux.js';
 import { registerPane, unregisterPane, unregisterSessionPanes } from './pane-registry.js';
 import { flushCycleTimer } from './pane-monitor.js';
@@ -87,16 +93,53 @@ export function setOrchestratorPaneId(sessionId: string, paneId: string): void {
   sessionOrchestratorPane.set(sessionId, paneId);
 }
 
+/**
+ * Shallow-merge orchestrator settings across layers (project > user > bundled)
+ * and write the result into the session prompts dir. Returns the path Claude
+ * CLI should be pointed at via `--settings`. Falls back to the bundled file
+ * unmodified if no extension layer contributes.
+ */
+function resolveOrchestratorSettings(cwd: string, sessionId: string): string {
+  const bundled = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
+  const projectSettings = projectOrchestratorSettingsPath(cwd);
+  const userSettings = userOrchestratorSettingsPath();
+
+  const hasProject = existsSync(projectSettings);
+  const hasUser = existsSync(userSettings);
+  if (!hasProject && !hasUser) return bundled;
+
+  // Merge from lowest to highest priority so higher overrides lower.
+  let merged: Record<string, unknown> = {};
+  for (const path of [bundled, hasUser ? userSettings : null, hasProject ? projectSettings : null]) {
+    if (!path || !existsSync(path)) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
+      merged = { ...merged, ...parsed };
+    } catch (err) {
+      console.warn(`[sisyphus] Failed to parse settings layer ${path}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  const out = join(promptsDir(cwd, sessionId), 'orchestrator-settings.merged.json');
+  writeFileSync(out, JSON.stringify(merged, null, 2), 'utf-8');
+  return out;
+}
+
 function loadOrchestratorPrompt(cwd: string, sessionId: string, mode: string): string {
+  // Project- or user-level full base override (single-file replacement of the bundled base).
   const projectPath = projectOrchestratorPromptPath(cwd);
   if (existsSync(projectPath)) {
     return readFileSync(projectPath, 'utf-8');
+  }
+  const userPath = userOrchestratorPromptPath();
+  if (existsSync(userPath)) {
+    return readFileSync(userPath, 'utf-8');
   }
 
   const basePath = resolve(import.meta.dirname, '../templates/orchestrator-base.md');
   const base = readFileSync(basePath, 'utf-8');
 
-  const modes = discoverOrchestratorModes();
+  const modes = discoverOrchestratorModes(cwd);
   const selected = modes.find(m => m.name === mode) ?? modes.find(m => m.name === 'discovery');
 
   if (!selected) {
@@ -381,7 +424,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     .replace(/\$SISYPHUS_SESSION_ID/g, sessionId);
 
   // Inject available orchestrator modes into system prompt
-  const modes = discoverOrchestratorModes();
+  const modes = discoverOrchestratorModes(cwd);
   const modeLines = modes.map(m => {
     const desc = m.description ? ` — ${m.description}` : '';
     return `- \`${m.name}\`${desc}`;
@@ -439,10 +482,24 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
     await state.drainMessages(cwd, sessionId, session.messages.length);
   }
 
-  const pluginSrcPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
+  // Layered plugin composition: project (.sisyphus/orchestrator-plugin) > user
+  // (~/.sisyphus/orchestrator-plugin) > bundled (templates/orchestrator-plugin).
+  // Higher layers shadow lower per relative path; effort markers rendered on .md files.
   const pluginPath = join(sesDir, '.orchestrator-plugin');
-  renderPluginDir(pluginSrcPath, pluginPath, sessionEffort);
-  const settingsPath = resolve(import.meta.dirname, '../templates/orchestrator-settings.json');
+  const orchLayers = orchestratorPluginLayers(cwd);
+  if (orchLayers.length === 0) {
+    // Fallback to bundled-only via the original renderer in the unlikely case
+    // that no layer resolves (mostly defensive — bundled should always be present).
+    const pluginSrcPath = resolve(import.meta.dirname, '../templates/orchestrator-plugin');
+    renderPluginDir(pluginSrcPath, pluginPath, sessionEffort);
+  } else {
+    renderLayeredPluginDir(orchLayers, pluginPath, sessionEffort);
+  }
+
+  // Layered settings: shallow-merge project > user > bundled (top-level keys).
+  // Always materialize the merged JSON into the session prompts dir so Claude CLI
+  // sees a single --settings target regardless of which layers contributed.
+  const settingsPath = resolveOrchestratorSettings(cwd, sessionId);
   const config = loadConfig(cwd);
   const effort = config.orchestratorEffort ?? 'xhigh';
   const model = config.model;

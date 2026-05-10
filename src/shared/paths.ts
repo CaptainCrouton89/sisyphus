@@ -37,6 +37,34 @@ export function projectOrchestratorPromptPath(cwd: string): string {
   return join(projectDir(cwd), 'orchestrator.md');
 }
 
+export function userOrchestratorPromptPath(): string {
+  return join(globalDir(), 'orchestrator.md');
+}
+
+export function projectOrchestratorSettingsPath(cwd: string): string {
+  return join(projectDir(cwd), 'orchestrator-settings.json');
+}
+
+export function userOrchestratorSettingsPath(): string {
+  return join(globalDir(), 'orchestrator-settings.json');
+}
+
+export function projectAgentPluginDir(cwd: string): string {
+  return join(projectDir(cwd), 'agent-plugin');
+}
+
+export function userAgentPluginDir(): string {
+  return join(globalDir(), 'agent-plugin');
+}
+
+export function projectOrchestratorPluginDir(cwd: string): string {
+  return join(projectDir(cwd), 'orchestrator-plugin');
+}
+
+export function userOrchestratorPluginDir(): string {
+  return join(globalDir(), 'orchestrator-plugin');
+}
+
 export function sessionsDir(cwd: string): string {
   return join(projectDir(cwd), 'sessions');
 }

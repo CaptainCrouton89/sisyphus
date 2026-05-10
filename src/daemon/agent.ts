@@ -22,6 +22,14 @@ import { emitHistoryEvent } from './history.js';
 import { emitOrphanAsk, markAgentAsksOrphan } from './orphan-asks.js';
 import { capturePanePidLstart } from './orphan-sweep.js';
 import { renderEffortMarkers } from './lib/effort-render.js';
+import {
+  agentPluginLayers,
+  mergeHookManifests,
+  copyLayered,
+  collectReferencedHookScripts,
+  collectDisabledHookScripts,
+  copySkill,
+} from './extensions.js';
 
 const agentCounters = new Map<string, number>();
 
@@ -79,6 +87,7 @@ function createAgentPlugin(
   mkdirSync(`${base}/.claude-plugin`, { recursive: true });
   mkdirSync(`${base}/agents`, { recursive: true });
   mkdirSync(`${base}/hooks`, { recursive: true });
+  mkdirSync(`${base}/skills`, { recursive: true });
 
   writeFileSync(
     `${base}/.claude-plugin/plugin.json`,
@@ -92,10 +101,10 @@ function createAgentPlugin(
   if (agentConfig?.filePath && agentType && agentType !== 'worker') {
     const shortName = agentType.replace(/^sisyphus:/, '');
 
-    // Copy sub-agent definitions if a subdirectory exists.
-    // The parent agent's own .md is NOT copied — it would make the parent
-    // visible as a Task-tool subagent inside its own pane, enabling self-dispatch.
-    // The main session receives the body via --append-system-prompt instead.
+    // Copy sub-agent definitions if a subdirectory exists next to the resolved
+    // agent .md. The parent agent's own .md is NOT copied — it would make the
+    // parent visible as a Task-tool subagent inside its own pane, enabling
+    // self-dispatch. The main session receives the body via --append-system-prompt.
     const subAgentDir = join(dirname(agentConfig.filePath), shortName);
     if (existsSync(subAgentDir)) {
       for (const f of readdirSync(subAgentDir)) {
@@ -106,72 +115,44 @@ function createAgentPlugin(
     }
   }
 
-  const srcHooks = resolve(import.meta.dirname, '../templates/agent-plugin/hooks');
-  for (const f of ['require-submit.sh', 'intercept-send-message.sh', 'register-bg-task.sh', 'ask-background-guard.sh']) {
-    copyFileSync(`${srcHooks}/${f}`, `${base}/hooks/${f}`);
-  }
-
-  // Build hooks config with conditional UserPromptSubmit per agent type
-  // Use ${CLAUDE_PLUGIN_ROOT} for paths — Claude Code resolves this to the plugin directory
-  const hooksConfig: Record<string, unknown[]> = {
-    PreToolUse: [
-      { matcher: 'SendMessage', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/intercept-send-message.sh' }] },
-      { matcher: 'Bash', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/ask-background-guard.sh' }] },
-    ],
-    PostToolUse: [
-      { matcher: 'Task', hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/register-bg-task.sh' }] },
-    ],
-  };
-
-  // Interactive agents (e.g. problem, requirements, design, plan) are designed for user back-and-forth
-  // and should not be blocked from stopping by the submit requirement.
-  if (!agentConfig?.frontmatter.interactive) {
-    hooksConfig.Stop = [
-      { hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/require-submit.sh' }] },
-    ];
-  }
-
+  // ── Layered hook composition ────────────────────────────────────────────────
+  // Walk project (.sisyphus/agent-plugin) > user (~/.sisyphus/agent-plugin) > bundled
+  // (templates/agent-plugin) and merge hooks.json manifests, copy hook scripts,
+  // and inject any skills the agent's frontmatter opts into.
+  const layers = agentPluginLayers(cwd);
   const normalizedType = agentType?.replace(/^sisyphus:/, '') ?? '';
-  const userPromptHooks: Record<string, string> = {
-    'problem': 'problem-user-prompt.sh',
-    'plan': 'plan-user-prompt.sh',
-    'spec': 'spec-user-prompt.sh',
-    'review': 'review-user-prompt.sh',
-    'review-plan': 'review-plan-user-prompt.sh',
-    'debug': 'debug-user-prompt.sh',
-    'operator': 'operator-user-prompt.sh',
-    'test-spec': 'test-spec-user-prompt.sh',
-    'explore': 'explore-user-prompt.sh',
+  const filterCtx = {
+    agentType: normalizedType,
+    interactive: agentConfig?.frontmatter.interactive === true,
   };
-  const hookScript = userPromptHooks[normalizedType];
-  if (hookScript) {
-    hooksConfig.UserPromptSubmit = [
-      { hooks: [{ type: 'command', command: `bash \${CLAUDE_PLUGIN_ROOT}/hooks/${hookScript}` }] },
-    ];
-    copyFileSync(`${srcHooks}/${hookScript}`, `${base}/hooks/${hookScript}`);
+
+  const referenced = collectReferencedHookScripts(layers, filterCtx);
+  const disabled = collectDisabledHookScripts(layers);
+  // Suppress disabled scripts even if a layer ships the file on disk, and
+  // skip scripts that no surviving manifest entry references (avoids leaking
+  // bundled scripts that only applied to other agent types).
+  const skipFiles = new Set<string>(disabled);
+  copyLayered(layers, {
+    subdir: 'hooks',
+    destDir: `${base}/hooks`,
+    filter: (name) => name !== 'CLAUDE.md' && name !== 'hooks.json' && (referenced.has(name) || !name.endsWith('.sh')),
+    skipFiles,
+  });
+
+  const mergedHooks = mergeHookManifests(layers, filterCtx);
+  writeFileSync(`${base}/hooks/hooks.json`, JSON.stringify({ hooks: mergedHooks }, null, 2), 'utf-8');
+
+  // ── Skill injection ─────────────────────────────────────────────────────────
+  // Skills are opt-in via the agent's `skills:` frontmatter list. Each name
+  // resolves across layers (project > user > bundled). Missing skills warn but
+  // do not fail spawn — the agent body may reference them best-effort.
+  const requestedSkills = agentConfig?.frontmatter.skills ?? [];
+  for (const skillName of requestedSkills) {
+    const ok = copySkill(layers, skillName, `${base}/skills`);
+    if (!ok) {
+      console.warn(`[sisyphus] Agent ${agentId} (${normalizedType}) requested skill '${skillName}' but no layer provides it.`);
+    }
   }
-
-  // Plan agent gets two additional PreToolUse gates:
-  //   - `plan-validate.sh` blocks `sis agent submit` when master plans exceed 200 lines.
-  //   - `plan-write-path.sh` blocks Write/Edit/MultiEdit on `plan-*.md` files
-  //     whose path doesn't anchor at $SISYPHUS_SESSION_DIR/context/$SISYPHUS_AGENT_ID/.
-  //     The pane cwd is the project root, so a bare relative `context/...` would
-  //     leak the file outside the session — recurring bug worth structural enforcement.
-  if (normalizedType === 'plan') {
-    (hooksConfig.PreToolUse as unknown[]).push({
-      matcher: 'Bash',
-      hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-validate.sh' }],
-    });
-    copyFileSync(`${srcHooks}/plan-validate.sh`, `${base}/hooks/plan-validate.sh`);
-
-    (hooksConfig.PreToolUse as unknown[]).push({
-      matcher: 'Write|Edit|MultiEdit',
-      hooks: [{ type: 'command', command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/plan-write-path.sh' }],
-    });
-    copyFileSync(`${srcHooks}/plan-write-path.sh`, `${base}/hooks/plan-write-path.sh`);
-  }
-
-  writeFileSync(`${base}/hooks/hooks.json`, JSON.stringify({ hooks: hooksConfig }, null, 2), 'utf-8');
 
   return base;
 }

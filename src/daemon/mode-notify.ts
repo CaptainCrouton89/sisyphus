@@ -65,9 +65,9 @@ function buildNextChain(
   return [{ mode: 'unknown' }, { mode: nextMode }];
 }
 
-function renderBody(chain: ModeChainEntry[]): string {
+function renderBody(chain: ModeChainEntry[], cwd: string): string {
   const current = chain[chain.length - 1]!;
-  const description = discoverOrchestratorModes()
+  const description = discoverOrchestratorModes(cwd)
     .find(m => m.name === current.mode)?.description?.trim();
   const lines: string[] = [];
   if (description) {
@@ -114,7 +114,7 @@ export async function emitModeTransitionNotify(
   const subtitle = chain.map(e => e.mode).join(' → ');
   const title = 'Mode change';
   const deckTitle = `Mode: ${subtitle}`;
-  const body = renderBody(chain);
+  const body = renderBody(chain, cwd);
 
   const interaction: Interaction = {
     id: 'mode-transition',
