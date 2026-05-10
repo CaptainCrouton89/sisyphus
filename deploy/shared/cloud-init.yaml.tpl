@@ -96,6 +96,9 @@ runcmd:
   # 6. Sisyphus install (root → /usr/bin/sisyphusd symlink).
   - npm i -g sisyphi@${sisyphus_version}
 
+  # 6b. Claude Code CLI (sisyphus drives it for agent sessions).
+  - npm i -g @anthropic-ai/claude-code
+
   # 7. Daemon as systemd user service.
   - sudo -u sisyphus XDG_RUNTIME_DIR=/run/user/$(id -u sisyphus) systemctl --user daemon-reload
   - sudo -u sisyphus XDG_RUNTIME_DIR=/run/user/$(id -u sisyphus) systemctl --user enable --now sisyphusd

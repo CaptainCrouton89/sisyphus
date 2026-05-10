@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import {
   cloudAttach,
+  cloudClaudeLogin,
   cloudInstall,
   cloudSession,
   cloudStart,
@@ -88,6 +89,15 @@ export function registerCloud(program: Command): void {
     .action(async (raw: StartRaw) => {
       const { provider, repo } = resolve(raw);
       await cloudStart(provider, repo, { fresh: raw.fresh === true, yes: raw.yes === true });
+    });
+
+  cloud
+    .command('claude-login')
+    .description('Run `claude auth login` on the box (device-code flow; paste the URL into your local browser).')
+    .option('--provider <name>', 'Cloud provider.')
+    .action((raw: CommonRaw) => {
+      const provider = pickProvider(raw.provider);
+      cloudClaudeLogin(provider);
     });
 
   cloud

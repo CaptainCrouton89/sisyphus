@@ -168,6 +168,31 @@ export function cloudAttach(provider: Provider, repo: string): void {
   child.on('exit', (code) => process.exit(code === null ? 1 : code));
 }
 
+// ── claude-login ─────────────────────────────────────────────────────────────
+
+/**
+ * Open an interactive ssh shell on the box running `claude auth login` so the
+ * user can complete the device-code flow (URL prints on box, user pastes the
+ * code from their local browser back into the same terminal). Self-heals on
+ * boxes provisioned before claude-code was added to cloud-init by installing
+ * it on demand.
+ */
+export function cloudClaudeLogin(provider: Provider): void {
+  const target = effectiveSshTarget(provider);
+  // `command -v` probes for an existing install; npm i -g runs as sisyphus
+  // (cloud-init installed it as root, but a per-user fallback also works).
+  const remote = [
+    'command -v claude >/dev/null 2>&1',
+    '|| sudo npm i -g @anthropic-ai/claude-code',
+    '&& claude auth login',
+  ].join(' ');
+  const child = spawn('ssh', ['-t', target, remote], {
+    stdio: 'inherit',
+    env: EXEC_ENV,
+  });
+  child.on('exit', (code) => process.exit(code === null ? 1 : code));
+}
+
 // ── start (umbrella) ─────────────────────────────────────────────────────────
 
 export async function cloudStart(provider: Provider, repo: string, opts: StartOptions): Promise<void> {
