@@ -110,10 +110,16 @@ The cycle shape:
 plan phase 1 → implement phase 1 → validate phase 1 → plan phase 2 → implement phase 2 → validate phase 2 → ...
 ```
 
-After a phase's implementation passes e2e validation, yield back to planning mode for the next phase:
+**Not every phase needs its own plan cycle.** Before yielding back, look at phase N+1 in `strategy.md`. If it's wrapper-shaped (every change backs onto an existing CLI/API/handler), mechanical (rename, move, reformat), or scoped to a single agent-cycle of work, yield directly to implementation and let the implement agent work from `strategy.md` plus what phase N taught you. Reserve the plan cycle for phases where the *how* is genuinely open.
+
+After a phase's implementation passes e2e validation, yield for the next phase — pick the mode that matches its shape:
 
 ```bash
+# Phase N+1 needs planning (default):
 sis orch yield --mode planning --prompt "Phase N validated. Plan phase N+1 per strategy.md."
+
+# Phase N+1 is wrapper-shaped or single-cycle:
+sis orch yield --mode implementation --prompt "Phase N validated. Implement phase N+1 per strategy.md."
 ```
 
 When spawning the phase-scoped plan lead, name in the prompt:
