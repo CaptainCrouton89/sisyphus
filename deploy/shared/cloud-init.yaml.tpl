@@ -67,7 +67,13 @@ write_files:
 runcmd:
   # 1. Base packages.
   - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y curl git tmux fzf neovim build-essential ufw mosh ca-certificates gnupg
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y curl git tmux fzf neovim build-essential ufw mosh ca-certificates gnupg pipx
+
+  # 1b. termrender — TUI markdown rendering. Without it the dashboard falls
+  # back to plain text. Install system-wide via pipx so the binary lands in
+  # /usr/local/bin and resolves on PATH for both interactive shells and
+  # systemd user services (same convention as the pbcopy/pbpaste shims).
+  - PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install termrender
 
   # 2. Node 22 via NodeSource. /usr/bin/node, /usr/bin/npm.
   - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
