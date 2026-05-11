@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { sendRequest } from '../client.js';
 import { EXEC_ENV } from '../../shared/exec.js';
 import { boxRepoPath, sessionDir, statePath, projectDir } from '../../shared/paths.js';
@@ -161,8 +161,17 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
   console.log(`→ rsync session state down`);
   await rsyncDown(target, `${remoteSessionDir}/`, `${sessionDir(cwd, sessionId)}/`, { withDelete: true });
 
+  // CRITICAL excludes:
+  // - `.sisyphus/`: without this, the box's `.sisyphus/sessions/*/state.json`
+  //   for OTHER live sessions on this box overwrites their local state,
+  //   clobbering cwd and wiping handoff.sentAt. Target session came down in
+  //   the previous --delete pass; top-level configs are pulled explicitly
+  //   below.
+  // `update: true`: prefer newer-on-local files. Without it, the box's older
+  //   copy of any file (incl. this very source if edited mid-reclaim) wins
+  //   over local edits made after the original handoff.
   console.log(`→ rsync working tree down`);
-  await rsyncDown(target, `${remoteRepoDir}/`, `${cwd}/`, { withDelete: false });
+  await rsyncDown(target, `${remoteRepoDir}/`, `${cwd}/`, { withDelete: false, excludeSisyphus: true, update: true });
 
   // Top-level project configs aren't in the session dir; pull them too.
   for (const name of ['config.json', 'orchestrator.md', 'orchestrator-settings.json']) {
@@ -172,6 +181,19 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
     if (probe.stdout.trim() !== 'y') continue;
     await rsyncDown(target, remotePath, localPath, { withDelete: false });
   }
+
+  // Restore local-only fields the rsync clobbered. See CLAUDE.md in this
+  // directory for the trap:
+  // - cwd: box has `/home/sisyphus/projects/<repo>`; daemon would write
+  //   atomic temp files to that nonexistent macOS path and fail.
+  // - handoff: box never sees `handoff.sentAt` (it's set locally only after
+  //   the push-side ssh resume succeeds), so rsync-down wipes it and
+  //   `cloud-reclaim-finalize` rejects without it.
+  const localStatePath = statePath(cwd, sessionId);
+  const merged = JSON.parse(readFileSync(localStatePath, 'utf-8')) as Session;
+  merged.cwd = cwd;
+  merged.handoff = local.handoff;
+  writeFileSync(localStatePath, JSON.stringify(merged, null, 2));
 
   // 5. Locally resume — spawn orchestrator with a context message about reclaim.
   const reclaimMessage = `Session reclaimed from cloud (${provider}:${repo}). Resuming locally.`;
@@ -236,12 +258,14 @@ async function waitForBoxPaused(provider: Provider, remoteSessionDir: string): P
   process.exit(1);
 }
 
-interface RsyncOpts { withDelete: boolean }
+interface RsyncOpts { withDelete: boolean; excludeSisyphus?: boolean; update?: boolean }
 
 function rsyncDown(target: string, remotePath: string, localPath: string, opts: RsyncOpts): Promise<void> {
   return new Promise((resolve, reject) => {
     const args: string[] = ['-avz'];
     if (opts.withDelete) args.push('--delete');
+    if (opts.update) args.push('--update');
+    if (opts.excludeSisyphus) args.push('--exclude=.sisyphus/');
     // Default excludes for working-tree pull (matches local→box direction).
     args.push('--exclude=.terraform/', '--exclude=node_modules/', '--exclude=dist/', '--exclude=.next/', '--exclude=.turbo/', '--exclude=coverage/', '--exclude=tmp/', '--exclude=.git/lfs/', '--exclude=.DS_Store');
     args.push('-e', 'ssh', `${target}:${remotePath}`, localPath);
