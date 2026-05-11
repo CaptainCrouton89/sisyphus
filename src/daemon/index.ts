@@ -42,6 +42,7 @@ import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
 import { checkAndApply, startPeriodicUpdateCheck, stopPeriodicUpdateCheck } from './updater.js';
 import { installPlugin } from './plugin-install.js';
+import { startLogRotator, stopLogRotator } from './log-rotate.js';
 
 function ensureDirs(): void {
   mkdirSync(globalDir(), { recursive: true });
@@ -259,6 +260,9 @@ async function recoverSessions(): Promise<void> {
 async function startDaemon(): Promise<void> {
   console.log('[sisyphus] Starting daemon...');
   ensureDirs();
+  // Cap daemon.log at 100MB. Runs before anything else so a daemon restart on
+  // top of a bloated log gets a fresh slate immediately.
+  startLogRotator();
   installPlugin();
 
   const config = loadConfig(process.cwd());
@@ -323,6 +327,7 @@ async function startDaemon(): Promise<void> {
 
   const shutdown = async () => {
     console.log('[sisyphus] Shutting down...');
+    stopLogRotator();
     stopPeriodicUpdateCheck();
     stopHeartbeatScanner();
     stopMonitor();
