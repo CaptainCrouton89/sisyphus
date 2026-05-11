@@ -17,6 +17,9 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
   console.log('Setting up Sisyphus...');
   console.log('');
 
+  // Platform banner
+  console.log(`  \u2713 Platform: ${result.platform.label}`);
+
   // tmux
   if (result.tmuxInstalled) {
     const detail = getTmuxVersion();
@@ -26,6 +29,31 @@ function printResults(result: OnboardResult, daemonOk: boolean, keybindMsg: stri
       ? 'Install Homebrew (https://brew.sh) then: brew install tmux'
       : 'apt install tmux (Debian/Ubuntu) or your package manager';
     console.log(`  \u2717 tmux: Not installed \u2014 ${hint}`);
+  }
+
+  // Clipboard (non-darwin: pbcopy is always present on macOS)
+  if (process.platform !== 'darwin') {
+    if (result.platform.clipboardTool !== null) {
+      console.log(`  \u2713 Clipboard: ${result.platform.clipboardTool}`);
+    } else {
+      const hint = result.platform.clipboardHint === null
+        ? 'Install xclip / wl-clipboard'
+        : result.platform.clipboardHint;
+      console.log(`  \u2717 Clipboard: no backend \u2014 ${hint}`);
+    }
+
+    // Notifications via libnotify (Linux/WSL)
+    if (result.platform.notifySendAvailable) {
+      console.log('  \u2713 Notifications: notify-send');
+    } else {
+      console.log('  \u26a0 Notifications: notify-send missing \u2014 sudo apt install libnotify-bin');
+    }
+  }
+
+  // WSL-specific: systemd opt-in for the daemon
+  if (result.platform.wslSystemdEnabled === false) {
+    console.log('  \u26a0 WSL systemd: disabled \u2014 add `[boot]\\nsystemd=true` to /etc/wsl.conf');
+    console.log('    then run `wsl --shutdown` in PowerShell. The daemon can still be started manually with `sisyphusd &`.');
   }
 
   // tmux config

@@ -4,6 +4,22 @@ if (nodeVersion < 22) {
   process.exit(1);
 }
 
+// Native Windows is unsupported: the orchestration layer depends on tmux,
+// bash, and POSIX sockets. WSL2 runs the Linux build with no changes.
+if (process.platform === 'win32') {
+  console.error(`Sisyphus does not run on native Windows (PowerShell / cmd.exe).
+
+It depends on tmux, bash, and POSIX sockets — please run it inside WSL2:
+
+  1. Install WSL2:  https://learn.microsoft.com/windows/wsl/install
+  2. Open your WSL distro (Ubuntu is a safe default).
+  3. Install Node.js v22+ and Claude Code inside WSL.
+  4. Re-run \`sis\` from the WSL shell, not PowerShell.
+
+Tip: enable systemd in /etc/wsl.conf for the recommended daemon setup.`);
+  process.exit(1);
+}
+
 import { Command } from 'commander';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import type { Command } from 'commander';
 import { daemonLogPath, daemonPidPath, globalDir, socketPath } from '../../shared/paths.js';
 import { isInstalled } from '../install.js';
-import { detectTerminal, checkItermOptionKey, isNvimAvailable, isTermrenderAvailable } from '../onboard.js';
+import { detectTerminal, checkItermOptionKey, isNvimAvailable, isTermrenderAvailable, detectPlatformReadiness } from '../onboard.js';
+import { platformLabel } from '../../shared/platform.js';
 import { resolveInstalledPlugin } from '../../daemon/plugins.js';
 import { cycleScriptPath, DEFAULT_CYCLE_KEY, getExistingBinding, isSisyphusBinding, sisyphusTmuxConfPath } from '../tmux-setup.js';
 
@@ -269,18 +270,59 @@ function checkNvim(): Check {
   }
 }
 
-function checkNotifyBinary(): Check | null {
-  if (process.platform !== 'darwin') return null;
-  const binary = join(homedir(), '.sisyphus', 'SisyphusNotify.app', 'Contents', 'MacOS', 'sisyphus-notify');
-  if (existsSync(binary)) {
-    return { name: 'Notifications', status: 'ok', detail: 'SisyphusNotify.app built' };
+function checkNotifyBinary(): Check {
+  if (process.platform === 'darwin') {
+    const binary = join(homedir(), '.sisyphus', 'SisyphusNotify.app', 'Contents', 'MacOS', 'sisyphus-notify');
+    if (existsSync(binary)) {
+      return { name: 'Notifications', status: 'ok', detail: 'SisyphusNotify.app built' };
+    }
+    return {
+      name: 'Notifications',
+      status: 'warn',
+      detail: 'SisyphusNotify.app not built (click-to-switch unavailable)',
+      fix: 'Requires Xcode CLI tools: xcode-select --install, then reinstall sisyphus',
+    };
+  }
+  // Linux / WSL — notify-send is the standard libnotify CLI.
+  const ready = detectPlatformReadiness();
+  if (ready.notifySendAvailable) {
+    return { name: 'Notifications', status: 'ok', detail: 'notify-send (libnotify)' };
   }
   return {
     name: 'Notifications',
     status: 'warn',
-    detail: 'SisyphusNotify.app not built (click-to-switch unavailable)',
-    fix: 'Requires Xcode CLI tools: xcode-select --install, then reinstall sisyphus',
+    detail: 'notify-send not found — OS banners disabled',
+    fix: 'sudo apt install libnotify-bin (or your distro\'s equivalent)',
   };
+}
+
+function checkClipboard(): Check {
+  const ready = detectPlatformReadiness();
+  if (ready.clipboardTool !== null) {
+    return { name: 'Clipboard', status: 'ok', detail: ready.clipboardTool };
+  }
+  const fix = ready.clipboardHint === null
+    ? 'Install xclip or wl-clipboard'
+    : ready.clipboardHint;
+  return {
+    name: 'Clipboard',
+    status: 'fail',
+    detail: 'No clipboard backend detected',
+    fix,
+  };
+}
+
+function checkPlatform(): Check {
+  const ready = detectPlatformReadiness();
+  if (ready.wslSystemdEnabled === false) {
+    return {
+      name: 'Platform',
+      status: 'warn',
+      detail: `${platformLabel()} — systemd disabled (daemon needs manual start)`,
+      fix: 'Add `[boot]\\nsystemd=true` to /etc/wsl.conf, then `wsl --shutdown` from PowerShell',
+    };
+  }
+  return { name: 'Platform', status: 'ok', detail: platformLabel() };
 }
 
 const SYMBOLS = { ok: '\u2713', warn: '!', fail: '\u2717' } as const;
@@ -291,8 +333,8 @@ export function registerDoctor(program: Command): void {
     .description('Check sisyphus installation health')
     .action(() => {
       const itermCheck = checkItermRightOptionKey();
-      const notifyCheck = checkNotifyBinary();
       const checks: Check[] = [
+        checkPlatform(),
         checkNodeVersion(),
         checkClaudeCli(),
         checkGit(),
@@ -307,7 +349,8 @@ export function registerDoctor(program: Command): void {
         checkTmuxKeybind(),
         checkSisyphusPlugin(),
         checkNvim(),
-        ...(notifyCheck ? [notifyCheck] : []),
+        checkNotifyBinary(),
+        checkClipboard(),
         checkTermrender(),
       ];
 

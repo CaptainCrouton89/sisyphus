@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugins.js';
 import { sisyphusTmuxConfPath } from './tmux-setup.js';
+import { hasCommand, isLinuxLike, isWslHost, platformLabel } from '../shared/platform.js';
+import { detectClipboard } from '../shared/clipboard.js';
 
 export interface TerminalInfo {
   name: string;
@@ -30,6 +32,22 @@ export interface TermrenderInfo {
   autoInstalled: boolean;
 }
 
+export interface PlatformReadiness {
+  /** Human-readable platform label e.g. "macOS", "WSL (Ubuntu)", "Linux". */
+  label: string;
+  /** Clipboard tool selected, or null if none available. */
+  clipboardTool: string | null;
+  /** Install hint shown when clipboardTool is null. */
+  clipboardHint: string | null;
+  /** True if `notify-send` is available (libnotify; Linux/WSL only check). */
+  notifySendAvailable: boolean;
+  /**
+   * For WSL only: true if systemd is enabled (`systemctl --version` works as a
+   * user service manager). Null on non-WSL.
+   */
+  wslSystemdEnabled: boolean | null;
+}
+
 export interface OnboardResult {
   tmuxInstalled: boolean;
   tmuxAutoInstalled: boolean;
@@ -39,6 +57,7 @@ export interface OnboardResult {
   nvim: NvimInfo;
   sisyphusPlugin: SisyphusPluginInfo;
   termrender: TermrenderInfo;
+  platform: PlatformReadiness;
 }
 
 export function detectTerminal(): TerminalInfo {
@@ -63,6 +82,16 @@ function isBrewAvailable(): boolean {
   } catch {
     return false;
   }
+}
+
+function tmuxInstallHint(): string {
+  if (process.platform === 'darwin') {
+    return '    Install Homebrew (https://brew.sh) then run: brew install tmux';
+  }
+  if (isWslHost()) {
+    return '    Install: sudo apt install tmux  (or your distro\'s package manager)';
+  }
+  return '    Install: apt install tmux (Debian/Ubuntu) or your package manager';
 }
 
 function tryAutoInstallTmux(): boolean {
@@ -386,6 +415,39 @@ function tryAutoInstallTermrender(): TermrenderInfo {
   return { installed: false, autoInstalled: false };
 }
 
+export function detectPlatformReadiness(): PlatformReadiness {
+  const clip = detectClipboard();
+  const linuxLike = isLinuxLike();
+  const wsl = isWslHost();
+
+  let wslSystemdEnabled: boolean | null = null;
+  if (wsl) {
+    try {
+      // `systemctl is-system-running` returns non-zero outside a systemd boot,
+      // but exits 0 (or 'degraded' / 'starting' / 'running') if systemd is PID 1.
+      execSync('systemctl is-system-running --quiet 2>/dev/null', { stdio: 'pipe' });
+      wslSystemdEnabled = true;
+    } catch {
+      // Some WSL installs return non-zero from is-system-running while still
+      // having systemd active. Cross-check by looking for the user instance.
+      try {
+        execSync('systemctl --user --version', { stdio: 'pipe' });
+        wslSystemdEnabled = true;
+      } catch {
+        wslSystemdEnabled = false;
+      }
+    }
+  }
+
+  return {
+    label: platformLabel(),
+    clipboardTool: clip.copy === null ? null : clip.copy.cmd,
+    clipboardHint: clip.hint,
+    notifySendAvailable: linuxLike ? hasCommand('notify-send') : true,
+    wslSystemdEnabled,
+  };
+}
+
 export function runOnboarding(): OnboardResult {
   const terminal = detectTerminal();
   const tmuxAlreadyInstalled = isTmuxAvailable();
@@ -422,16 +484,23 @@ export function runOnboarding(): OnboardResult {
   // termrender (markdown rendering for TUI)
   const termrender = tryAutoInstallTermrender();
 
-  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, sisyphusPlugin, termrender };
+  // Cross-platform readiness checks (clipboard, notifications, WSL systemd)
+  const platform = detectPlatformReadiness();
+
+  return { tmuxInstalled, tmuxAutoInstalled, terminal, itermOptionKey, tmuxDefaultsWritten, nvim, sisyphusPlugin, termrender, platform };
 }
 
 export function formatOnboardingMessages(result: OnboardResult): string[] {
   const lines: string[] = [];
 
+  // Platform banner \u2014 always show so the user knows what flavor we detected.
+  lines.push(`  Platform: ${result.platform.label}`, '');
+
   // Terminal recommendation (macOS only)
   if (process.platform === 'darwin' && !result.terminal.isIterm) {
+    const name = result.terminal.name.length > 0 ? result.terminal.name : 'unknown';
     lines.push(
-      `  Terminal: ${result.terminal.name || 'unknown'}`,
+      `  Terminal: ${name}`,
       '  Tip: iTerm2 is recommended for the best experience with sisyphus.',
       '       Download: https://iterm2.com',
       '',
@@ -446,12 +515,48 @@ export function formatOnboardingMessages(result: OnboardResult): string[] {
     }
     lines.push('');
   } else if (!result.tmuxInstalled) {
-    const installHint = process.platform === 'darwin'
-      ? '    Install Homebrew (https://brew.sh) then run: brew install tmux'
-      : '    Install: apt install tmux (Debian/Ubuntu) or your package manager';
+    const installHint = tmuxInstallHint();
     lines.push(
       '  \u2717 tmux is required but could not be installed automatically.',
       installHint,
+      '',
+    );
+  }
+
+  // Clipboard backend (Linux/WSL only \u2014 macOS pbcopy is always present)
+  if (process.platform !== 'darwin') {
+    if (result.platform.clipboardTool === null) {
+      const hint = result.platform.clipboardHint === null
+        ? 'Install xclip, wl-clipboard, or (on WSL) ensure clip.exe is on PATH.'
+        : result.platform.clipboardHint;
+      lines.push(
+        '  \u2717 Clipboard: no backend detected \u2014 copy menus will fail.',
+        `    ${hint}`,
+        '',
+      );
+    } else {
+      lines.push(`  \u2713 Clipboard: ${result.platform.clipboardTool}`, '');
+    }
+  }
+
+  // Desktop notifications (Linux/WSL only \u2014 macOS uses the bundled Swift app)
+  if (process.platform !== 'darwin' && !result.platform.notifySendAvailable) {
+    lines.push(
+      '  \u26a0  Desktop notifications: notify-send not found.',
+      '    Install: sudo apt install libnotify-bin (Debian/Ubuntu) or your distro\u2019s equivalent.',
+      '    Without it, sisyphus events still appear in the TUI but won\u2019t raise an OS banner.',
+      '',
+    );
+  }
+
+  // WSL-specific: systemd opt-in
+  if (result.platform.wslSystemdEnabled === false) {
+    lines.push(
+      '  \u26a0  WSL systemd is not enabled \u2014 the daemon must be started manually.',
+      '    To enable: add the following to /etc/wsl.conf, then `wsl --shutdown` from PowerShell:',
+      '      [boot]',
+      '      systemd=true',
+      '    Once active, you can configure `systemctl --user enable --now sisyphus`.',
       '',
     );
   }
