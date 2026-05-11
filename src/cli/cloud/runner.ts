@@ -30,10 +30,10 @@ export interface StartOptions {
 
 // ── sync ─────────────────────────────────────────────────────────────────────
 
-export async function cloudSync(provider: Provider, repo: string, opts: SyncOptions): Promise<void> {
+export async function cloudSync(provider: Provider, repo: string, opts: SyncOptions, cwd?: string): Promise<void> {
   const target = effectiveSshTarget(provider);
   const remoteDir = boxRepoPath(repo);
-  const localOrigin = getOriginUrl();
+  const localOrigin = getOriginUrl(cwd);
 
   ensureGroveInstalled(provider);
 
@@ -76,7 +76,7 @@ export async function cloudSync(provider: Provider, repo: string, opts: SyncOpti
     if (mkdir.exitCode !== 0) {
       throw new Error(`Failed to mkdir on box: ${mkdir.stderr}`);
     }
-    const toplevel = getRepoToplevel();
+    const toplevel = getRepoToplevel(cwd);
     const args = buildRsyncArgs(toplevel, `${target}:${remoteDir}/`);
     console.log(`→ rsync ${toplevel}/ → ${target}:${remoteDir}/`);
     const code = await runRsync(args);
@@ -106,9 +106,9 @@ function runRsync(args: string[]): Promise<number> {
 
 // ── install ──────────────────────────────────────────────────────────────────
 
-export async function cloudInstall(provider: Provider, repo: string): Promise<void> {
+export async function cloudInstall(provider: Provider, repo: string, cwd?: string): Promise<void> {
   const remoteDir = boxRepoPath(repo);
-  const toplevel = getRepoToplevel();
+  const toplevel = getRepoToplevel(cwd);
   const pm: PackageManager = detectPackageManager(toplevel);
   const cmd = packageManagerInstallCmd(pm);
   if (!cmd) {
@@ -124,7 +124,7 @@ export async function cloudInstall(provider: Provider, repo: string): Promise<vo
   const existing = readSidecar(provider, repo);
   // Carry forward existing identity fields; only overwrite when missing.
   const sidecar: CloudSidecar = {
-    originUrl: existing && existing.originUrl !== undefined ? existing.originUrl : getOriginUrl(),
+    originUrl: existing && existing.originUrl !== undefined ? existing.originUrl : getOriginUrl(cwd),
     localHostname: existing ? existing.localHostname : hostname(),
     lastSync: existing?.lastSync,
     lastInstall: new Date().toISOString(),

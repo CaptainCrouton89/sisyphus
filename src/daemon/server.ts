@@ -770,6 +770,99 @@ async function handleRequest(req: Request): Promise<Response> {
         return { ok: true, data: { items: items as unknown as Record<string, unknown> } };
       }
 
+      case 'cloud-handoff': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+
+        const session = state.getSession(tracking.cwd, req.sessionId);
+        if (session.handoff?.sentAt) {
+          const where = session.handoff.target ? `${session.handoff.target.provider}:${session.handoff.target.repo}` : 'cloud';
+          return { ok: false, error: `Session ${req.sessionId} is already on ${where}. Use \`sis cloud reclaim\` first.` };
+        }
+        if (session.handoff && !req.force) {
+          return { ok: false, error: `Session ${req.sessionId} already has a queued handoff. Pass --force to override or --cancel to clear.` };
+        }
+
+        const { resolveProvider, defaultRepoName, checkRepoName, triggerForceHandoff } = await import('./cloud-handoff.js');
+        let provider: string;
+        try {
+          provider = resolveProvider(req.provider);
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+        const repo = req.repo ?? defaultRepoName(tracking.cwd);
+        try {
+          checkRepoName(repo);
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+
+        await state.updateSession(tracking.cwd, req.sessionId, {
+          handoff: {
+            target: { provider, repo },
+            queuedAt: new Date().toISOString(),
+            force: req.force === true,
+          },
+        });
+
+        if (req.force === true) {
+          // Fire-and-forget; CLI may poll session state for sentAt/lastError.
+          void triggerForceHandoff(req.sessionId, tracking.cwd);
+          return { ok: true, data: { queued: true, force: true, provider, repo } };
+        }
+        return { ok: true, data: { queued: true, force: false, provider, repo } };
+      }
+
+      case 'cloud-handoff-cancel': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const session = state.getSession(tracking.cwd, req.sessionId);
+        if (!session.handoff) {
+          return { ok: false, error: `Session ${req.sessionId} has no queued handoff.` };
+        }
+        if (session.handoff.sentAt) {
+          return { ok: false, error: `Session ${req.sessionId} has already shipped to cloud — use \`sis cloud reclaim\` to bring it back.` };
+        }
+        await state.updateSession(tracking.cwd, req.sessionId, { handoff: undefined });
+        return { ok: true, data: { cancelled: true } };
+      }
+
+      case 'cloud-reclaim-finalize': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const session = state.getSession(tracking.cwd, req.sessionId);
+        if (!session.handoff?.sentAt) {
+          return { ok: false, error: `Session ${req.sessionId} was never sent to cloud; nothing to reclaim.` };
+        }
+        await state.updateSession(tracking.cwd, req.sessionId, {
+          handoff: { ...session.handoff, reclaimedAt: new Date().toISOString() },
+        });
+        return { ok: true };
+      }
+
+      case 'admin-quiesce': {
+        const tracking = sessionTrackingMap.get(req.sessionId);
+        if (!tracking) return unknownSessionError(req.sessionId);
+        const session = state.getSession(tracking.cwd, req.sessionId);
+        if (session.handoff?.sentAt) {
+          return { ok: false, error: `Session ${req.sessionId} already lives on cloud; nothing to quiesce locally.` };
+        }
+
+        await state.updateSession(tracking.cwd, req.sessionId, {
+          handoff: {
+            queuedAt: new Date().toISOString(),
+            force: req.force === true,
+          },
+        });
+
+        if (req.force === true) {
+          const { performHandoff } = await import('./cloud-handoff.js');
+          void performHandoff(req.sessionId, tracking.cwd);
+          return { ok: true, data: { queued: true, force: true } };
+        }
+        return { ok: true, data: { queued: true, force: false } };
+      }
+
       default:
         return { ok: false, error: `Unknown request type: ${(req as Record<string, unknown>).type}` };
     }

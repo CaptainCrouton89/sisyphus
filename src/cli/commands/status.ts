@@ -155,6 +155,22 @@ function printSession(session: Session, verbose: boolean): void {
 
   console.log(`  Orchestrator cycles: ${session.orchestratorCycles.length}`);
 
+  if (session.handoff) {
+    const h = session.handoff;
+    if (h.lastError) {
+      console.log(`  Handoff: ${COLOR_CODES.red}error${RESET} — ${h.lastError}`);
+    } else if (h.reclaimedAt) {
+      const where = h.target ? `${h.target.provider}:${h.target.repo}` : 'cloud';
+      console.log(`  Handoff: reclaimed from ${where} at ${h.reclaimedAt}`);
+    } else if (h.sentAt && h.target) {
+      console.log(`  Handoff: running on ${h.target.provider}:${h.target.repo} since ${h.sentAt}`);
+    } else if (h.target) {
+      console.log(`  Handoff: queued → ${h.target.provider}:${h.target.repo} (since ${h.queuedAt})`);
+    } else {
+      console.log(`  Handoff: quiesce queued (since ${h.queuedAt})`);
+    }
+  }
+
   // Active agents block
   const runningAgents = session.agents.filter(a => a.status === 'running');
   if (runningAgents.length > 0) {

@@ -34,7 +34,19 @@ export type Request =
   | { type: 'unregister-segment'; id: string }
   | { type: 'ask-generate-visual'; sessionId: string; askId: string; qid: string; cols: number; force?: boolean }
   // Response: { ok: true, data: { items: AggregateInboxItem[] } }
-  | { type: 'inbox-list' };
+  | { type: 'inbox-list' }
+  // Queue (or immediately fire) a cloud handoff. `provider` is resolved via
+  // `pickProvider` on the daemon side; `repo` defaults to the local repo basename.
+  // Response: { ok: true, data: { queued: boolean, sentAt?: string } }
+  | { type: 'cloud-handoff'; sessionId: string; cwd: string; provider?: string; repo?: string; force?: boolean }
+  // Cancel a queued handoff. Rejects if `sentAt` is already set.
+  | { type: 'cloud-handoff-cancel'; sessionId: string; cwd: string }
+  // Pause-only quiesce — no cloud push. Used by `sis cloud reclaim` on the box
+  // to stop the box-side session before rsync-ing state back to local.
+  | { type: 'admin-quiesce'; sessionId: string; cwd: string; force?: boolean }
+  // Finalize a reclaim: mark `handoff.reclaimedAt`. Called by `sis cloud reclaim`
+  // after the rsync down completes and the local orchestrator is respawned.
+  | { type: 'cloud-reclaim-finalize'; sessionId: string; cwd: string };
 
 export type Response =
   | { ok: true; data?: Record<string, unknown> }

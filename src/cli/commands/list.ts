@@ -11,6 +11,13 @@ interface SessionSummary {
   agentCount: number;
   createdAt: string;
   cwd?: string;
+  handoff?: {
+    queuedAt: string;
+    sentAt?: string;
+    reclaimedAt?: string;
+    target?: { provider: string; repo: string };
+    lastError?: string;
+  };
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,6 +28,25 @@ const STATUS_COLORS: Record<string, string> = {
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';
+const CLOUD = '\x1b[35m'; // magenta
+const RED = '\x1b[31m';
+
+function handoffAnnotation(h: SessionSummary['handoff']): string {
+  if (!h) return '';
+  if (h.lastError) {
+    return `  ${RED}handoff error: ${h.lastError}${RESET}`;
+  }
+  if (h.reclaimedAt) {
+    return `  ${DIM}(reclaimed)${RESET}`;
+  }
+  if (h.sentAt && h.target) {
+    return `  ${CLOUD}→ ${h.target.provider}:${h.target.repo}${RESET}`;
+  }
+  if (h.target) {
+    return `  ${CLOUD}handoff queued → ${h.target.provider}:${h.target.repo}${RESET}`;
+  }
+  return `  ${CLOUD}quiesce queued${RESET}`;
+}
 
 function truncateTask(task: string, max: number): string {
   if (task.length <= max) return task;
@@ -59,7 +85,8 @@ export function registerList(program: Command): void {
           const task = truncateTask(s.task, 60);
           const label = s.name ? `${s.name} ${DIM}(${s.id.slice(0, 8)})${RESET}` : s.id;
           const cwdLabel = opts.all && s.cwd ? `  ${DIM}${basename(s.cwd)}${RESET}` : '';
-          console.log(`  ${BOLD}${label}${RESET}  ${status}  ${agents}  ${task}${cwdLabel}`);
+          const handoffLabel = handoffAnnotation(s.handoff);
+          console.log(`  ${BOLD}${label}${RESET}  ${status}  ${agents}  ${task}${cwdLabel}${handoffLabel}`);
         }
 
         if (filtered && totalCount && totalCount > sessions.length) {

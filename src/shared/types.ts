@@ -27,6 +27,33 @@ export type SessionStatus = 'active' | 'paused' | 'completed';
 
 export type UploadStatus = 'pending' | 'uploaded' | 'failed';
 
+/**
+ * Records intent to move a session to a cloud box (or pause for reclaim).
+ * - `target` omitted ⇒ quiesce-only (used by reclaim's box-side pause step).
+ * - `target` present ⇒ at next quiesce, daemon syncs state + working tree to
+ *   the box and respawns the orchestrator there via `sis resume`.
+ */
+export interface HandoffState {
+  /** Cloud destination. Omitted means "pause at next quiesce; do not push." */
+  target?: { provider: string; repo: string };
+  /** ISO timestamp when the RPC was received. */
+  queuedAt: string;
+  /** Set after a successful push to the box. */
+  sentAt?: string;
+  /** Set after a successful pull back to local. */
+  reclaimedAt?: string;
+  /** True when --force was passed; daemon interrupts in-flight work. */
+  force: boolean;
+  /**
+   * Resume message injected on the box. Computed at queue time for --force
+   * (since we know which agents/orchestrator are being interrupted), empty
+   * for natural quiesce.
+   */
+  message?: string;
+  /** Most recent failure during push; set so the user can retry from `sis list`. */
+  lastError?: string;
+}
+
 export type MessageSource =
   | { type: 'agent'; agentId: string }
   | { type: 'user' }
@@ -104,6 +131,13 @@ export interface Session {
    * from the dashboard via the `D` key.
    */
   dangerousMode?: boolean;
+  /**
+   * Cloud-handoff lifecycle marker. Set by `sis cloud handoff` (push to box)
+   * or `sis admin quiesce` (pause-only). Presence with `sentAt` unset blocks
+   * local respawn at the next quiesce point; presence with `sentAt` set means
+   * the session lives on the box and can be `sis cloud reclaim`-ed.
+   */
+  handoff?: HandoffState;
 }
 
 export interface StatusDigest {

@@ -523,12 +523,33 @@ export function getSessionStatus(cwd: string, sessionId: string): Session {
   return state.getSession(cwd, sessionId);
 }
 
-export function listSessions(cwd: string): Array<{ id: string; name?: string; task: string; status: string; createdAt: string; activeMs: number; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string; orphaned?: boolean }> {
+export interface SessionListEntry {
+  id: string;
+  name?: string;
+  task: string;
+  status: string;
+  createdAt: string;
+  activeMs: number;
+  agentCount: number;
+  runningAgentCount: number;
+  tmuxSessionName?: string;
+  tmuxWindowId?: string;
+  orphaned?: boolean;
+  handoff?: {
+    queuedAt: string;
+    sentAt?: string;
+    reclaimedAt?: string;
+    target?: { provider: string; repo: string };
+    lastError?: string;
+  };
+}
+
+export function listSessions(cwd: string): SessionListEntry[] {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];
 
   const entries = readdirSync(dir, { withFileTypes: true });
-  const sessions: Array<{ id: string; name?: string; task: string; status: string; createdAt: string; activeMs: number; agentCount: number; runningAgentCount: number; tmuxSessionName?: string; tmuxWindowId?: string; orphaned?: boolean }> = [];
+  const sessions: SessionListEntry[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -546,6 +567,15 @@ export function listSessions(cwd: string): Array<{ id: string; name?: string; ta
         tmuxSessionName: session.tmuxSessionName,
         tmuxWindowId: session.tmuxWindowId,
         orphaned: session.orphaned ?? false,
+        handoff: session.handoff
+          ? {
+              queuedAt: session.handoff.queuedAt,
+              sentAt: session.handoff.sentAt,
+              reclaimedAt: session.handoff.reclaimedAt,
+              target: session.handoff.target,
+              lastError: session.handoff.lastError,
+            }
+          : undefined,
       });
     } catch (err) {
       console.error(`[sisyphus] Failed to read session ${entry.name}:`, err);
@@ -634,6 +664,19 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         await state.updateSessionStatus(cwd, sessionId, 'active');
       } else if (freshSession.status !== 'active') {
         respawningSessions.delete(sessionId);
+        return;
+      }
+
+      // Cloud handoff intercept — if a handoff is queued and hasn't shipped
+      // yet, ship to cloud (or pause-only) instead of respawning locally.
+      // Skip when lastError is set: previous attempt failed and we should not
+      // auto-retry on every quiesce — that'd block local progress indefinitely.
+      // User must retry explicitly (`sis cloud handoff --force` again) or cancel.
+      // Imported lazily to avoid a require-cycle with cloud-handoff.ts.
+      if (freshSession.handoff && !freshSession.handoff.sentAt && !freshSession.handoff.lastError) {
+        respawningSessions.delete(sessionId);
+        const { performHandoff } = await import('./cloud-handoff.js');
+        await performHandoff(sessionId, cwd);
         return;
       }
 
@@ -1221,5 +1264,45 @@ export async function handlePaneExited(
       // Agents still running — their panes keep the window alive
       respawningSessions.delete(sessionId);
     }
+  }
+}
+
+/**
+ * Tear down a session's local tmux footprint without destroying its state.json.
+ * Used by cloud handoff (and pause-only quiesce) — the session lives on
+ * elsewhere or is paused for reclaim, so we keep the directory intact but
+ * release every tmux/pane-monitor resource the daemon was holding.
+ *
+ * `interrupted: true` means in-flight panes are being killed mid-work (force
+ * handoff). Currently no extra bookkeeping vs `false`, but keeps the call
+ * sites readable and lets us hook future telemetry per case.
+ */
+export async function quiesceLocalSession(
+  sessionId: string,
+  cwd: string,
+  _opts: { interrupted: boolean },
+): Promise<void> {
+  await flushTimers(sessionId);
+  const session = state.getSession(cwd, sessionId);
+
+  const orchPaneId = orchestrator.getOrchestratorPaneId(sessionId);
+  if (orchPaneId) tmux.killPane(orchPaneId);
+
+  untrackSession(sessionId);
+  unregisterSessionPanes(sessionId);
+  clearAgentCounter(sessionId);
+  orchestratorDone.delete(sessionId);
+  respawningSessions.delete(sessionId);
+
+  // Detach any clients still attached to the window before destroying it.
+  switchToHomeSession(session);
+
+  const killTarget = session.tmuxSessionId ?? session.tmuxSessionName;
+  if (killTarget) tmux.killSession(killTarget);
+
+  await state.updateSessionStatus(cwd, sessionId, 'paused');
+
+  try { recomputeDots(); } catch (err) {
+    console.warn(`[sisyphus] recomputeDots failed during quiesce: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

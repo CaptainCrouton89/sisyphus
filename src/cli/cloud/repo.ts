@@ -3,10 +3,11 @@ import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { EXEC_ENV } from '../../shared/exec.js';
 
-function captureGit(args: string[]): { stdout: string; ok: boolean } {
+function captureGit(args: string[], cwd?: string): { stdout: string; ok: boolean } {
   const result = spawnSync('git', args, {
     encoding: 'utf-8',
     env: EXEC_ENV,
+    cwd: cwd ?? process.cwd(),
   });
   if (typeof result.stdout !== 'string') {
     throw new Error('Internal: git spawn did not capture stdout as string');
@@ -19,18 +20,18 @@ function captureGit(args: string[]): { stdout: string; ok: boolean } {
  * Falls back to `basename(cwd)` when cwd is not inside a git repo — supports
  * parent dirs that contain repos but aren't themselves a repo.
  */
-export function inferRepoName(): string {
-  const { stdout, ok } = captureGit(['rev-parse', '--show-toplevel']);
+export function inferRepoName(cwd?: string): string {
+  const { stdout, ok } = captureGit(['rev-parse', '--show-toplevel'], cwd);
   if (ok && stdout) return basename(stdout);
-  return basename(process.cwd());
+  return basename(cwd ?? process.cwd());
 }
 
 /**
  * Read the local repo's `origin` remote URL. Returns null if no `origin` is
  * configured or cwd is not inside a git repo.
  */
-export function getOriginUrl(): string | null {
-  const { stdout, ok } = captureGit(['remote', 'get-url', 'origin']);
+export function getOriginUrl(cwd?: string): string | null {
+  const { stdout, ok } = captureGit(['remote', 'get-url', 'origin'], cwd);
   if (!ok) return null;
   return stdout.length > 0 ? stdout : null;
 }
@@ -40,10 +41,10 @@ export function getOriginUrl(): string | null {
  * Non-repo mode is intentional: enables syncing parent dirs that contain
  * multiple child repos (each child's `.git/` rides along via rsync).
  */
-export function getRepoToplevel(): string {
-  const { stdout, ok } = captureGit(['rev-parse', '--show-toplevel']);
+export function getRepoToplevel(cwd?: string): string {
+  const { stdout, ok } = captureGit(['rev-parse', '--show-toplevel'], cwd);
   if (ok && stdout) return stdout;
-  return process.cwd();
+  return cwd ?? process.cwd();
 }
 
 /**
