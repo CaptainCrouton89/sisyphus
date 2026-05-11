@@ -8,5 +8,4 @@
 - `taskHistory` keys are normalized task hashes. Adding task tracking without matching the same normalization silently misses matches, breaking `sisyphean`/`stubborn`/`one-must-imagine` achievement counts.
 - `wallClockMs` vs `activeMs`: wall time (start→end) vs cumulative agent active time. Summing cycle-level `activeMs` double-counts cross-cycle agents.
 - `SessionSummary.efficiency` may be null even when `wallClockMs` exists (written before the field was added); `history.ts` CLI recomputes inline — don't assume `null` means data unavailable.
-- `EXEC_ENV` augments PATH with Homebrew/nix/user-local dirs — skipping it may fail to find `tmux`/`git`/`claude` in stripped environments (launchd, CI).
 - `exec` bleeds stderr to logs, 30s default timeout. `execSafe` suppresses stderr, returns null on error, and has **no default timeout** (`timeoutMs` omitted → `undefined` → infinite wait).

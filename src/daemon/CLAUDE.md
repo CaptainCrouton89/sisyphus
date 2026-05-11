@@ -4,9 +4,5 @@
 - Adding a new agent-termination path requires calling `gcBgTasks(cwd, sessionId, agentId)` — `register-bg-task.sh` records background-Task agentIds; `require-submit.sh` consumes them. Leftover entries from an unterminated path leak silently into the next cycle.
 - `setPaneStyle()` writes a static `pane-border-format` string; `updatePaneMeta()` updates only the variables without rebuilding the format. Calling `updatePaneMeta()` on a pane that never had `setPaneStyle()` produces invisible labels.
 - `flushAgentTimer(sessionId, agentId)` is read-only — returns full accumulated ms (not a delta). Pass into `updateAgent({activeMs})` to persist; it sets the **absolute** value. `flushTimers()` uses `incrementActiveTime` for deltas. Mixing the two paths silently corrupts active-time accounting.
-- `switchToHomeSession()` must be called before `tmux.killSession()` — reversing the order detaches clients before they can switch.
-
-## Companion
-
 - Async commentary callbacks must reload fresh companion state immediately before saving; never close over a captured companion reference across an `await` — concurrent fire-and-forget callbacks clobber each other.
 - `companionCredited{Cycles,ActiveMs,Strength,Wisdom}` are written to session state on `handleComplete()`. `onSessionComplete()` reads these to skip already-credited work if the session is continued and completed again — omitting the write causes double-counting.
