@@ -159,6 +159,102 @@ export function userTmuxConfPath(): string | null {
   return null;
 }
 
+// Cross-platform helpers used by other embedded scripts. Installed alongside
+// them in ~/.sisyphus/bin/ — the other scripts invoke these by absolute path.
+const SISYPHUS_CLIP_SCRIPT = `#!/bin/bash
+# Cross-platform clipboard wrapper.
+#   sisyphus-clip            # read stdin, write to clipboard
+#   sisyphus-clip copy       # same as default
+#   sisyphus-clip paste      # write clipboard contents to stdout
+
+mode="\${1:-copy}"
+uname_s="$(uname -s 2>/dev/null || echo unknown)"
+
+is_wsl=0
+if [ "$uname_s" = "Linux" ]; then
+  if [ -n "\${WSL_DISTRO_NAME:-}\${WSL_INTEROP:-}" ]; then is_wsl=1; fi
+  if [ -r /proc/version ] && grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then is_wsl=1; fi
+fi
+
+case "$mode" in
+  copy)
+    if [ "$uname_s" = "Darwin" ]; then
+      exec pbcopy
+    elif [ "$is_wsl" = "1" ] && command -v clip.exe >/dev/null 2>&1; then
+      exec clip.exe
+    elif [ -n "\${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
+      exec wl-copy
+    elif command -v xclip >/dev/null 2>&1; then
+      exec xclip -selection clipboard
+    elif command -v xsel >/dev/null 2>&1; then
+      exec xsel --clipboard --input
+    else
+      echo "sisyphus-clip: no clipboard backend (install xclip / wl-clipboard / clip.exe)" >&2
+      exit 1
+    fi
+    ;;
+  paste)
+    if [ "$uname_s" = "Darwin" ]; then
+      exec pbpaste
+    elif [ "$is_wsl" = "1" ] && command -v powershell.exe >/dev/null 2>&1; then
+      # Get-Clipboard appends \\r\\n; strip the trailing CR.
+      powershell.exe -NoProfile -Command Get-Clipboard | sed 's/\\r$//'
+      exit "\${PIPESTATUS[0]:-0}"
+    elif [ -n "\${WAYLAND_DISPLAY:-}" ] && command -v wl-paste >/dev/null 2>&1; then
+      exec wl-paste --no-newline
+    elif command -v xclip >/dev/null 2>&1; then
+      exec xclip -selection clipboard -o
+    elif command -v xsel >/dev/null 2>&1; then
+      exec xsel --clipboard --output
+    else
+      echo "sisyphus-clip: no clipboard backend (install xclip / wl-clipboard / powershell.exe)" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Usage: sisyphus-clip [copy|paste]" >&2
+    exit 2
+    ;;
+esac
+`;
+
+const SISYPHUS_OPEN_SCRIPT = `#!/bin/bash
+# Cross-platform "open path in default file manager / handler".
+#   sisyphus-open <path>
+
+if [ $# -lt 1 ]; then
+  echo "Usage: sisyphus-open <path>" >&2
+  exit 2
+fi
+target="$1"
+
+uname_s="$(uname -s 2>/dev/null || echo unknown)"
+is_wsl=0
+if [ "$uname_s" = "Linux" ]; then
+  if [ -n "\${WSL_DISTRO_NAME:-}\${WSL_INTEROP:-}" ]; then is_wsl=1; fi
+  if [ -r /proc/version ] && grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then is_wsl=1; fi
+fi
+
+if [ "$uname_s" = "Darwin" ]; then
+  exec open "$target"
+elif [ "$is_wsl" = "1" ] && command -v explorer.exe >/dev/null 2>&1; then
+  win="$target"
+  if command -v wslpath >/dev/null 2>&1; then
+    win=$(wslpath -w "$target" 2>/dev/null || echo "$target")
+  fi
+  # explorer.exe returns 1 even on success when launching a new window — ignore.
+  explorer.exe "$win" >/dev/null 2>&1 || true
+elif command -v xdg-open >/dev/null 2>&1; then
+  exec xdg-open "$target"
+else
+  echo "sisyphus-open: no opener available (install xdg-utils on Linux)" >&2
+  exit 1
+fi
+`;
+
+const CLIP_BIN = '$HOME/.sisyphus/bin/sisyphus-clip';
+const OPEN_BIN = '$HOME/.sisyphus/bin/sisyphus-open';
+
 const CYCLE_SCRIPT = `#!/bin/bash
 # Target by $N session ID (column 5 in TSV) — tmux -t <name> can substring-match
 # the wrong session under sparse env.
@@ -520,7 +616,7 @@ read -n 1 -s -r -p "Press a key to close."
 
 const RESTART_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and restart it (fzf picker with confirm for running agents).
-# Assumes macOS (fzf optional). Requires \`sis status --json\`.
+# fzf optional. Requires \`sis status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -580,14 +676,13 @@ exec nvim "$file"
 `;
 
 const OPEN_DIR_SCRIPT = `#!/bin/bash
-# Open session dir in Finder (macOS).
-# macOS-only — Linux/Windows port deferred.
+# Open session dir in the platform file manager (Finder/Explorer/xdg-open).
 # Run from a sisyphus session pane, not the home dashboard.
 ${SESSION_RESOLVE}
 
 dir="$cwd/.sisyphus/sessions/$session_id"
 [ ! -d "$dir" ] && { tmux display-message "Session dir not found: $dir"; exit 0; }
-exec open "$dir"
+exec ${OPEN_BIN} "$dir"
 `;
 
 const OPEN_LOGS_SCRIPT = `#!/bin/bash
@@ -759,7 +854,7 @@ fi
 
 const JUMP_TO_PANE_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and jump to its tmux pane.
-# Assumes macOS (pbcopy, fzf optional). Requires \`sis status --json\`.
+# fzf optional. Requires \`sis status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -806,7 +901,7 @@ tmux select-pane -t "$target_pane"
 
 const MSG_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and send it a message via nvim.
-# Assumes macOS (fzf optional). Requires \`sis status --json\` and \`--agent\` on message.
+# fzf optional. Requires \`sis status --json\` and \`--agent\` on message.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -849,7 +944,7 @@ exec sis message --session "$session_id" --agent "\${ids[$idx]}" "$(cat "$tmpfil
 
 const RERUN_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and spawn a retry with its original instruction.
-# Assumes macOS (fzf optional). Requires \`sis status --json\`.
+# fzf optional. Requires \`sis status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -901,7 +996,7 @@ exec sis agent spawn --session "$session_id" --agent-type "\${atypes[$idx]}" --n
 
 const OPEN_CLAUDE_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent or orchestrator cycle and resume its Claude session.
-# Assumes macOS (fzf optional). Requires \`sis status --json\`.
+# fzf optional. Requires \`sis status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -950,7 +1045,7 @@ cd "$cwd" && exec claude --resume "$cid"
 const TAIL_AGENT_LOGS_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and view its tmux pane scrollback (last 2000 lines) in less.
 # Uses tmux capture-pane — no tail -f, no pipe-pane side effects.
-# Assumes macOS (fzf optional). Requires \`sis status --json\`.
+# fzf optional. Requires \`sis status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -993,7 +1088,7 @@ tmux capture-pane -t "$target_pane" -p -S -2000 | less +G
 
 const KILL_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and kill it (with red confirmation prompt).
-# Assumes macOS (fzf optional). Requires \`sis status --json\` and \`sis agent kill\`.
+# fzf optional. Requires \`sis status --json\` and \`sis agent kill\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -1037,7 +1132,7 @@ read -n 1 -s -r -p "Press a key to close."
 
 const COPY_AGENT_ID_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and copy its ID to clipboard.
-# Assumes macOS (pbcopy, fzf optional). Requires \`sis status --json\`.
+# Requires \`sis status --json\`. fzf optional.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -1072,66 +1167,62 @@ else
 fi
 
 aid="\${ids[$idx]}"
-printf '%s' "$aid" | pbcopy
+printf '%s' "$aid" | ${CLIP_BIN}
 tmux display-message "Copied $aid"
 `;
 
 const COPY_LOGS_SCRIPT = `#!/bin/bash
 # Copy last 200 lines of the newest cycle log to clipboard.
-# Assumes macOS (pbcopy).
 ${SESSION_RESOLVE}
 
 dir="$cwd/.sisyphus/sessions/$session_id/logs"
 [ -d "$dir" ] || { tmux display-message "No logs dir"; exit 0; }
 latest=$(ls -t "$dir"/cycle-*.md 2>/dev/null | head -1)
 [ -z "$latest" ] && { tmux display-message "No cycle logs yet"; exit 0; }
-tail -n 200 "$latest" | pbcopy
+tail -n 200 "$latest" | ${CLIP_BIN}
 tmux display-message "Copied last 200 lines of $(basename "$latest")"
 `;
 
 const COPY_LATEST_REPORT_SCRIPT = `#!/bin/bash
 # Copy the newest report file to clipboard.
-# Assumes macOS (pbcopy).
 ${SESSION_RESOLVE}
 
 dir="$cwd/.sisyphus/sessions/$session_id/reports"
 [ -d "$dir" ] || { tmux display-message "No reports dir"; exit 0; }
 latest=$(ls -t "$dir" 2>/dev/null | head -1)
 [ -z "$latest" ] && { tmux display-message "No reports yet"; exit 0; }
-cat "$dir/$latest" | pbcopy
+cat "$dir/$latest" | ${CLIP_BIN}
 tmux display-message "Copied $latest"
 `;
 
 const COPY_PATH_SCRIPT = `#!/bin/bash
 # Copy the session directory path to clipboard.
-# Assumes macOS (pbcopy).
 ${SESSION_RESOLVE}
 
-printf '%s' "$cwd/.sisyphus/sessions/$session_id" | pbcopy
+printf '%s' "$cwd/.sisyphus/sessions/$session_id" | ${CLIP_BIN}
 tmux display-message "Copied session path"
 `;
 
 const COPY_ID_SCRIPT = `#!/bin/bash
 # Copy the session ID to clipboard.
-# Assumes macOS (pbcopy).
 ${SESSION_RESOLVE}
 
-printf '%s' "$session_id" | pbcopy
+printf '%s' "$session_id" | ${CLIP_BIN}
 tmux display-message "Copied session ID"
 `;
 
 const COPY_CONTEXT_SCRIPT = `#!/bin/bash
 # Copy the session context XML to clipboard.
-# Assumes macOS (pbcopy). Requires \`sis session context\`.
+# Requires \`sis session context\`.
 ${SESSION_RESOLVE}
 
-sis session context "$session_id" --cwd "$cwd" | pbcopy
+sis session context "$session_id" --cwd "$cwd" | ${CLIP_BIN}
 tmux display-message "Copied session context (XML)"
 `;
 
 const EDIT_CONTEXT_FILE_SCRIPT = `#!/bin/bash
 # Pick a context file for the current session and open it in nvim.
-# Excludes archive/ subdirectory. Assumes macOS (fzf optional).
+# Excludes archive/ subdirectory. fzf optional.
 ${SESSION_RESOLVE}
 
 ctx_dir="$cwd/.sisyphus/sessions/$session_id/context"
@@ -1168,17 +1259,10 @@ exec nvim "$file"
 // === Stage 4 script constants ===
 
 const QUICK_SPAWN_EXPLORE_SCRIPT = `#!/bin/bash
-# Spawn an Explore agent with the macOS clipboard contents as the instruction.
-# macOS only — pbpaste hard dependency.
+# Spawn an Explore agent with the clipboard contents as the instruction.
 ${SESSION_RESOLVE}
 
-if ! command -v pbpaste >/dev/null 2>&1; then
-  echo "pbpaste not found — macOS only for now"
-  read -n 1 -s -r -p "Press a key to close."
-  exit 1
-fi
-
-instruction=$(pbpaste)
+instruction=$(${CLIP_BIN} paste 2>/dev/null)
 if [ -z "\${instruction// }" ]; then
   echo "Clipboard is empty — copy a task description first"
   read -n 1 -s -r -p "Press a key to close."
@@ -1203,17 +1287,10 @@ exit $exit_code
 `;
 
 const QUICK_SPAWN_DEBUG_SCRIPT = `#!/bin/bash
-# Spawn a Debug agent with the macOS clipboard contents as the instruction.
-# macOS only — pbpaste hard dependency.
+# Spawn a Debug agent with the clipboard contents as the instruction.
 ${SESSION_RESOLVE}
 
-if ! command -v pbpaste >/dev/null 2>&1; then
-  echo "pbpaste not found — macOS only for now"
-  read -n 1 -s -r -p "Press a key to close."
-  exit 1
-fi
-
-instruction=$(pbpaste)
+instruction=$(${CLIP_BIN} paste 2>/dev/null)
 if [ -z "\${instruction// }" ]; then
   echo "Clipboard is empty — copy a task description first"
   read -n 1 -s -r -p "Press a key to close."
@@ -1324,6 +1401,10 @@ function installAllScripts(): void {
   installScript('sisyphus-kill-pane', KILL_PANE_SCRIPT);
   installScript('sisyphus-new', NEW_PROMPT_SCRIPT);
   installScript('sisyphus-msg', MESSAGE_SCRIPT);
+  // Cross-platform helpers used by the other embedded scripts. Install these
+  // first so paste/copy callers find them on disk by the time they're invoked.
+  installScript('sisyphus-clip', SISYPHUS_CLIP_SCRIPT);
+  installScript('sisyphus-open', SISYPHUS_OPEN_SCRIPT);
   installScript('sisyphus-kill-session', KILL_SESSION_SCRIPT);
   installScript('sisyphus-delete-session', DELETE_SESSION_SCRIPT);
   installScript('sisyphus-status-popup', STATUS_POPUP_SCRIPT);
