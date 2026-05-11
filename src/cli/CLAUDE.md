@@ -2,5 +2,3 @@
 - `isInstalled()` checks plist **file existence only** — plist present but not loaded (e.g. after `launchctl unload` without file removal) skips re-install and hangs in `waitForDaemon()`. Fix: delete the plist or `launchctl load -w ~/Library/LaunchAgents/com.sisyphus.daemon.plist`
 - Plist bakes `process.execPath` at install time — upgrading or moving Node silently breaks the daemon; fix with `sis admin setup`
 - `homeScript()` bakes the absolute path to `tui.js` (`import.meta.dirname`) into the shell script at setup time — moving or npm-updating sisyphus breaks `C-s h` silently; fix with `sis admin setup-keybind`
-- `removeTmuxKeybind` only unbinds `DEFAULT_CYCLE_KEY`/`DEFAULT_PREFIX_KEY` — if setup was called with custom keys, those root bindings persist after removal
-- Session picker (`PICK_SESSION_SCRIPT`) scopes to the current session's cwd from the manifest; if the current session has no manifest entry, `cwd` is empty and **all** sessions across all cwds are shown instead
