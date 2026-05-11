@@ -91,7 +91,7 @@ Output (`output.json`) shape: `{responses: InteractionResponse[], completedAt: s
 state.json         # daemon-managed state machine — agents, cycles, status, phase (atomic writes only)
 goal.md            # what "done" looks like — should be a crisp paragraph
 strategy.md        # completed / current stage / ahead — shape of the work, living document
-roadmap.md        # current stage, exit criteria, next steps — updated every cycle
+roadmap.md        # current stage, exit criteria, active context — updated every cycle
 digest.json        # compact summary for orchestrator context
 context/           # agent-written docs: requirements.{json,md}, design.{json,md},
                    #   e2e-recipe.md, exploration notes, CLAUDE.md
@@ -172,7 +172,7 @@ When a session is running well, its artifacts have these shapes. Deviations are 
 
 - **goal.md** — one crisp paragraph; definition of done. Long verification/acceptance criteria belong in a dedicated context doc (`context/verification.md` or similar), not in goal.md itself.
 - **strategy.md** — stages (completed / current / ahead) with exit criteria; lives as an action plan, not a wiki. Scope should match the task — under-scoping misses work, over-scoping balloons into unrelated effort.
-- **roadmap.md** — current stage, exit criteria, next steps. Should update every cycle.
+- **roadmap.md** — current stage (with a status line describing what is happening right now), exit criteria, active context. No "next steps" or predictions. Should update every cycle.
 - **requirements.md** — scoped constraints with priorities, not a wish-list brainstorm.
 - **design.md** — architecture decisions tied to requirements; names specific files, types, boundaries.
 - **plan-stage-N-*.md** — sharp stages with files / signatures / exit criteria. Not bureaucratic step lists; not vague either.

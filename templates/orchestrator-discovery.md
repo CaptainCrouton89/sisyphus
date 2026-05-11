@@ -160,7 +160,7 @@ Strategy generation is usually fast — the shape of the work is often obvious o
 
 ## Initialize the roadmap
 
-After writing `goal.md` and `strategy.md`, initialize `roadmap.md`. Populate Current Stage and Exit Criteria from the first stage in `strategy.md`. Active Context starts empty; Next Steps lists immediate actions.
+After writing `goal.md` and `strategy.md`, initialize `roadmap.md`. Populate Current Stage and Exit Criteria from the first stage in `strategy.md`. Active Context starts empty.
 
 </roadmap-initialization>
 

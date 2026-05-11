@@ -27,7 +27,7 @@ Sisyphus stores session data in two places. Both matter.
 state.json         # live state machine — agents, cycles, status, phase
 goal.md            # one-paragraph definition of "done"
 strategy.md        # completed / current stage / ahead — shape of the work
-roadmap.md         # current stage, exit criteria, next steps (updated every cycle)
+roadmap.md         # current stage, exit criteria, active context (updated every cycle)
 digest.json        # compact summary for orchestrator context
 context/           # agent-written docs: requirements.{json,md}, design.{json,md},
                    #   e2e-recipe.md, exploration notes, CLAUDE.md

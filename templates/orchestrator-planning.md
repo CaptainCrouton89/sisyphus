@@ -62,7 +62,7 @@ If you're unsure, spawn the spec agent. The cost of a short spec conversation is
 
 <plan-delegation>
 
-Once you have context docs and aligned spec outputs (requirements + design), revisit the roadmap — this is the first point where you understand real scope. Roadmap refinement means updating the four canonical sections: current stage, exit criteria, active context references, and next steps. Decisions from exploration and spec work fold into context documents — not the roadmap.
+Once you have context docs and aligned spec outputs (requirements + design), revisit the roadmap — this is the first point where you understand real scope. Roadmap refinement means updating the three canonical sections: current stage, exit criteria, and active context references. Decisions from exploration and spec work fold into context documents — not the roadmap.
 
 Spawn **one plan lead** per feature (or per phase — see phase-scoped planning below). Point it at inputs (requirements, design, context docs) — not a pre-made structure. The plan lead handles its own decomposition: it assesses scope, delegates sub-plans if needed, runs adversarial reviews, and delivers a synthesized master plan. **Delegate outcomes, not implementations** — tell the plan lead what needs planning and why, not how to structure the plan.
 
