@@ -1,7 +1,9 @@
 import type { Command } from 'commander';
-import { basename } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { sendRequest } from '../client.js';
-import { buildCompanionContext } from '../../tui/lib/context.js';
+import { buildCompanionContextBlocks, renderContextDelta, renderFullContext, type CompanionContextBlocks } from '../../tui/lib/context.js';
+import { globalDir } from '../../shared/paths.js';
 import { renderCompanion } from '../../shared/companion-render.js';
 import { ACHIEVEMENTS } from '../../shared/companion-types.js';
 import type { CompanionState, CompanionMemoryState, ObservationCategory, ObservationRecord } from '../../shared/companion-types.js';
@@ -201,11 +203,33 @@ export function registerCompanion(program: Command): void {
 
   companion
     .command('context')
-    .description('Output session context JSON for companion hook')
-    .option('--cwd <path>', 'Project directory', process.cwd())
-    .action((opts: { cwd: string }) => {
-      const context = buildCompanionContext(opts.cwd);
-      process.stdout.write(JSON.stringify({ additionalContext: context }));
+    .description('Emit per-prompt context for the companion plugin hook. Caches the last emission per claude session and writes only the delta on subsequent calls (or nothing, when unchanged).')
+    .requiredOption('--cwd <path>', 'Project directory whose sessions to summarise')
+    .requiredOption('--session-id <id>', 'Claude session id (from the UserPromptSubmit stdin payload) — keys the per-session cache')
+    .action((opts: { cwd: string; sessionId: string }) => {
+      // Cache lives at ~/.sisyphus/companion-context-cache/<sessionId>.json.
+      // No cleanup yet — blobs are tiny; `rm -rf` the dir to reset.
+      const cachePath = join(globalDir(), 'companion-context-cache', `${opts.sessionId}.json`);
+      let prev: CompanionContextBlocks = {};
+      try {
+        prev = JSON.parse(readFileSync(cachePath, 'utf-8')) as CompanionContextBlocks;
+      } catch {
+        prev = {};
+      }
+
+      const next = buildCompanionContextBlocks(opts.cwd);
+      const hadPrev = Object.keys(prev).length > 0;
+
+      if (hadPrev) {
+        const delta = renderContextDelta(prev, next);
+        if (delta === null) return;
+        process.stdout.write(delta);
+      } else {
+        process.stdout.write(renderFullContext(next));
+      }
+
+      mkdirSync(dirname(cachePath), { recursive: true });
+      writeFileSync(cachePath, JSON.stringify(next), 'utf-8');
     });
 
   companion
