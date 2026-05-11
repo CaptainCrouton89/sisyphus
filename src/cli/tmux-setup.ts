@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { globalDir } from '../shared/paths.js';
 import { KEYMAP, formatHelpForKeymap, type MenuDef, type MenuItem, type Action } from '../shared/keymap.js';
+import { ensureSisyphusInitLua } from '../shared/sisyphus-init-lua.js';
 
 export const DEFAULT_CYCLE_KEY = 'M-s';
 export const DEFAULT_PREFIX_KEY = 'C-s';
@@ -150,7 +151,7 @@ export function sisyphusTmuxConfPath(): string {
   return join(globalDir(), 'tmux.conf');
 }
 
-function userTmuxConfPath(): string | null {
+export function userTmuxConfPath(): string | null {
   const dotfile = join(homedir(), '.tmux.conf');
   const xdg = join(homedir(), '.config', 'tmux', 'tmux.conf');
   if (existsSync(xdg)) return xdg;
@@ -286,9 +287,9 @@ fi
 
 const NEW_PROMPT_SCRIPT = `#!/bin/bash
 # Open nvim to compose a new sisyphus task, then start a session
-tmpfile=$(mktemp /tmp/sisyphus-new-XXXXXX.md)
+tmpfile=$(mktemp /tmp/sisyphus-new.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
-nvim "$tmpfile"
+NVIM_APPNAME=sisyphus nvim "$tmpfile"
 grep -q '[^[:space:]]' "$tmpfile" || exit 0
 exec sis start "$(cat "$tmpfile")"
 `;
@@ -318,9 +319,9 @@ fi
 
 [ -z "$session_id" ] && { echo "No active sisyphus session found"; sleep 1; exit 1; }
 
-tmpfile=$(mktemp /tmp/sisyphus-msg-XXXXXX.md)
+tmpfile=$(mktemp /tmp/sisyphus-msg.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
-nvim "$tmpfile"
+NVIM_APPNAME=sisyphus nvim "$tmpfile"
 grep -q '[^[:space:]]' "$tmpfile" || exit 0
 exec sis message --session "$session_id" "$(cat "$tmpfile")"
 `;
@@ -385,6 +386,16 @@ cat <<'EOF_HELP'
 ${formatHelpForKeymap(KEYMAP)}
 EOF_HELP
 read -n 1 -s -r -p "  Press any key to close"
+`;
+
+// Open/focus the side companion claude pane. Re-runs are idempotent — the CLI
+// looks for an existing pane with @sisyphus_companion set to this cwd via
+// tmux pane options, so a previously closed pane never leaves stale state.
+const COMPANION_PANE_SCRIPT = `#!/bin/bash
+tmux_sid=$(tmux display-message -p '#{session_id}')
+cwd=$(tmux show-options -t "$tmux_sid" -v @sisyphus_cwd 2>/dev/null)
+[ -z "$cwd" ] && cwd=$(tmux display-message -p '#{pane_current_path}')
+exec sis companion pane --cwd "$cwd"
 `;
 
 const STATUS_POPUP_SCRIPT = `#!/bin/bash
@@ -598,10 +609,10 @@ ${SESSION_RESOLVE}
 short_id="\${session_id:0:8}"
 
 # Optional message — leave empty to resume with no extra instructions.
-tmpfile=$(mktemp /tmp/sisyphus-resume-XXXXXX.md)
+tmpfile=$(mktemp /tmp/sisyphus-resume.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
 printf "# Resume session %s\\n# (Optional) Add follow-up instructions for the orchestrator below.\\n# Save & quit empty to resume with no message.\\n\\n" "$short_id" > "$tmpfile"
-nvim "$tmpfile"
+NVIM_APPNAME=sisyphus nvim "$tmpfile"
 
 # Strip comment + blank lines to detect empty submission
 body=$(grep -v '^[[:space:]]*#' "$tmpfile" | sed '/^[[:space:]]*$/d')
@@ -695,10 +706,10 @@ const SPAWN_AGENT_SCRIPT = `#!/bin/bash
 # Run from a sisyphus session pane, not the home dashboard.
 ${SESSION_RESOLVE}
 
-tmpfile=$(mktemp /tmp/sisyphus-spawn-XXXXXX.md)
+tmpfile=$(mktemp /tmp/sisyphus-spawn.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
 printf "# Spawn agent in session %s\\n# Write the agent's instruction below. Empty = abort.\\n\\n" "\${session_id:0:8}" > "$tmpfile"
-nvim "$tmpfile"
+NVIM_APPNAME=sisyphus nvim "$tmpfile"
 
 body=$(grep -v '^[[:space:]]*#' "$tmpfile" | sed '/^[[:space:]]*$/d')
 [ -z "$body" ] && exit 0
@@ -829,9 +840,9 @@ else
   (( idx >= 0 && idx < \${#entries[@]} )) || exit 0
 fi
 
-tmpfile=$(mktemp /tmp/sisyphus-msg-agent-XXXX.md)
+tmpfile=$(mktemp /tmp/sisyphus-msg-agent.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
-nvim "$tmpfile"
+NVIM_APPNAME=sisyphus nvim "$tmpfile"
 grep -q '[^[:space:]]' "$tmpfile" || exit 0
 exec sis message --session "$session_id" --agent "\${ids[$idx]}" "$(cat "$tmpfile")"
 `;
@@ -1303,6 +1314,10 @@ function installScript(name: string, content: string): void {
 }
 
 function installAllScripts(): void {
+  // Compose flows (in-session message scripts) launch `NVIM_APPNAME=sisyphus nvim`,
+  // which needs ~/.config/sisyphus/init.lua to exist before first use.
+  ensureSisyphusInitLua();
+
   // Existing scripts with real content
   installScript('sisyphus-cycle', CYCLE_SCRIPT);
   installScript('sisyphus-home', homeScript());
@@ -1368,6 +1383,11 @@ function installAllScripts(): void {
   // === Stage 6 (help script override) ===
   installScript('sisyphus-help', HELP_SCRIPT);
   // === end Stage 6 ===
+
+  // Side claude pane (direct leader action). Re-runs are idempotent — the CLI
+  // detects an existing companion pane for the cwd via the @sisyphus_companion
+  // pane marker and focuses it instead of creating a duplicate.
+  installScript('sisyphus-companion-pane', COMPANION_PANE_SCRIPT);
 }
 
 export function getExistingBinding(key: string, table: string = 'root'): string | null {
@@ -1395,13 +1415,20 @@ export function isSisyphusBinding(binding: string): boolean {
 export type SetupResult =
   | { status: 'installed'; message: string }
   | { status: 'already-installed'; message: string }
-  | { status: 'conflict'; message: string; existingBinding: string }
+  | { status: 'conflict'; message: string; existingBinding: string; conflictKey: string }
   | { status: 'unsupported-tmux'; message: string }
+  | { status: 'requires-force'; message: string; reason: 'would-modify-user-conf'; userConf: string; manualLine: string }
   | { status: 'conf-modification-declined'; message: string; manualLine: string; userConf: string };
 
 export interface SetupOptions {
-  /** Skip the confirmation prompt before appending to the user's tmux.conf. */
+  /** Skip the y/N prompt before appending to the user's tmux.conf. */
   assumeYes?: boolean;
+  /**
+   * Override safety refusals: silently overwrite any existing root-table binding on
+   * cycle/prefix keys AND auto-append the source-file line to the user's tmux.conf
+   * (implies assumeYes for the conf-append path).
+   */
+  force?: boolean;
 }
 
 async function confirmConfAppend(userConf: string, line: string): Promise<boolean> {
@@ -1438,14 +1465,46 @@ export async function setupTmuxKeybind(
     };
   }
 
-  // Check for existing bindings before writing anything
-  for (const [label, key] of [['cycle', cycleKey], ['prefix', prefixKey]] as const) {
-    const existing = getExistingBinding(key);
-    if (existing !== null && !isSisyphusBinding(existing)) {
+  // Check for existing bindings before writing anything. With --force, we overwrite
+  // them silently (tmux bind-key replaces in place); otherwise refuse so the user can
+  // pick alternate keys or explicitly opt in.
+  if (!opts.force) {
+    for (const [label, key] of [['cycle', cycleKey], ['prefix', prefixKey]] as const) {
+      const existing = getExistingBinding(key);
+      if (existing !== null && !isSisyphusBinding(existing)) {
+        return {
+          status: 'conflict',
+          message: `Tmux key ${key} (${label}) is already bound to something else. Re-run with --force to overwrite, or pass an alternate cycle key (e.g. "sis admin setup-keybind M-w").`,
+          existingBinding: existing,
+          conflictKey: key,
+        };
+      }
+    }
+  }
+
+  // Detect whether we'd modify the user's tmux.conf BEFORE writing any sisyphus-managed
+  // file. Without --force (or --yes), refuse so the user can decide explicitly.
+  const userConfPreview = userTmuxConfPath();
+  const sisyphusConfPathPreview = sisyphusTmuxConfPath();
+  const markedSourceLinePreview = `source-file ${sisyphusConfPathPreview} ${SISYPHUS_CONF_MARKER}`;
+  if (userConfPreview !== null && !opts.force && !opts.assumeYes) {
+    let alreadySources = false;
+    try {
+      alreadySources = readFileSync(userConfPreview, 'utf8').includes(sisyphusConfPathPreview);
+    } catch {
+      /* unreadable — treat as not-sourcing so we err on the side of refusing */
+    }
+    if (!alreadySources) {
       return {
-        status: 'conflict',
-        message: `Tmux key ${key} (${label}) is already bound to something else. Run "sis admin setup-keybind <key>" to use a different key.`,
-        existingBinding: existing,
+        status: 'requires-force',
+        reason: 'would-modify-user-conf',
+        userConf: userConfPreview,
+        manualLine: markedSourceLinePreview,
+        message:
+          `Refusing to modify ${userConfPreview} without explicit consent.\n` +
+          `Re-run with --force (persist) or --yes (same effect, conf-append only) to append:\n` +
+          `  ${markedSourceLinePreview}\n` +
+          `Or run "sis admin check-keybinds" for the full decision tree (live-only install is also an option).`,
       };
     }
   }
@@ -1476,7 +1535,7 @@ export async function setupTmuxKeybind(
     if (contents.includes(confPath)) {
       persistedToConf = true;
     } else {
-      const shouldAppend = opts.assumeYes
+      const shouldAppend = opts.assumeYes || opts.force
         ? true
         : await confirmConfAppend(userConf, markedSourceLine);
       if (shouldAppend) {

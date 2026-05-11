@@ -103,8 +103,9 @@ export function registerSetup(program: Command): void {
   program
     .command('setup')
     .description('One-time setup: install dependencies, daemon, keybindings, and commands')
-    .option('-y, --yes', 'Skip confirmation prompts (e.g. before modifying ~/.tmux.conf)')
-    .action(async (opts: { yes?: boolean }) => {
+    .option('-y, --yes', 'Skip the y/N prompt before modifying ~/.tmux.conf')
+    .option('-f, --force', 'Override safety refusals: overwrite existing key bindings AND auto-append source-file to ~/.tmux.conf')
+    .action(async (opts: { yes?: boolean; force?: boolean }) => {
       // 1. Onboarding (tmux, terminal, iterm, nvim, plugin)
       const result = runOnboarding();
 
@@ -117,15 +118,21 @@ export function registerSetup(program: Command): void {
         daemonOk = isInstalled();
       }
 
-      // 3. Keybindings
+      // 3. Keybindings — refuses without --force if it would conflict or modify the
+      // user's tmux.conf. Surface the refusal clearly so the user knows to re-run.
       const keybindResult = await setupTmuxKeybind(
         DEFAULT_CYCLE_KEY,
         DEFAULT_PREFIX_KEY,
-        { assumeYes: opts.yes },
+        { assumeYes: opts.yes, force: opts.force },
       );
       let keybindMsg: string;
       if (keybindResult.status === 'installed' || keybindResult.status === 'already-installed') {
         keybindMsg = `${DEFAULT_CYCLE_KEY} cycle, ${DEFAULT_PREFIX_KEY} prefix (h=dashboard, x=kill)`;
+      } else if (keybindResult.status === 'requires-force' || keybindResult.status === 'conflict') {
+        keybindMsg =
+          `${keybindResult.message}\n` +
+          `    Run "sis admin check-keybinds" for the full decision tree, then re-run "sis admin setup --force" to proceed.`;
+        process.exitCode = 1;
       } else {
         keybindMsg = keybindResult.message;
       }

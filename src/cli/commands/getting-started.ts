@@ -341,18 +341,30 @@ Two keybinds to remember (both use the RIGHT Option key):
 | Right Option + s | Cycle through sisyphus sessions |
 | Right Option + Shift + s | Jump back to dashboard |
 
-### 4. Verify keybinds are installed
+### 4. Verify keybinds are installed (REQUIRED before step 5)
 
-Run \`sis admin doctor\` and check the output. Look for:
-- "Cycle script" — should be ✓
-- "Tmux keybind" — should be ✓
-- "Right Option Key" — should be "Esc+"
+Run \`sis admin check-keybinds\` and follow the decision tree it emits. The output is
+structured for you — it tells you the current state and which path to take (Path A
+through Path F). Do NOT skip this and do NOT ask the user to test a keybind until
+both \`M-s\` and \`C-s\` read "sisyphus" in that command's output.
 
-If cycle script or keybind is missing, run: \`sis admin setup-keybind\`
+Common paths:
+- **Path A (already wired):** confirm and move on.
+- **Path B (safe auto-install):** run \`sis admin setup-keybind --yes\`.
+- **Path C (would touch user's tmux.conf):** ask the user — persistent (\`--force\`) or
+  live-only (no flag, non-TTY auto-declines the conf write).
+- **Path D (binding conflict):** pick alternate keys or wire directly.
+- **Path E (hidden prefix collision):** their tmux prefix is C-s; explain and offer
+  alternatives.
+- **Path F (tmux not ready):** fix the precondition first.
+
+After acting, re-run \`sis admin check-keybinds\` to confirm success.
 
 ### 5. Test the keybind
 
-Have the user try pressing Right Option + s. Nothing should happen yet (no sisyphus session running) — and that's fine. The important thing is no special character appears.
+Once check-keybinds reports both keys as "sisyphus", have the user try pressing
+Right Option + s. Nothing should happen yet (no sisyphus session running) — and that's
+fine. The important thing is no special character appears.
 
 If they see \`ß\` or similar, circle back to the Right Option Key setup above.
 

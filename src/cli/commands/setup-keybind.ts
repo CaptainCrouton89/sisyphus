@@ -5,10 +5,14 @@ export function registerSetupKeybind(program: Command): void {
   program
     .command('setup-keybind [cycle-key]')
     .description('Install sisyphus tmux keybindings (default: M-s cycle, C-s prefix)')
-    .option('-y, --yes', 'Skip confirmation prompt before modifying ~/.tmux.conf')
-    .action(async (key: string | undefined, opts: { yes?: boolean }) => {
-      const resolvedKey = key ?? DEFAULT_CYCLE_KEY;
-      const result = await setupTmuxKeybind(resolvedKey, undefined, { assumeYes: opts.yes });
+    .option('-y, --yes', 'Auto-accept the y/N prompt before appending source-file to ~/.tmux.conf')
+    .option('-f, --force', 'Override safety refusals: overwrite existing key bindings AND auto-append the source-file line')
+    .action(async (key: string | undefined, opts: { yes?: boolean; force?: boolean }) => {
+      const resolvedKey = key === undefined ? DEFAULT_CYCLE_KEY : key;
+      const result = await setupTmuxKeybind(resolvedKey, undefined, {
+        assumeYes: opts.yes,
+        force: opts.force,
+      });
 
       switch (result.status) {
         case 'installed':
@@ -19,21 +23,29 @@ export function registerSetupKeybind(program: Command): void {
           console.log(result.message);
           break;
         case 'conflict':
-          console.log(`Key ${resolvedKey} is already bound:`);
+          console.log(`Key ${result.conflictKey} is already bound:`);
           console.log(`  ${result.existingBinding}`);
           console.log('');
-          console.log('Use a different key, e.g.:');
-          console.log('  sis admin setup-keybind M-S');
-          console.log('  sis admin setup-keybind M-w');
-          console.log('  sis admin setup-keybind M-j');
+          console.log('Options:');
+          console.log('  - Pick a different cycle key:  sis admin setup-keybind M-w');
+          console.log('  - Run "sis admin check-keybinds" for a full breakdown');
+          console.log('  - Override and overwrite:      sis admin setup-keybind --force');
+          process.exitCode = 1;
           break;
         case 'unsupported-tmux':
           console.log(result.message);
+          process.exitCode = 1;
+          break;
+        case 'requires-force':
+          console.log(result.message);
+          console.log('');
+          console.log('Run "sis admin check-keybinds" first if you want the full decision tree before deciding.');
+          process.exitCode = 1;
           break;
         case 'conf-modification-declined':
           console.log(result.message);
           console.log('');
-          console.log('Re-run with --yes to skip the prompt.');
+          console.log('Re-run with --force to append automatically.');
           break;
       }
     });

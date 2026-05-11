@@ -127,8 +127,9 @@ function printGettingStarted(
 
   if (keybindResult.status === 'installed') {
     lines.push(`Tmux keybind: ${keybindResult.message}`, '');
-  } else if (keybindResult.status === 'conflict') {
+  } else if (keybindResult.status === 'conflict' || keybindResult.status === 'requires-force') {
     lines.push(`Keybind: ${keybindResult.message}`, '');
+    lines.push('Run `sis admin check-keybinds` to see options, then `sis admin setup --force`.', '');
   } else if (keybindResult.status === 'conf-modification-declined') {
     lines.push(keybindResult.message, '');
   }
