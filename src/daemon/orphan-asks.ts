@@ -3,6 +3,13 @@ import * as askStore from './ask-store.js';
 import * as state from './state.js';
 import type { AskMeta, Deck, Interaction, InteractionOption, Session } from '../shared/types.js';
 import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
+import { mapWithLimit } from '../shared/lib/concurrent.js';
+
+// Cap parallel ask updates to avoid fd spikes when a session has hundreds of
+// asks (each updateMeta does read+atomicWrite under withLock; without a cap,
+// `Promise.all` over an entire ask list schedules all of them at once and
+// piles up fd churn during startup recovery and orphan sweeps).
+const ASK_FANOUT_LIMIT = 16;
 
 const ORPHAN_ASKED_BY = 'system:orphan-handler';
 
@@ -204,7 +211,7 @@ async function _markAsksOrphanFromList(
   sessionId: string,
   agentId: string,
 ): Promise<void> {
-  await Promise.all(asks.map(async (askId) => {
+  await mapWithLimit(asks, ASK_FANOUT_LIMIT, async (askId) => {
     try {
       const meta = askStore.readMeta(cwd, sessionId, askId);
       if (!meta) return;
@@ -218,7 +225,7 @@ async function _markAsksOrphanFromList(
         err instanceof Error ? err.message : err,
       );
     }
-  }));
+  });
 }
 
 /**
@@ -251,7 +258,7 @@ export async function resolveOrchestratorOrphanAsks(
 ): Promise<void> {
   const asks = askStore.listAsks(cwd, sessionId);
   const completedAt = new Date().toISOString();
-  await Promise.all(asks.map(async (askId) => {
+  await mapWithLimit(asks, ASK_FANOUT_LIMIT, async (askId) => {
     try {
       const meta = askStore.readMeta(cwd, sessionId, askId);
       if (!meta) return;
@@ -270,5 +277,5 @@ export async function resolveOrchestratorOrphanAsks(
         err instanceof Error ? err.message : err,
       );
     }
-  }));
+  });
 }
