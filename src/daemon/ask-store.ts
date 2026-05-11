@@ -15,6 +15,7 @@ const ACTIONABLE_KINDS: ReadonlySet<InteractionKind> = new Set([
 ]);
 
 const HEARTBEAT_ASKED_BY = 'system:heartbeat';
+const ORPHAN_ASKED_BY = 'system:orphan-handler';
 
 function maybeNotifyOnAskCreated(cwd: string, sessionId: string, meta: AskMeta): void {
   if (process.env.NODE_ENV === 'test' || process.env.SISYPHUS_DISABLE_NOTIFY === '1') return;
@@ -232,6 +233,11 @@ async function maybeAutoResolveAsk(
 ): Promise<void> {
   try {
     if (!isSessionDangerous(cwd, sessionId)) return;
+    // Orphan-handler asks require human action — auto-selecting "resume" doesn't
+    // trigger an actual resume, but it does mark the ask answered, which defeats
+    // emitOrphanAsk's dedup and causes a notification flood every monitor tick
+    // while the orchestrator stays gone.
+    if (deck.source?.askedBy === ORPHAN_ASKED_BY) return;
     await autoResolveAsk(cwd, sessionId, askId, deck);
   } catch {
     // never roll back the deck write
