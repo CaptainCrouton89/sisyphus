@@ -75,8 +75,6 @@ export function registerDashboardWindow(cwd?: string): void {
   }
 }
 
-let companionPaneId: string | null = null;
-
 function setupCompanionPlugin(): string {
   const srcDir = join(import.meta.dirname, 'templates', 'companion-plugin');
   const destDir = join(globalDir(), 'companion-plugin');
@@ -89,10 +87,33 @@ export function paneExists(paneId: string): boolean {
   return execSafe(`tmux display-message -t ${shellQuote(paneId)} -p "#{pane_id}"`) !== null;
 }
 
+// Find a companion pane for this cwd by marker option. Returns null if none.
+// Authoritative source — replaces the old module-level companionPaneId cache
+// which went stale after `tmux kill-pane` (stale id → paneExists race),
+// across TUI restarts, and when the user opened a second dashboard.
+function findCompanionPaneForCwd(normalizedCwd: string): string | null {
+  const out = execSafe(`tmux list-panes -aF "#{pane_id}\t#{@sisyphus_companion}"`);
+  if (!out) return null;
+  for (const line of out.split('\n')) {
+    const tabIdx = line.indexOf('\t');
+    if (tabIdx < 0) continue;
+    const paneId = line.slice(0, tabIdx);
+    const marker = line.slice(tabIdx + 1);
+    if (paneId && marker === normalizedCwd) return paneId;
+  }
+  return null;
+}
+
 export function openCompanionPane(cwd: string): void {
-  // If companion pane is alive, focus it
-  if (companionPaneId && paneExists(companionPaneId)) {
-    execSafe(`tmux select-pane -t ${shellQuote(companionPaneId)}`);
+  const normalizedCwd = cwd.replace(/\/+$/, '');
+
+  // Reuse an alive companion pane for this cwd if one exists. We look it up
+  // via the tmux pane option marker rather than caching a pane id in module
+  // state, so a killed pane never leaves us in a state where we try to focus
+  // something that's gone.
+  const existing = findCompanionPaneForCwd(normalizedCwd);
+  if (existing) {
+    execSafe(`tmux select-pane -t ${shellQuote(existing)}`);
     return;
   }
 
@@ -115,9 +136,12 @@ export function openCompanionPane(cwd: string): void {
   const claudeCmd = `SISYPHUS_COMPANION_CWD=${shellQuote(cwd)} PATH=${shellQuote(pathEnv)} claude --dangerously-skip-permissions --plugin-dir ${shellQuote(pluginDir)} --append-system-prompt "$(cat ${shellQuote(promptPath)})"`;
 
   const result = exec(
-    `tmux split-window -h -d -l 33% -P -F "#{pane_id}" -c ${shellQuote(cwd)} ${shellQuote(claudeCmd)}`,
+    `tmux split-window -h -l 33% -P -F "#{pane_id}" -c ${shellQuote(cwd)} ${shellQuote(claudeCmd)}`,
   );
-  companionPaneId = result.trim() || null;
+  const newPaneId = result.trim();
+  if (newPaneId) {
+    execSafe(`tmux set-option -p -t ${shellQuote(newPaneId)} @sisyphus_companion ${shellQuote(normalizedCwd)}`);
+  }
 }
 
 const TERMINAL_EDITORS = new Set(['nvim', 'vim', 'vi', 'nano', 'emacs', 'micro', 'helix', 'hx', 'joe', 'ne', 'kak']);

@@ -209,6 +209,15 @@ export function registerCompanion(program: Command): void {
     });
 
   companion
+    .command('pane')
+    .description('Open (or focus) a side claude pane next to the dashboard')
+    .option('--cwd <path>', 'Project directory', process.cwd())
+    .action(async (opts: { cwd: string }) => {
+      const { openCompanionPane } = await import('../../tui/lib/tmux.js');
+      openCompanionPane(opts.cwd);
+    });
+
+  companion
     .command('popup-test')
     .description('Show a test commentary popup to validate feedback key handling')
     .option('--text <text>', 'Custom popup text', 'Cycle complete. Everything went exactly as planned. Nothing suspicious here.')

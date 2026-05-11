@@ -115,7 +115,8 @@ export const KEYMAP: KeyMap = {
       { key: '/', label: '  Search / filter', action: { type: 'script', name: 'sisyphus-search-reports' }, tuiAction: 'search' },
       { key: ' ', label: '  Open popup explicitly', action: { type: 'tui', action: 'show-leader' } },
       { key: 'y', label: '  Yank ›', action: { type: 'submenu', ref: 'copy' } },
-      { key: 'c', label: '  Companion ›', action: { type: 'submenu', ref: 'companion' } },
+      { key: 'c', label: '  Side claude pane', action: { type: 'script', name: 'sisyphus-companion-pane' }, tuiAction: 'companion-pane' },
+      { key: 'C', label: '  Companion (gamification) ›', action: { type: 'submenu', ref: 'companion' } },
       { key: 'o', label: '  Open ›', action: { type: 'submenu', ref: 'open' } },
       { key: 'a', label: '  Agent ›', action: { type: 'submenu', ref: 'agent' } },
       { key: 'S', label: '  Session ›', action: { type: 'submenu', ref: 'session' } },
@@ -128,7 +129,6 @@ export const KEYMAP: KeyMap = {
       items: [
         { key: 'p', label: '  profile (overlay)',    action: { type: 'tui', action: 'companion-overlay' } },
         { key: 'd', label: '  debug (mood signals)', action: { type: 'tui', action: 'companion-debug' } },
-        { key: 't', label: '  open in tmux pane',    action: { type: 'tui', action: 'companion-pane' } },
       ],
     },
     copy: {

@@ -1,33 +1,14 @@
 import { execSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, cpSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { shellQuote } from '../../shared/shell.js';
 import { EXEC_ENV } from '../../shared/exec.js';
 import { type AppState, type ComposeAction, OPTIONAL_COMPOSE, notify } from '../state.js';
 import type { InputActions } from '../input.js';
 import { dispatchComposeAction } from '../input.js';
 
-let initLuaEnsured = false;
-
-/**
- * Idempotent: copies templates/sisyphus-init.lua to ~/.config/sisyphus/init.lua
- * if and only if the destination doesn't exist. Safe to call repeatedly.
- */
-export function ensureSisyphusInitLua(): void {
-  if (initLuaEnsured) return;
-  initLuaEnsured = true;
-  try {
-    const destDir = join(homedir(), '.config', 'sisyphus');
-    const destPath = join(destDir, 'init.lua');
-    if (existsSync(destPath)) return;
-    mkdirSync(destDir, { recursive: true });
-    const srcPath = join(import.meta.dirname, 'templates', 'sisyphus-init.lua');
-    cpSync(srcPath, destPath);
-  } catch {
-    // Non-fatal: popup will still open nvim, just without sisyphus init customization.
-  }
-}
+export { ensureSisyphusInitLua } from '../../shared/sisyphus-init-lua.js';
 
 /**
  * Open a tmux popup running `NVIM_APPNAME=sisyphus nvim <tempfile>`, await close,

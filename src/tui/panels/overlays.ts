@@ -90,7 +90,7 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
     helpRow('  r  re-run agent', '  g  edit goal', innerWidth),
     helpRow('  p  open roadmap', '  S  edit strategy', innerWidth),
     helpRow('  w  go to window', '  o  resume claude', innerWidth),
-    helpRow('  c  claude companion', '  q  quit', innerWidth),
+    helpRow('  c  side claude pane', '  q  quit', innerWidth),
     ' '.padEnd(innerWidth),
     // Leader direct keys (top-level space-key)
     helpRow('  space s  cycle session', '  space h  home/dashboard', innerWidth),
@@ -99,10 +99,12 @@ export function renderHelpOverlay(buf: FrameBuffer, rows: number, cols: number):
     helpRow('  space x  kill pane', '  space /  search', innerWidth),
     helpRow('  space ?  help', '  space 1-9  jump to session', innerWidth),
     ' '.padEnd(innerWidth),
+    // Direct top-level leader keys
+    helpRow('  space c  side claude pane', '  space y ›  Yank', innerWidth),
     // Submenu prefixes
-    helpRow('  space c ›  Copy', '  space o ›  Open', innerWidth),
-    helpRow('  space a ›  Agent', '  space S ›  Session', innerWidth),
-    helpRow('  space g ›  Go', '', innerWidth),
+    helpRow('  space o ›  Open', '  space a ›  Agent', innerWidth),
+    helpRow('  space S ›  Session', '  space g ›  Go', innerWidth),
+    helpRow('  space C ›  Companion', '', innerWidth),
     ' '.padEnd(innerWidth),
     ansiDim('  Changed: space a → space a s (spawn agent)'.padEnd(innerWidth)),
   ];
