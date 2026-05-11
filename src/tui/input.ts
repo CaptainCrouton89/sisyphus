@@ -1,7 +1,7 @@
-import { execSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { exportSessionToZip } from '../shared/session-export.js';
+import { pasteFromClipboard } from '../shared/clipboard.js';
 import type { Key } from './terminal.js';
 import {
   type AppState,
@@ -138,7 +138,7 @@ export interface InputActions {
   openLogPopup: typeof import('./lib/tmux.js').openLogPopup;
   openShellPopup: typeof import('./lib/tmux.js').openShellPopup;
   openInFileManager: typeof import('./lib/tmux.js').openInFileManager;
-  copyToClipboard: typeof import('./lib/clipboard.js').copyToClipboard;
+  copyToClipboard: (text: string) => void;
   buildSessionContext: typeof import('./lib/context.js').buildSessionContext;
 
   // Compose via tmux popup
@@ -783,13 +783,12 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'quick-spawn-explore': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      let exploreInstruction: string;
-      try {
-        exploreInstruction = execSync('pbpaste', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
-      } catch {
-        notify(state, 'pbpaste not available — macOS only');
+      const pasted = pasteFromClipboard();
+      if ('reason' in pasted) {
+        notify(state, pasted.reason);
         break;
       }
+      const exploreInstruction = pasted.text.trim();
       if (exploreInstruction.length < 20) {
         notify(state, `Clipboard too short (${exploreInstruction.length} chars; need 20+)`);
         break;
@@ -803,13 +802,12 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'quick-spawn-debug': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
-      let debugInstruction: string;
-      try {
-        debugInstruction = execSync('pbpaste', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
-      } catch {
-        notify(state, 'pbpaste not available — macOS only');
+      const pasted = pasteFromClipboard();
+      if ('reason' in pasted) {
+        notify(state, pasted.reason);
         break;
       }
+      const debugInstruction = pasted.text.trim();
       if (debugInstruction.length < 20) {
         notify(state, `Clipboard too short (${debugInstruction.length} chars; need 20+)`);
         break;

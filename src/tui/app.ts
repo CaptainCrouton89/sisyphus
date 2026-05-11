@@ -34,7 +34,7 @@ import {
   openInFileManager,
   promptInPopup,
 } from './lib/tmux.js';
-import { copyToClipboard } from './lib/clipboard.js';
+import { copyToClipboard as sharedCopyToClipboard } from '../shared/clipboard.js';
 import { buildSessionContext } from './lib/context.js';
 import { renderTreePanel } from './panels/tree.js';
 import { renderDetailRows, renderDigestRows, type DetailContext } from './panels/detail.js';
@@ -823,7 +823,10 @@ export function startApp(state: AppState, cleanup: () => void): void {
     openLogPopup,
     openShellPopup,
     openInFileManager,
-    copyToClipboard,
+    copyToClipboard: (text) => {
+      const err = sharedCopyToClipboard(text);
+      if (err !== null) notify(state, err.reason);
+    },
     buildSessionContext,
     resolveEditor: () => {
       if (config.editor) return config.editor;
