@@ -26,6 +26,7 @@ import { registerReconnect } from './commands/reconnect.js';
 import { registerClone } from './commands/clone.js';
 import { registerSessionTask } from './commands/update-task.js';
 import { registerSessionEffort } from './commands/set-effort.js';
+import { registerSessionDangerous } from './commands/set-dangerous.js';
 import { registerSessionContext } from './commands/print-context.js';
 import { registerSpawn } from './commands/spawn.js';
 import { registerSubmit } from './commands/submit.js';
@@ -95,6 +96,7 @@ registerReconnect(session);
 registerClone(session);
 registerSessionTask(session);
 registerSessionEffort(session);
+registerSessionDangerous(session);
 registerSessionContext(session);
 
 // agent group
