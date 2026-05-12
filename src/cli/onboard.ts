@@ -456,16 +456,17 @@ export function runOnboarding(): OnboardResult {
   let tmuxAutoInstalled = false;
   let tmuxDefaultsWritten = false;
 
-  // Auto-install tmux if missing
+  // Auto-install tmux if missing (macOS only — Linux/WSL users install via their package manager)
   if (!tmuxAlreadyInstalled && process.platform === 'darwin') {
     tmuxAutoInstalled = tryAutoInstallTmux();
     tmuxInstalled = tmuxAutoInstalled;
+  }
 
-    // Write sensible defaults only for fresh tmux installs (don't touch existing configs)
-    if (tmuxAutoInstalled && !hasExistingTmuxConf()) {
-      writeTmuxDefaults();
-      tmuxDefaultsWritten = true;
-    }
+  // Write sensible defaults whenever tmux is present and the user has no existing conf.
+  // Platform-agnostic so WSL/Linux first-timers get the same ergonomic keybinds as macOS.
+  if (tmuxInstalled && !hasExistingTmuxConf()) {
+    writeTmuxDefaults();
+    tmuxDefaultsWritten = true;
   }
 
   // Check iTerm2 right option key
