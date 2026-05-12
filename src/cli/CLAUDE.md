@@ -1,4 +1,2 @@
 - `ssyph_` prefix on session names is mandatory — renaming breaks `RESOLVE_HOME` (skips `ssyph_*` to find home) and pane-monitor detection (separate file); both fail silently
 - `isInstalled()` checks plist **file existence only** — plist present but not loaded (e.g. after `launchctl unload` without file removal) skips re-install and hangs in `waitForDaemon()`. Fix: delete the plist or `launchctl load -w ~/Library/LaunchAgents/com.sisyphus.daemon.plist`
-- Plist bakes `process.execPath` at install time — upgrading or moving Node silently breaks the daemon; fix with `sis admin setup`
-- `homeScript()` bakes the absolute path to `tui.js` (`import.meta.dirname`) into the shell script at setup time — moving or npm-updating sisyphus breaks `C-s h` silently; fix with `sis admin setup-keybind`
