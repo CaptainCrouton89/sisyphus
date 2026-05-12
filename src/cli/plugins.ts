@@ -21,7 +21,7 @@ function isMarketplaceInstalled(marketplace: string): boolean {
   return output.includes(marketplace);
 }
 
-function installMarketplace(marketplace: string, owner = 'CaptainCrouton89'): void {
+function installMarketplace(marketplace: string, owner: string): void {
   console.log(`Adding marketplace: ${owner}/${marketplace}`);
   execSync(`claude plugins marketplace add ${owner}/${marketplace}`, { stdio: 'inherit' });
 }
@@ -73,7 +73,7 @@ export async function ensureRequiredPlugins(cwd: string): Promise<void> {
     console.log(`Required plugin ${key} not found — installing...`);
 
     if (!isMarketplaceInstalled(plugin.marketplace)) {
-      installMarketplace(plugin.marketplace);
+      installMarketplace(plugin.marketplace, plugin.owner);
     }
 
     installPlugin(key);

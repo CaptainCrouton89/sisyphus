@@ -62,6 +62,12 @@ export async function ensureDaemonInstalled(): Promise<void> {
   // before this plugin shipped self-heal the next time the daemon is unreachable.
   const sisyphusPlugin = ensureSisyphusPluginInstalled();
 
+  // Also idempotent: required plugins from config (e.g. devcore@crouton-kit).
+  // Must run on every daemon-ensure, not just first install — users whose
+  // plist predates a new entry in `requiredPlugins` would otherwise never
+  // get it.
+  await ensureRequiredPlugins(process.cwd());
+
   if (!isInstalled()) {
     const nodePath = process.execPath;
     const daemonPath = daemonBinPath();
@@ -76,8 +82,6 @@ export async function ensureDaemonInstalled(): Promise<void> {
     execSync(`launchctl load -w ${plistPath()}`);
 
     const keybindResult = await setupTmuxKeybind();
-
-    await ensureRequiredPlugins(process.cwd());
 
     printGettingStarted(keybindResult, sisyphusPlugin);
   }

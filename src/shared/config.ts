@@ -12,6 +12,8 @@ export interface NotificationConfig {
 export interface RequiredPlugin {
   name: string;
   marketplace: string;
+  /** GitHub owner of the marketplace repo (`<owner>/<marketplace>`). */
+  owner: string;
 }
 
 export interface UploadConfig {
@@ -49,7 +51,7 @@ const DEFAULT_CONFIG: Config = {
   },
   companionPopup: true,
   requiredPlugins: [
-    { name: 'devcore', marketplace: 'crouton-kit' },
+    { name: 'devcore', marketplace: 'crouton-kit', owner: 'crouton-labs' },
   ],
 };
 
