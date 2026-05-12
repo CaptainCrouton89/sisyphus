@@ -14,6 +14,7 @@ interface ReadOptions {
   raw?: boolean;
   summary?: boolean;
   toolDetail?: boolean;
+  json?: boolean;
 }
 
 const ORCH_ALIASES = new Set(['orchestrator', 'orch', 'o']);
@@ -111,6 +112,7 @@ export function registerRead(program: Command): void {
     .option('--raw', 'Print raw JSONL (no formatting, no filtering)')
     .option('--summary', 'One-line-per-turn summary instead of full content')
     .option('--tool-detail', 'Include full tool inputs/outputs (default: truncated to 400/600 chars)')
+    .option('-j, --json', 'Output JSONL — one JSON object per turn (mutually exclusive with --raw and --summary)')
     .action(async (targetRaw: string, opts: ReadOptions) => {
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -179,6 +181,15 @@ export function registerRead(program: Command): void {
 
       const raw = readFileSync(path, 'utf-8');
 
+      if (opts.json && opts.raw) {
+        console.error('Error: --json and --raw are mutually exclusive');
+        process.exit(1);
+      }
+      if (opts.json && opts.summary) {
+        console.error('Error: --json and --summary are mutually exclusive');
+        process.exit(1);
+      }
+
       if (opts.raw) {
         process.stdout.write(raw);
         return;
@@ -203,6 +214,17 @@ export function registerRead(program: Command): void {
       if (tail && Number.isFinite(tail)) {
         entries = entries.slice(-tail);
         sliceNote = sliceNote ? `${sliceNote}, then last ${tail}` : `last ${tail} of ${totalTurns}`;
+      }
+
+      if (opts.json) {
+        for (const e of entries) {
+          console.log(JSON.stringify({
+            role: e.type,
+            timestamp: e.timestamp,
+            content: e.message?.content,
+          }));
+        }
+        return;
       }
 
       console.log(`=== ${label} — ${entries.length} turn(s)${sliceNote ? ` (${sliceNote})` : ''} ===`);

@@ -37,3 +37,35 @@ export function statusColor(status: string): string {
       return 'white';
   }
 }
+
+// Color enabled if stdout is a TTY, NO_COLOR is not set, and TERM is not dumb.
+// FORCE_COLOR=1 overrides all of the above.
+const COLOR_ENABLED =
+  process.env['FORCE_COLOR'] === '1' ||
+  (process.stdout.isTTY === true &&
+    process.env['NO_COLOR'] === undefined &&
+    process.env['TERM'] !== 'dumb');
+
+function wrap(open: string, close: string = '\x1b[0m') {
+  return (s: string): string => COLOR_ENABLED ? `${open}${s}${close}` : s;
+}
+
+export const bold = wrap('\x1b[1m');
+export const dim = wrap('\x1b[2m');
+export const red = wrap('\x1b[31m');
+export const green = wrap('\x1b[32m');
+export const yellow = wrap('\x1b[33m');
+export const cyan = wrap('\x1b[36m');
+export const gray = wrap('\x1b[90m');
+export const magenta = wrap('\x1b[35m');
+export const white = wrap('\x1b[37m');
+
+const COLOR_FNS: Record<string, (s: string) => string> = {
+  red, green, yellow, cyan, gray, magenta, white,
+  bold, dim,
+};
+
+export function colorize(text: string, colorName: string): string {
+  const fn = COLOR_FNS[colorName];
+  return fn ? fn(text) : text;
+}

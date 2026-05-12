@@ -6,21 +6,10 @@ import type { Request } from '../../shared/protocol.js';
 import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
 import { computeActiveTimeMs } from '../../shared/utils.js';
 import { roadmapPath, cycleLogPath } from '../../shared/paths.js';
-import { formatDuration, statusColor } from '../../shared/format.js';
-
-const COLOR_CODES: Record<string, string> = {
-  green: '\x1b[32m', yellow: '\x1b[33m', cyan: '\x1b[36m',
-  red: '\x1b[31m', gray: '\x1b[90m', white: '\x1b[37m',
-};
-const RESET = '\x1b[0m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
+import { formatDuration, statusColor, bold, dim, red, colorize as fmtColorize } from '../../shared/format.js';
 
 function colorize(text: string, status: string): string {
-  const colorName = statusColor(status);
-  const code = COLOR_CODES[colorName];
-  if (!code) return `${text}\x1b[0m`;
-  return `${code}${text}\x1b[0m`;
+  return fmtColorize(text, statusColor(status));
 }
 
 function inferOrchestratorPhase(session: Session): string {
@@ -47,13 +36,13 @@ function inferOrchestratorPhase(session: Session): string {
 
 function formatAgent(agent: Agent, verbose: boolean): string {
   const status = colorize(agent.status, agent.status);
-  const name = `${BOLD}${agent.name}${RESET}`;
-  const type = `${DIM}(${agent.agentType})${RESET}`;
+  const name = bold(agent.name);
+  const type = dim(`(${agent.agentType})`);
   const duration = formatDuration(agent.activeMs);
-  let line = `    ${agent.id} ${name} ${type} — ${status} ${DIM}(${duration})${RESET}`;
+  let line = `    ${agent.id} ${name} ${type} — ${status} ${dim(`(${duration})`)}`;
   if (verbose && agent.instruction) {
     const truncated = agent.instruction.length > 200 ? agent.instruction.slice(0, 200) + '...' : agent.instruction;
-    line += `\n      ${DIM}Instruction: ${truncated}${RESET}`;
+    line += `\n      ${dim(`Instruction: ${truncated}`)}`;
   }
   if (agent.reports.length > 0) {
     for (const r of agent.reports) {
@@ -70,10 +59,10 @@ function formatAgent(agent: Agent, verbose: boolean): string {
 function formatCycle(cycle: OrchestratorCycle, phase?: string): string {
   let duration: string;
   if (cycle.completedAt) {
-    duration = ` ${DIM}(${formatDuration(cycle.activeMs)})${RESET}`;
+    duration = ` ${dim(`(${formatDuration(cycle.activeMs)})`)}`;
   } else {
     const elapsed = formatDuration(cycle.activeMs);
-    duration = ` ${DIM}(running, ${elapsed})${RESET}`;
+    duration = ` ${dim(`(running, ${elapsed})`)}`;
   }
   const agents = cycle.agentsSpawned.length > 0
     ? ` — agents: ${cycle.agentsSpawned.join(', ')}`
@@ -134,7 +123,7 @@ function capturePaneOutput(paneId: string, lines: number = 50): string | null {
 function printSession(session: Session, verbose: boolean): void {
   const status = colorize(session.status, session.status);
   const sessionDuration = formatDuration(session.createdAt, session.completedAt);
-  console.log(`\n${BOLD}Session: ${session.id}${RESET}`);
+  console.log(`\n${bold(`Session: ${session.id}`)}`);
   console.log(`  Status: ${status}`);
   const effortLabel = session.effort != null ? session.effort : 'high (default)';
   console.log(`  Effort: ${effortLabel}`);
@@ -158,7 +147,7 @@ function printSession(session: Session, verbose: boolean): void {
   if (session.handoff) {
     const h = session.handoff;
     if (h.lastError) {
-      console.log(`  Handoff: ${COLOR_CODES.red}error${RESET} — ${h.lastError}`);
+      console.log(`  Handoff: ${red('error')} — ${h.lastError}`);
     } else if (h.reclaimedAt) {
       const where = h.target ? `${h.target.provider}:${h.target.repo}` : 'cloud';
       console.log(`  Handoff: reclaimed from ${where} at ${h.reclaimedAt}`);
@@ -174,15 +163,15 @@ function printSession(session: Session, verbose: boolean): void {
   // Active agents block
   const runningAgents = session.agents.filter(a => a.status === 'running');
   if (runningAgents.length > 0) {
-    console.log(`\n${BOLD}Active agents (${runningAgents.length}):${RESET}`);
+    console.log(`\n${bold(`Active agents (${runningAgents.length}):`)}` );
     for (const agent of runningAgents) {
-      const name = `${BOLD}${agent.name}${RESET}`;
-      const type = `${DIM}(${agent.agentType})${RESET}`;
+      const name = bold(agent.name);
+      const type = dim(`(${agent.agentType})`);
       const duration = formatDuration(agent.activeMs);
       console.log(`  ${agent.id}  ${name}  ${type}  running ${duration}`);
       if (verbose && agent.instruction) {
         const truncated = agent.instruction.length > 200 ? agent.instruction.slice(0, 200) + '...' : agent.instruction;
-        console.log(`    ${DIM}Instruction: ${truncated}${RESET}`);
+        console.log(`    ${dim(`Instruction: ${truncated}`)}`);
       }
     }
   }
@@ -190,12 +179,12 @@ function printSession(session: Session, verbose: boolean): void {
   // Roadmap
   const roadmap = readRoadmap(session.cwd, session.id);
   if (roadmap) {
-    console.log(`\n${BOLD}Roadmap:${RESET}`);
+    console.log(`\n${bold('Roadmap:')}`);
     console.log(roadmap);
   }
 
   if (session.orchestratorCycles.length > 0) {
-    console.log(`\n  ${BOLD}Cycles:${RESET}`);
+    console.log(`\n  ${bold('Cycles:')}`);
     const cycles = session.orchestratorCycles;
     for (let i = 0; i < cycles.length; i++) {
       const isLast = i === cycles.length - 1;
@@ -208,12 +197,12 @@ function printSession(session: Session, verbose: boolean): void {
         if (log) {
           const lines = log.split('\n');
           const preview = lines.slice(0, 20).join('\n');
-          console.log(`      ${DIM}--- cycle log ---${RESET}`);
+          console.log(`      ${dim('--- cycle log ---')}`);
           for (const line of preview.split('\n')) {
-            console.log(`      ${DIM}${line}${RESET}`);
+            console.log(`      ${dim(line)}`);
           }
           if (lines.length > 20) {
-            console.log(`      ${DIM}... (${lines.length - 20} more lines)${RESET}`);
+            console.log(`      ${dim(`... (${lines.length - 20} more lines)`)}`);
           }
         }
       }
@@ -221,7 +210,7 @@ function printSession(session: Session, verbose: boolean): void {
   }
 
   if (session.agents.length > 0) {
-    console.log(`\n  ${BOLD}Agents:${RESET}`);
+    console.log(`\n  ${bold('Agents:')}`);
     for (const agent of session.agents) {
       console.log(formatAgent(agent, verbose));
     }
@@ -255,7 +244,7 @@ function printSession(session: Session, verbose: boolean): void {
 
   // Completion report
   if (verbose && session.completionReport) {
-    console.log(`\n${BOLD}Completion Report:${RESET}`);
+    console.log(`\n${bold('Completion Report:')}`);
     console.log(session.completionReport);
   }
 }

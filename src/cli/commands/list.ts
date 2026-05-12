@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { basename } from 'node:path';
+import { bold, dim, red, green, yellow, cyan, magenta, colorize } from '../../shared/format.js';
 
 interface SessionSummary {
   id: string;
@@ -20,32 +21,36 @@ interface SessionSummary {
   };
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  active: '\x1b[32m',
-  paused: '\x1b[33m',
-  completed: '\x1b[36m',
-};
-const RESET = '\x1b[0m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const CLOUD = '\x1b[35m'; // magenta
-const RED = '\x1b[31m';
+function statusColor(s: string): string {
+  switch (s) {
+    case 'active': return 'green';
+    case 'paused': return 'yellow';
+    case 'completed': return 'cyan';
+    default: return '';
+  }
+}
+
+function colorStatus(s: string): string {
+  const name = statusColor(s);
+  if (!name) return s;
+  return colorize(s, name);
+}
 
 function handoffAnnotation(h: SessionSummary['handoff']): string {
   if (!h) return '';
   if (h.lastError) {
-    return `  ${RED}handoff error: ${h.lastError}${RESET}`;
+    return `  ${red(`handoff error: ${h.lastError}`)}`;
   }
   if (h.reclaimedAt) {
-    return `  ${DIM}(reclaimed)${RESET}`;
+    return `  ${dim('(reclaimed)')}`;
   }
   if (h.sentAt && h.target) {
-    return `  ${CLOUD}→ ${h.target.provider}:${h.target.repo}${RESET}`;
+    return `  ${magenta(`→ ${h.target.provider}:${h.target.repo}`)}`;
   }
   if (h.target) {
-    return `  ${CLOUD}handoff queued → ${h.target.provider}:${h.target.repo}${RESET}`;
+    return `  ${magenta(`handoff queued → ${h.target.provider}:${h.target.repo}`)}`;
   }
-  return `  ${CLOUD}quiesce queued${RESET}`;
+  return `  ${magenta('quiesce queued')}`;
 }
 
 function truncateTask(task: string, max: number): string {
@@ -59,7 +64,8 @@ export function registerList(program: Command): void {
     .description('List sessions (defaults to current project)')
     .option('-a, --all', 'Show sessions from all projects')
     .option('--cwd <path>', 'Project directory to list sessions for (overrides SISYPHUS_CWD)')
-    .action(async (opts: { all?: boolean; cwd?: string }) => {
+    .option('-j, --json', 'Output raw JSON')
+    .action(async (opts: { all?: boolean; cwd?: string; json?: boolean }) => {
       const cwd = opts.cwd ?? process.env['SISYPHUS_CWD'] ?? process.cwd();
       const request: Request = { type: 'list', cwd, all: opts.all };
       const response = await sendRequest(request);
@@ -68,10 +74,15 @@ export function registerList(program: Command): void {
         const totalCount = response.data?.totalCount as number | undefined;
         const filtered = response.data?.filtered as boolean | undefined;
 
+        if (opts.json) {
+          console.log(JSON.stringify(sessions));
+          return;
+        }
+
         if (sessions.length === 0) {
           if (filtered && totalCount && totalCount > 0) {
             console.log(`No sessions in this project. ${totalCount} session(s) in other projects.`);
-            console.log(`${DIM}Run ${RESET}sis list --all${DIM} to show all.${RESET}`);
+            console.log(`${dim('Run ')}sis list --all${dim(' to show all.')}`);
           } else {
             console.log('No sessions');
           }
@@ -79,19 +90,18 @@ export function registerList(program: Command): void {
         }
 
         for (const s of sessions) {
-          const color = STATUS_COLORS[s.status] ?? '';
-          const status = `${color}${s.status}${RESET}`;
-          const agents = `${DIM}${s.agentCount} agent(s)${RESET}`;
+          const status = colorStatus(s.status);
+          const agents = dim(`${s.agentCount} agent(s)`);
           const task = truncateTask(s.task, 60);
-          const label = s.name ? `${s.name} ${DIM}(${s.id.slice(0, 8)})${RESET}` : s.id;
-          const cwdLabel = opts.all && s.cwd ? `  ${DIM}${basename(s.cwd)}${RESET}` : '';
+          const label = s.name ? `${s.name} ${dim(`(${s.id.slice(0, 8)})`)}` : s.id;
+          const cwdLabel = opts.all && s.cwd ? `  ${dim(basename(s.cwd))}` : '';
           const handoffLabel = handoffAnnotation(s.handoff);
-          console.log(`  ${BOLD}${label}${RESET}  ${status}  ${agents}  ${task}${cwdLabel}${handoffLabel}`);
+          console.log(`  ${bold(label)}  ${status}  ${agents}  ${task}${cwdLabel}${handoffLabel}`);
         }
 
         if (filtered && totalCount && totalCount > sessions.length) {
           const otherCount = totalCount - sessions.length;
-          console.log(`\n${DIM}${otherCount} more session(s) in other projects. Run ${RESET}sis list --all${DIM} to show all.${RESET}`);
+          console.log(`\n${dim(`${otherCount} more session(s) in other projects. Run `)}sis list --all${dim(' to show all.')}`);
         }
       } else {
         console.error(`Error: ${response.error}`);

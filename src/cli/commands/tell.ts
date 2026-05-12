@@ -78,7 +78,7 @@ export function registerTell(program: Command): void {
       };
       const response = await sendRequest(request);
       if (response.ok) {
-        console.log(`Sent to ${targetRaw}${submit ? '' : ' (not submitted)'}`);
+        console.error(`Sent to ${targetRaw}${submit ? '' : ' (not submitted)'}`);
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

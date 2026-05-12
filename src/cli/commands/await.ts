@@ -14,7 +14,8 @@ export function registerAwait(program: Command): void {
     .description('Block until an agent reaches a terminal status, then print its final report inline. Marks the agent as consumed-inline so its report is suppressed from the next cycle.')
     .argument('<agentId>', 'Agent ID to await')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
-    .action(async (agentId: string, opts: { session?: string }) => {
+    .option('-j, --json', 'Output result as a single JSON object (report as string field)')
+    .action(async (agentId: string, opts: { session?: string; json?: boolean }) => {
       assertTmux();
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
@@ -35,19 +36,26 @@ export function registerAwait(program: Command): void {
       const agentName = data.agentName as string;
       const agentType = data.agentType as string;
 
-      const shortType = agentType && agentType !== 'worker' ? agentType.replace(/^sisyphus:/, '') : '';
-      const label = shortType ? `${shortType}-${agentName}` : agentName;
-      console.log(`[${status}] ${agentId} (${label})`);
+      let report = '';
       if (reportPath && existsSync(reportPath)) {
         try {
-          const body = readFileSync(reportPath, 'utf-8');
-          if (body.length > 0) {
-            // Avoid double newline: file usually ends with \n already.
-            process.stdout.write(body.endsWith('\n') ? body : body + '\n');
-          }
+          report = readFileSync(reportPath, 'utf-8');
         } catch (err) {
           console.error(`Warning: could not read report at ${reportPath}: ${err instanceof Error ? err.message : err}`);
         }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ agentId, status, agentName, agentType, reportPath, report }));
+        return;
+      }
+
+      const shortType = agentType && agentType !== 'worker' ? agentType.replace(/^sisyphus:/, '') : '';
+      const label = shortType ? `${shortType}-${agentName}` : agentName;
+      console.log(`[${status}] ${agentId} (${label})`);
+      if (report.length > 0) {
+        // Avoid double newline: file usually ends with \n already.
+        process.stdout.write(report.endsWith('\n') ? report : report + '\n');
       }
     });
 }

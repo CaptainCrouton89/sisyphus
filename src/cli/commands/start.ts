@@ -128,16 +128,16 @@ export function registerStart(program: Command): void {
       }
 
       const sessionId = response.data?.sessionId as string;
-      console.log(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
+      console.error(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
 
       if (opts.tmuxCheck === false) {
         // --no-tmux-check: print info and exit, don't touch tmux
         const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
         if (tmuxSessionName) {
-          console.log(`Tmux session: ${tmuxSessionName}`);
-          console.log(`  tmux attach -t ${tmuxSessionName}`);
+          console.error(`Tmux session: ${tmuxSessionName}`);
+          console.error(`  tmux attach -t ${tmuxSessionName}`);
         }
-        console.log(`Monitor: sis status ${sessionId}`);
+        console.error(`Monitor: sis status ${sessionId}`);
         return;
       }
 
@@ -198,6 +198,6 @@ export function registerStart(program: Command): void {
         attachToTmuxSession(tmuxSession);
       }
 
-      console.log(`Monitor: sis status ${sessionId}`);
+      console.error(`Monitor: sis status ${sessionId}`);
     });
 }

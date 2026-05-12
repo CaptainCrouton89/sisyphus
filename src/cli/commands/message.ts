@@ -47,7 +47,7 @@ export function registerMessage(program: Command): void {
       const request: Request = { type: 'message', sessionId, content: content!, source, ...(opts.agent ? { agentId: opts.agent } : {}) };
       const response = await sendRequest(request);
       if (response.ok) {
-        console.log('Message queued');
+        console.error('Message queued');
       } else {
         console.error(`Error: ${response.error}`);
         process.exit(1);

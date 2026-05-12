@@ -439,6 +439,16 @@ sis session delete <session-id> --cwd /path/to/project
 
 `sis --help` or `sis <command> --help` for full usage.
 
+## Output and exit codes
+
+**JSON output** — `-j, --json` is available on `status`, `list`, `await`, `read`, and `admin history`. Each command emits data to stdout: a single JSON object or array, or JSONL (one object per line) for `read`.
+
+**ANSI color** — auto-detected from stdout TTY. Disable with `NO_COLOR=1`; force-enable with `FORCE_COLOR=1`.
+
+**Exit codes** — `0` on success, `1` on error (message on stderr).
+
+**stdout vs stderr** — stdout is reserved for data (use it with `jq`, pipes, or `$()`). All diagnostics, progress, and status messages go to stderr.
+
 ## License
 
 MIT

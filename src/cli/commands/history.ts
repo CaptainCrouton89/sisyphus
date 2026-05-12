@@ -2,21 +2,13 @@ import type { Command } from 'commander';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { historyBaseDir, historySessionDir, historyEventsPath, historySessionSummaryPath, statePath } from '../../shared/paths.js';
-import { formatDuration, statusColor } from '../../shared/format.js';
+import { formatDuration, statusColor, bold, dim, colorize } from '../../shared/format.js';
 import type { SessionSummary, SessionSummaryAgent } from '../../shared/history-types.js';
 import type { HistoryEvent } from '../../shared/history-types.js';
 import type { Session } from '../../shared/types.js';
 
-const RESET = '\x1b[0m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const COLOR: Record<string, string> = {
-  green: '\x1b[32m', yellow: '\x1b[33m', cyan: '\x1b[36m',
-  red: '\x1b[31m', gray: '\x1b[90m', white: '\x1b[37m', magenta: '\x1b[35m',
-};
-
 function c(color: string, text: string): string {
-  return `${COLOR[color] ?? ''}${text}${RESET}`;
+  return colorize(text, color);
 }
 
 // Agent types that run interactive TUI sessions. Their activeMs includes
@@ -291,10 +283,10 @@ function listSessions(opts: {
     const cycles = s.cycleCount > 0 ? `${s.cycleCount} cycles` : '';
     const meta = [agents, cycles, dur].filter(Boolean).join(', ');
 
-    console.log(`${date}  ${status}  ${name}  ${DIM}${meta}${RESET}  ${proj}`);
+    console.log(`${date}  ${status}  ${name}  ${dim(meta)}  ${proj}`);
 
     const taskPreview = s.task.length > 100 ? s.task.slice(0, 100) + '...' : s.task;
-    console.log(`  ${DIM}${taskPreview}${RESET}`);
+    console.log(`  ${dim(taskPreview)}`);
     console.log('');
   }
 
@@ -340,64 +332,64 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
   // Detail view
   const inProgress = s.completedAt == null;
   const inProgressTag = inProgress ? `  ${c('yellow', '(in progress)')}` : '';
-  console.log(`${BOLD}${s.name ?? s.sessionId.slice(0, 8)}${RESET}  ${fmtStatus(s.status)}${inProgressTag}`);
-  console.log(`${DIM}ID:${RESET} ${s.sessionId}`);
-  console.log(`${DIM}Project:${RESET} ${s.cwd}`);
-  console.log(`${DIM}Model:${RESET} ${s.model ?? 'default'}`);
-  console.log(`${DIM}Started:${RESET} ${fmtDate(s.startedAt)}`);
-  console.log(`${DIM}Ended:${RESET} ${s.completedAt ? fmtDate(s.completedAt) : c('gray', '— still running')}`);
+  console.log(`${bold(s.name ?? s.sessionId.slice(0, 8))}  ${fmtStatus(s.status)}${inProgressTag}`);
+  console.log(`${dim('ID:')} ${s.sessionId}`);
+  console.log(`${dim('Project:')} ${s.cwd}`);
+  console.log(`${dim('Model:')} ${s.model ?? 'default'}`);
+  console.log(`${dim('Started:')} ${fmtDate(s.startedAt)}`);
+  console.log(`${dim('Ended:')} ${s.completedAt ? fmtDate(s.completedAt) : c('gray', '— still running')}`);
   const { computeMs, interactiveMs } = splitAgentTime(s.agents);
   const wallStr = s.wallClockMs ? formatDuration(s.wallClockMs) : '—';
-  console.log(`${DIM}Active:${RESET} ${formatDuration(s.activeMs)}  ${DIM}Wall:${RESET} ${wallStr}`);
+  console.log(`${dim('Active:')} ${formatDuration(s.activeMs)}  ${dim('Wall:')} ${wallStr}`);
   if (interactiveMs > 0) {
-    console.log(`${DIM}Compute:${RESET} ${formatDuration(computeMs)}  ${DIM}Interactive:${RESET} ${formatDuration(interactiveMs)} ${DIM}(TUI wait time, not compute)${RESET}`);
+    console.log(`${dim('Compute:')} ${formatDuration(computeMs)}  ${dim('Interactive:')} ${formatDuration(interactiveMs)} ${dim('(TUI wait time, not compute)')}`);
   }
   if (s.userBlockedMs > 0) {
-    console.log(`${DIM}Waiting on user:${RESET} ${formatDuration(s.userBlockedMs)} ${DIM}(blocked on sis ask, not compute)${RESET}`);
+    console.log(`${dim('Waiting on user:')} ${formatDuration(s.userBlockedMs)} ${dim('(blocked on sis ask, not compute)')}`);
   }
   console.log('');
 
   // Task
-  console.log(`${BOLD}Task${RESET}`);
+  console.log(bold('Task'));
   console.log(s.task);
   console.log('');
 
   // Context
   if (s.context) {
-    console.log(`${BOLD}Context${RESET}`);
+    console.log(bold('Context'));
     console.log(s.context.length > 500 ? s.context.slice(0, 500) + '...' : s.context);
     console.log('');
   }
 
   // Agents
   if (s.agents.length > 0) {
-    console.log(`${BOLD}Agents${RESET} (${s.agents.length})`);
+    console.log(`${bold('Agents')} (${s.agents.length})`);
     for (const a of s.agents) {
       const name = a.nickname ? `${a.name} "${a.nickname}"` : a.name;
       const type = a.agentType ? c('gray', ` [${a.agentType}]`) : '';
       const interactive = isInteractiveAgent(a.agentType) ? c('yellow', ' (interactive)') : '';
       const blocked = a.userBlockedMs ?? 0;
-      const waiting = blocked > 0 ? `  ${DIM}· ${formatDuration(blocked)} waiting${RESET}` : '';
-      console.log(`  ${fmtStatus(a.status)}  ${name}${type}${interactive}  ${DIM}${formatDuration(a.activeMs)}${RESET}${waiting}`);
+      const waiting = blocked > 0 ? `  ${dim(`· ${formatDuration(blocked)} waiting`)}` : '';
+      console.log(`  ${fmtStatus(a.status)}  ${name}${type}${interactive}  ${dim(formatDuration(a.activeMs))}${waiting}`);
     }
     console.log('');
   }
 
   // Cycles
   if (s.cycles.length > 0) {
-    console.log(`${BOLD}Cycles${RESET} (${s.cycles.length})`);
+    console.log(`${bold('Cycles')} (${s.cycles.length})`);
     for (const cy of s.cycles) {
       const mode = cy.mode ? c('magenta', cy.mode) : '';
       const blocked = cy.userBlockedMs ?? 0;
-      const waiting = blocked > 0 ? `  ${DIM}· ${formatDuration(blocked)} waiting${RESET}` : '';
-      console.log(`  ${DIM}#${cy.cycle}${RESET}  ${mode}  ${cy.agentsSpawned} agents  ${DIM}${formatDuration(cy.activeMs)}${RESET}${waiting}`);
+      const waiting = blocked > 0 ? `  ${dim(`· ${formatDuration(blocked)} waiting`)}` : '';
+      console.log(`  ${dim(`#${cy.cycle}`)}  ${mode}  ${cy.agentsSpawned} agents  ${dim(formatDuration(cy.activeMs))}${waiting}`);
     }
     console.log('');
   }
 
   // Messages
   if (s.messages.length > 0) {
-    console.log(`${BOLD}Messages${RESET} (${s.messages.length})`);
+    console.log(`${bold('Messages')} (${s.messages.length})`);
     for (const m of s.messages) {
       const src = c('gray', m.source);
       const preview = m.content.length > 120 ? m.content.slice(0, 120) + '...' : m.content;
@@ -408,14 +400,14 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
 
   // Completion report
   if (s.completionReport) {
-    console.log(`${BOLD}Completion Report${RESET}`);
+    console.log(bold('Completion Report'));
     console.log(s.completionReport);
     console.log('');
   }
 
   // Achievements
   if (s.achievements.length > 0) {
-    console.log(`${BOLD}Achievements Unlocked${RESET}`);
+    console.log(bold('Achievements Unlocked'));
     console.log(`  ${s.achievements.join(', ')}`);
     console.log('');
   }
@@ -430,7 +422,7 @@ function showSession(idOrName: string, opts: { json: boolean; events: boolean })
       `hour ${sig.hourOfDay}`,
       sig.idleDurationMs > 60000 ? `idle ${formatDuration(sig.idleDurationMs)}` : null,
     ].filter(Boolean);
-    console.log(`${DIM}Final signals: ${parts.join(' · ')}${RESET}`);
+    console.log(dim(`Final signals: ${parts.join(' · ')}`));
   }
 }
 
@@ -442,11 +434,11 @@ function formatEventData(e: HistoryEvent): string {
     case 'session-named':
       return c('white', d.name as string);
     case 'agent-spawned':
-      return `${c('white', d.agentId as string)}  ${d.agentType ?? ''}  ${DIM}${(d.instruction as string)?.slice(0, 60) ?? ''}...${RESET}`;
+      return `${c('white', d.agentId as string)}  ${d.agentType ?? ''}  ${dim(`${(d.instruction as string)?.slice(0, 60) ?? ''}...`)}`;
     case 'agent-nicknamed':
       return `${d.agentId}  "${c('white', d.nickname as string)}"`;
     case 'agent-completed':
-      return `${d.agentId}  ${DIM}${formatDuration(d.activeMs as number)}${RESET}  ${DIM}${(d.reportSummary as string)?.slice(0, 60) ?? ''}${RESET}`;
+      return `${d.agentId}  ${dim(formatDuration(d.activeMs as number))}  ${dim((d.reportSummary as string)?.slice(0, 60) ?? '')}`;
     case 'agent-exited':
       return `${d.agentId}  ${fmtStatus(d.status as string)}  ${d.reason ?? ''}`;
     case 'cycle-boundary':
@@ -462,15 +454,15 @@ function formatEventData(e: HistoryEvent): string {
       return `${c('cyan', d.type as string)}  ${c('gray', fileParts)}`;
     }
     case 'agent-killed':
-      return `${d.agentId}  ${fmtStatus(d.status as string)}  ${DIM}${formatDuration(d.activeMs as number)}${RESET}  ${d.reason ?? ''}`;
+      return `${d.agentId}  ${fmtStatus(d.status as string)}  ${dim(formatDuration(d.activeMs as number))}  ${d.reason ?? ''}`;
     case 'agent-restarted':
-      return `${d.agentId}  restart #${d.restartCount}  ${DIM}was ${d.previousStatus}${RESET}`;
+      return `${d.agentId}  restart #${d.restartCount}  ${dim(`was ${d.previousStatus}`)}`;
     case 'rollback':
       return `cycle ${d.fromCycle} → ${d.toCycle}  ${d.killedAgentCount} agents killed`;
     case 'session-resumed':
       return `was ${fmtStatus(d.previousStatus as string)}  ${d.lostAgentCount} agents lost`;
     case 'session-continued':
-      return `${d.cycleCount} cycles  ${DIM}${formatDuration(d.activeMs as number)}${RESET}`;
+      return `${d.cycleCount} cycles  ${dim(formatDuration(d.activeMs as number))}`;
     case 'session-end':
       return `${fmtStatus(d.status as string)}  ${formatDuration(d.activeMs as number)}  ${d.agentCount} agents  ${d.cycleCount} cycles`;
     default:
@@ -593,22 +585,22 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
     return;
   }
 
-  console.log(`${BOLD}Session History Stats${RESET}`);
+  console.log(bold('Session History Stats'));
   console.log('');
-  console.log(`  ${BOLD}Sessions:${RESET}  ${sessions.length} total  ${c('cyan', `${completed.length} completed`)}  ${c('red', `${killed.length} killed`)}`);
-  const timeLine = `  ${BOLD}Time:${RESET}      ${formatDuration(totalActiveMs)} total  ${formatDuration(avgMs)} avg` +
-    (p50Ms != null && p90Ms != null ? `  ${DIM}p50=${formatDuration(p50Ms)} p90=${formatDuration(p90Ms)}${RESET}` : '');
+  console.log(`  ${bold('Sessions:')}  ${sessions.length} total  ${c('cyan', `${completed.length} completed`)}  ${c('red', `${killed.length} killed`)}`);
+  const timeLine = `  ${bold('Time:')}      ${formatDuration(totalActiveMs)} total  ${formatDuration(avgMs)} avg` +
+    (p50Ms != null && p90Ms != null ? `  ${dim(`p50=${formatDuration(p50Ms)} p90=${formatDuration(p90Ms)}`)}` : '');
   console.log(timeLine);
   if (avgEfficiency != null) {
     const effColor = avgEfficiency >= 0.7 ? 'green' : avgEfficiency >= 0.4 ? 'yellow' : 'red';
-    console.log(`  ${BOLD}Efficiency:${RESET} ${c(effColor, (avgEfficiency * 100).toFixed(1) + '%')}  ${DIM}(${efficiencyValues.length} sessions with data)${RESET}`);
+    console.log(`  ${bold('Efficiency:')} ${c(effColor, (avgEfficiency * 100).toFixed(1) + '%')}  ${dim(`(${efficiencyValues.length} sessions with data)`)}`);
   }
-  console.log(`  ${BOLD}Agents:${RESET}    ${totalAgents} spawned (${(totalAgents / sessions.length).toFixed(1)} avg/session)`);
-  console.log(`  ${BOLD}Cycles:${RESET}    ${totalCycles} total (${(totalCycles / sessions.length).toFixed(1)} avg/session)`);
-  console.log(`  ${BOLD}Messages:${RESET}  ${totalMessages} total`);
+  console.log(`  ${bold('Agents:')}    ${totalAgents} spawned (${(totalAgents / sessions.length).toFixed(1)} avg/session)`);
+  console.log(`  ${bold('Cycles:')}    ${totalCycles} total (${(totalCycles / sessions.length).toFixed(1)} avg/session)`);
+  console.log(`  ${bold('Messages:')}  ${totalMessages} total`);
   console.log('');
 
-  console.log(`${BOLD}By Project${RESET}`);
+  console.log(bold('By Project'));
   const sorted = [...byProject.entries()].sort((a, b) => b[1].count - a[1].count);
   for (const [proj, data] of sorted) {
     console.log(`  ${c('gray', fmtProject(proj))}  ${data.count} sessions  ${formatDuration(data.activeMs)}  ${data.agents} agents`);
@@ -617,9 +609,9 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   // Per-agent-type performance table
   if (agentTypeMap.size > 0) {
     console.log('');
-    console.log(`${BOLD}By Agent Type${RESET}`);
+    console.log(bold('By Agent Type'));
     const typeHeader = `  ${'Type'.padEnd(20)} ${'Count'.padStart(6)} ${'Avg Time'.padStart(10)} ${'Crash %'.padStart(8)} ${'Done %'.padStart(8)}`;
-    console.log(`${DIM}${typeHeader}${RESET}`);
+    console.log(dim(typeHeader));
     const sortedTypes = [...agentTypeMap.entries()].sort((a, b) => b[1].count - a[1].count);
     for (const [type, data] of sortedTypes) {
       const avgTime = formatDuration(data.totalMs / data.count);
@@ -633,12 +625,12 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
   // Temporal patterns
   if (sessions.length >= 5) {
     console.log('');
-    console.log(`${BOLD}Temporal Patterns${RESET}`);
+    console.log(bold('Temporal Patterns'));
     const topBlocks = [...hourBlocks.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
-    console.log(`  ${DIM}Busiest times:${RESET}  ${topBlocks.map(([label, count]) => `${label} (${count})`).join('  ')}`);
+    console.log(`  ${dim('Busiest times:')}  ${topBlocks.map(([label, count]) => `${label} (${count})`).join('  ')}`);
     const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const dayParts = dayOrder.map(d => `${d} ${dayCounts.get(d) ?? 0}`);
-    console.log(`  ${DIM}By day:${RESET}         ${dayParts.join('  ')}`);
+    console.log(`  ${dim('By day:')}         ${dayParts.join('  ')}`);
   }
 }
 
