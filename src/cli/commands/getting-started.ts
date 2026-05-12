@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command } from 'commander';
@@ -384,6 +385,10 @@ sis admin getting-started --tutorial 4
 }
 
 function printStep4(): void {
+  // Anchor the demo inside the user's cwd (under ./tmp/) instead of system /tmp,
+  // so sisyphus runs in a path the user can see and reason about. Absolute path
+  // emitted so the commands keep working even if Claude later changes cwd.
+  const demoPath = join(process.cwd(), 'tmp', 'sisyphus-tutorial-demo');
   console.log(`
 <claude-instructions>
 # Sisyphus Getting Started — Step 4: Demo Session
@@ -425,26 +430,29 @@ Have the user confirm they understand these keybinds before proceeding.
 
 ### 3. Set expectations, copy demo app, and launch
 
-First, copy the demo todo app to a temp directory and init a git repo (sisyphus needs git):
+First, copy the demo todo app into ./tmp/ under the user's current directory and init a git repo (sisyphus needs git). Run from the user's current shell — don't \`cd\` away first:
 \`\`\`
-rm -rf /tmp/sisyphus-tutorial-demo
-cp -r ${templatePath('tutorial-demo')} /tmp/sisyphus-tutorial-demo
-git -C /tmp/sisyphus-tutorial-demo init
-git -C /tmp/sisyphus-tutorial-demo add -A
-git -C /tmp/sisyphus-tutorial-demo commit -m "Initial todo app"
+mkdir -p ${join(process.cwd(), 'tmp')}
+rm -rf ${demoPath}
+cp -r ${templatePath('tutorial-demo')} ${demoPath}
+git -C ${demoPath} init
+git -C ${demoPath} add -A
+git -C ${demoPath} commit -m "Initial todo app"
 \`\`\`
 
 Tell the user:
 
-> I've set up a small todo app in /tmp/sisyphus-tutorial-demo — a Node.js API
-> with a few files. I'm going to launch sisyphus on it. Here's what will happen:
+> I've set up a small todo app in ${demoPath} — a Node.js API
+> with a few files. It lives under \`tmp/\` in your current directory so sisyphus
+> runs somewhere you can see, not in system /tmp. I'm going to launch sisyphus
+> on it. Here's what will happen:
 > 1. The dashboard opens automatically (you'll be switched to it)
 > 2. Press **Ctrl+p** to come back here to Claude — I'll guide you through what to watch
 > 3. The session takes a few minutes. You can watch agents work live!
 
-Then launch from the demo directory:
+Then launch from the demo directory (sisyphus operates in whichever directory you launch it from, so we \`cd\` in so the \`.sisyphus/\` state lands inside the demo):
 \`\`\`
-cd /tmp/sisyphus-tutorial-demo && sis start "Add three improvements to this todo app: (1) add a priority field (high/medium/low) to todos, (2) add a GET /todos/stats endpoint that returns counts of total/done/pending todos, (3) add tests for the new features. Explain your thinking at each step." -c "TUTORIAL DEMO: A user is watching this session to learn how sisyphus works. Be EXTRA VERBOSE — explain your reasoning, narrate what you're doing, and make your planning visible. When spawning agents, give each agent context that this is a tutorial demo and they should explain their work clearly. Keep scope small: 2-3 agents, 1-2 cycles."
+cd ${demoPath} && sis start "Add three improvements to this todo app: (1) add a priority field (high/medium/low) to todos, (2) add a GET /todos/stats endpoint that returns counts of total/done/pending todos, (3) add tests for the new features. Explain your thinking at each step." -c "TUTORIAL DEMO: A user is watching this session to learn how sisyphus works. Be EXTRA VERBOSE — explain your reasoning, narrate what you're doing, and make your planning visible. When spawning agents, give each agent context that this is a tutorial demo and they should explain their work clearly. Keep scope small: 2-3 agents, 1-2 cycles."
 \`\`\`
 
 After launching, tell them:
@@ -487,8 +495,8 @@ Between polls, encourage the user to explore:
 
 Once the session shows "completed":
 
-- Show them what the agents built: \`cd /tmp/sisyphus-tutorial-demo && git log --oneline\`
-- Run the tests to prove the work: \`cd /tmp/sisyphus-tutorial-demo && node --test test.js\`
+- Show them what the agents built: \`cd ${demoPath} && git log --oneline\`
+- Run the tests to prove the work: \`cd ${demoPath} && node --test test.js\`
 - Show the session artifacts: find the session dir in \`.sisyphus/sessions/\` and show \`roadmap.md\`
 - Explain: "Every session creates a roadmap, agent reports, and logs — all stored in .sisyphus/sessions/"
 
@@ -503,6 +511,10 @@ sis admin getting-started --tutorial 5
 }
 
 function printStep5(): void {
+  // Recompute the demo path so cleanup targets the same dir Step 4 created.
+  const demoPath = join(process.cwd(), 'tmp', 'sisyphus-tutorial-demo');
+  const demoExists = existsSync(demoPath);
+
   // Gather codebase context for suggestions
   let recentCommits = '';
   let topLevelFiles = '';
@@ -516,6 +528,10 @@ function printStep5(): void {
   console.log(`
 <claude-instructions>
 # Sisyphus Getting Started — Step 5: What's Next
+
+## Environment Data
+- demoPath: ${demoPath}
+- demoExists: ${demoExists}
 
 ## Codebase Context
 <recent-commits>
@@ -579,14 +595,38 @@ Or directly: \`sis start "your task" -c "any background context"\`
 
 Look at the recent commits and top-level files above. Based on what you can see of their project, suggest 2-3 concrete sisyphus-scale tasks they could try. Be specific to their codebase — reference actual directories, patterns, or areas you can see.
 
-If there are no commits or files (e.g., they ran this from /tmp), skip this section.
+If there are no commits or files (e.g., they ran this from an empty scratch dir, or from the tutorial demo dir itself at tmp/sisyphus-tutorial-demo), skip this section.
 
 Format as:
 > Based on your codebase, here are some tasks sisyphus would be great for:
 > - "..."
 > - "..."
 
-### 5. There's more to learn
+### 5. Clean up the demo dir
+
+**Only if demoExists is true** (see Environment Data above). The tutorial dropped a
+demo todo app at \`${demoPath}\` with its own \`.sisyphus/\` session state. Ask the user
+before deleting — they may want to poke around the session files first.
+
+Ask exactly:
+
+> Want me to remove the tutorial demo at \`${demoPath}\`? It's safe to delete — it
+> only contains the demo todo app and the session sisyphus just ran on it.
+
+If they say yes, run:
+\`\`\`
+rm -rf ${demoPath}
+\`\`\`
+
+Then check whether \`${join(process.cwd(), 'tmp')}\` is now empty, and if so remove it too:
+\`\`\`
+rmdir ${join(process.cwd(), 'tmp')} 2>/dev/null || true
+\`\`\`
+
+If they say no or want to explore first, leave it. They can clean up later with the same
+\`rm -rf\` command.
+
+### 6. There's more to learn
 
 Tell them:
 
