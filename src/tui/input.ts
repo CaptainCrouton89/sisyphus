@@ -467,8 +467,9 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'delete-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       try {
-        const text = actions.promptInPopup('Delete session? (yes/no):');
-        if (text?.trim() === 'yes') {
+        const text = actions.promptInPopup('Delete session? (y/yes to confirm):');
+        const answer = text?.trim().toLowerCase();
+        if (answer === 'y' || answer === 'yes') {
           actions.sendAndNotify({ type: 'delete', sessionId: selectedSessionId, cwd: state.cwd }, 'Session deleted');
         } else {
           notify(state, 'Delete cancelled');
