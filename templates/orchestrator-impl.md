@@ -100,7 +100,11 @@ A clean report ("No concerns") is a valid and common outcome. When you get one, 
 
 ## Refine Pass
 
-Aggregate reviewer findings. Spawn fix agents and **point them at the review report** — don't rewrite findings as line-by-line instructions. You triage (skip false positives, note architectural constraints) — they implement.
+Aggregate reviewer findings, then **route each finding to where the fix actually lives**:
+
+- **Many code corrections** — spawn fix agents and point them at the review report. You triage (skip false positives, note architectural constraints); they implement. Don't rewrite findings as line-by-line instructions.
+- **Plan or context-doc fixes** — edit the document yourself. A clarified requirement, a corrected assumption, or a tweaked plan section is faster done in the orchestrator than handed to an agent. Spawning an agent to edit a markdown file is overhead, not delegation. (Massive replans are different — see backtrack guidance below.)
+- **A handful of trivial code edits** (a missed import, a typo, a one-line constant) — make them yourself rather than spinning up an agent. The agent overhead exceeds the work.
 
 ```bash
 sis agent spawn --name "fix-review-issues" --agent-type sisyphus:implement \
