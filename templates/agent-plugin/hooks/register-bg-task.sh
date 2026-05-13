@@ -1,8 +1,8 @@
 #!/bin/bash
-# PostToolUse hook (matcher: Task): register background-Task agentIds for require-submit.sh.
-# Only fires when Claude Code itself flagged the Task as run_in_background=true —
-# structured signal, not prose scraping. Eliminates the false-positive class where
-# a non-background Task's output happens to contain the word "background".
+# PostToolUse hook (matcher: Task|Agent): register background sub-agent IDs for require-submit.sh.
+# For Task: only fires when Claude Code itself flagged run_in_background=true —
+# structured signal, not prose scraping.
+# For Agent (FleetView): always async; the run_in_background gate is skipped.
 # Passthrough (exit 0) if not in a sisyphus session.
 
 if [ -z "$SISYPHUS_SESSION_ID" ] || [ -z "$SISYPHUS_AGENT_ID" ]; then
@@ -11,9 +11,12 @@ fi
 
 INPUT=$(cat)
 
-RIB=$(echo "$INPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('tool_input',{}).get('run_in_background',False))" 2>/dev/null)
-if [ "$RIB" != "True" ]; then
-  exit 0
+TOOL_NAME=$(echo "$INPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('tool_name',''))" 2>/dev/null)
+if [ "$TOOL_NAME" != "Agent" ]; then
+  RIB=$(echo "$INPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('tool_input',{}).get('run_in_background',False))" 2>/dev/null)
+  if [ "$RIB" != "True" ]; then
+    exit 0
+  fi
 fi
 
 # tool_response may be a string or structured; normalize to a string before grepping.
