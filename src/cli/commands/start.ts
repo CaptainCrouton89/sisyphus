@@ -3,7 +3,7 @@ import { execSync, spawnSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { sendRequest } from '../client.js';
 import { readStdin } from '../stdin.js';
-import { getTmuxSessionInfo, isTmuxInstalled } from '../tmux.js';
+import { getCurrentTmuxSessionHome, getTmuxSessionInfo, isTmuxInstalled } from '../tmux.js';
 import { shellQuote } from '../../shared/shell.js';
 import { openDashboardWindow } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
@@ -55,7 +55,8 @@ export function registerStart(program: Command): void {
     .option('--no-tmux-check', 'Skip the tmux session check')
     .option('--stdin', 'Read the task description from stdin (avoids shell escaping for long prompts)')
     .option('--context-stdin', 'Read the context from stdin (mutually exclusive with --stdin)')
-    .action(async (taskArg: string | undefined, opts: { context?: string; name?: string; effort?: string; tmuxCheck?: boolean; stdin?: boolean; contextStdin?: boolean }) => {
+    .option('--force', 'Proceed even when invocation cwd differs from the current tmux session\'s home (linking will be inconsistent)')
+    .action(async (taskArg: string | undefined, opts: { context?: string; name?: string; effort?: string; tmuxCheck?: boolean; stdin?: boolean; contextStdin?: boolean; force?: boolean }) => {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
       if (opts.stdin && opts.contextStdin) {
@@ -116,6 +117,30 @@ export function registerStart(program: Command): void {
         console.error('Error: tmux is not installed. Sisyphus requires tmux for agent panes.');
         console.error('  Install: brew install tmux (macOS) or apt install tmux (Linux)');
         process.exit(1);
+      }
+
+      // When inside an existing tmux session that's already homed at a different
+      // project, refuse — the dashboard window would get pinned to this cwd but
+      // live in a session tagged for the other project, poisoning C-s h, alt+s
+      // cycle groups, scratch resolver, and dashboard re-attach. Usually caused
+      // by `cd <subdir> && sis start` from an agent.
+      if (process.env['TMUX'] && opts.force !== true) {
+        const info = getTmuxSessionInfo();
+        const existingHome = getCurrentTmuxSessionHome(info.id);
+        const normalizedCwd = cwd.replace(/\/+$/, '');
+        if (existingHome && existingHome !== normalizedCwd) {
+          console.error('Error: cwd mismatch with current tmux session.');
+          console.error(`  Session "${info.name}" is homed at: ${existingHome}`);
+          console.error(`  This invocation's cwd:              ${normalizedCwd}`);
+          console.error('');
+          console.error('Running `cd <dir> && sis start` from inside a tmux session homed elsewhere');
+          console.error('breaks dashboard/session linking (C-s h, alt+s cycle, scratch resolver).');
+          console.error('Usually you want to operate in the parent project, not the cd\'d subdir.');
+          console.error('');
+          console.error(`Verify with the user: start a session for ${existingHome} or ${normalizedCwd}?`);
+          console.error('To proceed anyway: sis start --force ...');
+          process.exit(1);
+        }
       }
 
       // Send the start request — this is just a socket call, no tmux needed
