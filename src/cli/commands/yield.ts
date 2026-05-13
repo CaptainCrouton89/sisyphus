@@ -10,7 +10,7 @@ export function registerYield(program: Command): void {
     .description('Yield control back to daemon (orchestrator only)')
     .option('--prompt <text>', 'Short orienting nudge for the next cycle (or pipe via stdin) — name what just happened; leave tactical decisions to the fresh read of the reports')
     .option('--stdin', 'Force-read prompt from stdin (avoids shell escaping for long prompts)')
-    .option('--mode <mode>', 'System prompt mode for next cycle (discovery, planning, implementation, validation, completion)')
+    .requiredOption('--mode <mode>', 'System prompt mode for next cycle (discovery, planning, implementation, validation, completion). Required — pass the current mode to stay in it.')
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID env var)')
     .action(async (opts: { prompt?: string; stdin?: boolean; mode?: string; session?: string }) => {
       assertTmux();

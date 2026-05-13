@@ -1,1 +1,1 @@
-- `sis orch yield --mode discovery`, `--mode validation`, etc. must be explicit at mode-transition cycles. Omitting silently defaults to `implementation` mode, skipping guardrails the subsequent cycle expects.
+- `sis orch yield --mode <mode>` is required on every yield. Pass the current mode to stay in it; pass a different mode to transition. There is no implicit "keep current mode" fallback — the CLI rejects yields without `--mode`.
