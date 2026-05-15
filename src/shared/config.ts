@@ -16,6 +16,21 @@ export interface RequiredPlugin {
   owner: string;
 }
 
+/**
+ * A `crtr` (crouter) plugin sisyphus depends on for agent/orchestrator skills.
+ * The bundled prompts reference these via `crtr skill show <plugin>/<skill>`;
+ * `ensureRequiredCrtrPlugins` makes sure the marketplace is registered and the
+ * plugin installed in the user's crtr scope.
+ */
+export interface RequiredCrtrPlugin {
+  /** crtr marketplace name (the `name` in its `.crouter-marketplace/marketplace.json`). */
+  marketplace: string;
+  /** Plugin name within that marketplace. */
+  plugin: string;
+  /** Git URL passed to `crtr marketplace add` when the marketplace is absent. */
+  gitUrl: string;
+}
+
 export interface UploadConfig {
   /** Worker base URL, e.g. https://sisyphus-upload-proxy.rhyneer-silas.workers.dev */
   url: string;
@@ -36,6 +51,7 @@ export interface Config {
   notifications?: NotificationConfig;
   companionPopup?: boolean;
   requiredPlugins?: RequiredPlugin[];
+  requiredCrtrPlugins?: RequiredCrtrPlugin[];
   statusBar?: StatusBarConfig;
   upload?: UploadConfig;
 }
@@ -52,6 +68,13 @@ const DEFAULT_CONFIG: Config = {
   companionPopup: true,
   requiredPlugins: [
     { name: 'devcore', marketplace: 'crouton-kit', owner: 'crouton-labs' },
+  ],
+  requiredCrtrPlugins: [
+    {
+      marketplace: 'sisyphus',
+      plugin: 'sisyphus',
+      gitUrl: 'https://github.com/crouton-labs/sisyphus',
+    },
   ],
 };
 

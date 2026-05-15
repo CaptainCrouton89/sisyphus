@@ -35,4 +35,4 @@ One line per file in this directory. Add an entry here when you create a new ref
 
 ---
 
-For guidance on what to capture, where to put it (SKILL.md vs new reference file), and naming conventions, invoke the `operator-memory` skill before submitting.
+For guidance on what to capture, where to put it (SKILL.md vs new reference file), and naming conventions, run `crtr skill show sisyphus/operator-memory` before submitting.

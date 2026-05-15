@@ -1,0 +1,14 @@
+{
+  "name": "sisyphus",
+  "version": "0.1.0",
+  "owner": { "name": "Silas Rhyneer" },
+  "plugins": [
+    {
+      "name": "sisyphus",
+      "source": "./crtr-plugins/sisyphus",
+      "version": "0.1.0",
+      "description": "Sisyphus orchestration & agent skills — strategy/orchestration patterns, humanloop deck design, perspective fanout, problem-document drafting, plateau breakers, operator memory guidance.",
+      "keywords": ["sisyphus","orchestration","strategy","humanloop","multi-agent"]
+    }
+  ]
+}

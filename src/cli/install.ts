@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { daemonLogPath, daemonUpdatingPath, globalDir, socketPath } from '../shared/paths.js';
 import { type SetupResult, removeTmuxKeybind, setupTmuxKeybind } from './tmux-setup.js';
-import { ensureRequiredPlugins, ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugins.js';
+import { ensureRequiredCrtrPlugins, ensureRequiredPlugins, ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugins.js';
 
 const PLIST_LABEL = 'com.sisyphus.daemon';
 const PLIST_FILENAME = `${PLIST_LABEL}.plist`;
@@ -67,6 +67,11 @@ export async function ensureDaemonInstalled(): Promise<void> {
   // plist predates a new entry in `requiredPlugins` would otherwise never
   // get it.
   await ensureRequiredPlugins(process.cwd());
+
+  // Same idempotent rationale for the crtr ecosystem: registers the sisyphus
+  // crtr marketplace + plugin so prompts' `crtr skill show sisyphus/*` resolve.
+  // Best-effort — never blocks daemon install.
+  ensureRequiredCrtrPlugins(process.cwd());
 
   if (!isInstalled()) {
     const nodePath = process.execPath;

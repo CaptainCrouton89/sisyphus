@@ -50,7 +50,7 @@ if [ "$RIB" = "1" ]; then
   exit 0
 fi
 
-REASON=$'`sisyphus ask <deck>` blocks until the user resolves the deck (potentially 10+ minutes). Re-issue this Bash tool call with `run_in_background: true` and end your turn — the bash completion notification will wake you with stdout ready to parse. See the `humanloop` skill for the full pattern.'
+REASON=$'`sisyphus ask <deck>` blocks until the user resolves the deck (potentially 10+ minutes). Re-issue this Bash tool call with `run_in_background: true` and end your turn — the bash completion notification will wake you with stdout ready to parse. Run `crtr skill show sisyphus/humanloop` for the full pattern.'
 
 ESCAPED=$(python3 -c "import json,sys; print(json.dumps(sys.stdin.read()))" <<< "$REASON")
 echo "{\"decision\":\"block\",\"reason\":$ESCAPED}"

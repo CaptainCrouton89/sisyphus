@@ -1,5 +1,6 @@
 ---
 name: perspective-fanout
+type: runbook
 description: >
   Load when the problem-agent dialogue has produced enough substance to react to but conclusions haven't hardened — typically four or more turns in, with a framing solidifying. Provides the protocol for spawning eight perspective sub-agents in parallel, synthesizing their outputs, and presenting the synthesis back to the user via a render+deck pair. Available only at MEDIUM, HIGH, or XHIGH effort.
 ---

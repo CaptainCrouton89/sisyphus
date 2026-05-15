@@ -1,5 +1,6 @@
 ---
 name: problem-plateau-breakers
+type: playbook
 description: >
   Load when the problem-agent dialogue loop signals the conversation has stalled — repeated circling, user freetext like "different angle" / "going nowhere" / "feels stuck", or the agent senses it has been chasing the same framing for several turns without traction. Provides four breaker-deck shapes (flip, zoom-out, zoom-in, name-tension) and the routing for each. Increments the turn counter and returns control to the dialogue loop.
 ---

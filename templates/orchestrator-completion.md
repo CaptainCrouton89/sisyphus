@@ -42,7 +42,7 @@ Use tables, diagrams, and structured markdown freely — the deck below renders 
 
 Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sis session complete` until the user picks `approve`.**
 
-Read the `humanloop` skill for option design and submission flow. The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
+Run `crtr skill show sisyphus/humanloop` for option design and submission flow. The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
 
 ```bash
 result=$(sis ask "$deck")
@@ -81,7 +81,7 @@ If a single deck round surfaces multiple moderate items, capture them all in `$n
 These change the goal itself:
 
 1. Update goal.md with the revised scope (record the pivot, per goal.md conventions)
-2. Invoke the **strategy skill** to revise strategy.md with the new direction
+2. Run `crtr skill show sisyphus/orchestration` and revise strategy.md with the new direction
 3. Yield to discovery mode:
 
 ```bash

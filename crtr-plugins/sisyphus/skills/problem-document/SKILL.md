@@ -1,5 +1,6 @@
 ---
 name: problem-document
+type: playbook
 description: >
   Load when ready to draft `context/problem.md` — the thinking artifact that orients downstream agents (spec, plan, implement) to why the work exists. Provides design principles, the section vocabulary to pick from, and an anchor example showing the target style. Use this before writing the draft, not after.
 ---

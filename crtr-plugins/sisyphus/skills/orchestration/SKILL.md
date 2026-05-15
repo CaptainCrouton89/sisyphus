@@ -1,5 +1,6 @@
 ---
 name: orchestration
+type: playbook
 description: >
   Task breakdown patterns for sisyphus orchestrator sessions. How to structure tasks, sequence agents, and manage cycles for debugging, feature builds, refactors, and other common workflows. Use when planning orchestration strategy or structuring a multi-agent session.
 ---

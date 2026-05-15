@@ -1,0 +1,7 @@
+{
+  "name": "sisyphus",
+  "version": "0.1.0",
+  "description": "Sisyphus orchestration & agent skills.",
+  "source": "https://github.com/crouton-labs/sisyphus",
+  "owner": { "name": "Silas Rhyneer" }
+}
