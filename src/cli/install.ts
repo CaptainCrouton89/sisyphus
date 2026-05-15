@@ -150,7 +150,7 @@ function printGettingStarted(
   }
 
   lines.push(
-    'Run `sis admin getting-started` for a complete usage guide.',
+    'Run `sis ui guide` for a complete usage guide.',
     '',
   );
 

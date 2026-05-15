@@ -11,23 +11,20 @@ import { ORCHESTRATOR_ASKED_BY } from '../../shared/types.js';
 import type { AskOutput, AskStatus } from '../../shared/types.js';
 import { execSafe } from '../../shared/exec.js';
 import { shellQuote } from '../../shared/shell.js';
+import { exitUsage } from '../errors.js';
 
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
 function validateAskId(askId: string): void {
   if (!ULID_RE.test(askId)) {
-    console.error(`Error: invalid askId format: ${askId}`);
-    process.exit(1);
+    exitUsage('invalid-ask-id', `invalid askId format: ${askId}`, {
+      received: askId,
+      expected: '26-character ULID (e.g. 01ARZ3NDEKTSV4RRFFQ69G5FAV)',
+    });
   }
 }
 
-export function registerAsk(program: Command): void {
-  const ask = program
-    .command('ask')
-    .description('Submit a structured question deck for the user to answer (blocks until answered)')
-    .argument('[file]', 'Path to deck JSON (omit for poll/peek subcommands)')
-    .option('--session <id>', 'Session id (defaults to SISYPHUS_SESSION_ID)')
-    .addHelpText('after', `
+const DECK_SCHEMA_HELP = `
 Posts a deck of questions to the user's dashboard inbox. They walk through it and you read the structured JSON back from stdout.
 
 The CLI always blocks until the user answers (which can take 10+ minutes).
@@ -73,12 +70,22 @@ OUTPUT
   Branch on each response by its interaction \`id\`.
 
 Validation errors at submit are precise — read them, don't guess.
-`)
-    .action(async (file: string | undefined, opts: { session?: string }) => {
-      if (!file) {
-        ask.help();
-        return;
-      }
+`;
+
+export function registerAsk(program: Command): void {
+  const ask = program
+    .command('ask')
+    .description('Submit a structured question deck for the user to answer (blocks until answered)')
+    .action(() => {
+      ask.help();
+    });
+
+  ask
+    .command('submit <file>')
+    .description('Submit a deck JSON file and block until the user answers')
+    .option('--session <id>', 'Session id (defaults to SISYPHUS_SESSION_ID)')
+    .addHelpText('after', DECK_SCHEMA_HELP)
+    .action(async (file: string, opts: { session?: string }) => {
       await submit(file, opts);
     });
 
@@ -113,8 +120,9 @@ function resolveSessionEnv(opts: { session?: string }): { cwd: string; sessionId
   const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
   const cwd = process.env.SISYPHUS_CWD ?? process.cwd();
   if (!sessionId) {
-    console.error('Error: provide --session or set SISYPHUS_SESSION_ID');
-    process.exit(1);
+    exitUsage('missing-session', 'provide --session or set SISYPHUS_SESSION_ID', {
+      next: 'sis ask submit <file> --session <id>',
+    });
   }
   return { cwd, sessionId };
 }
@@ -237,16 +245,17 @@ async function submit(file: string, opts: { session?: string }): Promise<void> {
 
   const deckPath = resolve(file);
   if (!existsSync(deckPath)) {
-    console.error(`Error: deck file not found: ${deckPath}`);
-    process.exit(1);
+    exitUsage('file-not-found', `deck file not found: ${deckPath}`, {
+      received: deckPath,
+      next: 'sis ask submit <file> (provide a valid path to a deck JSON)',
+    });
   }
 
   let decisions;
   try {
     decisions = parseDeck(deckPath);
   } catch (err) {
-    console.error(`Error: ${(err as Error).message}`);
-    process.exit(1);
+    exitUsage('invalid-deck', (err as Error).message, { received: deckPath });
   }
 
   const initialPpid = process.ppid;
@@ -279,8 +288,7 @@ async function poll(askId: string, opts: { session?: string }): Promise<void> {
   const { cwd, sessionId } = resolveSessionEnv(opts);
   const meta = readMeta(cwd, sessionId, askId);
   if (!meta) {
-    console.error(`Error: askId not found: ${askId}`);
-    process.exit(1);
+    exitUsage('not-found', `askId not found: ${askId}`, { received: askId });
   }
   const output = await waitForOutput(cwd, sessionId, askId);
   await markAnswered(cwd, sessionId, askId);

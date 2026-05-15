@@ -3,6 +3,8 @@ import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import type { Session } from '../../shared/types.js';
 import { exportSessionToZip } from '../../shared/session-export.js';
+import { exitError, exitUsage } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 export { exportSessionToZip };
 
@@ -28,17 +30,22 @@ export function registerExport(program: Command): void {
       }
 
       if (!sessionId) {
-        console.error('Error: No session ID provided and no active session found.');
-        console.error('Usage: sis admin export [session-id]');
-        process.exit(1);
+        exitUsage('missing_session_id', 'No session ID provided and no active session found.', {
+          next: 'sis session export <session-id>',
+        });
       }
 
       try {
         const outputPath = await exportSessionToZip(sessionId, cwd);
+        if (emitJsonOk({ sessionId, outputPath })) return;
         console.log(`Exported to ${outputPath}`);
       } catch (err) {
-        console.error(`Error: ${(err as Error).message}`);
-        process.exit(1);
+        exitError({
+          code: 'export_failed',
+          kind: 'permanent',
+          message: (err as Error).message,
+          received: sessionId,
+        });
       }
     });
 }

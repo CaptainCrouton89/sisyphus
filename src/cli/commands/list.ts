@@ -2,7 +2,9 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import { basename } from 'node:path';
-import { bold, dim, red, green, yellow, cyan, magenta, colorize } from '../../shared/format.js';
+import { bold, dim, red, magenta, colorize } from '../../shared/format.js';
+import { exitError } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 interface SessionSummary {
   id: string;
@@ -64,48 +66,58 @@ export function registerList(program: Command): void {
     .description('List sessions (defaults to current project)')
     .option('-a, --all', 'Show sessions from all projects')
     .option('--cwd <path>', 'Project directory to list sessions for (overrides SISYPHUS_CWD)')
-    .option('-j, --json', 'Output raw JSON')
-    .action(async (opts: { all?: boolean; cwd?: string; json?: boolean }) => {
+    .addHelpText(
+      'after',
+      `
+Examples:
+  $ sis session list
+  $ sis session list --all
+  $ sis session list --json | jq '.data.sessions[] | select(.status=="active")'
+
+Output:
+  Default       One line per session, columns: name(id) status agents task [cwd] [handoff].
+                Tasks truncated at 60 chars (no recovery flag; use --json for full).
+  --json        { ok, schema_version: 1, data: { sessions: [...], totalCount?, filtered? } }
+                Sessions include full task text — no truncation.
+
+Exit codes: 0 ok | 60 transient (daemon not ready).`,
+    )
+    .action(async (opts: { all?: boolean; cwd?: string }) => {
       const cwd = opts.cwd ?? process.env['SISYPHUS_CWD'] ?? process.cwd();
       const request: Request = { type: 'list', cwd, all: opts.all };
       const response = await sendRequest(request);
-      if (response.ok) {
-        const sessions = (response.data?.sessions ?? []) as SessionSummary[];
-        const totalCount = response.data?.totalCount as number | undefined;
-        const filtered = response.data?.filtered as boolean | undefined;
+      if (!response.ok) exitError(response.error);
+      const sessions = (response.data?.sessions ?? []) as SessionSummary[];
+      const totalCount = response.data?.totalCount as number | undefined;
+      const filtered = response.data?.filtered as boolean | undefined;
 
-        if (opts.json) {
-          console.log(JSON.stringify(sessions));
-          return;
-        }
+      if (emitJsonOk({ sessions, ...(totalCount !== undefined ? { totalCount } : {}), ...(filtered !== undefined ? { filtered } : {}) })) {
+        return;
+      }
 
-        if (sessions.length === 0) {
-          if (filtered && totalCount && totalCount > 0) {
-            console.log(`No sessions in this project. ${totalCount} session(s) in other projects.`);
-            console.log(`${dim('Run ')}sis list --all${dim(' to show all.')}`);
-          } else {
-            console.log('No sessions');
-          }
-          return;
+      if (sessions.length === 0) {
+        if (filtered && totalCount && totalCount > 0) {
+          console.log(`No sessions in this project. ${totalCount} session(s) in other projects.`);
+          console.log(`${dim('Run ')}sis session list --all${dim(' to show all.')}`);
+        } else {
+          console.log('No sessions');
         }
+        return;
+      }
 
-        for (const s of sessions) {
-          const status = colorStatus(s.status);
-          const agents = dim(`${s.agentCount} agent(s)`);
-          const task = truncateTask(s.task, 60);
-          const label = s.name ? `${s.name} ${dim(`(${s.id.slice(0, 8)})`)}` : s.id;
-          const cwdLabel = opts.all && s.cwd ? `  ${dim(basename(s.cwd))}` : '';
-          const handoffLabel = handoffAnnotation(s.handoff);
-          console.log(`  ${bold(label)}  ${status}  ${agents}  ${task}${cwdLabel}${handoffLabel}`);
-        }
+      for (const s of sessions) {
+        const status = colorStatus(s.status);
+        const agents = dim(`${s.agentCount} agent(s)`);
+        const task = truncateTask(s.task, 60);
+        const label = s.name ? `${s.name} ${dim(`(${s.id.slice(0, 8)})`)}` : s.id;
+        const cwdLabel = opts.all && s.cwd ? `  ${dim(basename(s.cwd))}` : '';
+        const handoffLabel = handoffAnnotation(s.handoff);
+        console.log(`  ${bold(label)}  ${status}  ${agents}  ${task}${cwdLabel}${handoffLabel}`);
+      }
 
-        if (filtered && totalCount && totalCount > sessions.length) {
-          const otherCount = totalCount - sessions.length;
-          console.log(`\n${dim(`${otherCount} more session(s) in other projects. Run `)}sis list --all${dim(' to show all.')}`);
-        }
-      } else {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
+      if (filtered && totalCount && totalCount > sessions.length) {
+        const otherCount = totalCount - sessions.length;
+        console.log(`\n${dim(`${otherCount} more session(s) in other projects. Run `)}sis session list --all${dim(' to show all.')}`);
       }
     });
 }

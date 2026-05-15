@@ -10,6 +10,8 @@ import { uploadSession, isUploadConfigured } from '../../shared/upload.js';
 import { buildManifest } from '../../shared/manifest.js';
 import { getSession } from '../../daemon/state.js';
 import { getSisyphusVersion } from '../../shared/version.js';
+import { exitError, exitUsage } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 export function registerUpload(program: Command): void {
   program
@@ -33,25 +35,31 @@ export function registerUpload(program: Command): void {
       }
 
       if (!sessionId) {
-        console.error('Error: No session ID provided and no active session found.');
-        console.error('Usage: sis admin upload [session-id]');
-        process.exit(1);
+        exitUsage('missing_session_id', 'No session ID provided and no active session found.', {
+          next: 'sis admin upload <session-id>',
+        });
       }
 
       const config = loadConfig(cwd);
       if (!isUploadConfigured(config.upload)) {
-        console.error(
-          "Error: upload not configured. Run 'sis admin configure-upload <url-with-token>' or set { upload: { url, token } } in .sisyphus/config.json.",
-        );
-        process.exit(1);
+        exitError({
+          code: 'upload_not_configured',
+          kind: 'usage',
+          message: "upload not configured.",
+          next: "Run 'sis admin configure-upload <url-with-token>' or set { upload: { url, token } } in .sisyphus/config.json.",
+        });
       }
 
       let zipPath: string;
       try {
         zipPath = await exportSessionToZip(sessionId, cwd, { reveal: false, outputDir: tmpdir() });
       } catch (err) {
-        console.error(`Error: ${(err as Error).message}`);
-        process.exit(1);
+        exitError({
+          code: 'export_failed',
+          kind: 'permanent',
+          message: (err as Error).message,
+          received: sessionId,
+        });
       }
 
       try {
@@ -79,8 +87,12 @@ export function registerUpload(program: Command): void {
           } catch {
             // daemon unreachable — best-effort
           }
-          console.error(`Upload failed: ${errMsg}`);
-          process.exit(1);
+          exitError({
+            code: 'upload_failed',
+            kind: 'transient',
+            message: `Upload failed: ${errMsg}`,
+            received: sessionId,
+          });
         }
 
         const persistReq: Request = {
@@ -93,13 +105,16 @@ export function registerUpload(program: Command): void {
         try {
           const resp = await sendRequest(persistReq);
           if (!resp.ok) {
-            console.warn(`warning: could not persist upload status (${resp.error ? resp.error : 'no error detail'})`);
+            const detail = typeof resp.error === 'string' ? resp.error : resp.error?.message ?? 'no error detail';
+            console.warn(`warning: could not persist upload status (${detail})`);
           }
         } catch {
           console.warn('warning: daemon unreachable — upload status not persisted to session state');
         }
 
-        console.log(`Uploaded to ${result!.storageKey}`);
+        if (!emitJsonOk({ sessionId, storageKey: result!.storageKey })) {
+          console.log(`Uploaded to ${result!.storageKey}`);
+        }
       } finally {
         rmSync(zipPath!, { force: true });
       }

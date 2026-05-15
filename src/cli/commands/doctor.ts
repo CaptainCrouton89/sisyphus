@@ -74,7 +74,7 @@ function checkDaemonInstalled(): Check {
       name: 'Daemon plist',
       status: 'fail',
       detail: 'Not installed',
-      fix: 'Run any sis command to auto-install, or: sis start "test"',
+      fix: 'Run any sis command to auto-install, or: sis session start "test"',
     };
   }
   // Linux: check if PID file exists (daemon started manually)

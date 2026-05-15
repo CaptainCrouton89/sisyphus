@@ -5,6 +5,9 @@ import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
 import type { Session, OrchestratorCycle } from '../../shared/types.js';
+import { exitError, exitUsage } from '../errors.js';
+import { isJsonMode } from '../output.js';
+import { normalizeAgentId } from './tell.js';
 
 interface ReadOptions {
   session?: string;
@@ -14,7 +17,6 @@ interface ReadOptions {
   raw?: boolean;
   summary?: boolean;
   toolDetail?: boolean;
-  json?: boolean;
 }
 
 const ORCH_ALIASES = new Set(['orchestrator', 'orch', 'o']);
@@ -101,147 +103,254 @@ function summaryLine(entry: JsonlEntry): string {
   return `${role} ${ts}  ${preview}`;
 }
 
-export function registerRead(program: Command): void {
-  program
-    .command('read <target>')
-    .description("Print the Claude conversation transcript for a target ('orchestrator' or 'agent-NNN').")
+async function emitTranscript(
+  claudeSessionId: string,
+  label: string,
+  sessionCwd: string,
+  opts: ReadOptions,
+): Promise<void> {
+  const path = transcriptPath(sessionCwd, claudeSessionId);
+  if (!existsSync(path)) {
+    exitError({
+      code: 'transcript_not_found',
+      kind: 'not_found',
+      message: `transcript not found at ${path}`,
+      received: path,
+    });
+  }
+
+  const raw = readFileSync(path, 'utf-8');
+  const json = isJsonMode();
+
+  if (json && opts.raw) {
+    exitUsage('flag_conflict', '--json and --raw are mutually exclusive', {
+      expected: 'one of: --json, --raw',
+    });
+  }
+  if (json && opts.summary) {
+    exitUsage('flag_conflict', '--json and --summary are mutually exclusive', {
+      expected: 'one of: --json, --summary',
+    });
+  }
+
+  if (opts.raw) {
+    process.stdout.write(raw);
+    return;
+  }
+
+  const allEntries: JsonlEntry[] = raw
+    .split('\n')
+    .filter(Boolean)
+    .map(line => { try { return JSON.parse(line) as JsonlEntry; } catch { return null; } })
+    .filter((e): e is JsonlEntry => e !== null);
+
+  let entries = allEntries.filter(e => e.type && TURN_TYPES.has(e.type));
+
+  const totalTurns = entries.length;
+  const head = opts.head ? parseInt(opts.head, 10) : undefined;
+  const tail = opts.tail ? parseInt(opts.tail, 10) : undefined;
+  let sliceNote = '';
+  if (head && Number.isFinite(head)) {
+    entries = entries.slice(0, head);
+    sliceNote = `first ${head} of ${totalTurns}`;
+  }
+  if (tail && Number.isFinite(tail)) {
+    entries = entries.slice(-tail);
+    sliceNote = sliceNote ? `${sliceNote}, then last ${tail}` : `last ${tail} of ${totalTurns}`;
+  }
+
+  if (json) {
+    for (const e of entries) {
+      process.stdout.write(JSON.stringify({
+        role: e.type,
+        timestamp: e.timestamp,
+        content: e.message?.content,
+      }) + '\n');
+    }
+    return;
+  }
+
+  console.log(`=== ${label} — ${entries.length} turn(s)${sliceNote ? ` (${sliceNote})` : ''} ===`);
+  console.log(`transcript: ${path}\n`);
+
+  if (opts.summary) {
+    for (const e of entries) console.log(summaryLine(e));
+    return;
+  }
+
+  for (const e of entries) {
+    const role = (e.type ?? '?').toUpperCase();
+    const ts = e.timestamp ?? '';
+    const body = formatBlocks(e.message?.content, opts.toolDetail ?? false);
+    console.log(`──── ${role} ${ts} ────`);
+    console.log(body);
+    console.log('');
+  }
+}
+
+async function fetchSession(sessionId: string): Promise<Session> {
+  const response = await sendRequest({ type: 'status', sessionId, cwd: process.cwd() } as Request);
+  if (!response.ok) exitError(response.error);
+  const session = (response.data as { session?: Session })?.session;
+  if (!session) {
+    exitError({
+      code: 'no_session_in_status',
+      kind: 'not_found',
+      message: 'status response did not include session',
+      received: sessionId,
+    });
+  }
+  return session;
+}
+
+export function registerOrchRead(parent: Command): void {
+  parent
+    .command('read')
+    .description("Print the Claude conversation transcript for the orchestrator.")
     .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID)')
     .option('--cycle <n>', 'Orchestrator cycle number (default: most recent live, else last completed)')
     .option('--tail <n>', 'Show last N turns', undefined)
     .option('--head <n>', 'Show first N turns', undefined)
-    .option('--raw', 'Print raw JSONL (no formatting, no filtering)')
+    .option('--raw', 'Print raw JSONL (no formatting, no filtering) — orthogonal to --json')
     .option('--summary', 'One-line-per-turn summary instead of full content')
     .option('--tool-detail', 'Include full tool inputs/outputs (default: truncated to 400/600 chars)')
-    .option('-j, --json', 'Output JSONL — one JSON object per turn (mutually exclusive with --raw and --summary)')
-    .action(async (targetRaw: string, opts: ReadOptions) => {
+    .addHelpText(
+      'after',
+      `
+Examples:
+  $ sis orch read --tail 5
+  $ sis orch read --cycle 2 --json | jq -r '.content[0].text'
+
+Output:
+  Default       Decorated transcript on stdout, header line + role-tagged blocks.
+  --json        JSONL on stdout, one object per turn: { role, timestamp, content }
+                (no \`{ok, schema_version}\` envelope — this is a stream, agents
+                consume turn-at-a-time).
+  --raw         Raw transcript JSONL from disk, unfiltered.
+
+Mutual exclusions:
+  --raw + --json     reject (exit 2)
+  --summary + --json reject (exit 2)
+
+Exit codes: 0 ok | 2 usage | 3 not_found (session/cycle/transcript).`,
+    )
+    .action(async (opts: ReadOptions) => {
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
-        console.error('Error: provide --session or set SISYPHUS_SESSION_ID');
-        process.exit(1);
+        exitUsage('missing_session_id', 'Provide --session or set SISYPHUS_SESSION_ID', {
+          next: 'export SISYPHUS_SESSION_ID=<sessionId> or pass --session <sessionId>',
+        });
       }
 
-      const response = await sendRequest({ type: 'status', sessionId, cwd: process.cwd() } as Request);
-      if (!response.ok) {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
-      }
-      const session = (response.data as { session?: Session })?.session;
-      if (!session) {
-        console.error('Error: status response did not include session');
-        process.exit(1);
-      }
+      const session = await fetchSession(sessionId);
 
-      let claudeSessionId: string | undefined;
-      let label: string;
-      if (ORCH_ALIASES.has(targetRaw)) {
-        let cycle: OrchestratorCycle | undefined;
-        if (opts.cycle) {
-          const n = parseInt(opts.cycle, 10);
-          if (!Number.isFinite(n)) {
-            console.error(`Error: --cycle must be a number, got: ${opts.cycle}`);
-            process.exit(1);
-          }
-          cycle = session.orchestratorCycles.find(c => c.cycle === n);
-          if (!cycle) {
-            console.error(`Error: orchestrator cycle ${n} not found in session`);
-            process.exit(1);
-          }
-        } else {
-          cycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt) ?? session.orchestratorCycles.at(-1);
+      let cycle: OrchestratorCycle | undefined;
+      if (opts.cycle) {
+        const n = parseInt(opts.cycle, 10);
+        if (!Number.isFinite(n)) {
+          exitUsage('bad_cycle', '--cycle must be a number', { received: opts.cycle });
         }
+        cycle = session.orchestratorCycles.find(c => c.cycle === n);
         if (!cycle) {
-          console.error('Error: no orchestrator cycles found');
-          process.exit(1);
+          exitError({
+            code: 'cycle_not_found',
+            kind: 'not_found',
+            message: `orchestrator cycle ${n} not found in session`,
+            received: n,
+            expected: session.orchestratorCycles.map(c => c.cycle),
+          });
         }
-        claudeSessionId = cycle.claudeSessionId;
-        label = `orchestrator cycle ${cycle.cycle}${cycle.completedAt ? ' (completed)' : ' (live)'}`;
-      } else if (/^agent-\d+$/i.test(targetRaw)) {
-        const ag = session.agents.find(a => a.id === targetRaw);
-        if (!ag) {
-          console.error(`Error: agent ${targetRaw} not found in session ${sessionId}`);
-          process.exit(1);
-        }
-        claudeSessionId = ag.claudeSessionId;
-        label = `agent ${ag.id} — ${ag.name} (${ag.status})`;
       } else {
-        console.error(`Error: target must be 'orchestrator' (or 'o'/'orch') or 'agent-NNN', got: ${targetRaw}`);
-        process.exit(1);
+        cycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt) ?? session.orchestratorCycles.at(-1);
       }
+      if (!cycle) {
+        exitError({
+          code: 'no_cycles',
+          kind: 'not_found',
+          message: 'no orchestrator cycles found',
+          received: sessionId,
+        });
+      }
+
+      const claudeSessionId = cycle.claudeSessionId;
+      const label = `orchestrator cycle ${cycle.cycle}${cycle.completedAt ? ' (completed)' : ' (live)'}`;
 
       if (!claudeSessionId) {
-        console.error(`Error: no claudeSessionId stored for ${label} — transcript may not exist yet`);
-        process.exit(1);
+        exitError({
+          code: 'no_claude_session',
+          kind: 'not_found',
+          message: `no claudeSessionId stored for ${label} — transcript may not exist yet`,
+          received: sessionId,
+        });
       }
 
-      const path = transcriptPath(session.cwd, claudeSessionId);
-      if (!existsSync(path)) {
-        console.error(`Error: transcript not found at ${path}`);
-        process.exit(1);
+      await emitTranscript(claudeSessionId, label, session.cwd, opts);
+    });
+}
+
+export function registerAgentRead(parent: Command): void {
+  parent
+    .command('read <id>')
+    .description("Print the Claude conversation transcript for an agent (agent-NNN).")
+    .option('--session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID)')
+    .option('--tail <n>', 'Show last N turns', undefined)
+    .option('--head <n>', 'Show first N turns', undefined)
+    .option('--raw', 'Print raw JSONL (no formatting, no filtering) — orthogonal to --json')
+    .option('--summary', 'One-line-per-turn summary instead of full content')
+    .option('--tool-detail', 'Include full tool inputs/outputs (default: truncated to 400/600 chars)')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  $ sis agent read agent-3 --summary
+  $ sis agent read 3 --json | jq -r '.content[0].text'
+
+Output:
+  Default       Decorated transcript on stdout, header line + role-tagged blocks.
+  --json        JSONL on stdout, one object per turn: { role, timestamp, content }
+  --raw         Raw transcript JSONL from disk, unfiltered.
+
+Mutual exclusions:
+  --raw + --json     reject (exit 2)
+  --summary + --json reject (exit 2)
+
+Exit codes: 0 ok | 2 usage | 3 not_found (session/agent/transcript).`,
+    )
+    .action(async (idRaw: string, opts: ReadOptions) => {
+      const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
+      if (!sessionId) {
+        exitUsage('missing_session_id', 'Provide --session or set SISYPHUS_SESSION_ID', {
+          next: 'export SISYPHUS_SESSION_ID=<sessionId> or pass --session <sessionId>',
+        });
       }
 
-      const raw = readFileSync(path, 'utf-8');
+      const agentId = normalizeAgentId(idRaw);
+      const session = await fetchSession(sessionId);
 
-      if (opts.json && opts.raw) {
-        console.error('Error: --json and --raw are mutually exclusive');
-        process.exit(1);
-      }
-      if (opts.json && opts.summary) {
-        console.error('Error: --json and --summary are mutually exclusive');
-        process.exit(1);
-      }
-
-      if (opts.raw) {
-        process.stdout.write(raw);
-        return;
-      }
-
-      const allEntries: JsonlEntry[] = raw
-        .split('\n')
-        .filter(Boolean)
-        .map(line => { try { return JSON.parse(line) as JsonlEntry; } catch { return null; } })
-        .filter((e): e is JsonlEntry => e !== null);
-
-      let entries = allEntries.filter(e => e.type && TURN_TYPES.has(e.type));
-
-      const totalTurns = entries.length;
-      const head = opts.head ? parseInt(opts.head, 10) : undefined;
-      const tail = opts.tail ? parseInt(opts.tail, 10) : undefined;
-      let sliceNote = '';
-      if (head && Number.isFinite(head)) {
-        entries = entries.slice(0, head);
-        sliceNote = `first ${head} of ${totalTurns}`;
-      }
-      if (tail && Number.isFinite(tail)) {
-        entries = entries.slice(-tail);
-        sliceNote = sliceNote ? `${sliceNote}, then last ${tail}` : `last ${tail} of ${totalTurns}`;
+      const ag = session.agents.find(a => a.id === agentId);
+      if (!ag) {
+        exitError({
+          code: 'unknown_agent',
+          kind: 'not_found',
+          message: `agent ${agentId} not found in session ${sessionId}`,
+          received: agentId,
+          candidates: session.agents.map(a => a.id),
+          next: 'sis session status to list agents',
+        });
       }
 
-      if (opts.json) {
-        for (const e of entries) {
-          console.log(JSON.stringify({
-            role: e.type,
-            timestamp: e.timestamp,
-            content: e.message?.content,
-          }));
-        }
-        return;
+      const claudeSessionId = ag.claudeSessionId;
+      const label = `agent ${ag.id} — ${ag.name} (${ag.status})`;
+
+      if (!claudeSessionId) {
+        exitError({
+          code: 'no_claude_session',
+          kind: 'not_found',
+          message: `no claudeSessionId stored for ${label} — transcript may not exist yet`,
+          received: agentId,
+        });
       }
 
-      console.log(`=== ${label} — ${entries.length} turn(s)${sliceNote ? ` (${sliceNote})` : ''} ===`);
-      console.log(`transcript: ${path}\n`);
-
-      if (opts.summary) {
-        for (const e of entries) console.log(summaryLine(e));
-        return;
-      }
-
-      for (const e of entries) {
-        const role = (e.type ?? '?').toUpperCase();
-        const ts = e.timestamp ?? '';
-        const body = formatBlocks(e.message?.content, opts.toolDetail ?? false);
-        console.log(`──── ${role} ${ts} ────`);
-        console.log(body);
-        console.log('');
-      }
+      await emitTranscript(claudeSessionId, label, session.cwd, opts);
     });
 }

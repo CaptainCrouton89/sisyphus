@@ -79,7 +79,7 @@ function runRequirementsExport(requirementsPath: string, force = false): Buffer 
     '--import',
     'tsx',
     shellQuote(cliEntry),
-    'admin',
+    'session',
     'requirements',
     '--export',
     shellQuote(requirementsPath),
@@ -146,14 +146,14 @@ describe('requirements export', () => {
       (error: unknown) => {
         assert.ok(error instanceof Error);
         const execError = error as Error & { status?: number; stderr?: Buffer };
-        assert.equal(execError.status, 1);
+        assert.equal(execError.status, 2);
         assert.match(
           execError.stderr?.toString('utf-8') ?? '',
-          /has been hand-edited \(differs from rendered output\)\./,
+          /has been hand-edited \(differs from rendered output\)/,
         );
         assert.match(
           execError.stderr?.toString('utf-8') ?? '',
-          /Use --force to overwrite/,
+          /--export --force/,
         );
         return true;
       },

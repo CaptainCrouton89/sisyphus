@@ -1,6 +1,8 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
+import { exitError, exitUsage } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 export function registerSegmentRegister(program: Command): void {
   program
@@ -11,10 +13,24 @@ export function registerSegmentRegister(program: Command): void {
     .requiredOption('--priority <n>', 'Priority (lower = further from center)', parseInt)
     .requiredOption('--bg <color>', 'Background hex color (e.g. #2d2f33)')
     .requiredOption('--content <content>', 'tmux format string content')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  $ sis segment register --id deploy --side right --priority 10 --bg "#2d2f33" --content "deploy: ok"
+
+Output:
+  Default       "Segment '<id>' registered." on stdout.
+  --json        { ok, schema_version: 1, data: { id } }
+
+Exit codes: 0 ok | 2 usage (bad --side).`,
+    )
     .action(async (opts: { id: string; side: string; priority: number; bg: string; content: string }) => {
       if (opts.side !== 'left' && opts.side !== 'right') {
-        console.error('Error: --side must be "left" or "right"');
-        process.exit(1);
+        exitUsage('bad_side', '--side must be "left" or "right"', {
+          received: opts.side,
+          expected: ['left', 'right'],
+        });
       }
       const request: Request = {
         type: 'register-segment',
@@ -25,11 +41,8 @@ export function registerSegmentRegister(program: Command): void {
         content: opts.content,
       };
       const response = await sendRequest(request);
-      if (response.ok) {
-        console.log(`Segment '${opts.id}' registered.`);
-      } else {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
-      }
+      if (!response.ok) exitError(response.error);
+      if (emitJsonOk({ id: opts.id })) return;
+      console.log(`Segment '${opts.id}' registered.`);
     });
 }

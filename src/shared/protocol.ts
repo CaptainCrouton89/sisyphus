@@ -48,6 +48,58 @@ export type Request =
   // after the rsync down completes and the local orchestrator is respawned.
   | { type: 'cloud-reclaim-finalize'; sessionId: string; cwd: string };
 
+/**
+ * Typed error kinds. Maps to CLI exit codes via `exitForError` (src/cli/errors.ts):
+ *   usage     → 2   (bad args / wrong shape)
+ *   not_found → 3   (referenced session/agent/etc. doesn't exist)
+ *   ambiguous → 4   (multiple matches — see `candidates`)
+ *   conflict  → 5   (state collision: already-exists, wrong-state, lock held)
+ *   transient → 60  (retry-safe: daemon-down, timeout, upstream 5xx)
+ *   permanent → 1   (everything else, including unmigrated string errors)
+ *
+ * Agents should branch on `kind` or the exit code, not on `message` prose.
+ */
+export type ErrorKind = 'usage' | 'not_found' | 'ambiguous' | 'conflict' | 'transient' | 'permanent';
+
+export interface ProtocolError {
+  /** Stable enum for the specific failure (e.g. 'unknown_session'). */
+  code: string;
+  kind: ErrorKind;
+  /** Human/agent-readable summary; safe to print verbatim. */
+  message: string;
+  /** Echo of what the caller sent that was rejected, for self-correction. */
+  received?: unknown;
+  /** Valid set/shape that would have been accepted. */
+  expected?: unknown;
+  /** Suggested follow-up command. */
+  next?: string;
+  /** Disambiguation list for kind:'ambiguous'. */
+  candidates?: string[];
+}
+
+/**
+ * Wire shape: error may be a raw string for unmigrated daemon sites; normalize
+ * via `normalizeError()` (src/cli/errors.ts) before consuming.
+ */
 export type Response =
   | { ok: true; data?: Record<string, unknown> }
-  | { ok: false; error: string };
+  | { ok: false; error: string | ProtocolError };
+
+/* -------------------------------------------------------------------------- */
+/* ProtocolError factories — use these in the daemon to emit typed errors.    */
+/* -------------------------------------------------------------------------- */
+
+interface ErrFields {
+  message: string;
+  received?: unknown;
+  expected?: unknown;
+  next?: string;
+  candidates?: string[];
+}
+
+export const errUsage = (code: string, f: ErrFields): ProtocolError => ({ kind: 'usage', code, ...f });
+export const errNotFound = (code: string, f: ErrFields): ProtocolError => ({ kind: 'not_found', code, ...f });
+export const errAmbiguous = (code: string, f: ErrFields): ProtocolError => ({ kind: 'ambiguous', code, ...f });
+export const errConflict = (code: string, f: ErrFields): ProtocolError => ({ kind: 'conflict', code, ...f });
+export const errTransient = (code: string, f: ErrFields): ProtocolError => ({ kind: 'transient', code, ...f });
+export const errPermanent = (code: string, f: ErrFields): ProtocolError => ({ kind: 'permanent', code, ...f });

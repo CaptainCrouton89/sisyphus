@@ -7,6 +7,8 @@ import type { Session, Agent, OrchestratorCycle } from '../../shared/types.js';
 import { computeActiveTimeMs } from '../../shared/utils.js';
 import { roadmapPath, cycleLogPath } from '../../shared/paths.js';
 import { formatDuration, statusColor, bold, dim, red, colorize as fmtColorize } from '../../shared/format.js';
+import { exitError } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 function colorize(text: string, status: string): string {
   return fmtColorize(text, statusColor(status));
@@ -255,29 +257,36 @@ export function registerStatus(program: Command): void {
     .description('Show session status')
     .argument('[session-id]', 'Session ID (defaults to SISYPHUS_SESSION_ID env)')
     .option('-v, --verbose', 'Show detailed output (roadmap, pane output, agent instructions)')
-    .option('-j, --json', 'Output raw JSON instead of formatted text')
-    .action(async (sessionIdArg?: string, opts?: { verbose?: boolean; json?: boolean }) => {
+    .addHelpText(
+      'after',
+      `
+Examples:
+  $ sis session status                       # current session (from SISYPHUS_SESSION_ID)
+  $ sis session status sess-7f2a -v
+  $ sis session status --json | jq '.data.session.agents[] | select(.status=="running")'
+
+Output:
+  Default       Multi-section human view with cycles, agents, roadmap (verbose).
+  --json        { ok, schema_version: 1, data: { session } } — full Session object;
+                no truncation; pane output omitted (use \`sis orch read\` for that).
+
+Exit codes: 0 ok | 3 not_found.`,
+    )
+    .action(async (sessionIdArg: string | undefined, opts: { verbose?: boolean }) => {
       const sessionId = sessionIdArg ?? process.env.SISYPHUS_SESSION_ID;
       const verbose = opts?.verbose ?? false;
-      const json = opts?.json ?? false;
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
       const request: Request = { type: 'status', sessionId, cwd };
       const response = await sendRequest(request);
-      if (response.ok) {
-        const session = response.data?.session as Session | undefined;
-        if (session) {
-          if (json) {
-            console.log(JSON.stringify(session));
-          } else {
-            printSession(session, verbose);
-          }
-        } else {
-          console.log('No session found');
-        }
-      } else {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
+      if (!response.ok) exitError(response.error);
+      const session = response.data?.session as Session | undefined;
+      if (!session) {
+        if (emitJsonOk({ session: null })) return;
+        console.log('No session found');
+        return;
       }
+      if (emitJsonOk({ session })) return;
+      printSession(session, verbose);
     });
 }

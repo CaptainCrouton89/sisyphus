@@ -270,7 +270,7 @@ while IFS=$'\\t' read -r type name scwd phase sid; do
   [ "$sid" = "$current_id" ] && { cwd="$scwd"; break; }
 done < "$MANIFEST"
 if [ -z "$cwd" ]; then
-  tmux display-message "sisyphus: '$current_name' has no @sisyphus_cwd — run 'sis start' here to register"
+  tmux display-message "sisyphus: '$current_name' has no @sisyphus_cwd — run 'sis session start' here to register"
   exit 0
 fi
 session_ids=()
@@ -387,7 +387,7 @@ tmpfile=$(mktemp /tmp/sisyphus-new.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
 NVIM_APPNAME=sisyphus nvim "$tmpfile"
 grep -q '[^[:space:]]' "$tmpfile" || exit 0
-exec sis start "$(cat "$tmpfile")"
+exec sis session start "$(cat "$tmpfile")"
 `;
 
 const MESSAGE_SCRIPT = `#!/bin/bash
@@ -419,7 +419,7 @@ tmpfile=$(mktemp /tmp/sisyphus-msg.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
 NVIM_APPNAME=sisyphus nvim "$tmpfile"
 grep -q '[^[:space:]]' "$tmpfile" || exit 0
-exec sis message --session "$session_id" "$(cat "$tmpfile")"
+exec sis orch message --session "$session_id" "$(cat "$tmpfile")"
 `;
 
 // --- Shared session ID + cwd resolution for session-scoped scripts ---
@@ -519,9 +519,9 @@ if [ -z "$session_id" ]; then
 fi
 
 if [ -n "$session_id" ]; then
-  sis status "$session_id" 2>&1 | less -R
+  sis session status "$session_id" 2>&1 | less -R
 else
-  sis list 2>&1 | less -R
+  sis session list 2>&1 | less -R
 fi
 `;
 
@@ -609,19 +609,19 @@ const EXPORT_SESSION_SCRIPT = `#!/bin/bash
 ${SESSION_RESOLVE}
 
 echo "Exporting session \${session_id:0:8}..."
-sis admin export "$session_id" --cwd "$cwd"
+sis session export "$session_id" --cwd "$cwd"
 echo ""
 read -n 1 -s -r -p "Press a key to close."
 `;
 
 const RESTART_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and restart it (fzf picker with confirm for running agents).
-# fzf optional. Requires \`sis status --json\`.
+# fzf optional. Requires \`sis session status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -854,12 +854,12 @@ fi
 
 const JUMP_TO_PANE_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and jump to its tmux pane.
-# fzf optional. Requires \`sis status --json\`.
+# fzf optional. Requires \`sis session status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -901,12 +901,12 @@ tmux select-pane -t "$target_pane"
 
 const MSG_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and send it a message via nvim.
-# fzf optional. Requires \`sis status --json\` and \`--agent\` on message.
+# fzf optional. Requires \`sis session status --json\` and \`--agent\` on message.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -939,17 +939,17 @@ tmpfile=$(mktemp /tmp/sisyphus-msg-agent.XXXXXX)
 trap 'rm -f "$tmpfile"' EXIT
 NVIM_APPNAME=sisyphus nvim "$tmpfile"
 grep -q '[^[:space:]]' "$tmpfile" || exit 0
-exec sis message --session "$session_id" --agent "\${ids[$idx]}" "$(cat "$tmpfile")"
+exec sis orch message --session "$session_id" --agent "\${ids[$idx]}" "$(cat "$tmpfile")"
 `;
 
 const RERUN_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and spawn a retry with its original instruction.
-# fzf optional. Requires \`sis status --json\`.
+# fzf optional. Requires \`sis session status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -996,7 +996,7 @@ exec sis agent spawn --session "$session_id" --agent-type "\${atypes[$idx]}" --n
 
 const OPEN_CLAUDE_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent or orchestrator cycle and resume its Claude session.
-# fzf optional. Requires \`sis status --json\`.
+# fzf optional. Requires \`sis session status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
@@ -1004,7 +1004,7 @@ command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 state="$cwd/.sisyphus/sessions/$session_id/state.json"
 [ ! -f "$state" ] && { echo "No state.json for this session"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -1045,12 +1045,12 @@ cd "$cwd" && exec claude --resume "$cid"
 const TAIL_AGENT_LOGS_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and view its tmux pane scrollback (last 2000 lines) in less.
 # Uses tmux capture-pane — no tail -f, no pipe-pane side effects.
-# fzf optional. Requires \`sis status --json\`.
+# fzf optional. Requires \`sis session status --json\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -1088,12 +1088,12 @@ tmux capture-pane -t "$target_pane" -p -S -2000 | less +G
 
 const KILL_AGENT_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and kill it (with red confirmation prompt).
-# fzf optional. Requires \`sis status --json\` and \`sis agent kill\`.
+# fzf optional. Requires \`sis session status --json\` and \`sis agent kill\`.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -1132,12 +1132,12 @@ read -n 1 -s -r -p "Press a key to close."
 
 const COPY_AGENT_ID_SCRIPT = `#!/bin/bash
 # Pick a sisyphus agent and copy its ID to clipboard.
-# Requires \`sis status --json\`. fzf optional.
+# Requires \`sis session status --json\`. fzf optional.
 ${SESSION_RESOLVE}
 
 command -v jq &>/dev/null || { echo "jq required"; sleep 1; exit 1; }
 
-agents_json=$(sis status "$session_id" --json 2>/dev/null)
+agents_json=$(sis session status "$session_id" --json 2>/dev/null)
 if [ -z "$agents_json" ]; then
   echo "Failed to read session status"; sleep 1; exit 1
 fi
@@ -1363,7 +1363,7 @@ exit $exit_code
 const HISTORY_SCRIPT = `#!/bin/bash
 # Show rich session detail (history command's per-session view) in a popup.
 ${SESSION_RESOLVE}
-sis admin history "$session_id" 2>&1 | less -R
+sis session history "$session_id" 2>&1 | less -R
 `;
 
 const RECONNECT_SCRIPT = `#!/bin/bash
@@ -1378,7 +1378,7 @@ exit $exit_code
 const OPEN_SCRATCH_SCRIPT = `#!/bin/bash
 # Open a standalone Claude scratch window in the home tmux session for this cwd.
 # scratch resolves the home session itself via @sisyphus_cwd; no session_id needed.
-exec sis admin scratch
+exec sis session scratch
 `;
 
 // === end Stage 4 script constants ===

@@ -11,6 +11,7 @@ import type { Provider } from '../deploy/creds.js';
 import type { Request } from '../../shared/protocol.js';
 import type { Session } from '../../shared/types.js';
 import { join } from 'node:path';
+import { exitError } from '../errors.js';
 
 interface HandoffOptions {
   provider: Provider;
@@ -31,10 +32,7 @@ export async function cloudHandoff(sessionId: string, opts: HandoffOptions): Pro
     force: opts.force,
   };
   const response = await sendRequest(request);
-  if (!response.ok) {
-    console.error(`Error: ${response.error}`);
-    process.exit(1);
-  }
+  if (!response.ok) exitError(response.error);
 
   const data = response.data as { force?: boolean; provider?: string; repo?: string } | undefined;
   const where = `${data?.provider ?? opts.provider}:${data?.repo ?? opts.repo}`;
@@ -58,10 +56,7 @@ export async function cloudHandoff(sessionId: string, opts: HandoffOptions): Pro
 export async function cloudHandoffCancel(sessionId: string): Promise<void> {
   const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
   const response = await sendRequest({ type: 'cloud-handoff-cancel', sessionId, cwd });
-  if (!response.ok) {
-    console.error(`Error: ${response.error}`);
-    process.exit(1);
-  }
+  if (!response.ok) exitError(response.error);
   console.log(`Handoff for ${sessionId} cancelled.`);
 }
 
@@ -83,8 +78,12 @@ async function waitForSentOrError(cwd: string, sessionId: string): Promise<void>
       continue;
     }
     if (session.handoff?.lastError) {
-      console.error(`Handoff failed: ${session.handoff.lastError}`);
-      process.exit(1);
+      exitError({
+        code: 'handoff_failed',
+        kind: 'permanent',
+        message: `Handoff failed: ${session.handoff.lastError}`,
+        received: sessionId,
+      });
     }
     if (session.handoff?.sentAt) {
       const where = session.handoff.target
@@ -94,8 +93,11 @@ async function waitForSentOrError(cwd: string, sessionId: string): Promise<void>
       return;
     }
   }
-  console.error(`Timed out waiting for handoff after ${Math.round(MAX_WAIT_MS / 60000)}m.`);
-  process.exit(1);
+  exitError({
+    code: 'handoff_timeout',
+    kind: 'transient',
+    message: `Timed out waiting for handoff after ${Math.round(MAX_WAIT_MS / 60000)}m.`,
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -116,16 +118,28 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
   //    explicitly passed one (rare — usually the recorded target is correct).
   const local = readLocalSession(cwd, sessionId);
   if (!local.handoff?.sentAt) {
-    console.error(`Session ${sessionId} is not on cloud (no handoff.sentAt). Nothing to reclaim.`);
-    process.exit(1);
+    exitError({
+      code: 'not_on_cloud',
+      kind: 'conflict',
+      message: `Session ${sessionId} is not on cloud (no handoff.sentAt). Nothing to reclaim.`,
+      received: sessionId,
+    });
   }
   if (local.handoff.reclaimedAt) {
-    console.error(`Session ${sessionId} was already reclaimed at ${local.handoff.reclaimedAt}.`);
-    process.exit(1);
+    exitError({
+      code: 'already_reclaimed',
+      kind: 'conflict',
+      message: `Session ${sessionId} was already reclaimed at ${local.handoff.reclaimedAt}.`,
+      received: sessionId,
+    });
   }
   if (!local.handoff.target) {
-    console.error(`Session ${sessionId} has handoff.sentAt but no target — corrupted state.`);
-    process.exit(1);
+    exitError({
+      code: 'corrupted_handoff',
+      kind: 'permanent',
+      message: `Session ${sessionId} has handoff.sentAt but no target — corrupted state.`,
+      received: sessionId,
+    });
   }
   const provider = pickProvider(opts.providerOverride ?? local.handoff.target.provider);
   const repo = local.handoff.target.repo;
@@ -135,18 +149,22 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
 
   console.log(`Reclaiming ${sessionId} from ${provider}:${repo}...`);
 
-  // 2. Tell box-side daemon to quiesce. Box-side `sis admin quiesce` calls the
+  // 2. Tell box-side daemon to quiesce. Box-side `sis session quiesce` calls the
   //    `admin-quiesce` RPC against the box's local daemon socket. Must `cd`
   //    into the repo first so the CLI uses the right cwd to find state.json.
   const quiesceBase = opts.force
-    ? `sis admin quiesce ${shellQuote(sessionId)} --force`
-    : `sis admin quiesce ${shellQuote(sessionId)}`;
+    ? `sis session quiesce ${shellQuote(sessionId)} --force`
+    : `sis session quiesce ${shellQuote(sessionId)}`;
   const quiesceCmd = `cd ${shellQuoteHomePath(remoteRepoDir)} && ${quiesceBase}`;
   console.log(`→ ssh box: ${quiesceCmd}`);
   const quiesceCode = await runOnBoxStreaming(provider, quiesceCmd);
   if (quiesceCode !== 0) {
-    console.error(`Box-side quiesce failed (exit ${quiesceCode}).`);
-    process.exit(1);
+    exitError({
+      code: 'box_quiesce_failed',
+      kind: 'transient',
+      message: `Box-side quiesce failed (exit ${quiesceCode}).`,
+      received: quiesceCode,
+    });
   }
 
   // 3. Poll the box's state.json until status === 'paused'. The box-side
@@ -204,10 +222,7 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
     cwd,
     message: reclaimMessage,
   });
-  if (!resumeResp.ok) {
-    console.error(`Local resume failed: ${resumeResp.error}`);
-    process.exit(1);
-  }
+  if (!resumeResp.ok) exitError(resumeResp.error);
 
   // 6. Tear down box-side. `sis session kill` is destructive but fine — the
   //    box state is now mirrored locally; we don't want a stale tmux session
@@ -222,7 +237,8 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
   // 7. Mark reclaimed locally.
   const finalizeResp = await sendRequest({ type: 'cloud-reclaim-finalize', sessionId, cwd });
   if (!finalizeResp.ok) {
-    console.warn(`Warning: failed to finalize reclaim state: ${finalizeResp.error}`);
+    const errMsg = typeof finalizeResp.error === 'string' ? finalizeResp.error : finalizeResp.error.message;
+    console.warn(`Warning: failed to finalize reclaim state: ${errMsg}`);
   }
 
   console.log(`✓ ${sessionId} reclaimed; orchestrator respawning locally.`);
@@ -231,8 +247,12 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
 function readLocalSession(cwd: string, sessionId: string): Session {
   const path = statePath(cwd, sessionId);
   if (!existsSync(path)) {
-    console.error(`No local state.json for ${sessionId} at ${path}.`);
-    process.exit(1);
+    exitError({
+      code: 'no_local_state',
+      kind: 'not_found',
+      message: `No local state.json for ${sessionId} at ${path}.`,
+      received: sessionId,
+    });
   }
   return JSON.parse(readFileSync(path, 'utf-8')) as Session;
 }
@@ -254,8 +274,11 @@ async function waitForBoxPaused(provider: Provider, remoteSessionDir: string): P
     }
     await sleep(POLL_INTERVAL_MS);
   }
-  console.error(`Timed out waiting for box-side session to pause.`);
-  process.exit(1);
+  exitError({
+    code: 'box_pause_timeout',
+    kind: 'transient',
+    message: 'Timed out waiting for box-side session to pause.',
+  });
 }
 
 interface RsyncOpts { withDelete: boolean; excludeSisyphus?: boolean; update?: boolean }

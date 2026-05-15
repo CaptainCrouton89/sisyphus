@@ -1,26 +1,39 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
+import { exitError, exitUsage } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 export function registerAgentRestart(program: Command): void {
   program
     .command('restart <agentId>')
     .description('Restart a failed/killed/lost agent in a new tmux pane')
     .option('-s, --session <sessionId>', 'Session ID (defaults to SISYPHUS_SESSION_ID)')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  $ sis agent restart agent-3
+  $ sis agent restart agent-3 --session sess-7f2a --json
+
+Output:
+  Default       "Agent <id> restarted." on stdout.
+  --json        { ok, schema_version: 1, data: { sessionId, agentId } }
+
+Exit codes: 0 ok | 2 usage | 3 not_found | 5 conflict (agent still running).`,
+    )
     .action(async (agentId: string, opts: { session?: string }) => {
       const sessionId = opts.session ?? process.env.SISYPHUS_SESSION_ID;
       if (!sessionId) {
-        console.error('Error: No session ID. Use --session or set SISYPHUS_SESSION_ID.');
-        process.exit(1);
+        exitUsage('missing_session_id', 'Provide --session or set SISYPHUS_SESSION_ID', {
+          next: 'export SISYPHUS_SESSION_ID=<sessionId> or pass --session <sessionId>',
+        });
       }
 
       const request: Request = { type: 'restart-agent', sessionId, agentId };
       const response = await sendRequest(request);
-      if (response.ok) {
-        console.log(`Agent ${agentId} restarted.`);
-      } else {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
-      }
+      if (!response.ok) exitError(response.error);
+      if (emitJsonOk({ sessionId, agentId })) return;
+      console.log(`Agent ${agentId} restarted.`);
     });
 }

@@ -880,7 +880,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'history': {
       try {
-        actions.openShellPopup(state.cwd, 'sis admin history');
+        actions.openShellPopup(state.cwd, 'sis session history');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -922,7 +922,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'show-status': {
       try {
-        actions.openShellPopup(state.cwd, `sis status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
+        actions.openShellPopup(state.cwd, `sis session status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
       } catch {
         notify(state, 'Failed to open status');
       }

@@ -40,17 +40,15 @@ Use tables, diagrams, and structured markdown freely — the deck below renders 
 
 ## Ask for Sign-off via `sis ask`
 
-Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. The CLI blocks until the user resolves the ask in their dashboard inbox, then prints the JSON response. **NEVER call `sis session complete` until the user picks `approve`.**
+Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. **NEVER call `sis session complete` until the user picks `approve`.**
 
 Run `crtr skill show sisyphus/humanloop` for option design and submission flow. The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
 
 ```bash
-result=$(sis ask "$deck")
+result=$(sis ask submit "$deck")
 choice=$(echo "$result" | jq -r '.responses[0].selectedOptionId')
 notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 ```
-
-Orchestrator blocks here — `sis ask` waits internally; do not add any extra "wait for user" step. See `sis ask -h` for CLI syntax.
 
 ## Handle Feedback
 

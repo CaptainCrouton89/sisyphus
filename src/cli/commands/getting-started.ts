@@ -17,7 +17,7 @@ function isClaudeCode(): boolean {
 function printNonClaudeMessage(): void {
   console.log(`
   ╔══════════════════════════════════════════════════╗
-  ║   sis admin getting-started — Interactive Tutorial ║
+  ║   sis ui guide — Interactive Tutorial            ║
   ╚══════════════════════════════════════════════════╝
 
   This command provides an interactive tutorial best experienced
@@ -25,7 +25,7 @@ function printNonClaudeMessage(): void {
 
   To start:
     1. Open Claude Code:  claude
-    2. Run:               sis admin getting-started
+    2. Run:               sis ui guide
 
   If you just want the quick reference, run:
     sis --help
@@ -61,14 +61,14 @@ This tutorial has 6 steps. Share this overview so the user knows what's coming a
 
 | Step | Topic | Command |
 |------|-------|---------|
-| 0 | Entry & tmux gate (you are here) | \`sis admin getting-started\` |
+| 0 | Entry & tmux gate (you are here) | \`sis ui guide\` |
 | 1 | Tmux basics — sessions, panes, navigation | \`--tutorial 1\` |
 | 2 | Nvim basics — open, save, quit (optional) | \`--tutorial 2\` |
 | 3 | Sisyphus concepts — session model & keybinds | \`--tutorial 3\` |
 | 4 | Live demo — launch and observe a real session | \`--tutorial 4\` |
 | 5 | What's next — real usage guidance & suggestions | \`--tutorial 5\` |
 
-Tell the user they can skip to any step with \`sis admin getting-started --tutorial <N>\`.
+Tell the user they can skip to any step with \`sis ui guide --tutorial <N>\`.
 
 ## Instructions for Claude
 
@@ -78,8 +78,8 @@ You are guiding a user through the Sisyphus interactive tutorial.
 
 Ask the user if they'd like the interactive walkthrough. If they decline, give this quick summary and stop:
 
-> Sisyphus is a multi-agent orchestrator for Claude Code. Start a session with \`sis start "task"\`,
-> monitor with \`sis dashboard\`, and check health with \`sis admin doctor\`.
+> Sisyphus is a multi-agent orchestrator for Claude Code. Start a session with \`sis session start "task"\`,
+> monitor with \`sis ui dashboard\`, and check health with \`sis admin doctor\`.
 
 ### If they want the tutorial:
 
@@ -101,17 +101,17 @@ Ask the user if they'd like the interactive walkthrough. If they decline, give t
 - Tell them to install tmux:
   - macOS: \`brew install tmux\`
   - Linux: \`apt install tmux\` or their package manager
-- After install, re-run: \`sis admin getting-started --tutorial 0\` to verify
+- After install, re-run: \`sis ui guide --tutorial 0\` to verify
 
 **Case 2: tmux installed but NOT in a tmux session (inTmux: false)**
 - Tell the user they need to be inside a tmux session for the tutorial
 - Have them run: \`tmux new-session\`
 - Then resume the conversation with Claude in the new tmux session: \`claude\`
-- Then re-run: \`sis admin getting-started --tutorial 0\` to verify
+- Then re-run: \`sis ui guide --tutorial 0\` to verify
 
 **Case 3: In tmux (inTmux: true)**
 - Tell the user they're all set — tmux is running
-- Proceed by running: \`sis admin getting-started --tutorial 1\`
+- Proceed by running: \`sis ui guide --tutorial 1\`
 </claude-instructions>
 `);
 }
@@ -190,7 +190,7 @@ Ask the user to confirm: "Can you navigate between panes with Ctrl+h and Ctrl+l?
 
 Once confirmed, proceed:
 \`\`\`
-sis admin getting-started --tutorial 2
+sis ui guide --tutorial 2
 \`\`\`
 </claude-instructions>
 `);
@@ -234,7 +234,7 @@ Ask if they were able to edit and save the file (or if they skipped).
 
 Proceed:
 \`\`\`
-sis admin getting-started --tutorial 3
+sis ui guide --tutorial 3
 \`\`\`
 </claude-instructions>
 `);
@@ -378,7 +378,7 @@ Confirm:
 
 Proceed:
 \`\`\`
-sis admin getting-started --tutorial 4
+sis ui guide --tutorial 4
 \`\`\`
 </claude-instructions>
 `);
@@ -404,7 +404,7 @@ All core checks (tmux, daemon, keybinds) should be ✓.
 
 ### 2. BEFORE launching: Teach navigation
 
-**This is critical.** When \`sis start\` runs, it auto-opens the dashboard in a new tmux window. The user will suddenly be looking at the dashboard and may feel "stuck". Teach them how to navigate BEFORE launching:
+**This is critical.** When \`sis session start\` runs, it auto-opens the dashboard in a new tmux window. The user will suddenly be looking at the dashboard and may feel "stuck". Teach them how to navigate BEFORE launching:
 
 Explain clearly:
 
@@ -452,7 +452,7 @@ Tell the user:
 
 Then launch from the demo directory (sisyphus operates in whichever directory you launch it from, so we \`cd\` in so the \`.sisyphus/\` state lands inside the demo):
 \`\`\`
-cd ${demoPath} && sis start "Add three improvements to this todo app: (1) add a priority field (high/medium/low) to todos, (2) add a GET /todos/stats endpoint that returns counts of total/done/pending todos, (3) add tests for the new features. Explain your thinking at each step." -c "TUTORIAL DEMO: A user is watching this session to learn how sisyphus works. Be EXTRA VERBOSE — explain your reasoning, narrate what you're doing, and make your planning visible. When spawning agents, give each agent context that this is a tutorial demo and they should explain their work clearly. Keep scope small: 2-3 agents, 1-2 cycles."
+cd ${demoPath} && sis session start "Add three improvements to this todo app: (1) add a priority field (high/medium/low) to todos, (2) add a GET /todos/stats endpoint that returns counts of total/done/pending todos, (3) add tests for the new features. Explain your thinking at each step." -c "TUTORIAL DEMO: A user is watching this session to learn how sisyphus works. Be EXTRA VERBOSE — explain your reasoning, narrate what you're doing, and make your planning visible. When spawning agents, give each agent context that this is a tutorial demo and they should explain their work clearly. Keep scope small: 2-3 agents, 1-2 cycles."
 \`\`\`
 
 After launching, tell them:
@@ -465,7 +465,7 @@ Wait for them to confirm they're back, then start live commentary.
 
 **This is the most important part of the demo.** Don't just launch and wait — actively narrate.
 
-Once the user is back, start a polling loop. Every ~45 seconds, run \`sis status --verbose <session-id>\` and provide SHORT, contextual commentary about what's happening. The \`--verbose\` flag shows agent instructions, full roadmap, cycle logs, and live pane output from the orchestrator and running agents — use this rich data to narrate what's actually happening, not just phase names.
+Once the user is back, start a polling loop. Every ~45 seconds, run \`sis session status --verbose <session-id>\` and provide SHORT, contextual commentary about what's happening. The \`--verbose\` flag shows agent instructions, full roadmap, cycle logs, and live pane output from the orchestrator and running agents — use this rich data to narrate what's actually happening, not just phase names.
 
 **How to narrate each phase:**
 
@@ -504,7 +504,7 @@ Once the session shows "completed":
 
 Tell the user the demo is done. Then run:
 \`\`\`
-sis admin getting-started --tutorial 5
+sis ui guide --tutorial 5
 \`\`\`
 </claude-instructions>
 `);
@@ -589,7 +589,7 @@ This is the most important part. Explain clearly:
 The easiest way is the \`/sisyphus:begin\` slash command inside Claude Code. Just tell Claude
 what you want to build and it'll hand it off to sisyphus with the right context.
 
-Or directly: \`sis start "your task" -c "any background context"\`
+Or directly: \`sis session start "your task" -c "any background context"\`
 
 ### 4. Suggest real tasks for THEIR codebase
 
@@ -635,16 +635,16 @@ Tell them:
 > to understand the philosophy, or you want a deeper rundown on the dashboard,
 > monitoring, configuration, or how to steer sessions — just ask and I'll explain.
 
-If the user says yes or asks to learn more, run \`sis admin getting-started --explain\`
+If the user says yes or asks to learn more, run \`sis ui guide --explain\`
 and use its output to explain the system to them conversationally. Don't dump the whole
 thing — answer what they're curious about, using the reference as your source material.
 </claude-instructions>
 `);
 }
 
-function buildCommandTable(program: Command): string {
+function buildCommandTable(root: Command): string {
   const lines: string[] = ['| Command | Purpose |', '|---------|---------|'];
-  for (const cmd of program.commands) {
+  for (const cmd of root.commands) {
     if ((cmd as unknown as { _hidden: boolean })._hidden) continue;
     if (cmd.name() === 'help') continue;
     const subs = cmd.commands.filter(c => !(c as unknown as { _hidden: boolean })._hidden && c.name() !== 'help');
@@ -674,7 +674,7 @@ function buildCommandTable(program: Command): string {
   return lines.join('\n');
 }
 
-function printExplain(program: Command): void {
+function printExplain(root: Command): void {
   console.log(`
 <claude-instructions>
 # Sisyphus — Comprehensive Reference
@@ -817,7 +817,7 @@ code that looks right and code that works.
   ┌──────────────────────────────────────────────────────────────────┐
   │                    SESSION LIFECYCLE                             │
   │                                                                  │
-  │  sis start "task"                                                │
+  │  sis session start "task"                                        │
   │       │                                                          │
   │       ▼                                                          │
   │  ┌─────────┐     spawn agents     ┌──────────────┐               │
@@ -860,7 +860,7 @@ This means it never runs out of context, no matter how many cycles a session tak
 
 ## The Dashboard
 
-The dashboard is a real-time TUI that shows session state. Launch with \`sis dashboard\`
+The dashboard is a real-time TUI that shows session state. Launch with \`sis ui dashboard\`
 or it auto-opens when a session starts.
 
 **Dashboard sections:**
@@ -904,10 +904,10 @@ Sisyphus sessions should be actively monitored. Here's what to watch for:
 
 **Useful monitoring commands:**
 \`\`\`
-sis status <id>              # Quick status check
-sis status --verbose <id>    # Full detail: roadmap, pane output, agent instructions
-sis dashboard                # Interactive TUI
-tail -f ~/.sisyphus/daemon.log    # Daemon activity log
+sis session status <id>              # Quick status check
+sis session status --verbose <id>    # Full detail: roadmap, pane output, agent instructions
+sis ui dashboard                     # Interactive TUI
+tail -f ~/.sisyphus/daemon.log       # Daemon activity log
 \`\`\`
 
 ## The .sisyphus/ Directory
@@ -972,11 +972,11 @@ Then describe your task. Claude will hand it off with the right context.
 
 **Direct CLI:**
 \`\`\`
-sis start "task description" -c "background context"
-sis start "Implement @requirements.md" -n my-feature
+sis session start "task description" -c "background context"
+sis session start "Implement @requirements.md" -n my-feature
 \`\`\`
 
-**Reference files with @**: \`sis start "Build @docs/spec.md"\` — the orchestrator
+**Reference files with @**: \`sis session start "Build @docs/spec.md"\` — the orchestrator
 will read the referenced file as part of its planning.
 
 **The -c flag** adds background context the orchestrator sees but doesn't act on directly.
@@ -986,7 +986,7 @@ Use it for constraints: \`-c "Don't modify the auth module, use the existing API
 
 ## CLI Command Reference
 
-${buildCommandTable(program)}
+${buildCommandTable(root)}
 
 ## Troubleshooting
 
@@ -998,10 +998,10 @@ sisyphusd restart
 **Keybinds not working (special characters appear):**
 iTerm2 → Settings → Profiles → Keys → Right Option Key → Esc+
 
-**Agents stuck:** Check \`sis status --verbose <id>\` to see pane output. If an
+**Agents stuck:** Check \`sis session status --verbose <id>\` to see pane output. If an
 agent is waiting for input, kill the session and restart with clearer instructions.
 
-**Dashboard not opening:** Run \`sis dashboard\` manually. Must be inside tmux.
+**Dashboard not opening:** Run \`sis ui dashboard\` manually. Must be inside tmux.
 
 **Session seems hung:** Check \`tail -20 ~/.sisyphus/daemon.log\` for errors.
 The daemon polls panes every 2s — if a pane dies unexpectedly, it'll be detected.
@@ -1011,15 +1011,15 @@ The daemon polls panes every 2s — if a pane dies unexpectedly, it'll be detect
 
 const STEPS: Array<() => void> = [printStep0, printStep1, printStep2, printStep3, printStep4, printStep5];
 
-export function registerGettingStarted(program: Command): void {
-  program
-    .command('getting-started')
+export function registerGettingStarted(parent: Command, root: Command): void {
+  parent
+    .command('guide')
     .description('Interactive tutorial (best with Claude Code)')
     .option('--tutorial <step>', 'Tutorial step (0-5)', parseInt)
     .option('--explain', 'Comprehensive reference for how sisyphus works')
     .action((opts) => {
       if (opts.explain) {
-        printExplain(program);
+        printExplain(root);
         return;
       }
       if (opts.tutorial !== undefined) {

@@ -39,15 +39,18 @@ export function statusColor(status: string): string {
 }
 
 // Color enabled if stdout is a TTY, NO_COLOR is not set, and TERM is not dumb.
-// FORCE_COLOR=1 overrides all of the above.
-const COLOR_ENABLED =
-  process.env['FORCE_COLOR'] === '1' ||
-  (process.stdout.isTTY === true &&
-    process.env['NO_COLOR'] === undefined &&
-    process.env['TERM'] !== 'dumb');
+// FORCE_COLOR=1 overrides all of the above. Evaluated *per call* so the CLI
+// can flip NO_COLOR at runtime when --json or --no-color is passed (see
+// src/cli/global-flags.ts) without needing to re-import this module.
+function colorEnabled(): boolean {
+  if (process.env['FORCE_COLOR'] === '1') return true;
+  if (process.env['NO_COLOR'] !== undefined) return false;
+  if (process.env['TERM'] === 'dumb') return false;
+  return process.stdout.isTTY === true;
+}
 
 function wrap(open: string, close: string = '\x1b[0m') {
-  return (s: string): string => COLOR_ENABLED ? `${open}${s}${close}` : s;
+  return (s: string): string => colorEnabled() ? `${open}${s}${close}` : s;
 }
 
 export const bold = wrap('\x1b[1m');

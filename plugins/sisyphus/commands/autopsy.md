@@ -39,7 +39,7 @@ prompts/           # orchestrator-system-N.md, orchestrator-user-N.md, agent-NNN
 snapshots/         # cycle-N/ — filesystem snapshots at cycle boundaries (for rollback)
 ```
 
-**2. Global history dir:** `~/.sisyphus/history/{sessionId}/`. Exists for every session the daemon has seen, independent of the project dir. Structured, queryable via `sis admin history`:
+**2. Global history dir:** `~/.sisyphus/history/{sessionId}/`. Exists for every session the daemon has seen, independent of the project dir. Structured, queryable via `sis session history`:
 
 ```
 session.json       # SessionSummary — final state, agents, cycles, messages,
@@ -53,7 +53,7 @@ events.jsonl       # ordered timeline: session-start, agent-spawned, agent-compl
 
 The project dir has the **content** (what agents wrote, what was decided). The history dir has the **timeline** (what happened and when). You usually want both.
 
-**3. Packaged export dumps.** `sis admin export` zips a session as `sisyphus-<label>-<date>.zip`, extracting to a dir with this layout:
+**3. Packaged export dumps.** `sis session export` zips a session as `sisyphus-<label>-<date>.zip`, extracting to a dir with this layout:
 
 ```
 <dump-root>/
@@ -62,23 +62,23 @@ The project dir has the **content** (what agents wrote, what was decided). The h
   history/        # everything from ~/.sisyphus/history/{id}/
 ```
 
-If the user hands you a `<dump-root>` path (e.g. under `~/Downloads/`), `sis admin history <id>` **will not work** — the local daemon has no record of it. Fall back to reading `<dump-root>/history/session.json` + `history/events.jsonl` directly for the timeline, and treat `<dump-root>/session/` exactly like the project session dir below. Everything session-scoped is in the zip; nothing else needs to be fetched.
+If the user hands you a `<dump-root>` path (e.g. under `~/Downloads/`), `sis session history <id>` **will not work** — the local daemon has no record of it. Fall back to reading `<dump-root>/history/session.json` + `history/events.jsonl` directly for the timeline, and treat `<dump-root>/session/` exactly like the project session dir below. Everything session-scoped is in the zip; nothing else needs to be fetched.
 
-## `sis admin history` CLI
+## `sis session history` CLI
 
 Start here for orientation. It's fast and gives structured views.
 
 ```bash
-sis admin history                              # list recent sessions (newest first)
-sis admin history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
-sis admin history <id-or-name> --events        # raw event timeline
-sis admin history <id-or-name> --json          # full SessionSummary as JSON
-sis admin history <id-or-name> --events --json # events array as JSON (useful for grep/jq)
-sis admin history --stats                      # aggregate metrics across sessions
-sis admin history --search "<query>"           # substring search across task/messages
-sis admin history --cwd <path>                 # filter by project dir
-sis admin history --since 7d                   # filter by recency (7d, 24h, 2w, 30m)
-sis admin history --status killed              # filter by terminal status
+sis session history                              # list recent sessions (newest first)
+sis session history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
+sis session history <id-or-name> --events        # raw event timeline
+sis session history <id-or-name> --json          # full SessionSummary as JSON
+sis session history <id-or-name> --events --json # events array as JSON (useful for grep/jq)
+sis session history --stats                      # aggregate metrics across sessions
+sis session history --search "<query>"           # substring search across task/messages
+sis session history --cwd <path>                 # filter by project dir
+sis session history --since 7d                   # filter by recency (7d, 24h, 2w, 30m)
+sis session history --status killed              # filter by terminal status
 ```
 
 **Session resolution:** `<id-or-name>` matches in order: exact UUID → UUID prefix → exact name → name substring. Short substrings can be ambiguous.
@@ -138,8 +138,8 @@ Path conventions are not authorship. `context/{agent-id}/` is where that agent's
 
 **Resource map for reconstruction** (which file answers which question):
 
-- Completion report + agent status block + counters (`crashCount`, `lostCount`, `killedAgentCount`, `rollbackCount`): `sis admin history <id>`, or directly `history/session.json`.
-- Event timeline: `sis admin history <id> --events`, or directly `history/events.jsonl`. Relevant events: `agent-killed`, `agent-restarted`, `rollback` (with `fromCycle → toCycle`), `session-resumed` (with `lostAgentCount`), repeated `cycle-boundary` at same mode, `signals-snapshot` phase transitions, long inter-event gaps.
+- Completion report + agent status block + counters (`crashCount`, `lostCount`, `killedAgentCount`, `rollbackCount`): `sis session history <id>`, or directly `history/session.json`.
+- Event timeline: `sis session history <id> --events`, or directly `history/events.jsonl`. Relevant events: `agent-killed`, `agent-restarted`, `rollback` (with `fromCycle → toCycle`), `session-resumed` (with `lostAgentCount`), repeated `cycle-boundary` at same mode, `signals-snapshot` phase transitions, long inter-event gaps.
 - Agent's own view of its work: `reports/{agentId}-final.md` — richer than any orchestrator summary of it.
 - Agent's instructions: `prompts/{agentId}-system.md` and `prompts/{agentId}-run.sh`. A bad agent outcome often traces to prompt framing.
 - Orchestrator's per-cycle view and decision: `logs/cycle-NNN.md` for what it observed, `prompts/orchestrator-system-N.md` + `prompts/orchestrator-user-N.md` for what it was fed.

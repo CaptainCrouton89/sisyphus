@@ -11,7 +11,7 @@ The user wants to spin up a standalone Claude Code session — outside sisyphus 
 Run the following in bash:
 
 ```bash
-sis admin scratch "$ARGUMENTS"
+sis session scratch "$ARGUMENTS"
 ```
 
 This opens a new tmux window in the home session with `claude --dangerously-skip-permissions`. Do not track it, wait for it, or reference it in the roadmap. It's fire-and-forget.

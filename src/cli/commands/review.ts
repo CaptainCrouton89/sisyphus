@@ -3,6 +3,7 @@ import { join, resolve, dirname } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, renameSync, readdirSync } from 'node:fs';
 import { contextDir, sessionsDir } from '../../shared/paths.js';
 import type { RequirementStatus } from '../../shared/requirements-types.js';
+import { exitUsage } from '../errors.js';
 
 // Keeps the JSON Schema enum in sync with the TS union.
 const _statusCheck: RequirementStatus[] = ['draft', 'question', 'approved', 'rejected', 'deferred'];
@@ -20,8 +21,7 @@ function resolveContextArtifact(
   if (sessionId) {
     const target = join(contextDir(cwd, sessionId), filename);
     if (!existsSync(target)) {
-      console.error(`Error: File not found: ${target}`);
-      process.exit(1);
+      exitUsage('file-not-found', `File not found: ${target}`, { received: target });
     }
     return target;
   }
@@ -35,8 +35,9 @@ function resolveContextArtifact(
     }
   }
 
-  console.error(`Error: ${notFoundMessage}`);
-  process.exit(1);
+  exitUsage('file-not-found', notFoundMessage, {
+    next: 'sis session requirements --session-id <id>  # target a specific session',
+  });
 }
 
 export function registerReview(program: Command): void {
@@ -57,27 +58,26 @@ File resolution (first match wins):
   3. Most recent session with a requirements.json
 
 Examples:
-  $ sis admin requirements                              Auto-detect from current session
-  $ sis admin requirements path/to/requirements.json    Open a specific file
-  $ sis admin requirements --session-id abc123           Target a specific session
-  $ sis admin requirements --schema                     Print the JSON schema
-  $ sis admin requirements --annotated                  Print schema with writing guidance
-  $ sis admin requirements --export                       Render requirements.md from JSON
-  $ sis admin requirements --export --session-id abc123   Target a specific session
-  $ sis admin requirements --export --force               Overwrite even if hand-edited
+  $ sis session requirements                              Auto-detect from current session
+  $ sis session requirements path/to/requirements.json    Open a specific file
+  $ sis session requirements --session-id abc123           Target a specific session
+  $ sis session requirements --schema                     Print the JSON schema
+  $ sis session requirements --annotated                  Print schema with writing guidance
+  $ sis session requirements --export                       Render requirements.md from JSON
+  $ sis session requirements --export --session-id abc123   Target a specific session
+  $ sis session requirements --export --force               Overwrite even if hand-edited
 `)
     .action(async (file, opts) => {
       if (opts.force && !opts.export) {
-        console.error('Error: --force requires --export');
-        process.exit(1);
+        exitUsage('invalid-flags', '--force requires --export', {
+          next: 'sis session requirements --export --force',
+        });
       }
       if (opts.export && opts.schema) {
-        console.error('Error: --export cannot be combined with --schema');
-        process.exit(1);
+        exitUsage('invalid-flags', '--export cannot be combined with --schema');
       }
       if (opts.export && opts.annotated) {
-        console.error('Error: --export cannot be combined with --annotated');
-        process.exit(1);
+        exitUsage('invalid-flags', '--export cannot be combined with --annotated');
       }
       if (opts.export) {
         const targetPath = resolveContextArtifact(
@@ -88,8 +88,7 @@ Examples:
         );
 
         if (!existsSync(targetPath)) {
-          console.error(`Error: File not found: ${targetPath}`);
-          process.exit(1);
+          exitUsage('file-not-found', `File not found: ${targetPath}`, { received: targetPath });
         }
 
         const parsed = JSON.parse(readFileSync(targetPath, 'utf-8')) as Record<string, unknown>;
@@ -101,11 +100,9 @@ Examples:
           const existing = readFileSync(outPath, 'utf-8');
           if (existing !== rendered) {
             if (!opts.force) {
-              process.stderr.write(
-                `Error: ${outPath} has been hand-edited (differs from rendered output).\n` +
-                `Use --force to overwrite (existing file backed up to requirements.md.bak).\n`,
-              );
-              process.exit(1);
+              exitUsage('conflict', `${outPath} has been hand-edited (differs from rendered output)`, {
+                next: 'sis session requirements --export --force  # backs up to requirements.md.bak',
+              });
             }
             const bakPath = outPath + '.bak';
             renameSync(outPath, bakPath);
@@ -226,7 +223,7 @@ const REQUIREMENTS_SCHEMA = {
 const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 #
 # This is NOT valid JSON — it's a reference showing every field with
-# inline guidance. Run \`sis admin requirements --schema\` for the raw
+# inline guidance. Run \`sis session requirements --schema\` for the raw
 # JSON Schema.
 #
 # Safe assumptions must satisfy the same EARS shape requirements as

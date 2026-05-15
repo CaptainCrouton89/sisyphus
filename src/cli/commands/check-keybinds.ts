@@ -198,8 +198,8 @@ tmux server. No user files are clobbered (none to clobber, or already wired).
      This still uses C-s for the prefix; if the prefix also conflicts, you'll need to wire
      directly (option 3 below), since setup-keybind only takes a custom cycle key.
 
-  2. **Skip keybinds entirely.** The user can drive sisyphus from the CLI: \`sis dashboard\`,
-     \`sis status\`, \`sis start\`, \`sis session resume\`. Lose tmux quick-actions, keep
+  2. **Skip keybinds entirely.** The user can drive sisyphus from the CLI: \`sis ui dashboard\`,
+     \`sis session status\`, \`sis session start\`, \`sis session resume\`. Lose tmux quick-actions, keep
      existing bindings.
 
   3. **Wire commands directly (advanced).** Bypass setup-keybind and bind individual

@@ -75,9 +75,9 @@ sis admin doctor
 ## Quick start
 
 ```bash
-sis start "your task description"    # Start a session
-sis dashboard                        # Open the TUI (auto-opens on start)
-sis status                           # Check session state from the CLI
+sis session start "your task description"    # Start a session
+sis ui dashboard                             # Open the TUI (auto-opens on start)
+sis session status                           # Check session state from the CLI
 ```
 
 Sisyphus is a CLI that Claude Code calls for you. Tell Claude to use it and it handles the rest.
@@ -86,24 +86,24 @@ In Claude Code, say something like:
 
 > Use sisyphus to migrate our REST API from Express to Hono. The API lives in src/api/ with 14 route files...
 
-Claude calls `sis start` with a detailed task description, and tmux panes start appearing with parallel agents working on your codebase.
+Claude calls `sis session start` with a detailed task description, and tmux panes start appearing with parallel agents working on your codebase.
 
 ### Slash command (recommended)
 
 Create `.claude/commands/sisyphus-begin.md` in your project:
 
 ~~~markdown
-Run `sis start` with a detailed task description:
+Run `sis session start` with a detailed task description:
 
 ```bash
-sis start "your task description"
+sis session start "your task description"
 ```
 
 Write a thorough task description. Include what needs to be built or fixed, where relevant code lives, what done looks like, constraints, and adjacent concerns (don't break X, keep Y working). More context produces better results. The orchestrator figures out how to break it down.
 
 Example:
 ```bash
-sis start "Rip out our hand-rolled RBAC system and replace it with a proper policy engine. Current implementation is scattered across 20+ middleware files in src/middleware/auth/ that each do their own role checks with hardcoded string comparisons. Replace with a centralized policy engine in src/auth/policies/ using a declarative permission model — define resources, actions, and role mappings in a single config, then write one middleware that evaluates policies. Migrate every route that currently calls requireRole() or checkPermission() to the new system. The admin panel (src/routes/admin/) has the most complex rules including org-scoped permissions and delegated access — those need to work exactly as before. Add integration tests that cover the full matrix: superadmin, org-admin, member, and guest across every protected endpoint. Don't break the public API routes in src/routes/v1/public/. The existing test suite (npm test) must pass when you're done."
+sis session start "Rip out our hand-rolled RBAC system and replace it with a proper policy engine. Current implementation is scattered across 20+ middleware files in src/middleware/auth/ that each do their own role checks with hardcoded string comparisons. Replace with a centralized policy engine in src/auth/policies/ using a declarative permission model — define resources, actions, and role mappings in a single config, then write one middleware that evaluates policies. Migrate every route that currently calls requireRole() or checkPermission() to the new system. The admin panel (src/routes/admin/) has the most complex rules including org-scoped permissions and delegated access — those need to work exactly as before. Add integration tests that cover the full matrix: superadmin, org-admin, member, and guest across every protected endpoint. Don't break the public API routes in src/routes/v1/public/. The existing test suite (npm test) must pass when you're done."
 ```
 ~~~
 
@@ -114,7 +114,7 @@ Or just add a note to your `CLAUDE.md`:
 ```markdown
 ## Sisyphus
 For large tasks, use the `sis` CLI to orchestrate parallel agents.
-Run `sis start "detailed task description"` inside tmux.
+Run `sis session start "detailed task description"` inside tmux.
 ```
 
 ### Interactive tutorial
@@ -122,7 +122,7 @@ Run `sis start "detailed task description"` inside tmux.
 New to tmux or sisyphus? Run the guided walkthrough:
 
 ```bash
-sis admin getting-started
+sis ui guide
 ```
 
 Covers tmux basics, neovim essentials, sisyphus concepts, and a live demo session.
@@ -132,10 +132,10 @@ Covers tmux basics, neovim essentials, sisyphus concepts, and a live demo sessio
 Full-screen TUI for watching and controlling sessions.
 
 ```bash
-sis dashboard    # or press M-S (Alt-Shift-S)
+sis ui dashboard    # or press M-S (Alt-Shift-S)
 ```
 
-Auto-opens when you `sis start`.
+Auto-opens when you `sis session start`.
 
 Left panel is a session tree (sessions, cycles, agents, reports) with status indicators. Right panel shows detail for whatever's selected: roadmap, agent instructions, report content, live pane output. If neovim is available, files open in an embedded editor. Bottom bar has mode and keybinding hints.
 
@@ -318,7 +318,7 @@ Project `.sisyphus/config.json` overrides global `~/.sisyphus/config.json`:
 
 ### Session upload (optional)
 
-On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sis admin upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sis admin export` is unchanged; upload is purely additive.
+On session completion, sisyphus zips the session directory and uploads it to an operator-managed Cloudflare R2 bucket through a Worker proxy — asynchronously, never blocking completion. Use `sis admin upload <id>` to re-run the upload on demand (retry or in-progress sessions). `sis session export` is unchanged; upload is purely additive.
 
 **Token workflow** — the operator mints a per-user token and shares a URL of the form:
 
@@ -378,21 +378,21 @@ Operator setup (token minting, Worker deployment, R2 provisioning): see [`worker
 
 Session lifecycle: `session kill`, `session resume`, `session continue`, `session rollback`, `session complete`
 
-Agent and orchestrator: `agent spawn`, `agent submit`, `agent report`, `orch yield`, `message`, `agent restart`, `session task`
+Agent and orchestrator: `agent spawn`, `agent submit`, `agent report`, `orch yield`, `orch message`, `agent restart`, `session task`
 
-Monitoring: `status` (`--verbose`), `list` (`--all`), `dashboard`
+Monitoring: `session status` (`--verbose`), `session list` (`--all`), `ui dashboard`
 
-Setup: `admin setup`, `admin init`, `admin doctor`, `admin getting-started`, `companion`, `admin uninstall`
+Setup: `admin setup`, `admin init`, `admin doctor`, `ui guide`, `companion`, `admin uninstall`
 
 ### history
 
 Browse session history and metrics.
 
 ```bash
-sis admin history                        # List recent sessions
-sis admin history <session-id>           # Inspect a specific session
-sis admin history --stats                # Aggregate statistics
-sis admin history --events               # Raw event timeline
+sis session history                        # List recent sessions
+sis session history <session-id>           # Inspect a specific session
+sis session history --stats                # Aggregate statistics
+sis session history --events               # Raw event timeline
 ```
 
 | Option | Description |
@@ -441,7 +441,7 @@ sis session delete <session-id> --cwd /path/to/project
 
 ## Output and exit codes
 
-**JSON output** — `-j, --json` is available on `status`, `list`, `await`, `read`, and `admin history`. Each command emits data to stdout: a single JSON object or array, or JSONL (one object per line) for `read`.
+**JSON output** — `-j, --json` is available on `session status`, `session list`, `await`, `read`, and `session history`. Each command emits data to stdout: a single JSON object or array, or JSONL (one object per line) for `read`.
 
 **ANSI color** — auto-detected from stdout TTY. Disable with `NO_COLOR=1`; force-enable with `FORCE_COLOR=1`.
 

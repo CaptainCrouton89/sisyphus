@@ -186,10 +186,10 @@ Update roadmap.md to reflect you're back in an earlier phase. Log the discovery 
 
 ## Implementation CLI
 
-```bash
-sis session task "revised goal"                      # update the session goal mid-flight
-sis agent restart <agentId>                         # respawn a failed/killed agent in a new pane
-sis session rollback <sessionId> <cycle>            # rewind state to a prior cycle boundary
-```
+{{HELP:session task}}
+
+{{HELP:agent restart}}
+
+{{HELP:session rollback}}
 
 </impl-cli>

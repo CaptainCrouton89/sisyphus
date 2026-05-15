@@ -91,9 +91,7 @@ sis orch yield --mode planning --prompt "Validation revealed [architectural issu
 
 ## Validation CLI
 
-```bash
-sis agent restart <agentId>                         # respawn a failed/killed validation agent
-```
+{{HELP:agent restart}}
 
 ## Transition to Completion
 

@@ -7,6 +7,8 @@ import { getCurrentTmuxSessionHome, getTmuxSessionInfo, isTmuxInstalled } from '
 import { shellQuote } from '../../shared/shell.js';
 import { openDashboardWindow } from './dashboard.js';
 import type { Request } from '../../shared/protocol.js';
+import { exitError, exitUsage } from '../errors.js';
+import { emitJsonOk, isJsonMode } from '../output.js';
 
 
 /**
@@ -60,8 +62,9 @@ export function registerStart(program: Command): void {
       const cwd = process.env['SISYPHUS_CWD'] ?? process.cwd();
 
       if (opts.stdin && opts.contextStdin) {
-        console.error('Error: --stdin and --context-stdin cannot be combined; pipe one and pass the other on argv');
-        process.exit(1);
+        exitUsage('flag_conflict', '--stdin and --context-stdin cannot be combined; pipe one and pass the other on argv', {
+          expected: 'exactly one of --stdin, --context-stdin',
+        });
       }
 
       let task: string | undefined = taskArg;
@@ -70,19 +73,22 @@ export function registerStart(program: Command): void {
       if (opts.stdin) {
         const piped = await readStdin({ force: true });
         if (!piped) {
-          console.error('Error: --stdin set but no input received on stdin');
-          process.exit(1);
+          exitUsage('empty_stdin', '--stdin set but no input received on stdin', {
+            next: 'pipe content: `cat task.md | sis session start --stdin`',
+          });
         }
         if (taskArg !== undefined && taskArg !== '-') {
-          console.error('Error: --stdin conflicts with [task] positional; pass one or the other');
-          process.exit(1);
+          exitUsage('stdin_conflict', '--stdin conflicts with [task] positional; pass one or the other', {
+            received: { stdin: true, task: taskArg },
+          });
         }
         task = piped;
       } else if (taskArg === '-') {
         const piped = await readStdin({ force: true });
         if (!piped) {
-          console.error("Error: task '-' means read stdin, but no input received");
-          process.exit(1);
+          exitUsage('empty_stdin', "task '-' means read stdin, but no input received", {
+            next: 'pipe content or omit `-`',
+          });
         }
         task = piped;
       }
@@ -90,56 +96,60 @@ export function registerStart(program: Command): void {
       if (opts.contextStdin) {
         const piped = await readStdin({ force: true });
         if (!piped) {
-          console.error('Error: --context-stdin set but no input received on stdin');
-          process.exit(1);
+          exitUsage('empty_stdin', '--context-stdin set but no input received on stdin', {
+            next: 'pipe content: `cat ctx.md | sis session start "..." --context-stdin`',
+          });
         }
         if (opts.context !== undefined) {
-          console.error('Error: --context-stdin conflicts with -c/--context; use one');
-          process.exit(1);
+          exitUsage('flag_conflict', '--context-stdin conflicts with -c/--context; use one', {
+            received: { contextStdin: true, context: opts.context },
+          });
         }
         context = piped;
       }
 
       if (!task) {
-        console.error('Error: provide <task> argument, pipe via --stdin, or pass `-` as the task');
-        process.exit(1);
+        exitUsage('missing_task', 'provide <task> argument, pipe via --stdin, or pass `-` as the task', {
+          next: 'sis session start "your task" — or sis session start - <task.md — or sis session start --stdin <task.md',
+        });
       }
 
       if (opts.effort !== undefined) {
         const validTiers = ['low', 'medium', 'high', 'xhigh'];
         if (!validTiers.includes(opts.effort)) {
-          console.error(`Error: --effort must be one of: ${validTiers.join(', ')}`);
-          process.exit(1);
+          exitUsage('bad_effort', `--effort must be one of: ${validTiers.join(', ')}`, {
+            received: opts.effort,
+            expected: validTiers,
+          });
         }
       }
 
       if (!isTmuxInstalled()) {
-        console.error('Error: tmux is not installed. Sisyphus requires tmux for agent panes.');
-        console.error('  Install: brew install tmux (macOS) or apt install tmux (Linux)');
-        process.exit(1);
+        exitError({
+          code: 'tmux_missing',
+          kind: 'permanent',
+          message: 'tmux is not installed. Sisyphus requires tmux for agent panes.',
+          next: 'brew install tmux (macOS) or apt install tmux (Linux)',
+        });
       }
 
       // When inside an existing tmux session that's already homed at a different
       // project, refuse — the dashboard window would get pinned to this cwd but
       // live in a session tagged for the other project, poisoning C-s h, alt+s
       // cycle groups, scratch resolver, and dashboard re-attach. Usually caused
-      // by `cd <subdir> && sis start` from an agent.
+      // by `cd <subdir> && sis session start` from an agent.
       if (process.env['TMUX'] && opts.force !== true) {
         const info = getTmuxSessionInfo();
         const existingHome = getCurrentTmuxSessionHome(info.id);
         const normalizedCwd = cwd.replace(/\/+$/, '');
         if (existingHome && existingHome !== normalizedCwd) {
-          console.error('Error: cwd mismatch with current tmux session.');
-          console.error(`  Session "${info.name}" is homed at: ${existingHome}`);
-          console.error(`  This invocation's cwd:              ${normalizedCwd}`);
-          console.error('');
-          console.error('Running `cd <dir> && sis start` from inside a tmux session homed elsewhere');
-          console.error('breaks dashboard/session linking (C-s h, alt+s cycle, scratch resolver).');
-          console.error('Usually you want to operate in the parent project, not the cd\'d subdir.');
-          console.error('');
-          console.error(`Verify with the user: start a session for ${existingHome} or ${normalizedCwd}?`);
-          console.error('To proceed anyway: sis start --force ...');
-          process.exit(1);
+          exitError({
+            code: 'cwd_mismatch',
+            kind: 'conflict',
+            message: `cwd mismatch with current tmux session. Session "${info.name}" is homed at: ${existingHome}; this invocation's cwd: ${normalizedCwd}. Running \`cd <dir> && sis session start\` from inside a tmux session homed elsewhere breaks dashboard/session linking (C-s h, alt+s cycle, scratch resolver). Usually you want to operate in the parent project, not the cd'd subdir.`,
+            received: { invocationCwd: normalizedCwd, tmuxSession: info.name, tmuxHome: existingHome },
+            next: `Verify with the user: start a session for ${existingHome} or ${normalizedCwd}? To proceed anyway: sis session start --force ...`,
+          });
         }
       }
 
@@ -147,22 +157,26 @@ export function registerStart(program: Command): void {
       const effort = opts.effort as 'low' | 'medium' | 'high' | 'xhigh' | undefined;
       const request: Request = { type: 'start', task, context, cwd, name: opts.name, ...(effort !== undefined ? { effort } : {}) };
       const response = await sendRequest(request);
-      if (!response.ok) {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
-      }
+      if (!response.ok) exitError(response.error);
 
       const sessionId = response.data?.sessionId as string;
+      const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
+
+      // --json: emit envelope and exit early; do not take over the terminal.
+      if (isJsonMode()) {
+        emitJsonOk({ sessionId, ...(tmuxSessionName ? { tmuxSessionName } : {}) });
+        return;
+      }
+
       console.error(`Task handed off to sisyphus orchestrator (session ${sessionId})`);
 
       if (opts.tmuxCheck === false) {
         // --no-tmux-check: print info and exit, don't touch tmux
-        const tmuxSessionName = response.data?.tmuxSessionName as string | undefined;
         if (tmuxSessionName) {
           console.error(`Tmux session: ${tmuxSessionName}`);
           console.error(`  tmux attach -t ${tmuxSessionName}`);
         }
-        console.error(`Monitor: sis status ${sessionId}`);
+        console.error(`Monitor: sis session status ${sessionId}`);
         return;
       }
 
@@ -223,6 +237,6 @@ export function registerStart(program: Command): void {
         attachToTmuxSession(tmuxSession);
       }
 
-      console.error(`Monitor: sis status ${sessionId}`);
+      console.error(`Monitor: sis session status ${sessionId}`);
     });
 }

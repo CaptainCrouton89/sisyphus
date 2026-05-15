@@ -154,7 +154,8 @@ export function mountResolutionPanel(
         const ansi = readFileSync(ansiPath, 'utf-8');
         state.visuals.set(qid, { status: 'ready', content: ansi, visible: true });
       } else {
-        state.visuals.set(qid, { status: 'error', content: '', visible: true, error: res.error });
+        const errMsg = typeof res.error === 'string' ? res.error : res.error?.message;
+        state.visuals.set(qid, { status: 'error', content: '', visible: true, error: errMsg });
       }
       requestRender();
     })();

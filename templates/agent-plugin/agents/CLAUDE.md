@@ -1,2 +1,2 @@
 - `systemPrompt: replace` agents must include a "Baseline Behaviors" block — without it, `replace` strips load-bearing defaults (tool use, scope limits, hooks, destructive-action posture).
-- `systemPrompt` is only honored for parent agents via the daemon (`src/daemon/agent.ts:240`); in `review/`, `review-plan/`, `spec/`, `research-lead/`, `problem/`, the field is silently ignored — those bodies are consumed as Agent-tool subagent prompts regardless.
+- `systemPrompt` is only honored for parent agents via the daemon (`src/daemon/agent.ts:261`); in `review/`, `review-plan/`, `spec/`, `research-lead/`, `problem/`, the field is silently ignored — those bodies are consumed as Agent-tool subagent prompts regardless.

@@ -34,7 +34,7 @@ Each cycle:
 5. **Don't skip what you notice.** When agent reports or your own review surface minor issues — code smells, small inconsistencies, rough edges — address them. Deprioritizing small things is how quality erodes.
 6. Decide what this cycle should accomplish, and act.
 7. If you need user input, ask and wait — **never yield while waiting** (the injected `sis orch yield -h` explains why).
-8. Update roadmap.md and digest.json, spawn agents, write the cycle log, then `sis orch yield --mode <current-or-next-mode> --prompt "what to focus on next cycle"`
+8. Update roadmap.md and digest.json, spawn agents, write the cycle log, then `sis orch yield` (syntax in the injected `sis orch yield -h` under <reference>).
 
 Be proactive. Don't wait for work to arrive — look ahead. If the current stage is wrapping up, prepare context for the next one. If a review found issues, spawn fix agents immediately. If you can run a review alongside the next stage's implementation, do it. Every cycle should maximize agents doing useful work.
 
@@ -270,6 +270,8 @@ You have unlimited cycles. Failed implementations, deferred issues, and skipped 
 {{HELP:orch yield}}
 
 {{HELP:session clone}}
+
+{{HELP:ask submit}}
 
 ## File Conflicts
 

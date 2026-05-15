@@ -3,6 +3,7 @@ import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, readdir
 import { socketPath, globalDir, messagesDir, sessionsDir } from '../shared/paths.js';
 import { join } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
+import { errUsage, errNotFound, errAmbiguous, errConflict, errTransient, errPermanent } from '../shared/protocol.js';
 import type { MessageSource } from '../shared/types.js';
 import { validateSessionId, validateRepoName } from '../shared/shell.js';
 import * as sessionManager from './session-manager.js';
@@ -90,7 +91,14 @@ export function registerSessionTmux(sessionId: string, tmuxSession: string, wind
 }
 
 function unknownSessionError(sessionId: string): Response {
-  return { ok: false, error: `Unknown session: ${sessionId}. Run \`sis list --all\` to see available sessions.` };
+  return {
+    ok: false,
+    error: errNotFound('unknown_session', {
+      message: `Unknown session: ${sessionId}. Run \`sis session list --all\` to see available sessions.`,
+      received: sessionId,
+      next: 'sis session list --all',
+    }),
+  };
 }
 
 /**
@@ -156,8 +164,16 @@ function resolvePartialSessionId(partial: string): { id: string } | { error: Res
     return { id };
   }
   if (matches.length > 1) {
-    const list = matches.map(id => `  ${id}`).join('\n');
-    return { error: { ok: false, error: `Ambiguous session prefix "${partial}" matches ${matches.length} sessions:\n${list}` } };
+    return {
+      error: {
+        ok: false,
+        error: errAmbiguous('ambiguous_session', {
+          message: `Ambiguous session prefix "${partial}" matches ${matches.length} sessions`,
+          received: partial,
+          candidates: matches,
+        }),
+      },
+    };
   }
 
   // No match — let downstream handlers produce their own errors
@@ -178,7 +194,13 @@ async function handleRequest(req: Request): Promise<Response> {
     // Validate session IDs to prevent path traversal
     if ('sessionId' in req && req.sessionId) {
       if (!validateSessionId(req.sessionId)) {
-        return { ok: false, error: `Invalid session ID: must contain only alphanumeric characters, hyphens, and underscores` };
+        return {
+          ok: false,
+          error: errUsage('invalid_session_id', {
+            message: 'Invalid session ID: must contain only alphanumeric characters, hyphens, and underscores',
+            received: req.sessionId,
+          }),
+        };
       }
       const resolved = resolvePartialSessionId(req.sessionId);
       if ('error' in resolved) return resolved.error;
@@ -222,7 +244,13 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!tracking) return unknownSessionError(req.sessionId);
         // Validate repo name to prevent path traversal from IPC clients bypassing CLI
         if (req.repo && req.repo !== '.' && !validateRepoName(req.repo)) {
-          return { ok: false, error: 'Invalid repo name: must be a simple directory name without path separators or ".."' };
+          return {
+            ok: false,
+            error: errUsage('invalid_repo_name', {
+              message: 'Invalid repo name: must be a simple directory name without path separators or ".."',
+              received: req.repo,
+            }),
+          };
         }
         const result = await sessionManager.handleSpawn(req.sessionId, tracking.cwd, req.agentType, req.name, req.instruction, req.repo);
         return { ok: true, data: { agentId: result.agentId } };
@@ -231,7 +259,13 @@ async function handleRequest(req: Request): Promise<Response> {
       case 'submit': {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
-        if (!tracking.windowId) return { ok: false, error: `No tmux window found for session: ${req.sessionId}` };
+        if (!tracking.windowId) return {
+          ok: false,
+          error: errNotFound('no_tmux_window', {
+            message: `No tmux window found for session: ${req.sessionId}`,
+            received: req.sessionId,
+          }),
+        };
         await sessionManager.handleSubmit(tracking.cwd, req.sessionId, req.agentId, req.report, tracking.windowId);
         return { ok: true };
       }
@@ -254,7 +288,13 @@ async function handleRequest(req: Request): Promise<Response> {
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
         const result = await agent.handleAwait(tracking.cwd, req.sessionId, req.agentId);
-        if (!result) return { ok: false, error: `Unknown agent: ${req.agentId} in session ${req.sessionId}` };
+        if (!result) return {
+          ok: false,
+          error: errNotFound('unknown_agent', {
+            message: `Unknown agent: ${req.agentId} in session ${req.sessionId}`,
+            received: req.agentId,
+          }),
+        };
         return {
           ok: true,
           data: {
@@ -360,7 +400,14 @@ async function handleRequest(req: Request): Promise<Response> {
             sessionTrackingMap.set(req.sessionId, tracking);
             persistSessionRegistry();
           } else {
-            return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sis list --all\` to see available sessions.` };
+            return {
+            ok: false,
+            error: errNotFound('unknown_session', {
+              message: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sis session list --all\` to see available sessions.`,
+              received: req.sessionId,
+              next: 'sis session list --all',
+            }),
+          };
           }
         }
         const session = await sessionManager.resumeSession(req.sessionId, tracking.cwd, req.message);
@@ -376,7 +423,14 @@ async function handleRequest(req: Request): Promise<Response> {
         // If the orchestrator pane is detected alive, also flip status active.
         const stateFile = `${req.cwd}/.sisyphus/sessions/${req.sessionId}/state.json`;
         if (!existsSync(stateFile)) {
-          return { ok: false, error: `Unknown session: ${req.sessionId}. No state.json at ${stateFile}.` };
+          return {
+            ok: false,
+            error: errNotFound('unknown_session', {
+              message: `Unknown session: ${req.sessionId}. No state.json at ${stateFile}.`,
+              received: req.sessionId,
+              next: 'sis session list --all',
+            }),
+          };
         }
         await Promise.all([
           state.clearSessionOrphan(req.cwd, req.sessionId),
@@ -556,7 +610,12 @@ async function handleRequest(req: Request): Promise<Response> {
           });
           return { ok: true };
         } catch (err) {
-          return { ok: false, error: `Failed to persist upload status: ${err instanceof Error ? err.message : String(err)}` };
+          return {
+            ok: false,
+            error: errPermanent('rpc_failed', {
+              message: `Failed to persist upload status: ${err instanceof Error ? err.message : String(err)}`,
+            }),
+          };
         }
       }
 
@@ -613,13 +672,32 @@ async function handleRequest(req: Request): Promise<Response> {
           const liveCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt);
           paneId = liveCycle?.paneId ?? session.orchestratorCycles.at(-1)?.paneId;
           targetLabel = 'orchestrator';
-          if (!paneId) return { ok: false, error: 'No orchestrator pane found for this session' };
+          if (!paneId) return {
+            ok: false,
+            error: errNotFound('no_orchestrator_pane', {
+              message: 'No orchestrator pane found for this session',
+              received: req.sessionId,
+            }),
+          };
         } else {
           const agentId = req.target.agentId;
           const ag = session.agents.find(a => a.id === agentId);
-          if (!ag) return { ok: false, error: `Unknown agent: ${agentId} in session ${req.sessionId}` };
+          if (!ag) return {
+            ok: false,
+            error: errNotFound('unknown_agent', {
+              message: `Unknown agent: ${agentId} in session ${req.sessionId}`,
+              received: agentId,
+            }),
+          };
           if (ag.status !== 'running') {
-            return { ok: false, error: `Agent ${agentId} is ${ag.status}, not running — cannot tell` };
+            return {
+              ok: false,
+              error: errConflict('agent_not_running', {
+                message: `Agent ${agentId} is ${ag.status}, not running — cannot tell`,
+                received: ag.status,
+                expected: 'running',
+              }),
+            };
           }
           paneId = ag.paneId;
           targetLabel = agentId;
@@ -628,7 +706,12 @@ async function handleRequest(req: Request): Promise<Response> {
         try {
           tmux.pasteToPane(paneId, req.text, req.submit);
         } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+          return {
+            ok: false,
+            error: errPermanent('rpc_failed', {
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          };
         }
 
         // Record in session.messages for debuggability — the typed prompt won't otherwise
@@ -664,7 +747,7 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'register-segment': {
-        if (!compositor) return { ok: false, error: 'Compositor not initialized' };
+        if (!compositor) return { ok: false, error: errTransient('compositor_uninit', { message: 'Compositor not initialized' }) };
         compositor.registerExternal({
           id: req.id,
           side: req.side,
@@ -676,28 +759,43 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'update-segment': {
-        if (!compositor) return { ok: false, error: 'Compositor not initialized' };
+        if (!compositor) return { ok: false, error: errTransient('compositor_uninit', { message: 'Compositor not initialized' }) };
         try {
           compositor.updateExternal(req.id, req.content);
           return { ok: true };
         } catch (e) {
-          return { ok: false, error: (e as Error).message };
+          return {
+            ok: false,
+            error: errPermanent('rpc_failed', { message: (e as Error).message }),
+          };
         }
       }
 
       case 'unregister-segment': {
-        if (!compositor) return { ok: false, error: 'Compositor not initialized' };
+        if (!compositor) return { ok: false, error: errTransient('compositor_uninit', { message: 'Compositor not initialized' }) };
         compositor.unregisterExternal(req.id);
         return { ok: true };
       }
 
       case 'ask-generate-visual': {
         const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-        if (!ID_RE.test(req.askId)) return { ok: false, error: `Invalid askId: ${req.askId}` };
-        if (!ID_RE.test(req.qid)) return { ok: false, error: `Invalid qid: ${req.qid}` };
+        if (!ID_RE.test(req.askId)) return {
+          ok: false,
+          error: errUsage('invalid_ask_id', { message: `Invalid askId: ${req.askId}`, received: req.askId }),
+        };
+        if (!ID_RE.test(req.qid)) return {
+          ok: false,
+          error: errUsage('invalid_qid', { message: `Invalid qid: ${req.qid}`, received: req.qid }),
+        };
         const tracking = sessionTrackingMap.get(req.sessionId);
         if (!tracking) return unknownSessionError(req.sessionId);
-        if (!tracking.cwd) return { ok: false, error: `No cwd registered for session: ${req.sessionId}` };
+        if (!tracking.cwd) return {
+          ok: false,
+          error: errUsage('no_cwd_registered', {
+            message: `No cwd registered for session: ${req.sessionId}`,
+            received: req.sessionId,
+          }),
+        };
         const result = await generateVisualForQuestion({
           cwd: tracking.cwd,
           sessionId: req.sessionId,
@@ -709,7 +807,10 @@ async function handleRequest(req: Request): Promise<Response> {
         if (result.ok) {
           return { ok: true, data: { markdownPath: result.markdownPath, ansiPath: result.ansiPath, turns: result.turns } };
         }
-        return { ok: false, error: result.error };
+        return {
+          ok: false,
+          error: errPermanent('rpc_failed', { message: result.error }),
+        };
       }
 
       case 'inbox-list': {
@@ -777,10 +878,23 @@ async function handleRequest(req: Request): Promise<Response> {
         const session = state.getSession(tracking.cwd, req.sessionId);
         if (session.handoff?.sentAt) {
           const where = session.handoff.target ? `${session.handoff.target.provider}:${session.handoff.target.repo}` : 'cloud';
-          return { ok: false, error: `Session ${req.sessionId} is already on ${where}. Use \`sis cloud reclaim\` first.` };
+          return {
+            ok: false,
+            error: errConflict('already_on_cloud', {
+              message: `Session ${req.sessionId} is already on ${where}. Use \`sis cloud reclaim\` first.`,
+              received: req.sessionId,
+              next: 'sis cloud reclaim',
+            }),
+          };
         }
         if (session.handoff && !req.force) {
-          return { ok: false, error: `Session ${req.sessionId} already has a queued handoff. Pass --force to override or --cancel to clear.` };
+          return {
+            ok: false,
+            error: errConflict('handoff_already_queued', {
+              message: `Session ${req.sessionId} already has a queued handoff. Pass --force to override or --cancel to clear.`,
+              received: req.sessionId,
+            }),
+          };
         }
 
         const { resolveProvider, defaultRepoName, checkRepoName, triggerForceHandoff } = await import('./cloud-handoff.js');
@@ -788,13 +902,22 @@ async function handleRequest(req: Request): Promise<Response> {
         try {
           provider = resolveProvider(req.provider);
         } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+          return {
+            ok: false,
+            error: errPermanent('rpc_failed', { message: err instanceof Error ? err.message : String(err) }),
+          };
         }
         const repo = req.repo ?? defaultRepoName(tracking.cwd);
         try {
           checkRepoName(repo);
         } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+          return {
+            ok: false,
+            error: errUsage('invalid_repo_name', {
+              message: err instanceof Error ? err.message : String(err),
+              received: repo,
+            }),
+          };
         }
 
         await state.updateSession(tracking.cwd, req.sessionId, {
@@ -818,10 +941,23 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!tracking) return unknownSessionError(req.sessionId);
         const session = state.getSession(tracking.cwd, req.sessionId);
         if (!session.handoff) {
-          return { ok: false, error: `Session ${req.sessionId} has no queued handoff.` };
+          return {
+            ok: false,
+            error: errNotFound('no_queued_handoff', {
+              message: `Session ${req.sessionId} has no queued handoff.`,
+              received: req.sessionId,
+            }),
+          };
         }
         if (session.handoff.sentAt) {
-          return { ok: false, error: `Session ${req.sessionId} has already shipped to cloud — use \`sis cloud reclaim\` to bring it back.` };
+          return {
+            ok: false,
+            error: errConflict('already_shipped', {
+              message: `Session ${req.sessionId} has already shipped to cloud — use \`sis cloud reclaim\` to bring it back.`,
+              received: req.sessionId,
+              next: 'sis cloud reclaim',
+            }),
+          };
         }
         await state.updateSession(tracking.cwd, req.sessionId, { handoff: undefined });
         return { ok: true, data: { cancelled: true } };
@@ -832,7 +968,13 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!tracking) return unknownSessionError(req.sessionId);
         const session = state.getSession(tracking.cwd, req.sessionId);
         if (!session.handoff?.sentAt) {
-          return { ok: false, error: `Session ${req.sessionId} was never sent to cloud; nothing to reclaim.` };
+          return {
+            ok: false,
+            error: errConflict('not_on_cloud', {
+              message: `Session ${req.sessionId} was never sent to cloud; nothing to reclaim.`,
+              received: req.sessionId,
+            }),
+          };
         }
         await state.updateSession(tracking.cwd, req.sessionId, {
           handoff: { ...session.handoff, reclaimedAt: new Date().toISOString() },
@@ -845,7 +987,14 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!tracking) return unknownSessionError(req.sessionId);
         const session = state.getSession(tracking.cwd, req.sessionId);
         if (session.handoff?.sentAt) {
-          return { ok: false, error: `Session ${req.sessionId} already lives on cloud; nothing to quiesce locally.` };
+          return {
+            ok: false,
+            error: errConflict('already_on_cloud', {
+              message: `Session ${req.sessionId} already lives on cloud; nothing to quiesce locally.`,
+              received: req.sessionId,
+              next: 'sis cloud reclaim',
+            }),
+          };
         }
 
         await state.updateSession(tracking.cwd, req.sessionId, {
@@ -864,11 +1013,17 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       default:
-        return { ok: false, error: `Unknown request type: ${(req as Record<string, unknown>).type}` };
+        return {
+          ok: false,
+          error: errUsage('unknown_request_type', {
+            message: `Unknown request type: ${(req as Record<string, unknown>).type}`,
+            received: (req as Record<string, unknown>).type,
+          }),
+        };
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message };
+    return { ok: false, error: errPermanent('internal_error', { message }) };
   }
 }
 
@@ -894,7 +1049,7 @@ export function startServer(): Promise<Server> {
           try {
             req = JSON.parse(line) as Request;
           } catch {
-            conn.write(JSON.stringify({ ok: false, error: 'Invalid JSON' }) + '\n');
+            conn.write(JSON.stringify({ ok: false, error: errUsage('invalid_json', { message: 'Invalid JSON' }) }) + '\n');
             continue;
           }
 
@@ -905,7 +1060,7 @@ export function startServer(): Promise<Server> {
           }).catch((err) => {
             console.warn('[sisyphus] Unhandled request error:', err instanceof Error ? err.message : err);
             if (!conn.destroyed) {
-              conn.write(JSON.stringify({ ok: false, error: 'Internal server error' }) + '\n');
+              conn.write(JSON.stringify({ ok: false, error: errPermanent('internal_error', { message: 'Internal server error' }) }) + '\n');
             }
           });
         }

@@ -1,20 +1,28 @@
 import type { Command } from 'commander';
 import { sendRequest } from '../client.js';
 import type { Request } from '../../shared/protocol.js';
+import { exitError } from '../errors.js';
+import { emitJsonOk } from '../output.js';
 
 export function registerSegmentUnregister(program: Command): void {
   program
     .command('unregister')
     .description('Remove an external status bar segment')
     .requiredOption('--id <id>', 'Segment identifier to remove')
+    .addHelpText(
+      'after',
+      `
+Output:
+  Default       "Segment '<id>' unregistered." on stdout.
+  --json        { ok, schema_version: 1, data: { id } }
+
+Exit codes: 0 ok | 3 not_found.`,
+    )
     .action(async (opts: { id: string }) => {
       const request: Request = { type: 'unregister-segment', id: opts.id };
       const response = await sendRequest(request);
-      if (response.ok) {
-        console.log(`Segment '${opts.id}' unregistered.`);
-      } else {
-        console.error(`Error: ${response.error}`);
-        process.exit(1);
-      }
+      if (!response.ok) exitError(response.error);
+      if (emitJsonOk({ id: opts.id })) return;
+      console.log(`Segment '${opts.id}' unregistered.`);
     });
 }

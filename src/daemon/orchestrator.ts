@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve, join, relative } from 'node:path';
-import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
+import { resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
+import { injectHelp } from './help-inject.js';
 import {
   contextDir, goalPath, strategyPath, digestPath, cycleLogPath, logsDir, roadmapPath,
   projectOrchestratorPromptPath, userOrchestratorPromptPath,
@@ -431,9 +432,11 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   }).join('\n');
 
   const substitutedPrompt = substituteEnvVars(
-    basePrompt
-      .replace('{{AGENT_TYPES}}', agentTypeLines)
-      .replace('{{ORCHESTRATOR_MODES}}', modeLines)
+    injectHelp(
+      basePrompt
+        .replace('{{AGENT_TYPES}}', agentTypeLines)
+        .replace('{{ORCHESTRATOR_MODES}}', modeLines)
+    )
   );
   const sessionEffort = session.effort != null ? session.effort : 'high';
   const systemPrompt = renderEffortMarkers(substitutedPrompt, sessionEffort);

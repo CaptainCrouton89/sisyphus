@@ -71,18 +71,18 @@ Then stop and wait for them. Do not proceed to step 4 until they confirm they're
 
 ## 4. Run the interactive tutorial
 
-Hand off to the built-in tutorial — it has its own state machine and walks through `sis start`, the dashboard, the `C-s` menu, and a real test task:
+Hand off to the built-in tutorial — it has its own state machine and walks through `sis session start`, the dashboard, the `C-s` menu, and a real test task:
 
 ```bash
-sis admin getting-started
+sis ui guide
 ```
 
-The tutorial is self-driving; let it talk to the user. Don't narrate over it. If they get stuck mid-tutorial, they can re-enter at any step with `sis admin getting-started --tutorial <N>`.
+The tutorial is self-driving; let it talk to the user. Don't narrate over it. If they get stuck mid-tutorial, they can re-enter at any step with `sis ui guide --tutorial <N>`.
 
 ## 5. Wrap up
 
 Once the tutorial finishes (or the user opts out), give them a short cheat sheet:
-- `sis start "<task>"` — hand a task to sisyphus
+- `sis session start "<task>"` — hand a task to sisyphus
 - `C-s h` — open the dashboard from any tmux pane
 - `C-s x` — smart kill-pane (jumps home if it's the last pane)
 - `M-s` — cycle through sisyphus sessions
@@ -93,7 +93,7 @@ Then stop. Don't keep generating advice.
 ## Diagnostic allow-list
 
 Run freely without asking:
-- `sis admin setup`, `sis admin setup -y`, `sis admin setup-keybind`, `sis admin doctor`, `sis admin check-keybinds`, `sis admin check-statusbar`, `sis admin getting-started`
+- `sis admin setup`, `sis admin setup -y`, `sis admin setup-keybind`, `sis admin doctor`, `sis admin check-keybinds`, `sis admin check-statusbar`, `sis ui guide`
 - `tmux -V`, `tmux source-file ~/.tmux.conf`, `tmux list-keys`
 - `which tmux`, `which sis`, `node --version`
 

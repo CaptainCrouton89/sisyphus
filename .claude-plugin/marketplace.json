@@ -10,7 +10,7 @@
     {
       "name": "sisyphus",
       "source": "./plugins/sisyphus",
-      "description": "User-facing slash commands for sisyphus (begin, autopsy, cloud-start, configure-upload)",
+      "description": "User-facing slash commands for sisyphus (begin, autopsy, bug, cloud-start, configure-upload)",
       "version": "1.0.2",
       "keywords": [
         "sisyphus",

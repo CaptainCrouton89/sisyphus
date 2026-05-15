@@ -8,6 +8,7 @@ import * as tmux from './tmux.js';
 import { getNextColor, normalizeTmuxColor } from './colors.js';
 import { getWindowId } from './orchestrator.js';
 import { contextDir, promptsDir, reportsDir, reportFilePath, sessionDir } from '../shared/paths.js';
+import { injectHelp } from './help-inject.js';
 import { registerPane, unregisterPane, unregisterAgentPane } from './pane-registry.js';
 import { flushAgentTimer } from './pane-monitor.js';
 import { summarizeReport } from './summarize.js';
@@ -70,10 +71,12 @@ function renderAgentSuffix(sessionId: string, instruction: string, contextDirRel
     template = `# Sisyphus Agent\nSession: {{SESSION_ID}}\nTask: {{INSTRUCTION}}`;
   }
 
-  return template
-    .replace(/\{\{SESSION_ID\}\}/g, sessionId)
-    .replace(/\{\{INSTRUCTION\}\}/g, instruction)
-    .replace(/\{\{CONTEXT_DIR\}\}/g, contextDirRel);
+  return injectHelp(
+    template
+      .replace(/\{\{SESSION_ID\}\}/g, sessionId)
+      .replace(/\{\{INSTRUCTION\}\}/g, instruction)
+      .replace(/\{\{CONTEXT_DIR\}\}/g, contextDirRel)
+  );
 }
 
 function createAgentPlugin(

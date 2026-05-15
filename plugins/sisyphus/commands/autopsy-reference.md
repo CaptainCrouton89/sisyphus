@@ -51,7 +51,7 @@ Phase transitions are shaped by exit criteria in `roadmap.md`. "Stuck in a phase
 | Reports | agent → orchestrator | `sis agent submit` (terminal) / `sis agent report` (non-terminal) |
 | State | daemon → orchestrator | `state.json` — agent statuses, session metadata |
 | Events | daemon → history | `events.jsonl` — timestamped lifecycle events |
-| Ask | agent → user | `sis ask <deck.json>` — submits a structured `Deck` of `Interaction[]`; user answers via the dashboard's full-screen resolution mode. Always blocking (caller waits for `output.json`); to avoid tying up a shell, callers invoke via the Bash tool with `run_in_background: true` and observe completion via `BashOutput`. `poll <askId>` blocks on a known askId; `peek <askId>` is non-blocking |
+| Ask | agent → user | `sis ask submit <deck.json>` — submits a structured `Deck` of `Interaction[]`; user answers via the dashboard's full-screen resolution mode. Always blocking (caller waits for `output.json`); to avoid tying up a shell, callers invoke via the Bash tool with `run_in_background: true` and observe completion via `BashOutput`. `sis ask poll <askId>` blocks on a known askId; `sis ask peek <askId>` is non-blocking |
 | Yield prompt | orchestrator → next orchestrator | `sis orch yield --prompt "..."` |
 
 ### `sis ask` deck schema
@@ -118,19 +118,19 @@ The project dir has the **content** (what agents wrote, what was decided). The g
 
 If invoked outside the project: the global history dir is always accessible at `~/.sisyphus/history/<uuid>/`. To find the project dir for a given session, read `session.json` — it usually records `cwd`. If the project dir isn't accessible, you can still do a lot from the global timeline alone (events, summary, completion report, mood, efficiency).
 
-## `sis admin history` CLI
+## `sis session history` CLI
 
 ```bash
-sis admin history                              # list recent sessions (newest first)
-sis admin history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
-sis admin history <id-or-name> --events        # raw event timeline
-sis admin history <id-or-name> --json          # full SessionSummary as JSON
-sis admin history <id-or-name> --events --json # events array as JSON (for grep/jq)
-sis admin history --stats                      # aggregate metrics
-sis admin history --search "<query>"           # substring search across task/messages
-sis admin history --cwd <path>                 # filter by project dir
-sis admin history --since 7d                   # filter by recency
-sis admin history --status killed              # filter by terminal status
+sis session history                              # list recent sessions (newest first)
+sis session history <id-or-name>                 # detail view: task, agents, cycles, reviews, report
+sis session history <id-or-name> --events        # raw event timeline
+sis session history <id-or-name> --json          # full SessionSummary as JSON
+sis session history <id-or-name> --events --json # events array as JSON (for grep/jq)
+sis session history --stats                      # aggregate metrics
+sis session history --search "<query>"           # substring search across task/messages
+sis session history --cwd <path>                 # filter by project dir
+sis session history --since 7d                   # filter by recency
+sis session history --status killed              # filter by terminal status
 ```
 
 Session resolution order: exact UUID → UUID prefix → exact name → name substring. Short substrings can be ambiguous — prefer UUID prefixes when the name isn't unique.

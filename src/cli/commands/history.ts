@@ -6,6 +6,8 @@ import { formatDuration, statusColor, bold, dim, colorize } from '../../shared/f
 import type { SessionSummary, SessionSummaryAgent } from '../../shared/history-types.js';
 import type { HistoryEvent } from '../../shared/history-types.js';
 import type { Session } from '../../shared/types.js';
+import { exitUsage } from '../errors.js';
+import { emitJsonOk, isJsonMode } from '../output.js';
 
 function c(color: string, text: string): string {
   return colorize(text, color);
@@ -203,8 +205,10 @@ function findSession(idOrName: string): { id: string; summary: SessionSummary } 
 function parseSince(since: string): number {
   const match = since.match(/^(\d+)\s*(d|h|m|w)$/);
   if (!match) {
-    console.error(`Error: invalid --since format "${since}". Use e.g. 7d, 24h, 30m, 2w`);
-    process.exit(1);
+    exitUsage('invalid-since', `invalid --since format "${since}"`, {
+      received: since,
+      expected: 'duration like 7d, 24h, 30m, or 2w',
+    });
   }
   const n = parseInt(match[1]!, 10);
   const unit = match[2]!;
@@ -237,7 +241,7 @@ function fmtProject(cwd: string): string {
 
 function listSessions(opts: {
   cwd?: string; status?: string; since?: string; search?: string;
-  limit: number; json: boolean;
+  limit: number;
 }): void {
   let sessions = loadAllSummaries();
 
@@ -263,10 +267,7 @@ function listSessions(opts: {
 
   sessions = sessions.slice(0, opts.limit);
 
-  if (opts.json) {
-    console.log(JSON.stringify(sessions.map(s => s.summary), null, 2));
-    return;
-  }
+  if (emitJsonOk({ sessions: sessions.map(s => s.summary) })) return;
 
   if (sessions.length === 0) {
     console.log(c('gray', 'No sessions found.'));
@@ -296,26 +297,24 @@ function listSessions(opts: {
   }
 }
 
-function showSession(idOrName: string, opts: { json: boolean; events: boolean }): void {
+function showSession(idOrName: string, opts: { events: boolean }): void {
   const found = findSession(idOrName);
   if (!found) {
-    console.error(`Error: session "${idOrName}" not found`);
-    process.exit(1);
+    exitUsage('not-found', `session "${idOrName}" not found`, {
+      received: idOrName,
+      next: 'sis history  # list available sessions',
+    });
   }
 
   const { id, summary: s } = found;
 
-  if (opts.json && !opts.events) {
-    console.log(JSON.stringify(s, null, 2));
-    return;
+  if (!opts.events) {
+    if (emitJsonOk({ session: s })) return;
   }
 
   if (opts.events) {
     const events = loadEvents(id);
-    if (opts.json) {
-      console.log(JSON.stringify(events, null, 2));
-      return;
-    }
+    if (emitJsonOk({ events })) return;
     if (events.length === 0) {
       console.log(c('gray', 'No events recorded.'));
       return;
@@ -470,7 +469,7 @@ function formatEventData(e: HistoryEvent): string {
   }
 }
 
-function showStats(opts: { cwd?: string; since?: string; json: boolean }): void {
+function showStats(opts: { cwd?: string; since?: string }): void {
   // Exclude in-flight sessions — their activeMs/wallClockMs are live snapshots that
   // would skew aggregate averages, efficiency, and percentiles.
   let sessions = loadAllSummaries().filter(s => s.summary.completedAt != null);
@@ -557,33 +556,30 @@ function showStats(opts: { cwd?: string; since?: string; json: boolean }): void 
     dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
   }
 
-  if (opts.json) {
-    console.log(JSON.stringify({
-      total: sessions.length,
-      completed: completed.length,
-      killed: killed.length,
-      totalActiveMs,
-      avgActiveMs: Math.round(avgMs),
-      avgEfficiency,
-      p50Ms,
-      p90Ms,
-      totalAgents,
-      totalCycles,
-      totalMessages,
-      byProject: Object.fromEntries([...byProject.entries()].map(([k, v]) => [k, v])),
-      agentTypes: Object.fromEntries([...agentTypeMap.entries()].map(([k, v]) => [k, {
-        ...v,
-        avgMs: Math.round(v.totalMs / v.count),
-        crashRate: v.count > 0 ? v.crashed / v.count : 0,
-        completionRate: v.count > 0 ? v.completed / v.count : 0,
-      }])),
-      temporalPatterns: sessions.length >= 5 ? {
-        hourBlocks: Object.fromEntries(hourBlocks),
-        dayOfWeek: Object.fromEntries(dayCounts),
-      } : null,
-    }, null, 2));
-    return;
-  }
+  if (emitJsonOk({
+    total: sessions.length,
+    completed: completed.length,
+    killed: killed.length,
+    totalActiveMs,
+    avgActiveMs: Math.round(avgMs),
+    avgEfficiency,
+    p50Ms,
+    p90Ms,
+    totalAgents,
+    totalCycles,
+    totalMessages,
+    byProject: Object.fromEntries([...byProject.entries()].map(([k, v]) => [k, v])),
+    agentTypes: Object.fromEntries([...agentTypeMap.entries()].map(([k, v]) => [k, {
+      ...v,
+      avgMs: Math.round(v.totalMs / v.count),
+      crashRate: v.count > 0 ? v.crashed / v.count : 0,
+      completionRate: v.count > 0 ? v.completed / v.count : 0,
+    }])),
+    temporalPatterns: sessions.length >= 5 ? {
+      hourBlocks: Object.fromEntries(hourBlocks),
+      dayOfWeek: Object.fromEntries(dayCounts),
+    } : null,
+  })) return;
 
   console.log(bold('Session History Stats'));
   console.log('');
@@ -649,22 +645,37 @@ export function registerHistory(program: Command): void {
     .option('--search <query>', 'Search task text and messages')
     .option('--events', 'Show raw event timeline')
     .option('--stats', 'Show aggregate statistics')
-    .option('--json', 'Output as JSON')
+    .addHelpText('after', `
+Examples:
+  $ sis history
+  $ sis history sess-7f2a
+  $ sis history sess-7f2a --events
+  $ sis history --stats
+  $ sis history --since 7d --status completed
+  $ sis history --json
+
+Output:
+  Default       Prose session list or detail view
+  --json        { ok, schema_version: 1, data: { sessions } } (list)
+                { ok, schema_version: 1, data: { session } }  (detail)
+                { ok, schema_version: 1, data: { events } }   (--events)
+                { ok, schema_version: 1, data: { ...stats } } (--stats)
+
+Exit codes: 0 ok | 2 usage error | see \`sis --help\` for full table.`)
     .option('-n, --limit <n>', 'Max sessions to show', '20')
     .action(async (session: string | undefined, opts: {
       cwd?: string; status?: string; since?: string; search?: string;
-      events?: boolean; stats?: boolean; json?: boolean; limit: string;
+      events?: boolean; stats?: boolean; limit: string;
     }) => {
       const limit = parseInt(opts.limit, 10) || 20;
-      const json = opts.json ?? false;
 
       if (opts.stats) {
-        showStats({ cwd: opts.cwd, since: opts.since, json });
+        showStats({ cwd: opts.cwd, since: opts.since });
         return;
       }
 
       if (session) {
-        showSession(session, { json, events: opts.events ?? false });
+        showSession(session, { events: opts.events ?? false });
         return;
       }
 
@@ -674,7 +685,6 @@ export function registerHistory(program: Command): void {
         since: opts.since,
         search: opts.search,
         limit,
-        json,
       });
     });
 }
