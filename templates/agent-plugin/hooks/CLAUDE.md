@@ -1,5 +1,4 @@
 - Script edits are invisible to running agents — the daemon copies scripts at spawn time; **respawn required** to pick up changes.
-- Higher layers can suppress a bundled script by basename via `"disable": ["script.sh"]` at the manifest's top level.
 - `interactive: true` in agent frontmatter triggers `condition: "non-interactive"` filtering — entries with that condition (currently the bundled `require-submit.sh` Stop hook) are dropped from the merged manifest for interactive agents.
 - Scripts receive no `{{placeholder}}` substitution — placeholders appear as literal text, unlike `.md` templates.
 - `UserPromptSubmit` hooks write raw text to stdout. PreToolUse hooks (e.g. `intercept-send-message.sh`) write `{"decision":"block","reason":"..."}` or exit 0 — wrong format silently does nothing.
