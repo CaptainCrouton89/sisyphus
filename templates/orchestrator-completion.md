@@ -42,7 +42,7 @@ Use tables, diagrams, and structured markdown freely — the deck below renders 
 
 Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. **NEVER call `sis session complete` until the user picks `approve`.**
 
-Run `crtr skill show sisyphus/humanloop` for option design and submission flow. The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
+Run `echo '{"name":"sisyphus/humanloop"}' | crtr skill read show` for option design and submission flow (output JSON has `.content`). The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
 
 ```bash
 result=$(sis ask submit "$deck")
@@ -79,7 +79,7 @@ If a single deck round surfaces multiple moderate items, capture them all in `$n
 These change the goal itself:
 
 1. Update goal.md with the revised scope (record the pivot, per goal.md conventions)
-2. Run `crtr skill show sisyphus/orchestration` and revise strategy.md with the new direction
+2. Run `echo '{"name":"sisyphus/orchestration"}' | crtr skill read show` (output JSON has `.content`) and revise strategy.md with the new direction
 3. Yield to discovery mode:
 
 ```bash
