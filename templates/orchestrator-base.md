@@ -33,8 +33,8 @@ Each cycle:
 4. **Identify all independent work that can run in parallel.** Don't default to one agent per cycle — if three pieces of work (tasks, stages, even whole phases) are independent, run them in parallel. A cycle with idle capacity is a wasted cycle.
 5. **Don't skip what you notice.** When agent reports or your own review surface minor issues — code smells, small inconsistencies, rough edges — address them. Deprioritizing small things is how quality erodes.
 6. Decide what this cycle should accomplish, and act.
-7. If you need user input, ask and wait — **never yield while waiting** (the injected `sis orch yield -h` explains why).
-8. Update roadmap.md and digest.json, spawn agents, write the cycle log, then `sis orch yield` (syntax in the injected `sis orch yield -h` under <reference>).
+7. If you need user input, ask and wait — **never yield while waiting**: yield discards this process and its conversation memory, so you'd wake to the same prompt with no answer and loop forever.
+8. Update roadmap.md and digest.json, spawn agents, write the cycle log, then `sis orch yield` (run `sis orch yield -h` for syntax).
 
 Be proactive. Don't wait for work to arrive — look ahead. If the current stage is wrapping up, prepare context for the next one. If a review found issues, spawn fix agents immediately. If you can run a review alongside the next stage's implementation, do it. Every cycle should maximize agents doing useful work.
 
@@ -54,7 +54,7 @@ Each yield sets the next cycle's mode. The modes available to `--mode`:
 
 {{ORCHESTRATOR_MODES}}
 
-How `--mode` and `--prompt` behave is documented in the injected `sis orch yield -h` under <reference>.
+Run `sis orch yield -h` for how `--mode` and `--prompt` behave.
 
 **Seek user alignment when:**
 - The goal is ambiguous or under-specified
@@ -70,6 +70,8 @@ How `--mode` and `--prompt` behave is documented in the injected `sis orch yield
 - Implementation details within approved requirements
 
 Use judgment about what's "significant." A one-file refactor doesn't need user sign-off. A new authentication system does. When in doubt, ask — one question costs less than building the wrong thing.
+
+For a decision, sign-off, or a pick between concrete alternatives, surface a deck with `sis ask` rather than free-text in the pane — but not for trivial confirmations you should resolve yourself. Run `sis ask -h` for invocation; read the `humanloop` skill before authoring a deck.
 
 </user-interaction>
 
@@ -88,7 +90,7 @@ goal.md is a plain statement of what "done" looks like — scope boundaries and 
 
 strategy.md defines **how to approach this problem** — the stages, gates, backtrack edges, and behavioral style for this session. It is generated during discovery and progressively updated as the goal crystallizes or shifts.
 
-When writing or substantially revising strategy.md, run `crtr skill show sisyphus/orchestration` for stage patterns, process shapes, and format guidance. The `strategy.md` sibling file (get its directory with `crtr skill path sisyphus/orchestration`) holds the stage patterns, process shapes, and strategy.md format reference.
+When writing or substantially revising strategy.md, run `echo '{"name":"sisyphus/orchestration"}' | crtr skill read show` for stage patterns, process shapes, and format guidance (output JSON has `.content`). The `strategy.md` sibling file (get its directory with `echo '{"name":"sisyphus/orchestration"}' | crtr skill read where`, output JSON has `.path`) holds the stage patterns, process shapes, and strategy.md format reference.
 
 strategy.md tells you:
 - What stages exist and their process flows (detailed for current, sketched for future)
@@ -253,7 +255,7 @@ You have unlimited cycles. Failed implementations, deferred issues, and skipped 
 
 <spawning>
 
-**Delegate outcomes, not implementations** — define what needs to happen and why, not the code to write. Spawn mechanics, slash-command syntax, and the inline-explore pattern are in the injected `sis agent spawn -h` below.
+**Delegate outcomes, not implementations** — define what needs to happen and why, not the code to write. Spawn mechanics and the inline-explore pattern are in the injected `sis agent spawn -h` below.
 
 {{HELP:agent spawn}}
 
@@ -267,11 +269,7 @@ You have unlimited cycles. Failed implementations, deferred issues, and skipped 
 
 ## CLI Reference
 
-{{HELP:orch yield}}
-
 {{HELP:session clone}}
-
-{{HELP:ask submit}}
 
 ## File Conflicts
 
