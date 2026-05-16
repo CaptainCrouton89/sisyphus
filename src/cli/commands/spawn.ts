@@ -24,10 +24,10 @@ function listTypes(): void {
     return;
   }
 
-  const maxName = Math.max(...types.map(t => t.qualifiedName.length), 4);
+  const maxName = Math.max(...types.map(t => t.qualifiedName.length), 10);
   const maxSource = Math.max(...types.map(t => t.source.length), 6);
 
-  console.log(`${'TYPE'.padEnd(maxName)}  ${'SOURCE'.padEnd(maxSource)}  DESCRIPTION`);
+  console.log(`${'AGENT TYPE'.padEnd(maxName)}  ${'SOURCE'.padEnd(maxSource)}  DESCRIPTION`);
   for (const t of types) {
     const desc = t.description ?? '';
     console.log(`${t.qualifiedName.padEnd(maxName)}  ${t.source.padEnd(maxSource)}  ${desc}`);
@@ -67,10 +67,6 @@ Next on success:
 
 Delegate outcomes, not implementations — say what needs to happen and why,
 not the code to write.
-
-Slash commands: prefix the instruction with /skill:name to load a methodology:
-  $ sis agent spawn --agent-type sisyphus:debug --name dbg \\
-      "/devcore:debugging session tokens expire early. Check src/middleware/auth.ts"
 
 Inline understanding: for mid-flow "why does X behave this way?" / "what's the
 contract between X and Y?" questions, spawn sisyphus:explore and consume its
@@ -151,18 +147,29 @@ long-running implementors; you'll burn the turn waiting.`,
         }
       }
 
+      let agentType = opts.agentType.trim();
+      if (agentType.startsWith('/')) {
+        agentType = agentType.slice(1);
+        process.stderr.write('note: stripped leading "/" from --agent-type (agent types are identifiers, not slash commands)\n');
+      }
+      let agentName = opts.name.trim();
+      if (agentName.startsWith('/')) {
+        agentName = agentName.slice(1);
+        process.stderr.write('note: stripped leading "/" from --name (agent types are identifiers, not slash commands)\n');
+      }
+
       const request: Request = {
         type: 'spawn',
         sessionId,
-        agentType: opts.agentType,
-        name: opts.name,
+        agentType,
+        name: agentName,
         instruction,
         ...(opts.repo ? { repo: opts.repo } : {}),
       };
       const response = await sendRequest(request);
       if (!response.ok) exitError(response.error);
       const agentId = response.data?.agentId as string;
-      if (emitJsonOk({ agentId, sessionId, agentType: opts.agentType, name: opts.name })) return;
+      if (emitJsonOk({ agentId, sessionId, agentType, name: agentName })) return;
       console.log(`Agent spawned: ${agentId}`);
       console.log(`Tip: \`sis agent await ${agentId}\` blocks for the report and consumes it inline (won't appear in next cycle).`);
       console.log('Run `sis orch yield` when done spawning agents.');

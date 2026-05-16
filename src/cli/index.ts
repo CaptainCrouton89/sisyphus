@@ -139,7 +139,7 @@ Errors in --json:
 
 // session group
 const session = program.command('session').description('Manage sessions');
-registerStart(session);
+registerStart(session, program);
 registerStatus(session);
 registerList(session);
 registerKill(session);
@@ -183,7 +183,7 @@ registerAsk(program);
 
 // ui group
 const ui = program.command('ui').description('Interactive surfaces (dashboard, guide)');
-registerDashboard(ui);
+registerDashboard(ui, program);
 registerGettingStarted(ui, program);
 
 // segment group
@@ -253,7 +253,7 @@ propagateUniversalFlags(program);
 // Show welcome on first run (before ~/.sisyphus exists)
 const args = process.argv.slice(2);
 const firstArg = args[0];
-const skipWelcome = ['session', 'agent', 'orch', 'ask', 'ui', 'segment', 'admin', 'help', '--help', '-h', '--version', '-V'];
+const skipWelcome = ['session', 'start', 'dashboard', 'agent', 'orch', 'ask', 'ui', 'segment', 'admin', 'help', '--help', '-h', '--version', '-V'];
 if (!existsSync(globalDir()) && firstArg && !skipWelcome.includes(firstArg)) {
   mkdirSync(globalDir(), { recursive: true });
   console.log('');

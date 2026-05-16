@@ -58,9 +58,9 @@ export function openDashboardWindow(tmuxSession: string, cwd: string): boolean {
   return true;
 }
 
-export function registerDashboard(program: Command): void {
-  program
-    .command('dashboard')
+function buildDashboardCommand(target: Command, hidden: boolean): void {
+  target
+    .command('dashboard', { hidden })
     .description('Launch the TUI dashboard for monitoring and managing sessions')
     .action(async () => {
       assertTmux();
@@ -69,4 +69,13 @@ export function registerDashboard(program: Command): void {
         stdio: 'inherit',
       });
     });
+}
+
+/**
+ * Registers `<parent> dashboard` (canonical, e.g. `sis ui dashboard`) and,
+ * when `root` is given, a hidden top-level `sis dashboard` alias.
+ */
+export function registerDashboard(parent: Command, root?: Command): void {
+  buildDashboardCommand(parent, false);
+  if (root) buildDashboardCommand(root, true);
 }

@@ -46,9 +46,18 @@ function attachToTmuxSession(sessionName: string): void {
 }
 
 
-export function registerStart(program: Command): void {
-  program
-    .command('start')
+/**
+ * Registers `<parent> start` (canonical, e.g. `sis session start`) and,
+ * when `root` is given, a hidden top-level `sis start` alias.
+ */
+export function registerStart(parent: Command, root?: Command): void {
+  buildStartCommand(parent, false);
+  if (root) buildStartCommand(root, true);
+}
+
+function buildStartCommand(target: Command, hidden: boolean): void {
+  target
+    .command('start', { hidden })
     .description('Start a new sisyphus session')
     .argument('[task]', 'Task description for the orchestrator (omit when using --stdin)')
     .option('-c, --context <context>', 'Background context for the orchestrator')
