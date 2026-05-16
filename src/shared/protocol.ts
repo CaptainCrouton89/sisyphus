@@ -33,7 +33,7 @@ export type Request =
   | { type: 'update-segment'; id: string; content: string }
   | { type: 'unregister-segment'; id: string }
   | { type: 'ask-generate-visual'; sessionId: string; askId: string; qid: string; cols: number; force?: boolean }
-  // Response: { ok: true, data: { items: AggregateInboxItem[] } }
+  // Response: { ok: true, data: { items: (InboxItem & { sessionName?: string })[] } }
   | { type: 'inbox-list' }
   // Queue (or immediately fire) a cloud handoff. `provider` is resolved via
   // `pickProvider` on the daemon side; `repo` defaults to the local repo basename.

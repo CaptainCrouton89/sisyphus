@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { createSession } from '../daemon/state.js';
 import * as askStore from '../daemon/ask-store.js';
 import { emitModeTransitionNotify } from '../daemon/mode-notify.js';
-import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
+import { ORCHESTRATOR_ASKED_BY, type DeckSource } from '../shared/types.js';
 
 let testDir: string;
 
@@ -63,13 +63,13 @@ describe('emitModeTransitionNotify — mode change', () => {
     assert.ok(optionIds.includes('ack'), 'should have ack option');
 
     assert.equal(deck!.source?.askedBy, ORCHESTRATOR_ASKED_BY);
-    assert.ok(deck!.title.includes('discovery'));
-    assert.ok(deck!.title.includes('planning'));
+    assert.ok(deck!.title?.includes('discovery'));
+    assert.ok(deck!.title?.includes('planning'));
 
     // Aggregation discriminator + structured chain are present from the first emit
     assert.equal(meta!.modeTransition, true, 'meta should carry modeTransition discriminator');
     assert.deepEqual(
-      deck!.source?.modeChain,
+      (deck!.source as DeckSource | undefined)?.modeChain,
       [{ mode: 'discovery' }, { mode: 'planning' }],
       'source.modeChain seeds with [prev, next]',
     );
@@ -203,7 +203,7 @@ describe('emitModeTransitionNotify — aggregation', () => {
     assert.equal(meta!.subtitle, 'discovery → planning → execution');
 
     const deck = askStore.readDecisions(testDir, sessionId, askId);
-    assert.deepEqual(deck!.source?.modeChain, [
+    assert.deepEqual((deck!.source as DeckSource | undefined)?.modeChain, [
       { mode: 'discovery', cycles: 2, activeMs: 14 * 60 * 1000 },
       { mode: 'planning', cycles: 3, activeMs: 30 * 60 * 1000 },
       { mode: 'execution' },

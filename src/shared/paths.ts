@@ -157,11 +157,11 @@ export function askMetaPath(cwd: string, sessionId: string, askId: string): stri
 }
 
 export function askDecisionsPath(cwd: string, sessionId: string, askId: string): string {
-  return join(askEntryDir(cwd, sessionId, askId), 'decisions.json');
+  return join(askEntryDir(cwd, sessionId, askId), 'deck.json');
 }
 
 export function askOutputPath(cwd: string, sessionId: string, askId: string): string {
-  return join(askEntryDir(cwd, sessionId, askId), 'output.json');
+  return join(askEntryDir(cwd, sessionId, askId), 'response.json');
 }
 
 export function askProgressPath(cwd: string, sessionId: string, askId: string): string {

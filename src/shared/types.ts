@@ -198,28 +198,12 @@ export interface OrchestratorCycle {
   resumeArgs?: string;
 }
 
-// ── sisyphus ask: v2 interaction / deck types (mirror humanloop's published shapes) ──
+// ── sisyphus ask: interaction / deck types — canonical shapes from humanloop ──
 
-export type InteractionKind = 'notify' | 'validation' | 'decision' | 'context' | 'error';
+export type { Deck, Interaction, InteractionOption, InteractionKind, InteractionResponse } from '@crouton-kit/humanloop';
 
-export interface InteractionOption {
-  id: string;
-  label: string;
-  description?: string;
-  shortcut?: string;
-}
-
-export interface Interaction {
-  id: string;
-  title: string;
-  subtitle?: string;
-  body?: string;
-  bodyPath?: string;
-  options: InteractionOption[];
-  allowFreetext?: boolean;
-  freetextLabel?: string;
-  kind?: InteractionKind;
-}
+// Sisyphus-only extension: modeChain on DeckSource
+import type { DeckSource as HumanloopDeckSource, InteractionKind, InteractionResponse } from '@crouton-kit/humanloop';
 
 export interface ModeChainEntry {
   mode: string;
@@ -229,25 +213,11 @@ export interface ModeChainEntry {
   activeMs?: number;
 }
 
-export interface DeckSource {
-  sessionName?: string;
-  askedBy?: string;
-  blockedSince?: string;
+/** Sisyphus DeckSource extends humanloop's with orchestrator mode-chain. */
+export type DeckSource = HumanloopDeckSource & {
   /** For orchestrator mode-transition notify decks: ordered chain of modes visited. Trailing entry is the current mode. */
   modeChain?: ModeChainEntry[];
-}
-
-export interface Deck {
-  title?: string;
-  source?: DeckSource;
-  interactions: Interaction[];
-}
-
-export interface InteractionResponse {
-  id: string;
-  selectedOptionId?: string;
-  freetext?: string;
-}
+};
 
 export interface AskOutput {
   responses: InteractionResponse[];

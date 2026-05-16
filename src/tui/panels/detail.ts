@@ -38,7 +38,7 @@ import {
   type DetailLine,
 } from '../lib/format.js';
 import { buildCycleFlowLines } from './cycle-flow.js';
-import { coerceKind } from '../../shared/inbox-types.js';
+import { coerceKind, sessionIdFromDir, askIdFromDir } from '../../shared/inbox-types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -878,7 +878,7 @@ function formatTimestampShort(iso: string): string {
 function renderFleetRollup(rect: Rect, state: AppState, focused: boolean): string[] {
   const items = state.aggregateInbox;
   const sessions = state.sessions;
-  const cacheKey = `rollup:${items.length}:${sessions.length}:${items.map(i => `${i.askId}:${i.status}`).join(',')}:${rect.w}`;
+  const cacheKey = `rollup:${items.length}:${sessions.length}:${items.map(i => `${askIdFromDir(i.dir)}:${i.blockedSince}`).join(',')}:${rect.w}`;
   let lines: DetailLine[];
   if (cacheKey === state.digestCacheKey && state.cachedDigestLines !== null) {
     lines = state.cachedDigestLines;
@@ -892,7 +892,7 @@ function renderFleetRollup(rect: Rect, state: AppState, focused: boolean): strin
     for (const s of sessions) {
       byStatus.set(s.status, (byStatus.get(s.status) ?? 0) + 1);
     }
-    const uniqueSessions = new Set(items.map(i => i.sessionId)).size;
+    const uniqueSessions = new Set(items.map(i => sessionIdFromDir(i.dir))).size;
     lines = [];
     lines.push([seg('  Fleet Inbox', { color: 'red', bold: true })]);
     lines.push(singleLine(`    ${items.length} pending across ${uniqueSessions} sessions`, { dim: true }));

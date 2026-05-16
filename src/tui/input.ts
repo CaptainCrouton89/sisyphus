@@ -18,6 +18,7 @@ import type { Request } from '../shared/protocol.js';
 import { findParentIndex } from './lib/tree.js';
 import { badgeGalleryLeft, badgeGalleryRight, closeBadgeGallery, companionOverlayNextPage, companionOverlayShowHelp, companionOverlayDismissHelp, getCompanionPage, badgeListScrollUp, badgeListScrollDown } from './panels/overlays.js';
 import { enterResolutionMode } from './panels/mounted-humanloop.js';
+import { askIdFromDir } from '../shared/inbox-types.js';
 import { KEYMAP, MENU_FOR_MODE } from '../shared/keymap.js';
 import type { MenuItem } from '../shared/keymap.js';
 
@@ -1234,7 +1235,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
     if (node.type === 'needs-you-virtual') {
       const firstItem = state.aggregateInbox[0];
       if (firstItem) {
-        enterResolutionMode(state, firstItem.askId, actions.send, async ({ sessionId, agentId, paneId }) => {
+        enterResolutionMode(state, askIdFromDir(firstItem.dir), actions.send, async ({ sessionId, agentId, paneId }) => {
           const res = await actions.send({ type: 'status', sessionId });
           const sess = res.ok ? (res.data?.session as Session | undefined) : undefined;
           if (!sess) { notify(state, 'Session not found'); return; }

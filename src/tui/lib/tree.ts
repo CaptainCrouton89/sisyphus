@@ -16,7 +16,8 @@ import type {
 } from '../types/tree.js';
 import type { Session } from '../../shared/types.js';
 import type { SessionSummary } from '../state.js';
-import type { AggregateInboxItem } from '../../shared/inbox-types.js';
+import type { InboxItem } from '../../shared/inbox-types.js';
+import { sessionIdFromDir } from '../../shared/inbox-types.js';
 import { contextDir } from '../../shared/paths.js';
 
 /** Sort priority: active+open=0, active+closed=1, paused+open=2, paused+closed=3, completed=4 */
@@ -35,16 +36,17 @@ export function buildTree(
   expanded: Set<string>,
   cwd: string,
   polledContextFiles: string[] = [],
-  aggregateInbox: AggregateInboxItem[] = [],
+  aggregateInbox: InboxItem[] = [],
 ): TreeNode[] {
   const nodes: TreeNode[] = [];
 
   // Build per-session inbox index
-  const inboxBySession = new Map<string, AggregateInboxItem[]>();
+  const inboxBySession = new Map<string, InboxItem[]>();
   for (const item of aggregateInbox) {
-    const arr = inboxBySession.get(item.sessionId) ?? [];
+    const sessionId = sessionIdFromDir(item.dir);
+    const arr = inboxBySession.get(sessionId) ?? [];
     arr.push(item);
-    inboxBySession.set(item.sessionId, arr);
+    inboxBySession.set(sessionId, arr);
   }
 
   // Bucket sessions

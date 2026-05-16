@@ -5,7 +5,7 @@ import * as state from './state.js';
 import { discoverOrchestratorModes } from './orchestrator-modes.js';
 import { askOutputPath } from '../shared/paths.js';
 import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
-import type { Deck, Interaction, ModeChainEntry } from '../shared/types.js';
+import type { Deck, Interaction, ModeChainEntry, DeckSource } from '../shared/types.js';
 
 export interface PrevModeStats {
   cycles: number;
@@ -105,7 +105,7 @@ export async function emitModeTransitionNotify(
     ? askStore.readDecisions(cwd, sessionId, existingAskId)
     : null;
   const chain = buildNextChain(
-    existingDeck?.source?.modeChain,
+    (existingDeck?.source as DeckSource | undefined)?.modeChain,
     prevMode,
     nextMode,
     prevModeStats,
@@ -125,13 +125,14 @@ export async function emitModeTransitionNotify(
     options: [{ id: 'ack', label: 'Acknowledged' }],
   };
 
+  const deckSource: DeckSource = {
+    ...(sessionName !== undefined ? { sessionName } : {}),
+    askedBy: ORCHESTRATOR_ASKED_BY,
+    modeChain: chain,
+  };
   const deck: Deck = {
     title: deckTitle,
-    source: {
-      ...(sessionName !== undefined ? { sessionName } : {}),
-      askedBy: ORCHESTRATOR_ASKED_BY,
-      modeChain: chain,
-    },
+    source: deckSource,
     interactions: [interaction],
   };
 

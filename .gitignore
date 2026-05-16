@@ -13,6 +13,10 @@ __pycache__/
 # Sisyphus
 .sisyphus
 
+# yalc (local @crouton-kit/* dev linking)
+.yalc/
+yalc.lock
+
 tmp/
 package-lock.json
 

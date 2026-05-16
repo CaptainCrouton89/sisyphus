@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { askIdFromDir } from '../shared/inbox-types.js';
 
 import {
   type AppState,
@@ -555,7 +556,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
       : state.sessions;
 
     const statusFP = filteredSessions.map(s => `${s.status}:${s.windowAlive}:${s.runningAgentCount}:${s.orphaned ?? false}`).join(',');
-    const inboxFP = `${state.aggregateInbox.length}:${state.aggregateInbox.map(i => i.askId).join(',')}`;
+    const inboxFP = `${state.aggregateInbox.length}:${state.aggregateInbox.map(i => askIdFromDir(i.dir)).join(',')}`;
     const cacheKey = `${state.expanded.size}:${filteredSessions.length}:${state.selectedSession?.id}:${state.contextFiles.length}:${state.searchFilter}:${statusFP}:${inboxFP}`;
     let nodes: TreeNode[];
     if (cacheKey === state.treeCacheKey && state.cachedTreeNodes !== null) {

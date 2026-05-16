@@ -18,7 +18,7 @@ interface RunSingleAskOpts {
  * Designed for the parallel ask-pane spawned by `sis ask`: the pane has
  * no inbox, no tree, just the deck. Both this pane and the dashboard write
  * through the same on-disk ask-store paths, so whichever surface answers
- * first wins; the loser detects the resolution via output.json and exits.
+ * first wins; the loser detects the resolution via response.json and exits.
  */
 export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
   const { cwd, sessionId, askId } = opts;
@@ -73,7 +73,7 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
       try {
         await updateMeta(cwd, sessionId, askId, { status: 'answered', completedAt });
       } catch {
-        // Race: dashboard updated meta concurrently. output.json is written; the
+        // Race: dashboard updated meta concurrently. response.json is written; the
         // blocked `sis ask` will still pick up the result.
       }
       exit(0);
@@ -123,7 +123,7 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
   watchFile(outputPath, { interval: 250 }, onExternalChange);
 
   // Race guard: dashboard may have answered between our initial readMeta and
-  // mount completion. If output.json is already on disk, exit immediately.
+  // mount completion. If response.json is already on disk, exit immediately.
   if (existsSync(outputPath)) {
     exit(0);
     return;

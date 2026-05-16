@@ -814,7 +814,7 @@ export async function handleSubmit(cwd: string, sessionId: string, agentId: stri
 /**
  * Yield/submit guard: an open deck (`pending`/`in-progress`) attributed to the caller
  * means the user is mid-answer or hasn't started. Letting the caller terminate now
- * orphans the answer — the pane closes, no one is left to read `output.json`.
+ * orphans the answer — the pane closes, no one is left to read `response.json`.
  *
  * Backgrounded vs foreground doesn't change the calculus on the daemon side. The
  * orchestrator pattern is foreground (this guard fires only on bug paths). The

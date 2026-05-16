@@ -315,7 +315,7 @@ async function peek(askId: string, opts: { session?: string }): Promise<void> {
     }
   } catch (err) {
     if (!(err instanceof SyntaxError)) throw err;
-    // output.json mid-write (atomic rename in progress); leave output key absent
+    // response.json mid-write (atomic rename in progress); leave output key absent
   }
   process.stdout.write(JSON.stringify(result) + '\n');
 }

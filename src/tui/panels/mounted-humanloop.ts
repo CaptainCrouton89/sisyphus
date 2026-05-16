@@ -5,7 +5,8 @@ import { readDecisions, readProgress, readMeta, updateMeta, writeOutput } from '
 import { askProgressPath } from '../../shared/paths.js';
 import type { AppState } from '../state.js';
 import { requestRender } from '../state.js';
-import type { AggregateInboxItem } from '../../shared/inbox-types.js';
+import type { InboxItem } from '../../shared/inbox-types.js';
+import { sessionIdFromDir, cwdFromDir, askIdFromDir } from '../../shared/inbox-types.js';
 import type { Request, Response } from '../../shared/protocol.js';
 import { rawSend } from '../../shared/client.js';
 import type { Key } from '../terminal.js';
@@ -85,7 +86,7 @@ export interface MountedResolutionHandle {
 // ── Mount options ─────────────────────────────────────────────────────────────
 
 export interface MountResolutionOpts {
-  aggregateInbox: AggregateInboxItem[];
+  aggregateInbox: (InboxItem & { sessionName?: string })[];
   startIndex: number;
   cols: number;
   rows: number;
@@ -106,18 +107,30 @@ export function mountResolutionPanel(
 
   const item = () => queue[currentIndex]!;
 
+  function itemCoords(it: InboxItem): { cwd: string; sessionId: string; askId: string } {
+    return {
+      cwd: cwdFromDir(it.dir),
+      sessionId: sessionIdFromDir(it.dir),
+      askId: askIdFromDir(it.dir),
+    };
+  }
+
   function buildDeck(idx: number): Deck | null {
     const it = queue[idx];
     if (!it) return null;
-    const deck = readDecisions(it.cwd, it.sessionId, it.askId);
+    const { cwd, sessionId, askId } = itemCoords(it);
+    const deck = readDecisions(cwd, sessionId, askId);
     if (!deck) return null;
     deck.source = {
-      sessionName: it.sessionName,
-      askedBy: it.askedBy,
+      sessionName: (it as InboxItem & { sessionName?: string }).sessionName ?? it.source?.sessionName,
+      askedBy: it.source?.askedBy,
       blockedSince: it.blockedSince,
     };
     return deck;
   }
+
+  // Coords for the initial item — stable reference for initial deck + progress read.
+  const { cwd: initCwd, sessionId: initSessionId, askId: initAskId } = itemCoords(item());
 
   // Initial deck — if missing (file gone, stale inbox, etc.) return null so the caller
   // never enters resolution mode. Returning a live no-op handle traps the user with no
@@ -127,7 +140,7 @@ export function mountResolutionPanel(
 
   // Track answered count for current-qid derivation (Gap 2 option a)
   let currentDeck = initialDeck;
-  const initialProgress = readProgress(item().cwd, item().sessionId, item().askId);
+  const initialProgress = readProgress(initCwd, initSessionId, initAskId);
   let answeredCount = initialProgress?.responses.length ?? 0;
 
   function getCurrentQid(): string | undefined {
@@ -138,13 +151,14 @@ export function mountResolutionPanel(
     const qid = getCurrentQid();
     if (!qid) return;
     const it = item();
+    const { sessionId: itSessionId, askId: itAskId } = itemCoords(it);
     state.visuals.set(qid, { status: 'loading', content: '', visible: true });
     requestRender();
     void (async () => {
       const res = await rawSend({
         type: 'ask-generate-visual',
-        sessionId: it.sessionId,
-        askId: it.askId,
+        sessionId: itSessionId,
+        askId: itAskId,
         qid,
         cols: bodyCols,
         force,
@@ -168,29 +182,30 @@ export function mountResolutionPanel(
   const submitResponses = (responses: InteractionResponse[]): void => {
     void (async () => {
       const it = item();
+      const { cwd, sessionId, askId } = itemCoords(it);
       const completedAt = new Date().toISOString();
 
       // Orphan disposition: dispatch before writeOutput so action lands first
-      const meta = readMeta(it.cwd, it.sessionId, it.askId);
+      const meta = readMeta(cwd, sessionId, askId);
       if (meta?.orphanTarget && responses.length > 0) {
         const sel = responses[0]!.selectedOptionId;
         if (sel) {
           await dispatchOrphanResolution(meta.orphanTarget, sel, {
             daemonSend: opts.daemonSend,
             onOrphanTakeover: opts.onOrphanTakeover,
-            sessionId: it.sessionId,
-            cwd: it.cwd,
+            sessionId,
+            cwd,
           });
         }
       }
 
       // Write output first (before inbox-list so daemon sees answered status)
-      writeOutput(it.cwd, it.sessionId, it.askId, responses, completedAt);
-      await updateMeta(it.cwd, it.sessionId, it.askId, { status: 'answered', completedAt });
+      writeOutput(cwd, sessionId, askId, responses, completedAt);
+      await updateMeta(cwd, sessionId, askId, { status: 'answered', completedAt });
 
       const refreshRes = await opts.daemonSend({ type: 'inbox-list' });
-      const newQueue: AggregateInboxItem[] = refreshRes.ok
-        ? ((refreshRes.data?.items as AggregateInboxItem[]) ?? [])
+      const newQueue: (InboxItem & { sessionName?: string })[] = refreshRes.ok
+        ? ((refreshRes.data?.items as (InboxItem & { sessionName?: string })[]) ?? [])
         : [];
 
       if (newQueue.length === 0) {
@@ -201,6 +216,7 @@ export function mountResolutionPanel(
       queue = newQueue;
       currentIndex = 0;
       const nextItem = queue[0]!;
+      const nextCoords = itemCoords(nextItem);
       const nextDeck = buildDeck(0);
       if (!nextDeck) {
         opts.onUnmount();
@@ -208,14 +224,14 @@ export function mountResolutionPanel(
       }
 
       currentDeck = nextDeck;
-      const nextProgress = readProgress(nextItem.cwd, nextItem.sessionId, nextItem.askId);
+      const nextProgress = readProgress(nextCoords.cwd, nextCoords.sessionId, nextCoords.askId);
       answeredCount = nextProgress?.responses.length ?? 0;
       lastResponses = [];
 
       state.visuals.clear();
 
       panel.loadDeck(nextDeck, {
-        progressPath: askProgressPath(nextItem.cwd, nextItem.sessionId, nextItem.askId),
+        progressPath: askProgressPath(nextCoords.cwd, nextCoords.sessionId, nextCoords.askId),
       });
       requestRender();
     })();
@@ -225,15 +241,16 @@ export function mountResolutionPanel(
     deck: initialDeck,
     cols: opts.cols,
     rows: opts.rows,
-    progressPath: askProgressPath(item().cwd, item().sessionId, item().askId),
+    progressPath: askProgressPath(initCwd, initSessionId, initAskId),
     onProgress: (responses: InteractionResponse[]) => {
       answeredCount = responses.length;
       lastResponses = responses;
       requestRender();
       const it = item();
-      const cur = readMeta(it.cwd, it.sessionId, it.askId);
+      const { cwd, sessionId, askId } = itemCoords(it);
+      const cur = readMeta(cwd, sessionId, askId);
       if (cur?.status === 'pending') {
-        void updateMeta(it.cwd, it.sessionId, it.askId, { status: 'in-progress', startedAt: new Date().toISOString() });
+        void updateMeta(cwd, sessionId, askId, { status: 'in-progress', startedAt: new Date().toISOString() });
       }
     },
     onComplete: (responses: InteractionResponse[]) => {
@@ -279,10 +296,11 @@ export function mountResolutionPanel(
       if (!nextDeck) return;
       currentDeck = nextDeck;
       const it = item();
-      const progress = readProgress(it.cwd, it.sessionId, it.askId);
+      const { cwd: advCwd, sessionId: advSid, askId: advAid } = itemCoords(it);
+      const progress = readProgress(advCwd, advSid, advAid);
       answeredCount = progress?.responses.length ?? 0;
       panel.loadDeck(nextDeck, {
-        progressPath: askProgressPath(it.cwd, it.sessionId, it.askId),
+        progressPath: askProgressPath(advCwd, advSid, advAid),
       });
       requestRender();
     },
@@ -315,10 +333,11 @@ export function mountResolutionPanel(
     getHeaderInfo() {
       const it = item();
       const askTitle = currentDeck.title ?? currentDeck.interactions[0]?.title;
+      const itWithName = it as InboxItem & { sessionName?: string };
       return {
         currentIndex,
         queueLength: queue.length,
-        sessionName: it.sessionName,
+        sessionName: itWithName.sessionName ?? it.source?.sessionName,
         askTitle: askTitle ? askTitle.slice(0, 32) : undefined,
         blockedSince: it.blockedSince,
         kind: it.kind,
@@ -338,11 +357,11 @@ export function enterResolutionMode(
   onOrphanTakeover?: MountResolutionOpts['onOrphanTakeover'],
 ): void {
   const queue = state.aggregateInbox;
-  const startIdx = queue.findIndex((item) => item.askId === askId);
+  const startIdx = queue.findIndex((item) => askIdFromDir(item.dir) === askId);
   if (startIdx < 0) {
     // Ask not in current inbox — use the first item as fallback
     if (queue.length === 0) return;
-    enterResolutionMode(state, queue[0]!.askId, daemonSend, onOrphanTakeover);
+    enterResolutionMode(state, askIdFromDir(queue[0]!.dir), daemonSend, onOrphanTakeover);
     return;
   }
 

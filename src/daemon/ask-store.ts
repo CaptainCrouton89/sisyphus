@@ -176,9 +176,9 @@ export interface PendingAskRef {
  * yield/submit so a deck can't be abandoned mid-flight — terminating the caller's
  * pane orphans any answer the user produces afterward.
  *
- * Skips: meta.orphaned, status === 'answered', decks where output.json already
+ * Skips: meta.orphaned, status === 'answered', decks where response.json already
  * exists (the user resolved the deck but markAnswered hasn't run yet, e.g. because
- * the original waiter died before observing the output), and non-blocking decks
+ * the original waiter died before observing the response), and non-blocking decks
  * (mode-transition notifications, heartbeat asks, orphan-recovery surfaces — these
  * have no CLI waiter, so terminating the caller doesn't orphan anything).
  */
@@ -198,7 +198,7 @@ function buildAutoResponses(deck: Deck): InteractionResponse[] {
 
 /**
  * Unconditionally auto-resolve the given ask using the supplied (or just-read)
- * deck. Skips when output.json already exists or no responses can be built.
+ * deck. Skips when response.json already exists or no responses can be built.
  * The flush path passes the deck directly; the writeDecisions hook also passes
  * the deck so we never re-read it.
  */

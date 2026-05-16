@@ -7,6 +7,7 @@ import { ensureSisyphusPluginInstalled, type SisyphusPluginInfo } from './plugin
 import { sisyphusTmuxConfPath } from './tmux-setup.js';
 import { hasCommand, isLinuxLike, isWslHost, platformLabel } from '../shared/platform.js';
 import { detectClipboard } from '../shared/clipboard.js';
+import { ensureRenderer, isRendererReady } from '@crouton-kit/humanloop';
 
 export interface TerminalInfo {
   name: string;
@@ -360,59 +361,25 @@ export function tryAutoInstallNvim(): NvimInfo {
   return { installed: true, autoInstalled: true, version: getNvimVersion(), lazyVimInstalled, baleiaInstalled };
 }
 
+/**
+ * termrender is a humanloop-managed dependency: humanloop pins it in its own
+ * venv (provisioned via `uv`) and is the sole caller — it ignores $PATH, so
+ * sisyphus must NOT `pip install termrender` (that copy would never be used).
+ * This reports whether humanloop's managed renderer is ready; false ⇒
+ * humanloop transparently falls back to plaintext word-wrap.
+ */
 export function isTermrenderAvailable(): boolean {
-  try {
-    execSync('which termrender', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isPipxAvailable(): boolean {
-  try {
-    execSync('which pipx', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isPipAvailable(): boolean {
-  try {
-    execSync('which pip3', { stdio: 'pipe' });
-    return true;
-  } catch {
-    try {
-      execSync('which pip', { stdio: 'pipe' });
-      return true;
-    } catch {
-      return false;
-    }
-  }
+  return isRendererReady();
 }
 
 function tryAutoInstallTermrender(): TermrenderInfo {
-  if (isTermrenderAvailable()) {
-    return { installed: true, autoInstalled: false };
-  }
-  // Prefer pipx (isolated install), fall back to pip
-  if (isPipxAvailable()) {
-    try {
-      console.log('  Installing termrender via pipx...');
-      execSync('pipx install termrender', { stdio: 'inherit' });
-      if (isTermrenderAvailable()) return { installed: true, autoInstalled: true };
-    } catch { /* fall through */ }
-  }
-  if (isPipAvailable()) {
-    try {
-      console.log('  Installing termrender via pip...');
-      const pip = (() => { try { execSync('which pip3', { stdio: 'pipe' }); return 'pip3'; } catch { return 'pip'; } })();
-      execSync(`${pip} install termrender`, { stdio: 'inherit' });
-      if (isTermrenderAvailable()) return { installed: true, autoInstalled: true };
-    } catch { /* fall through */ }
-  }
-  return { installed: false, autoInstalled: false };
+  const before = isRendererReady();
+  // Best-effort: trigger humanloop's self-heal now (uv venv + pinned
+  // install, ~1-2s cold) so the first TUI render isn't slow. Never throws —
+  // if uv is absent humanloop degrades to plaintext on its own.
+  try { ensureRenderer(); } catch { /* humanloop handles degradation */ }
+  const installed = isRendererReady();
+  return { installed, autoInstalled: installed && !before };
 }
 
 export function detectPlatformReadiness(): PlatformReadiness {
@@ -562,13 +529,13 @@ export function formatOnboardingMessages(result: OnboardResult): string[] {
     );
   }
 
-  // termrender
+  // termrender (humanloop-managed renderer)
   if (result.termrender.autoInstalled) {
-    lines.push('  \u2713 termrender installed (markdown rendering for TUI).', '');
+    lines.push('  \u2713 humanloop renderer provisioned (rich markdown for TUI).', '');
   } else if (!result.termrender.installed) {
     lines.push(
-      '  \u26a0  termrender not installed (rich markdown rendering unavailable).',
-      '    Install: pipx install termrender (or: pip install termrender)',
+      '  \u26a0  rich markdown rendering unavailable (humanloop renderer not provisioned; plaintext fallback in use).',
+      '    Install uv so humanloop can self-provision it: curl -LsSf https://astral.sh/uv/install.sh | sh',
       '',
     );
   }

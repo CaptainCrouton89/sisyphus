@@ -1,5 +1,5 @@
 import type { Session } from '../shared/types.js';
-import type { AggregateInboxItem } from '../shared/inbox-types.js';
+import type { InboxItem } from '../shared/inbox-types.js';
 import type { TreeNode } from './types/tree.js';
 import type { ReportBlock } from './lib/reports.js';
 
@@ -185,7 +185,7 @@ export interface AppState {
   digestScroll: ThrottledScroll;
 
   // Aggregate inbox — fetched from daemon on each poll
-  aggregateInbox: AggregateInboxItem[];
+  aggregateInbox: (InboxItem & { sessionName?: string })[];
   crossSessionInboxScroll: ThrottledScroll;
   cachedInboxLines: import('./lib/format.js').DetailLine[] | null;
   inboxCacheKey: string;

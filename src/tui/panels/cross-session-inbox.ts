@@ -3,7 +3,7 @@ import type { AppState } from '../state.js';
 import {
   seg, singleLine, formatTimeAgo, truncate, type DetailLine,
 } from '../lib/format.js';
-import { coerceKind, type AggregateInboxItem } from '../../shared/inbox-types.js';
+import { coerceKind, type InboxItem, sessionIdFromDir, askIdFromDir } from '../../shared/inbox-types.js';
 
 const KIND_ICON: Record<string, string> = {
   notify: '✉',
@@ -20,7 +20,7 @@ const KIND_COLOR: Record<string, string> = {
   error: 'red',
 };
 
-function buildInboxLines(items: AggregateInboxItem[], width: number): DetailLine[] {
+function buildInboxLines(items: (InboxItem & { sessionName?: string })[], width: number): DetailLine[] {
   const lines: DetailLine[] = [];
   if (items.length === 0) {
     lines.push(singleLine(' No pending asks across the fleet', { dim: true, italic: true }));
@@ -33,8 +33,10 @@ function buildInboxLines(items: AggregateInboxItem[], width: number): DetailLine
     const kindKey = coerceKind(item.kind);
     const icon = kindKey in KIND_ICON ? KIND_ICON[kindKey]! : '·';
     const iconColor = kindKey in KIND_COLOR ? KIND_COLOR[kindKey]! : 'cyan';
-    const source = item.sessionName ? item.sessionName : item.sessionId.slice(0, 8);
-    const titleText = item.title ? item.title : `(${item.askId.slice(0, 8)})`;
+    const sessionId = sessionIdFromDir(item.dir);
+    const source = item.sessionName ? item.sessionName : sessionId.slice(0, 8);
+    const askId = askIdFromDir(item.dir);
+    const titleText = item.title ? item.title : `(${askId.slice(0, 8)})`;
     const blocked = formatTimeAgo(item.blockedSince);
     const maxTitle = Math.max(10, contentWidth - source.length - blocked.length - 8);
     lines.push([
@@ -58,7 +60,7 @@ export function renderCrossSessionInboxRows(rect: Rect, state: AppState): string
   }
   const focused = state.focusPane === 'detail';
   const items = state.aggregateInbox;
-  const fingerprint = items.map(i => `${i.askId}:${i.status}`).join(',');
+  const fingerprint = items.map(i => `${askIdFromDir(i.dir)}:${i.blockedSince}`).join(',');
   const cacheKey = `${items.length}:${fingerprint}:${rect.w}`;
   let lines: DetailLine[];
   if (cacheKey === state.inboxCacheKey && state.cachedInboxLines !== null) {

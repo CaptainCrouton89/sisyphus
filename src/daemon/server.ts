@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:net';
 import { unlinkSync, existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync, rmSync, chmodSync } from 'node:fs';
 import { socketPath, globalDir, messagesDir, sessionsDir } from '../shared/paths.js';
-import { join } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import type { Request, Response } from '../shared/protocol.js';
 import { errUsage, errNotFound, errAmbiguous, errConflict, errTransient, errPermanent } from '../shared/protocol.js';
 import type { MessageSource } from '../shared/types.js';
@@ -20,7 +20,8 @@ import { recomputeDots } from './status-dots.js';
 import * as orchestrator from './orchestrator.js';
 import * as agent from './agent.js';
 import * as tmux from './tmux.js';
-import type { AggregateInboxItem } from '../shared/inbox-types.js';
+import { scanInbox, type InboxItem } from '@crouton-kit/humanloop';
+import { askDir } from '../shared/paths.js';
 
 let server: Server | null = null;
 let compositor: Compositor | null = null;
@@ -814,61 +815,27 @@ async function handleRequest(req: Request): Promise<Response> {
       }
 
       case 'inbox-list': {
-        const items: AggregateInboxItem[] = [];
+        const askDirs: string[] = [];
         for (const [sessionId, tracking] of sessionTrackingMap) {
           if (!tracking.cwd) continue;
-          let askIds: string[] = [];
-          try {
-            askIds = listAsks(tracking.cwd, sessionId);
-          } catch (err) {
-            console.warn(`[sisyphus] inbox-list: listAsks failed for ${sessionId}:`, err);
-            continue;
-          }
-          const sessionName = tracking.name;
-
-          for (const askId of askIds) {
-            try {
-              const meta = readMeta(tracking.cwd, sessionId, askId);
-              if (!meta) continue;
-              if (meta.status === 'answered') continue;
-
-              let title = meta.title;
-              let subtitle = meta.subtitle;
-              let kind = meta.kind;
-              if (title === undefined || kind === undefined) {
-                try {
-                  const decisions = readDecisions(tracking.cwd, sessionId, askId);
-                  if (decisions) {
-                    const q0 = decisions.interactions[0];
-                    if (title === undefined) title = decisions.title !== undefined ? decisions.title : q0?.title;
-                    if (subtitle === undefined) subtitle = q0?.subtitle;
-                    if (kind === undefined) kind = q0?.kind;
-                  }
-                } catch (_err) { /* decisions.json is optional */ }
-              }
-
-              items.push({
-                sessionId,
-                sessionName,
-                cwd: tracking.cwd,
-                askId,
-                askedBy: meta.askedBy,
-                askedAt: meta.askedAt,
-                status: meta.status,
-                blocking: meta.blocking,
-                orphaned: meta.orphaned,
-                title,
-                subtitle,
-                blockedSince: meta.status === 'in-progress' ? (meta.startedAt ?? meta.askedAt) : meta.askedAt,
-                kind,
-              });
-            } catch (err) {
-              console.warn(`[sisyphus] inbox-list: readMeta failed for ${sessionId}/${askId}:`, err);
-            }
-          }
+          askDirs.push(askDir(tracking.cwd, sessionId));
         }
-        items.sort((a, b) => a.blockedSince.localeCompare(b.blockedSince));
-        return { ok: true, data: { items: items as unknown as Record<string, unknown> } };
+        let items: InboxItem[];
+        try {
+          items = scanInbox(askDirs);
+        } catch (err) {
+          console.warn('[sisyphus] inbox-list: scanInbox failed:', err);
+          items = [];
+        }
+        // Attach sessionName from sessionTrackingMap by deriving sessionId from item.dir
+        // dir: <cwd>/.sisyphus/sessions/<sessionId>/context/ask/<askId>
+        const itemsWithName = items.map(item => {
+          const sessionId = basename(dirname(dirname(dirname(item.dir))));
+          const tracking = sessionTrackingMap.get(sessionId);
+          const sessionName = tracking?.name ?? item.source?.sessionName;
+          return { ...item, sessionName };
+        });
+        return { ok: true, data: { items: itemsWithName as unknown as Record<string, unknown> } };
       }
 
       case 'cloud-handoff': {

@@ -51,7 +51,7 @@ export async function generateVisualForQuestion(opts: GenerateVisualOpts): Promi
   if (!meta) return { ok: false, error: `ask not found: ${opts.askId}` };
 
   const decisions = readDecisions(opts.cwd, opts.sessionId, opts.askId);
-  if (!decisions) return { ok: false, error: 'decisions.json missing' };
+  if (!decisions) return { ok: false, error: 'deck.json missing' };
   const question = decisions.interactions.find(q => q.id === opts.qid);
   if (!question) return { ok: false, error: `qid ${opts.qid} not found in decisions` };
 
@@ -261,17 +261,17 @@ function spawnAsync(cmd: string, args: string[], input: string, timeoutMs: numbe
 async function attachVisualHandler(args: {
   content: string; mdPath: string; ansiPath: string; cols: number;
 }): Promise<AttachResult> {
-  const check = await spawnAsync('termrender', ['--check'], args.content, 5000);
+  const check = await spawnAsync('termrender', ['doc', 'check'], JSON.stringify({ source: args.content }), 5000);
   if (check.error) {
     const msg = `termrender invocation failed: ${check.error.message}`;
     return { ok: false, error: msg, toolResult: errorResult(msg) };
   }
   if (check.status !== 0) {
-    const msg = `termrender --check rejected the content: ${check.stderr.trim()}`;
+    const msg = `termrender doc check rejected the content: ${check.stderr.trim()}`;
     return { ok: false, error: msg, toolResult: errorResult(msg) };
   }
 
-  const render = await spawnAsync('termrender', ['-w', String(args.cols)], args.content, 8000);
+  const render = await spawnAsync('termrender', ['doc', 'render'], JSON.stringify({ source: args.content, width: args.cols, color: true }), 8000);
   if (render.error) {
     const msg = `termrender render failed: ${render.error.message}`;
     return { ok: false, error: msg, toolResult: errorResult(msg) };

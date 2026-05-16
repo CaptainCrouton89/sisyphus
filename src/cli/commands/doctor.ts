@@ -241,19 +241,17 @@ function checkSisyphusPlugin(): Check {
 }
 
 function checkTermrender(): Check {
+  // termrender is pinned + provisioned by @crouton-kit/humanloop in its own
+  // venv (humanloop ignores $PATH). Report humanloop's managed-renderer
+  // readiness, not a stray PATH copy.
   if (isTermrenderAvailable()) {
-    try {
-      const version = execSync('termrender --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
-      return { name: 'termrender', status: 'ok', detail: version };
-    } catch {
-      return { name: 'termrender', status: 'ok', detail: 'installed' };
-    }
+    return { name: 'termrender', status: 'ok', detail: 'managed by @crouton-kit/humanloop' };
   }
   return {
     name: 'termrender',
     status: 'warn',
-    detail: 'Not installed (rich markdown rendering unavailable)',
-    fix: 'pipx install termrender (or: pip install termrender)',
+    detail: 'humanloop renderer not provisioned (plaintext fallback in use)',
+    fix: 'run `sis admin setup`, or install uv: curl -LsSf https://astral.sh/uv/install.sh | sh',
   };
 }
 
