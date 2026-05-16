@@ -11,6 +11,7 @@ import {
   promptsDir, sessionDir, reportsDir,
 } from '../shared/paths.js';
 import { execSafe } from '../shared/exec.js';
+import { digestSpinnerVerbs } from '../shared/digest-verbs.js';
 import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
 import type { Agent, Session } from '../shared/types.js';
 import { loadConfig } from '../shared/config.js';
@@ -107,7 +108,8 @@ function resolveOrchestratorSettings(cwd: string, sessionId: string): string {
 
   const hasProject = existsSync(projectSettings);
   const hasUser = existsSync(userSettings);
-  if (!hasProject && !hasUser) return bundled;
+  const digestVerbs = digestSpinnerVerbs(cwd, sessionId);
+  if (!hasProject && !hasUser && !digestVerbs) return bundled;
 
   // Merge from lowest to highest priority so higher overrides lower.
   let merged: Record<string, unknown> = {};
@@ -119,6 +121,11 @@ function resolveOrchestratorSettings(cwd: string, sessionId: string): string {
     } catch (err) {
       console.warn(`[sisyphus] Failed to parse settings layer ${path}: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  // Live session status (digest.json) replaces the themed verbs when present.
+  if (digestVerbs) {
+    merged.spinnerVerbs = { mode: 'replace', verbs: digestVerbs };
   }
 
   const out = join(promptsDir(cwd, sessionId), 'orchestrator-settings.merged.json');
@@ -413,9 +420,9 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
 
   const agentTypeLines = agentTypes.length > 0
     ? agentTypes.map(t => {
-        const modelTag = t.model ? ` (${t.model})` : '';
+        const tag = t.model ? `(agent, ${t.model})` : '(agent)';
         const desc = t.description ? ` — ${t.description}` : '';
-        return `- \`${t.qualifiedName}\`${modelTag}${desc}`;
+        return `- \`${t.qualifiedName}\` ${tag}${desc}`;
       }).join('\n')
     : '  (none)';
 

@@ -19,6 +19,7 @@ import { execEnv } from '../shared/env.js';
 import { shellQuote } from '../shared/shell.js';
 import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, buildNotifyCmd, writeRunScript } from './spawn-helpers.js';
 import { resolveRequiredPluginDirs, resolveAgentPluginDirs } from './plugins.js';
+import { digestSpinnerVerbs } from '../shared/digest-verbs.js';
 import { emitHistoryEvent } from './history.js';
 import { emitOrphanAsk, markAgentAsksOrphan } from './orphan-asks.js';
 import { capturePanePidLstart } from './orphan-sweep.js';
@@ -260,7 +261,24 @@ function setupAgentPane(opts: SetupAgentPaneOpts): { paneId: string; fullCmd: st
     const sessionIdFlag = claudeSessionId ? ` --session-id "${claudeSessionId}"` : '';
     const promptFlag = agentConfig?.frontmatter.systemPrompt === 'replace' ? '--system-prompt' : '--append-system-prompt';
     const siblingSettingsPath = agentConfig?.filePath ? agentConfig.filePath.replace(/\.md$/, '.settings.json') : null;
-    const settingsFlag = siblingSettingsPath && existsSync(siblingSettingsPath) ? ` --settings "${siblingSettingsPath}"` : '';
+    const hasSibling = !!siblingSettingsPath && existsSync(siblingSettingsPath);
+    const agentDigestVerbs = digestSpinnerVerbs(cwd, sessionId);
+    let resolvedSettingsPath: string | null = hasSibling ? siblingSettingsPath : null;
+    if (agentDigestVerbs) {
+      let base: Record<string, unknown> = {};
+      if (hasSibling) {
+        try {
+          base = JSON.parse(readFileSync(siblingSettingsPath!, 'utf-8')) as Record<string, unknown>;
+        } catch {
+          base = {};
+        }
+      }
+      base.spinnerVerbs = { mode: 'replace', verbs: agentDigestVerbs };
+      const mergedSettingsOut = join(promptsDir(cwd, sessionId), `${agentId}-settings.merged.json`);
+      writeFileSync(mergedSettingsOut, JSON.stringify(base, null, 2), 'utf-8');
+      resolvedSettingsPath = mergedSettingsOut;
+    }
+    const settingsFlag = resolvedSettingsPath ? ` --settings "${resolvedSettingsPath}"` : '';
     mainCmd = `claude${permFlag} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${sessionIdFlag}${extraPluginFlags ? ` ${extraPluginFlags}` : ''}${settingsFlag} --name ${shellQuote(agentTitle)} ${promptFlag} "$(cat '${suffixFilePath}')" ${shellQuote(instruction)}`;
     resumeArgs = `${permFlag.trimStart()} --effort ${effort}${modelFlag} --plugin-dir "${pluginPath}"${extraPluginFlags ? ` ${extraPluginFlags}` : ''}${settingsFlag}`;
   }
