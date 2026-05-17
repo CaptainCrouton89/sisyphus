@@ -36,7 +36,7 @@ import { resetAgentCounterFromState } from './agent.js';
 import { orphanOrchestrator } from './orphan-asks.js';
 import { isProcessAlive } from './lib/process.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
-import { listPanes, sessionExistsById, sessionNameTaken, resolveSessionId, initSessionMeta, getFirstWindowId } from './tmux.js';
+import { listPanes, initSessionMeta, getFirstWindowId, listAllSessions } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
@@ -122,6 +122,127 @@ function stopDaemon(): boolean {
   return true;
 }
 
+async function recoverOneSession(
+  sessionId: string,
+  cwd: string,
+  tmuxIdSet: Set<string>,
+  tmuxNameToId: Map<string, string>,
+): Promise<boolean> {
+  const stateFile = statePath(cwd, sessionId);
+  if (!existsSync(stateFile)) return false;
+
+  let session: Session;
+  try {
+    session = JSON.parse(readFileSync(stateFile, 'utf-8')) as Session;
+  } catch {
+    console.error(`[sisyphus] Failed to read session state for ${sessionId}, skipping`);
+    return false;
+  }
+
+  if (session.status !== 'active' && session.status !== 'paused') return false;
+
+  registerSessionCwd(sessionId, cwd);
+  resetAgentCounterFromState(sessionId, session.agents ?? []);
+
+  if (!session.tmuxSessionName) return true;
+
+  // Existence check via batched tmux list (single call shared across all sessions).
+  let sessionAlive = false;
+  let currentTmuxId = session.tmuxSessionId;
+
+  if (currentTmuxId && tmuxIdSet.has(currentTmuxId)) {
+    sessionAlive = true;
+  } else {
+    // $N is stale (tmux server restarted?) — try name fallback
+    currentTmuxId = undefined;
+  }
+
+  if (!sessionAlive) {
+    const resolved = tmuxNameToId.get(session.tmuxSessionName);
+    if (resolved) {
+      currentTmuxId = resolved;
+      sessionAlive = true;
+      // Persist the refreshed $N
+      await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, session.tmuxWindowId ?? '', currentTmuxId);
+    }
+  }
+
+  if (!sessionAlive) {
+    if (session.status === 'active') {
+      await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
+      // Clear stale tmux IDs
+      await stateModule.updateSession(cwd, sessionId, { tmuxSessionId: undefined });
+      console.log(`[sisyphus] Session ${sessionId} paused: tmux session no longer exists`);
+    }
+    return true;
+  }
+
+  // Discover window ID if missing from state
+  let windowId = session.tmuxWindowId;
+  if (!windowId) {
+    windowId = getFirstWindowId(currentTmuxId!) ?? getFirstWindowId(session.tmuxSessionName!) ?? undefined;
+    if (windowId) {
+      await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, windowId, currentTmuxId);
+      console.log(`[sisyphus] Discovered missing windowId ${windowId} for session ${sessionId}`);
+    }
+  }
+
+  const livePanes = windowId ? listPanes(windowId) : [];
+  if (livePanes.length === 0) {
+    // Window gone — pause the session so user can `sis session lifecycle resume`
+    if (session.status === 'active') {
+      await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
+      console.log(`[sisyphus] Session ${sessionId} paused: tmux window no longer exists`);
+    }
+    return true;
+  }
+
+  // Re-set session meta in case tmux options were lost (server restart, etc.)
+  initSessionMeta(currentTmuxId!, cwd, sessionId);
+  registerSessionTmux(sessionId, session.tmuxSessionName, windowId!, currentTmuxId);
+  setWindowId(sessionId, windowId!);
+  trackSession(sessionId, cwd, currentTmuxId, session.tmuxSessionName!);
+  updateTrackedWindow(sessionId, windowId!);
+  initTimers(sessionId, session);
+
+  const livePaneIds = new Set(livePanes.map(p => p.paneId));
+
+  // Recover orchestrator pane from last incomplete cycle
+  const lastIncompleteCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt && c.paneId);
+  if (lastIncompleteCycle?.paneId) {
+    setOrchestratorPaneId(sessionId, lastIncompleteCycle.paneId);
+    if (livePaneIds.has(lastIncompleteCycle.paneId)) {
+      registerPane(lastIncompleteCycle.paneId, sessionId, 'orchestrator');
+    }
+  }
+
+  // Register live agent panes
+  for (const agent of session.agents) {
+    if (agent.status === 'running' && agent.paneId && livePaneIds.has(agent.paneId)) {
+      registerPane(agent.paneId, sessionId, 'agent', agent.id);
+    }
+  }
+
+  console.log(`[sisyphus] Reconnected session ${sessionId} to tmux window ${session.tmuxWindowId}`);
+
+  // Detect sessions stuck in "all agents done, no orchestrator" state
+  if (session.status === 'active' && session.agents.length > 0) {
+    const hasRunningAgents = session.agents.some(a => a.status === 'running');
+    if (!hasRunningAgents) {
+      const orchestratorPaneId = getOrchestratorPaneId(sessionId);
+      const orchestratorAlive = orchestratorPaneId && livePaneIds.has(orchestratorPaneId);
+      if (!orchestratorAlive) {
+        await orphanOrchestrator(cwd, sessionId, 'orchestrator lost while daemon was down', 'daemon-startup-stuck');
+        await stateModule.completeOrchestratorCycle(cwd, sessionId);
+        console.log(`[sisyphus] Detected stuck session ${sessionId} on recovery: triggering orchestrator respawn`);
+        await onAllAgentsDone(sessionId, cwd, session.tmuxWindowId!);
+      }
+    }
+  }
+
+  return true;
+}
+
 async function recoverSessions(): Promise<void> {
   const registry = loadSessionRegistry();
   const entries = Object.entries(registry);
@@ -131,129 +252,16 @@ async function recoverSessions(): Promise<void> {
     return;
   }
 
-  let recovered = 0;
-  for (const [sessionId, cwd] of entries) {
-    const stateFile = statePath(cwd, sessionId);
-    if (!existsSync(stateFile)) {
-      continue;
-    }
+  // One tmux list-sessions call shared across all recoveries, instead of per-session has-session/list-sessions.
+  const allTmuxSessions = listAllSessions();
+  const tmuxIdSet = new Set(allTmuxSessions.map(s => s.sessionId));
+  const tmuxNameToId = new Map(allTmuxSessions.map(s => [s.name, s.sessionId]));
 
-    try {
-      const session = JSON.parse(readFileSync(stateFile, 'utf-8')) as Session;
-      if (session.status === 'active' || session.status === 'paused') {
-        registerSessionCwd(sessionId, cwd);
-        resetAgentCounterFromState(sessionId, session.agents ?? []);
+  const results = await Promise.all(
+    entries.map(([sessionId, cwd]) => recoverOneSession(sessionId, cwd, tmuxIdSet, tmuxNameToId)),
+  );
 
-        // Reconnect to tmux panes if info was persisted
-        if (session.tmuxSessionName) {
-          // Check by $N first, fall back to name
-          let sessionAlive = false;
-          let currentTmuxId = session.tmuxSessionId;
-
-          if (currentTmuxId) {
-            sessionAlive = sessionExistsById(currentTmuxId);
-            if (!sessionAlive) {
-              // $N is stale (tmux server restarted?) — try name fallback
-              currentTmuxId = undefined;
-            }
-          }
-
-          if (!sessionAlive && session.tmuxSessionName) {
-            if (sessionNameTaken(session.tmuxSessionName)) {
-              // Name exists — re-capture $N
-              currentTmuxId = resolveSessionId(session.tmuxSessionName) ?? undefined;
-              sessionAlive = !!currentTmuxId;
-              if (currentTmuxId) {
-                // Persist the refreshed $N
-                await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, session.tmuxWindowId ?? '', currentTmuxId);
-              }
-            }
-          }
-
-          if (!sessionAlive) {
-            if (session.status === 'active') {
-              await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
-              // Clear stale tmux IDs
-              await stateModule.updateSession(cwd, sessionId, { tmuxSessionId: undefined });
-              console.log(`[sisyphus] Session ${sessionId} paused: tmux session no longer exists`);
-            }
-            recovered++;
-            continue;
-          }
-
-          // Discover window ID if missing from state
-          let windowId = session.tmuxWindowId;
-          if (!windowId) {
-            windowId = getFirstWindowId(currentTmuxId!) ?? getFirstWindowId(session.tmuxSessionName!) ?? undefined;
-            if (windowId) {
-              await stateModule.updateSessionTmux(cwd, sessionId, session.tmuxSessionName, windowId, currentTmuxId);
-              console.log(`[sisyphus] Discovered missing windowId ${windowId} for session ${sessionId}`);
-            }
-          }
-
-          const livePanes = windowId ? listPanes(windowId) : [];
-          if (livePanes.length > 0) {
-            // Re-set session meta in case tmux options were lost (server restart, etc.)
-            initSessionMeta(currentTmuxId!, cwd, sessionId);
-            registerSessionTmux(sessionId, session.tmuxSessionName, windowId!, currentTmuxId);
-            setWindowId(sessionId, windowId!);
-            trackSession(sessionId, cwd, currentTmuxId, session.tmuxSessionName!);
-            updateTrackedWindow(sessionId, windowId!);
-            initTimers(sessionId, session);
-
-            // Recover orchestrator pane from last incomplete cycle
-            const lastIncompleteCycle = [...session.orchestratorCycles].reverse().find(c => !c.completedAt && c.paneId);
-            if (lastIncompleteCycle?.paneId) {
-              setOrchestratorPaneId(sessionId, lastIncompleteCycle.paneId);
-              const livePaneIds = new Set(livePanes.map(p => p.paneId));
-              if (livePaneIds.has(lastIncompleteCycle.paneId)) {
-                registerPane(lastIncompleteCycle.paneId, sessionId, 'orchestrator');
-              }
-            }
-
-            // Register live agent panes
-            for (const agent of session.agents) {
-              if (agent.status === 'running' && agent.paneId) {
-                const livePaneIds = new Set(livePanes.map(p => p.paneId));
-                if (livePaneIds.has(agent.paneId)) {
-                  registerPane(agent.paneId, sessionId, 'agent', agent.id);
-                }
-              }
-            }
-
-            console.log(`[sisyphus] Reconnected session ${sessionId} to tmux window ${session.tmuxWindowId}`);
-
-            // Detect sessions stuck in "all agents done, no orchestrator" state
-            if (session.status === 'active' && session.agents.length > 0) {
-              const hasRunningAgents = session.agents.some(a => a.status === 'running');
-              if (!hasRunningAgents) {
-                const livePaneIds = new Set(livePanes.map(p => p.paneId));
-                const orchestratorPaneId = getOrchestratorPaneId(sessionId);
-                const orchestratorAlive = orchestratorPaneId && livePaneIds.has(orchestratorPaneId);
-                if (!orchestratorAlive) {
-                  await orphanOrchestrator(cwd, sessionId, 'orchestrator lost while daemon was down', 'daemon-startup-stuck');
-                  await stateModule.completeOrchestratorCycle(cwd, sessionId);
-                  console.log(`[sisyphus] Detected stuck session ${sessionId} on recovery: triggering orchestrator respawn`);
-                  await onAllAgentsDone(sessionId, cwd, session.tmuxWindowId!);
-                }
-              }
-            }
-          } else {
-            // Window gone — pause the session so user can `sis session lifecycle resume`
-            if (session.status === 'active') {
-              await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
-              console.log(`[sisyphus] Session ${sessionId} paused: tmux window no longer exists`);
-            }
-          }
-        }
-
-        recovered++;
-      }
-    } catch {
-      console.error(`[sisyphus] Failed to read session state for ${sessionId}, skipping`);
-    }
-  }
-
+  const recovered = results.filter(Boolean).length;
   console.log(`[sisyphus] Recovered ${recovered} session(s) from registry`);
 }
 
@@ -266,9 +274,6 @@ async function startDaemon(): Promise<void> {
   installPlugin();
 
   const config = loadConfig(process.cwd());
-  if (config.autoUpdate !== false) {
-    await checkAndApply(); // may exit process if update found
-  }
 
   acquirePidLock();
 
@@ -314,16 +319,20 @@ async function startDaemon(): Promise<void> {
   await startServer();
   startMonitor(config.pollIntervalMs);
 
+  // Auto-update runs off the startup critical path so the IPC socket is reachable
+  // immediately. Found-update path still calls process.exit(0) and launchd respawns
+  // the daemon, same behavior as the periodic 6h check.
+  if (config.autoUpdate !== false) {
+    void checkAndApply();
+    startPeriodicUpdateCheck();
+  }
+
   await recoverSessions();
   await sweepOrphans();
 
   // Heartbeat scanner runs on its own slow clock (every 15min) — orphan startup-scan
   // already completed above, so heartbeats won't fire for asks that should be orphaned instead.
   startHeartbeatScanner();
-
-  if (config.autoUpdate !== false) {
-    startPeriodicUpdateCheck();
-  }
 
   const shutdown = async () => {
     console.log('[sisyphus] Shutting down...');

@@ -49,34 +49,34 @@ const GONE_PID = 2147483647; // max PID on most Linux, very unlikely to be alive
 // ---------------------------------------------------------------------------
 
 describe('probePidLstart - live process', () => {
-  it('returns live when pid matches expected lstart', () => {
+  it('returns live when pid matches expected lstart', async () => {
     const lstart = selfLstart();
-    const result = probePidLstart(process.pid, lstart);
+    const result = await probePidLstart(process.pid, lstart);
     assert.equal(result, 'live');
   });
 });
 
 describe('probePidLstart - recycled pid', () => {
-  it('returns recycled when pid exists but lstart differs', () => {
-    const result = probePidLstart(process.pid, 'Thu Jan  1 00:00:00 1970');
+  it('returns recycled when pid exists but lstart differs', async () => {
+    const result = await probePidLstart(process.pid, 'Thu Jan  1 00:00:00 1970');
     assert.equal(result, 'recycled');
   });
 });
 
 describe('probePidLstart - gone pid', () => {
-  it('returns gone when pid does not exist', () => {
-    const result = probePidLstart(GONE_PID, 'Thu Jan  1 00:00:00 1970');
+  it('returns gone when pid does not exist', async () => {
+    const result = await probePidLstart(GONE_PID, 'Thu Jan  1 00:00:00 1970');
     assert.equal(result, 'gone');
   });
 });
 
 describe('probePidLstart - unknown when ps throws without status=1', () => {
-  it('returns unknown when ps runner throws an error with no status code (ps unavailable)', () => {
-    // Inject a ps runner that throws without a `status` property (simulates ps binary missing
+  it('returns unknown when ps runner throws an error with no status code (ps unavailable)', async () => {
+    // Inject a ps runner that throws without a `code` property (simulates ps binary missing
     // or a signal-interrupted invocation). The safety invariant: 'unknown' must not false-orphan
     // agents when ps is unreachable.
-    const brokenPs = () => { throw new Error('ps: command not found'); };
-    const result = probePidLstart(process.pid, 'any-lstart', brokenPs);
+    const brokenPs = async () => { throw new Error('ps: command not found'); };
+    const result = await probePidLstart(process.pid, 'any-lstart', brokenPs);
     assert.equal(result, 'unknown', 'must return unknown when ps throws without status=1');
   });
 
