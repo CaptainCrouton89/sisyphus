@@ -680,6 +680,18 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
         return;
       }
 
+      // Clear any stale orphan flag now that we're committing to an auto-respawn.
+      // Mirrors the resume path (clearSessionOrphan ~@493). Without this the sticky
+      // `session.orphaned` set by a daemon-restart sweep or a pane-monitor tick
+      // during the normal "orchestrator spawned agent, cycle pane closed" gap
+      // never clears, so a healthy auto-respawned session shows a permanent false
+      // ⚠ orphan badge in the dashboard. Done before spawn so pane-monitor ticks
+      // during the spawn window don't re-see and re-set it.
+      await Promise.all([
+        state.clearSessionOrphan(cwd, sessionId),
+        resolveOrchestratorOrphanAsks(cwd, sessionId, 'respawn'),
+      ]);
+
       // Ensure the tmux session and window still exist.
       // Killing the last pane (orchestrator yield with no agents) destroys the window/session.
       let activeWindowId = windowId;

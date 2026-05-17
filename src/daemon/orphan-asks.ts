@@ -249,15 +249,28 @@ export async function orphanRunningAgentAsks(cwd: string, sessionId: string, ses
 /**
  * Marks any pending/in-progress orchestrator orphan asks as answered, with a
  * synthetic response indicating which path resolved them. Called by the resume
- * flow so the orphan ask doesn't linger in the inbox after a successful respawn.
+ * flow, the manual UI dismiss, and the auto-respawn path (`onAllAgentsDone`)
+ * so the orphan ask doesn't linger in the inbox after a successful respawn.
+ *
+ * `resolution` is the internal disposition; the option id written to the deck
+ * stays within the deck's actual option set (`resume` | `dismiss`) so existing
+ * consumers don't trip on an unknown id. `respawn` is auto-respawn, recorded
+ * as `dismiss` with explanatory freetext.
  */
 export async function resolveOrchestratorOrphanAsks(
   cwd: string,
   sessionId: string,
-  selectedOptionId: 'resume' | 'dismiss',
+  resolution: 'resume' | 'dismiss' | 'respawn',
 ): Promise<void> {
   const asks = askStore.listAsks(cwd, sessionId);
   const completedAt = new Date().toISOString();
+  const selectedOptionId = resolution === 'respawn' ? 'dismiss' : resolution;
+  const freetext =
+    resolution === 'resume'
+      ? 'auto-resolved by sis session lifecycle resume'
+      : resolution === 'respawn'
+        ? 'auto-resolved by orchestrator auto-respawn'
+        : 'auto-resolved by system';
   await mapWithLimit(asks, ASK_FANOUT_LIMIT, async (askId) => {
     try {
       const meta = askStore.readMeta(cwd, sessionId, askId);
@@ -268,7 +281,7 @@ export async function resolveOrchestratorOrphanAsks(
       askStore.writeOutput(cwd, sessionId, askId, [{
         id: 'orphan',
         selectedOptionId,
-        freetext: `auto-resolved by ${selectedOptionId === 'resume' ? 'sis session lifecycle resume' : 'system'}`,
+        freetext,
       }], completedAt);
       await askStore.updateMeta(cwd, sessionId, askId, { status: 'answered', completedAt });
     } catch (err) {

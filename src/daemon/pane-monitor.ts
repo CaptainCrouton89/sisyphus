@@ -501,17 +501,22 @@ async function pollSession(
   // killed the old pane and not yet registered the new one; the stale orchPaneId would
   // otherwise misfire as an orphan).
   if (orchPaneId && !livePaneIds.has(orchPaneId) && !respawningSessions.has(sessionId)) {
-    // Orchestrator pane disappeared without a yield command
+    // Orchestrator pane is gone. Always close out the cycle bookkeeping — that's
+    // required so `onAllAgentsDone` will respawn (it gates on lastCycle.completedAt).
     const cycleActiveMs = flushCycleTimer(sessionId, session.orchestratorCycles.length);
     await state.completeOrchestratorCycle(cwd, sessionId, undefined, undefined, cycleActiveMs);
-    await orphanOrchestrator(cwd, sessionId, 'orchestrator pane vanished without yield', 'orchestrator-gone');
     const runningAgents = session.agents.filter(a => a.status === 'running');
     if (runningAgents.length === 0) {
-      // No agents running and orchestrator gone — pause
+      // No agents running and orchestrator gone — genuine stall. Raise orphan + pause.
+      await orphanOrchestrator(cwd, sessionId, 'orchestrator pane vanished without yield', 'orchestrator-gone');
       await flushTimers(sessionId);
       await state.updateSessionStatus(cwd, sessionId, 'paused');
       console.log(`[sisyphus] Session ${sessionId} paused: orchestrator pane disappeared`);
     }
+    // else: orchestrator spawned agents and its cycle pane closed — that's the normal
+    // between-cycle handoff state. `onAllAgentsDone` will respawn when agents finish.
+    // Do NOT raise orphan here; the stuck-session detector below covers genuine crashes
+    // (it fires once agents drain) and a daemon restart would re-traverse this path.
   }
 
   // Re-read state since handleAgentKilled may have mutated it
