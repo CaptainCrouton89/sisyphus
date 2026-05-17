@@ -101,7 +101,7 @@ Standard requirement JSON shape:
 }
 ```
 
-For the full schema and writing guidance, run `sis session requirements --annotated`.
+For the full schema and writing guidance, run `sis session inspect requirements --annotated`.
 
 ## Safe-Assumption Heuristic
 

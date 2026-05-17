@@ -159,7 +159,7 @@ Write the recipe to `context/e2e-recipe.md` with setup steps, exact commands or 
 ## Planning CLI
 
 ```bash
-sis session requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
+sis session inspect requirements --export --session-id <id>  # render requirements.json → requirements.md (no LLM tokens)
 ```
 
 The requirements export renders a `requirements.json` to markdown without consuming LLM tokens.

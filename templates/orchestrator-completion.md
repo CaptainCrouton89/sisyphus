@@ -40,7 +40,7 @@ Use tables, diagrams, and structured markdown freely — the deck below renders 
 
 ## Ask for Sign-off via `sis ask`
 
-Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. **NEVER call `sis session complete` until the user picks `approve`.**
+Submit a structured deck pointing at `completion-summary.md` via `bodyPath`. **NEVER call `sis session lifecycle complete` until the user picks `approve`.**
 
 Run `echo '{"name":"sisyphus/humanloop"}' | crtr skill read show` for option design and submission flow (output JSON has `.content`). The completion deck is the canonical four-branch sign-off — `approve` / `minor` / `moderate` / `major` — each routes to a different recovery (see "Handle Feedback" below). Use `bodyPath: "../completion-summary.md"` so the user reviews the rendered summary inside the deck.
 
@@ -55,7 +55,7 @@ notes=$(echo "$result"  | jq -r '.responses[0].freetext // ""')
 Branch on `$choice`:
 
 ### `approve` — finalize
-Call `sis session complete` (see Finalizing below). `$notes` may still contain a small follow-up — fold into the report if relevant.
+Call `sis session lifecycle complete` (see Finalizing below). `$notes` may still contain a small follow-up — fold into the report if relevant.
 
 ### `minor` — typo, rename, small fix, cosmetic tweak
 Fix it yourself directly using `$notes` as the spec. Then update `completion-summary.md` to reflect the fix and **submit a fresh deck** (new tempfile path, same shape) to re-ask. Multiple rounds of minor fixes are fine — stay in the loop.
@@ -99,7 +99,7 @@ sis orch yield --mode completion --prompt "User review in progress. Fixed: [list
 Only after `$choice == "approve"` — call:
 
 ```bash
-sis session complete --report "summary of what was accomplished"
+sis session lifecycle complete --report "summary of what was accomplished"
 ```
 
 The report should be a concise summary suitable for session history. Reference the full completion report you presented if needed.
@@ -107,6 +107,6 @@ The report should be a concise summary suitable for session history. Reference t
 ## Completion CLI
 
 ```bash
-sis session complete --report "summary of what was accomplished"  # finalize session (only after user confirms)
-sis session continue "new instructions"                           # reactivate a completed session
+sis session lifecycle complete --report "summary of what was accomplished"  # finalize session (only after user confirms)
+sis session lifecycle continue "new instructions"                           # reactivate a completed session
 ```

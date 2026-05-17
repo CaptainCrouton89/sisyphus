@@ -140,7 +140,7 @@ Pick the tier by **novelty of behavior**, not file count:
 - New subsystem / new protocol / cross-domain orchestration: **HIGH**
 - Novel concurrency / new security boundary / multi-system contract: **XHIGH**
 
-Apply the tier with `sis session effort <low|medium|high|xhigh>` — this filters mode templates and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
+Apply the tier with `sis session config effort <low|medium|high|xhigh>` — this filters mode templates and agent prompts on subsequent cycles so you only see the guidance that applies. The user can override at any point.
 
 If you change the tier mid-session because scope shifted, the next cycle's prompts adjust automatically; don't manually patch `strategy.md` to match — for strategy guidance run `echo '{"name":"sisyphus/orchestration"}' | crtr skill read show` (output JSON has `.content`).
 
