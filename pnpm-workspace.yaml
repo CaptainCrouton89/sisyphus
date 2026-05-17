@@ -1,2 +1,7 @@
 packages:
   - 'workers/*'
+allowBuilds:
+  '@crouton-kit/humanloop': true
+  esbuild: true
+  sharp: true
+  workerd: true
