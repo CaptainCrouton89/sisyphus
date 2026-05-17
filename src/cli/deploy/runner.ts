@@ -214,7 +214,7 @@ export async function deployUp(provider: Provider, opts: UpOptions): Promise<voi
 
   console.log('');
   console.log(`  Tail provisioning:   sis deploy ${provider} logs`);
-  console.log(`  Verify daemon:       sis deploy ${provider} ssh -- sis admin doctor`);
+  console.log(`  Verify daemon:       sis deploy ${provider} ssh -- sis admin check doctor`);
   console.log('');
 }
 

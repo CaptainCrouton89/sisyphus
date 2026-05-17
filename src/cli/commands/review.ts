@@ -36,7 +36,7 @@ function resolveContextArtifact(
   }
 
   exitUsage('file-not-found', notFoundMessage, {
-    next: 'sis session requirements --session-id <id>  # target a specific session',
+    next: 'sis session inspect requirements --session-id <id>  # target a specific session',
   });
 }
 
@@ -58,19 +58,19 @@ File resolution (first match wins):
   3. Most recent session with a requirements.json
 
 Examples:
-  $ sis session requirements                              Auto-detect from current session
-  $ sis session requirements path/to/requirements.json    Open a specific file
-  $ sis session requirements --session-id abc123           Target a specific session
-  $ sis session requirements --schema                     Print the JSON schema
-  $ sis session requirements --annotated                  Print schema with writing guidance
-  $ sis session requirements --export                       Render requirements.md from JSON
-  $ sis session requirements --export --session-id abc123   Target a specific session
-  $ sis session requirements --export --force               Overwrite even if hand-edited
+  $ sis session inspect requirements                              Auto-detect from current session
+  $ sis session inspect requirements path/to/requirements.json    Open a specific file
+  $ sis session inspect requirements --session-id abc123           Target a specific session
+  $ sis session inspect requirements --schema                     Print the JSON schema
+  $ sis session inspect requirements --annotated                  Print schema with writing guidance
+  $ sis session inspect requirements --export                       Render requirements.md from JSON
+  $ sis session inspect requirements --export --session-id abc123   Target a specific session
+  $ sis session inspect requirements --export --force               Overwrite even if hand-edited
 `)
     .action(async (file, opts) => {
       if (opts.force && !opts.export) {
         exitUsage('invalid-flags', '--force requires --export', {
-          next: 'sis session requirements --export --force',
+          next: 'sis session inspect requirements --export --force',
         });
       }
       if (opts.export && opts.schema) {
@@ -101,7 +101,7 @@ Examples:
           if (existing !== rendered) {
             if (!opts.force) {
               exitUsage('conflict', `${outPath} has been hand-edited (differs from rendered output)`, {
-                next: 'sis session requirements --export --force  # backs up to requirements.md.bak',
+                next: 'sis session inspect requirements --export --force  # backs up to requirements.md.bak',
               });
             }
             const bakPath = outPath + '.bak';
@@ -223,7 +223,7 @@ const REQUIREMENTS_SCHEMA = {
 const REQUIREMENTS_ANNOTATED = `# requirements.json — Annotated Writing Guide
 #
 # This is NOT valid JSON — it's a reference showing every field with
-# inline guidance. Run \`sis session requirements --schema\` for the raw
+# inline guidance. Run \`sis session inspect requirements --schema\` for the raw
 # JSON Schema.
 #
 # Safe assumptions must satisfy the same EARS shape requirements as

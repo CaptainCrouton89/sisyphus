@@ -80,6 +80,7 @@ function runRequirementsExport(requirementsPath: string, force = false): Buffer 
     'tsx',
     shellQuote(cliEntry),
     'session',
+    'inspect',
     'requirements',
     '--export',
     shellQuote(requirementsPath),

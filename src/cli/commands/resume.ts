@@ -16,8 +16,8 @@ export function registerResume(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session resume sess-7f2a "Now also handle refresh tokens."
-  $ sis session resume sess-7f2a --stdin <new-roadmap.md
+  $ sis session lifecycle resume sess-7f2a "Now also handle refresh tokens."
+  $ sis session lifecycle resume sess-7f2a --stdin <new-roadmap.md
 
 When NOT to use:
   Use \`continue\` to keep working on a completed session without new
@@ -37,7 +37,7 @@ Exit codes: 0 ok | 2 usage | 3 not_found | 5 conflict (session already running).
         const piped = await readStdin({ force: true });
         if (!piped) {
           exitUsage('empty_stdin', '--stdin set but no input received on stdin', {
-            next: 'pipe content: `echo "..." | sis session resume <id> --stdin`',
+            next: 'pipe content: `echo "..." | sis session lifecycle resume <id> --stdin`',
           });
         }
         if (messageArg !== undefined && messageArg !== '-') {

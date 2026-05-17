@@ -398,7 +398,7 @@ export async function spawnOrchestrator(sessionId: string, cwd: string, windowId
   try {
     execSync('which claude', { stdio: 'pipe', env: tmux.EXEC_ENV });
   } catch {
-    throw new Error('Claude CLI not found on PATH. Run `sis admin doctor` to diagnose.');
+    throw new Error('Claude CLI not found on PATH. Run `sis admin check doctor` to diagnose.');
   }
 
   const session = state.getSession(cwd, sessionId);

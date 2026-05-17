@@ -36,7 +36,7 @@ export function registerUpload(program: Command): void {
 
       if (!sessionId) {
         exitUsage('missing_session_id', 'No session ID provided and no active session found.', {
-          next: 'sis admin upload <session-id>',
+          next: 'sis admin report upload <session-id>',
         });
       }
 
@@ -46,7 +46,7 @@ export function registerUpload(program: Command): void {
           code: 'upload_not_configured',
           kind: 'usage',
           message: "upload not configured.",
-          next: "Run 'sis admin configure-upload <url-with-token>' or set { upload: { url, token } } in .sisyphus/config.json.",
+          next: "Run 'sis admin report configure-upload <url-with-token>' or set { upload: { url, token } } in .sisyphus/config.json.",
         });
       }
 

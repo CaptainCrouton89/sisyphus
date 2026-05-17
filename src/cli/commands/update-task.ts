@@ -13,8 +13,8 @@ export function registerSessionTask(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session task "Refactor auth to use refresh tokens"
-  $ sis session task "..." --session sess-7f2a --json
+  $ sis session config task "Refactor auth to use refresh tokens"
+  $ sis session config task "..." --session sess-7f2a --json
 
 Output:
   Default       "Task updated" on stdout.

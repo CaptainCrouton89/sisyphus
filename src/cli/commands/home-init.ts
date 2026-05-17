@@ -4,7 +4,7 @@ import { shellQuote } from '../../shared/shell.js';
 import { openDashboardWindow } from './dashboard.js';
 
 /**
- * `sis admin home-init <name> <cwd>`
+ * `sis diagnostic home-init <name> <cwd>`
  *
  * Bootstrap a tmux home session — a regular (non-`ssyph_`-prefixed) session
  * with `@sisyphus_cwd` set, hosting the dashboard in window 1. Idempotent:

@@ -261,9 +261,9 @@ export function registerStatus(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session status                       # current session (from SISYPHUS_SESSION_ID)
-  $ sis session status sess-7f2a -v
-  $ sis session status --json | jq '.data.session.agents[] | select(.status=="running")'
+  $ sis session inspect status                       # current session (from SISYPHUS_SESSION_ID)
+  $ sis session inspect status sess-7f2a -v
+  $ sis session inspect status --json | jq '.data.session.agents[] | select(.status=="running")'
 
 Output:
   Default       Multi-section human view with cycles, agents, roadmap (verbose).

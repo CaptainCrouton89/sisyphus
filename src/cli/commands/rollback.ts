@@ -12,8 +12,8 @@ export function registerRollback(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session rollback sess-7f2a 3        # restore state as of cycle 3
-  $ sis session rollback sess-7f2a 3 --json
+  $ sis session recover rollback sess-7f2a 3        # restore state as of cycle 3
+  $ sis session recover rollback sess-7f2a 3 --json
 
 Output:
   Default       "Session <id> rolled back to cycle <N>." + resume hint.
@@ -22,7 +22,7 @@ Output:
 Exit codes: 0 ok | 2 usage (cycle must be positive int) | 3 not_found.
 
 Next on success:
-  $ sis session resume <sessionId>     # respawn orchestrator from restored state`,
+  $ sis session lifecycle resume <sessionId>     # respawn orchestrator from restored state`,
     )
     .action(async (sessionId: string, cycleStr: string) => {
       const toCycle = parseInt(cycleStr, 10);
@@ -40,6 +40,6 @@ Next on success:
       const data = response.data as { restoredToCycle: number };
       if (emitJsonOk({ sessionId, restoredToCycle: data.restoredToCycle })) return;
       console.log(`Session ${sessionId} rolled back to cycle ${data.restoredToCycle}.`);
-      console.log(`Session is now paused. Use 'sis session resume ${sessionId}' to respawn the orchestrator.`);
+      console.log(`Session is now paused. Use 'sis session lifecycle resume ${sessionId}' to respawn the orchestrator.`);
     });
 }

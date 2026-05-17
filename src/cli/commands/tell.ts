@@ -131,9 +131,9 @@ export function registerAgentTell(parent: Command): void {
       'after',
       `
 Examples:
-  $ sis agent tell agent-3 "switch to investigation mode"
-  $ sis agent tell 3 "switch to investigation mode"
-  $ cat prompt.md | sis agent tell agent-3 --stdin --no-submit
+  $ sis agent io tell agent-3 "switch to investigation mode"
+  $ sis agent io tell 3 "switch to investigation mode"
+  $ cat prompt.md | sis agent io tell agent-3 --stdin --no-submit
 
 When NOT to use:
   Use \`sis ask submit\` to actively block waiting for a structured reply.

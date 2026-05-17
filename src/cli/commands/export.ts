@@ -31,7 +31,7 @@ export function registerExport(program: Command): void {
 
       if (!sessionId) {
         exitUsage('missing_session_id', 'No session ID provided and no active session found.', {
-          next: 'sis session export <session-id>',
+          next: 'sis session inspect export <session-id>',
         });
       }
 

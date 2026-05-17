@@ -331,12 +331,12 @@ export async function spawnAgent(opts: SpawnAgentOpts): Promise<Agent> {
       try {
         execSync(`which ${fallbackCli}`, { stdio: 'pipe', env: execEnv() });
       } catch {
-        throw new Error(`Neither ${cliToCheck} (model: ${agentConfig?.frontmatter.model}) nor ${fallbackCli} (fallback: ${fallback}) CLI found on PATH. Run \`sis admin doctor\` to diagnose.`);
+        throw new Error(`Neither ${cliToCheck} (model: ${agentConfig?.frontmatter.model}) nor ${fallbackCli} (fallback: ${fallback}) CLI found on PATH. Run \`sis admin check doctor\` to diagnose.`);
       }
       if (agentConfig) agentConfig.frontmatter.model = fallback;
       provider = fallbackProvider;
     } else {
-      throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sis admin doctor\` to diagnose.`);
+      throw new Error(`${cliToCheck} CLI not found on PATH. Run \`sis admin check doctor\` to diagnose.`);
     }
   }
 

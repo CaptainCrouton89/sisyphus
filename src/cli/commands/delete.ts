@@ -13,8 +13,8 @@ export function registerDelete(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session delete sess-7f2a
-  $ sis session delete sess-7f2a --cwd /path/to/project --json
+  $ sis session lifecycle delete sess-7f2a
+  $ sis session lifecycle delete sess-7f2a --cwd /path/to/project --json
 
 Output:
   Default       "Session <id> deleted." on stdout.
@@ -23,7 +23,7 @@ Output:
 Exit codes: 0 ok | 3 not_found | 5 conflict (session still running — kill first).
 
 Next on success:
-  $ sis session list --all            # confirm removal`,
+  $ sis session inspect list --all            # confirm removal`,
     )
     .action(async (sessionId: string, opts: { cwd: string }) => {
       const request: Request = { type: 'delete', sessionId, cwd: opts.cwd };

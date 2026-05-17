@@ -302,8 +302,8 @@ export function registerAgentRead(parent: Command): void {
       'after',
       `
 Examples:
-  $ sis agent read agent-3 --summary
-  $ sis agent read 3 --json | jq -r '.content[0].text'
+  $ sis agent io read agent-3 --summary
+  $ sis agent io read 3 --json | jq -r '.content[0].text'
 
 Output:
   Default       Decorated transcript on stdout, header line + role-tagged blocks.
@@ -335,7 +335,7 @@ Exit codes: 0 ok | 2 usage | 3 not_found (session/agent/transcript).`,
           message: `agent ${agentId} not found in session ${sessionId}`,
           received: agentId,
           candidates: session.agents.map(a => a.id),
-          next: 'sis session status to list agents',
+          next: 'sis session inspect status to list agents',
         });
       }
 

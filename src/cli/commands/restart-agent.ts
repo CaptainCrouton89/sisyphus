@@ -13,8 +13,8 @@ export function registerAgentRestart(program: Command): void {
       'after',
       `
 Examples:
-  $ sis agent restart agent-3
-  $ sis agent restart agent-3 --session sess-7f2a --json
+  $ sis agent ctl restart agent-3
+  $ sis agent ctl restart agent-3 --session sess-7f2a --json
 
 Output:
   Default       "Agent <id> restarted." on stdout.

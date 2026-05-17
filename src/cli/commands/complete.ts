@@ -15,8 +15,8 @@ export function registerComplete(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session complete --report "All TODOs done; tests pass."
-  $ sis session complete --session sess-7f2a --report @report.md --json
+  $ sis session lifecycle complete --report "All TODOs done; tests pass."
+  $ sis session lifecycle complete --session sess-7f2a --report @report.md --json
 
 Output:
   Default       "Session completed." plus a continue-hint on stdout.
@@ -29,7 +29,7 @@ When NOT to use:
 Exit codes: 0 ok | 2 usage (missing session id) | 3 not_found.
 
 Next on success:
-  $ sis session continue      # clear roadmap and keep working in the same session`,
+  $ sis session lifecycle continue      # clear roadmap and keep working in the same session`,
     )
     .action(async (opts: { report: string; session?: string }) => {
       assertTmux();
@@ -49,6 +49,6 @@ Next on success:
       console.log('Session completed.');
       console.log('');
       console.log('To keep working in this session:');
-      console.log('  sis session continue   # reactivate session and clear roadmap for new work');
+      console.log('  sis session lifecycle continue   # reactivate session and clear roadmap for new work');
     });
 }

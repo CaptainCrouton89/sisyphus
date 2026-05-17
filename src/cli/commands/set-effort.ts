@@ -15,8 +15,8 @@ export function registerSessionEffort(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session effort sess-7f2a high
-  $ sis session effort sess-7f2a xhigh --json
+  $ sis session config effort sess-7f2a high
+  $ sis session config effort sess-7f2a xhigh --json
 
 Output:
   Default       "Effort tier set to '<tier>' for session <id>" + scope note.

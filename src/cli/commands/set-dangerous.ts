@@ -16,9 +16,9 @@ export function registerSessionDangerous(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session dangerous                 # toggle current session's mode
-  $ sis session dangerous sess-7f2a on
-  $ sis session dangerous sess-7f2a off --json
+  $ sis session config dangerous                 # toggle current session's mode
+  $ sis session config dangerous sess-7f2a on
+  $ sis session config dangerous sess-7f2a off --json
 
 Output:
   Default       "DANGEROUS mode {ON|OFF} for session <id>" + flushed-ask count.
@@ -64,7 +64,7 @@ Exit codes: 0 ok | 2 usage (bad state) | 3 not_found.`,
             kind: 'not_found',
             message: `session ${sessionId} not found`,
             received: sessionId,
-            next: 'sis session list --all',
+            next: 'sis session inspect list --all',
           });
         }
         enabled = !session.dangerousMode;

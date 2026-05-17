@@ -130,7 +130,7 @@ function buildBody(args: {
     .map(([k, v]) => `| ${k} | ${v} |`)
     .join('\n');
 
-  let body = `${description}\n\n---\n\n<details>\n<summary>Environment (auto-collected by <code>sis admin bug</code>)</summary>\n\n| field | value |\n|---|---|\n${envRows}\n\n</details>`;
+  let body = `${description}\n\n---\n\n<details>\n<summary>Environment (auto-collected by <code>sis admin report bug</code>)</summary>\n\n| field | value |\n|---|---|\n${envRows}\n\n</details>`;
 
   if (session) {
     body +=
@@ -165,7 +165,7 @@ function fallbackUrl(title: string, body: string): string {
   if (base.length + t.length + b.length > 7500) {
     b = encodeURIComponent(
       body.split('\n\n---\n\n')[0] +
-        '\n\n---\n\n_(diagnostics omitted — URL too long. Authenticate `gh` and re-run `sis admin bug` to attach full telemetry.)_',
+        '\n\n---\n\n_(diagnostics omitted — URL too long. Authenticate `gh` and re-run `sis admin report bug` to attach full telemetry.)_',
     );
   }
   return `${base}?title=${t}&body=${b}`;
@@ -194,9 +194,9 @@ export function registerBug(program: Command): void {
       'after',
       `
 Examples:
-  $ sis admin bug "spawn hangs when tmux server restarts mid-cycle"
-  $ sis admin bug --stdin --logs < report.md
-  $ sis admin bug "..." --dry-run        # preview the issue, file nothing
+  $ sis admin report bug "spawn hangs when tmux server restarts mid-cycle"
+  $ sis admin report bug --stdin --logs < report.md
+  $ sis admin report bug "..." --dry-run        # preview the issue, file nothing
 
 Telemetry attached (all non-sensitive — bug reports become PUBLIC issues):
   - Versions / platform (sisyphus, node, claude, tmux, git, gh, OS)
@@ -240,7 +240,7 @@ Exit codes: 0 ok | 2 usage.`,
         }
         if (!description || !description.trim()) {
           exitUsage('missing_description', 'provide a bug description (argument, --message, or piped stdin)', {
-            next: 'sis admin bug "what went wrong" — or: sis admin bug --stdin < report.md',
+            next: 'sis admin report bug "what went wrong" — or: sis admin report bug --stdin < report.md',
           });
         }
         description = description.trim();
@@ -280,7 +280,7 @@ Exit codes: 0 ok | 2 usage.`,
           if (!emitJsonOk({ url, filed: false })) {
             console.log("GitHub CLI unavailable or not authenticated — open this prefilled issue:\n");
             console.log(url);
-            console.log("\n(Install + run `gh auth login`, then re-run `sis admin bug` to file automatically.)");
+            console.log("\n(Install + run `gh auth login`, then re-run `sis admin report bug` to file automatically.)");
           }
           return;
         }

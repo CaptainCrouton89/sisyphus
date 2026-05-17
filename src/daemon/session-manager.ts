@@ -248,7 +248,7 @@ export async function cloneSession(
   // 1. Validate source
   const sourceSession = state.getSession(cwd, sourceId);
   if (sourceSession.status === 'completed') {
-    throw new Error('Cannot clone completed session. Use `sis session continue` to resume it first.');
+    throw new Error('Cannot clone completed session. Use `sis session lifecycle continue` to resume it first.');
   }
 
   // 2. Generate clone identity
@@ -399,7 +399,7 @@ export async function reconnectSession(sessionId: string, cwd: string): Promise<
 
   // Find the tmux session by name (since $N ID may be stale/missing)
   if (!tmux.sessionNameTaken(tmuxName)) {
-    throw new Error(`No tmux session named "${tmuxName}" exists. Use \`sis session resume\` to create a new one.`);
+    throw new Error(`No tmux session named "${tmuxName}" exists. Use \`sis session lifecycle resume\` to create a new one.`);
   }
 
   const tmuxSessId = tmux.resolveSessionId(tmuxName);
@@ -671,7 +671,7 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       // yet, ship to cloud (or pause-only) instead of respawning locally.
       // Skip when lastError is set: previous attempt failed and we should not
       // auto-retry on every quiesce — that'd block local progress indefinitely.
-      // User must retry explicitly (`sis cloud handoff --force` again) or cancel.
+      // User must retry explicitly (`sis cloud handoff push --force` again) or cancel.
       // Imported lazily to avoid a require-cycle with cloud-handoff.ts.
       if (freshSession.handoff && !freshSession.handoff.sentAt && !freshSession.handoff.lastError) {
         respawningSessions.delete(sessionId);

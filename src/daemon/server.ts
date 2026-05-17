@@ -95,9 +95,9 @@ function unknownSessionError(sessionId: string): Response {
   return {
     ok: false,
     error: errNotFound('unknown_session', {
-      message: `Unknown session: ${sessionId}. Run \`sis session list --all\` to see available sessions.`,
+      message: `Unknown session: ${sessionId}. Run \`sis session inspect list --all\` to see available sessions.`,
       received: sessionId,
-      next: 'sis session list --all',
+      next: 'sis session inspect list --all',
     }),
   };
 }
@@ -404,9 +404,9 @@ async function handleRequest(req: Request): Promise<Response> {
             return {
             ok: false,
             error: errNotFound('unknown_session', {
-              message: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sis session list --all\` to see available sessions.`,
+              message: `Unknown session: ${req.sessionId}. No state.json found at ${stateFile}. Run \`sis session inspect list --all\` to see available sessions.`,
               received: req.sessionId,
-              next: 'sis session list --all',
+              next: 'sis session inspect list --all',
             }),
           };
           }
@@ -429,7 +429,7 @@ async function handleRequest(req: Request): Promise<Response> {
             error: errNotFound('unknown_session', {
               message: `Unknown session: ${req.sessionId}. No state.json at ${stateFile}.`,
               received: req.sessionId,
-              next: 'sis session list --all',
+              next: 'sis session inspect list --all',
             }),
           };
         }
@@ -848,9 +848,9 @@ async function handleRequest(req: Request): Promise<Response> {
           return {
             ok: false,
             error: errConflict('already_on_cloud', {
-              message: `Session ${req.sessionId} is already on ${where}. Use \`sis cloud reclaim\` first.`,
+              message: `Session ${req.sessionId} is already on ${where}. Use \`sis cloud handoff pull\` first.`,
               received: req.sessionId,
-              next: 'sis cloud reclaim',
+              next: 'sis cloud handoff pull',
             }),
           };
         }
@@ -920,9 +920,9 @@ async function handleRequest(req: Request): Promise<Response> {
           return {
             ok: false,
             error: errConflict('already_shipped', {
-              message: `Session ${req.sessionId} has already shipped to cloud — use \`sis cloud reclaim\` to bring it back.`,
+              message: `Session ${req.sessionId} has already shipped to cloud — use \`sis cloud handoff pull\` to bring it back.`,
               received: req.sessionId,
-              next: 'sis cloud reclaim',
+              next: 'sis cloud handoff pull',
             }),
           };
         }
@@ -959,7 +959,7 @@ async function handleRequest(req: Request): Promise<Response> {
             error: errConflict('already_on_cloud', {
               message: `Session ${req.sessionId} already lives on cloud; nothing to quiesce locally.`,
               received: req.sessionId,
-              next: 'sis cloud reclaim',
+              next: 'sis cloud handoff pull',
             }),
           };
         }

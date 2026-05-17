@@ -50,7 +50,7 @@ export interface HandoffState {
    * for natural quiesce.
    */
   message?: string;
-  /** Most recent failure during push; set so the user can retry from `sis session list`. */
+  /** Most recent failure during push; set so the user can retry from `sis session inspect list`. */
   lastError?: string;
 }
 
@@ -132,10 +132,10 @@ export interface Session {
    */
   dangerousMode?: boolean;
   /**
-   * Cloud-handoff lifecycle marker. Set by `sis cloud handoff` (push to box)
-   * or `sis session quiesce` (pause-only). Presence with `sentAt` unset blocks
+   * Cloud-handoff lifecycle marker. Set by `sis cloud handoff push` (push to box)
+   * or `sis session recover quiesce` (pause-only). Presence with `sentAt` unset blocks
    * local respawn at the next quiesce point; presence with `sentAt` set means
-   * the session lives on the box and can be `sis cloud reclaim`-ed.
+   * the session lives on the box and can be `sis cloud handoff pull`-ed.
    */
   handoff?: HandoffState;
 }

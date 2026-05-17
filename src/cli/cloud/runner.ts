@@ -140,7 +140,7 @@ export async function cloudSession(provider: Provider, repo: string): Promise<vo
   const remoteDir = boxRepoPath(repo);
   // home-init is a sisyphus admin subcommand on the box; runs against the
   // local tmux server there. `~` expands in the remote shell.
-  const cmd = `sis admin home-init ${shellQuote(repo)} ${shellQuoteHomePath(remoteDir)}`;
+  const cmd = `sis diagnostic home-init ${shellQuote(repo)} ${shellQuoteHomePath(remoteDir)}`;
   console.log(`→ initializing tmux home session "${repo}" on box...`);
   const result = runOnBox(provider, cmd);
   if (result.exitCode !== 0) {

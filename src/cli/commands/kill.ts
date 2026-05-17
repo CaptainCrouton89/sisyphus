@@ -12,8 +12,8 @@ export function registerKill(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session kill sess-7f2a
-  $ sis session kill sess-7f2a --json
+  $ sis session lifecycle kill sess-7f2a
+  $ sis session lifecycle kill sess-7f2a --json
 
 Output:
   Default       Prose lines on stdout; "Session <id> killed." then cleanup count.
@@ -22,7 +22,7 @@ Output:
 Exit codes: 0 ok | 3 not_found | 60 transient | see \`sis --help\` for full table.
 
 Next on success:
-  $ sis session list                  # confirm the session is gone`,
+  $ sis session inspect list                  # confirm the session is gone`,
     )
     .action(async (sessionId: string) => {
       const request: Request = { type: 'kill', sessionId };

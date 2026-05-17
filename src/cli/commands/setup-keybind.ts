@@ -27,9 +27,9 @@ export function registerSetupKeybind(program: Command): void {
           console.log(`  ${result.existingBinding}`);
           console.log('');
           console.log('Options:');
-          console.log('  - Pick a different cycle key:  sis admin setup-keybind M-w');
-          console.log('  - Run "sis admin check-keybinds" for a full breakdown');
-          console.log('  - Override and overwrite:      sis admin setup-keybind --force');
+          console.log('  - Pick a different cycle key:  sis admin install setup-keybind M-w');
+          console.log('  - Run "sis admin check check-keybinds" for a full breakdown');
+          console.log('  - Override and overwrite:      sis admin install setup-keybind --force');
           process.exitCode = 1;
           break;
         case 'unsupported-tmux':
@@ -39,7 +39,7 @@ export function registerSetupKeybind(program: Command): void {
         case 'requires-force':
           console.log(result.message);
           console.log('');
-          console.log('Run "sis admin check-keybinds" first if you want the full decision tree before deciding.');
+          console.log('Run "sis admin check check-keybinds" first if you want the full decision tree before deciding.');
           process.exitCode = 1;
           break;
         case 'conf-modification-declined':

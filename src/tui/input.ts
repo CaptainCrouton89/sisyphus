@@ -872,7 +872,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
     case 'clone-session': {
       if (!selectedSessionId) { notify(state, 'No session selected'); break; }
       try {
-        actions.openShellPopup(state.cwd, `sis session clone ${selectedSessionId}`);
+        actions.openShellPopup(state.cwd, `sis session recover clone ${selectedSessionId}`);
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -881,7 +881,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'history': {
       try {
-        actions.openShellPopup(state.cwd, 'sis session history');
+        actions.openShellPopup(state.cwd, 'sis session inspect history');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -908,7 +908,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'reconnect': {
       try {
-        actions.openShellPopup(state.cwd, 'sis session reconnect');
+        actions.openShellPopup(state.cwd, 'sis session recover reconnect');
       } catch {
         notify(state, 'Failed to open shell');
       }
@@ -923,7 +923,7 @@ function handleLeaderAction(action: LeaderAction, state: AppState, actions: Inpu
 
     case 'show-status': {
       try {
-        actions.openShellPopup(state.cwd, `sis session status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
+        actions.openShellPopup(state.cwd, `sis session inspect status${selectedSessionId ? ` ${selectedSessionId}` : ''}`);
       } catch {
         notify(state, 'Failed to open status');
       }

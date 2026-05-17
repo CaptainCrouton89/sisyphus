@@ -38,7 +38,10 @@ export function registerCloud(program: Command): void {
     .command('cloud')
     .description('Per-repo workflow on the shared cloud box (sync, install, dashboard).');
 
-  cloud
+  // cloud box is exactly at the 7-child cap (sync/install/session/attach/status/login/up) — adding another verb requires a further sub-noun.
+  const box = cloud.command('box').description('Provision / operate the box for this repo');
+
+  box
     .command('sync')
     .description('Rsync this repo to the cloud box; ensures grove is installed and the repo is registered.')
     .option('--fresh', 'Wipe the box-side dir and `git clone` from origin instead of rsync.')
@@ -50,7 +53,7 @@ export function registerCloud(program: Command): void {
       await cloudSync(provider, repo, { fresh: raw.fresh === true, yes: raw.yes === true });
     });
 
-  cloud
+  box
     .command('install')
     .description('Run the repo\'s package-manager install on the box.')
     .option('--name <repo>', 'Override the repo name.')
@@ -60,7 +63,7 @@ export function registerCloud(program: Command): void {
       await cloudInstall(provider, repo);
     });
 
-  cloud
+  box
     .command('session')
     .description('Create or refresh the box-side tmux home session for this repo.')
     .option('--name <repo>', 'Override the repo name.')
@@ -70,7 +73,7 @@ export function registerCloud(program: Command): void {
       await cloudSession(provider, repo);
     });
 
-  cloud
+  box
     .command('attach')
     .description('Attach to the box-side tmux home session for this repo.')
     .option('--name <repo>', 'Override the repo name.')
@@ -80,28 +83,7 @@ export function registerCloud(program: Command): void {
       cloudAttach(provider, repo);
     });
 
-  cloud
-    .command('start')
-    .description('Sync, install, and start the dashboard session in one shot. (Stops short of attach.)')
-    .option('--fresh', 'Wipe the box-side dir and `git clone` from origin instead of rsync.')
-    .option('-y, --yes', 'Skip the --fresh confirmation prompt.')
-    .option('--name <repo>', 'Override the repo name.')
-    .option('--provider <name>', 'Cloud provider.')
-    .action(async (raw: StartRaw) => {
-      const { provider, repo } = resolve(raw);
-      await cloudStart(provider, repo, { fresh: raw.fresh === true, yes: raw.yes === true });
-    });
-
-  cloud
-    .command('claude-login')
-    .description('Run `claude auth login` on the box (device-code flow; paste the URL into your local browser).')
-    .option('--provider <name>', 'Cloud provider.')
-    .action((raw: CommonRaw) => {
-      const provider = pickProvider(raw.provider);
-      cloudClaudeLogin(provider);
-    });
-
-  cloud
+  box
     .command('status')
     .description('Print box-side status for this repo (planted, session running, last sync/install).')
     .option('--name <repo>', 'Override the repo name.')
@@ -111,8 +93,31 @@ export function registerCloud(program: Command): void {
       cloudStatus(provider, repo);
     });
 
-  cloud
-    .command('handoff <session-id>')
+  box
+    .command('login')
+    .description('Run auth login on the box (device-code flow; paste the URL into your local browser).')
+    .option('--provider <name>', 'Cloud provider.')
+    .action((raw: CommonRaw) => {
+      const provider = pickProvider(raw.provider);
+      cloudClaudeLogin(provider);
+    });
+
+  box
+    .command('up')
+    .description('Sync, install, and create the box session in one shot (cold start). Stops short of attach.')
+    .option('--fresh', 'Wipe the box-side dir and `git clone` from origin instead of rsync.')
+    .option('-y, --yes', 'Skip the --fresh confirmation prompt.')
+    .option('--name <repo>', 'Override the repo name.')
+    .option('--provider <name>', 'Cloud provider.')
+    .action(async (raw: StartRaw) => {
+      const { provider, repo } = resolve(raw);
+      await cloudStart(provider, repo, { fresh: raw.fresh === true, yes: raw.yes === true });
+    });
+
+  const handoff = cloud.command('handoff').description('Move a live session between local and box');
+
+  handoff
+    .command('push <session-id>')
     .description('Hand off a live session to the cloud box. Queues at next quiesce; --force interrupts now.')
     .option('--provider <name>', 'Cloud provider (default: auto-pick).')
     .option('--name <repo>', 'Override the repo name on the box.')
@@ -132,8 +137,8 @@ export function registerCloud(program: Command): void {
       await cloudHandoff(sessionId, { provider, repo, force: raw.force === true, wait: raw.wait === true });
     });
 
-  cloud
-    .command('reclaim <session-id>')
+  handoff
+    .command('pull <session-id>')
     .description('Pull a handed-off session back from the cloud box and resume locally.')
     .option('--provider <name>', 'Override the cloud provider (default: read from session.handoff).')
     .option('--force', 'Force the box-side session to stop now instead of waiting for quiesce.')

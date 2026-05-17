@@ -68,7 +68,7 @@ export function hasCommand(cmd: string): boolean {
   }
 }
 
-/** Human-readable platform label, e.g. for `sis admin doctor`. */
+/** Human-readable platform label, e.g. for `sis admin check doctor`. */
 export function platformLabel(): string {
   switch (detectPlatform()) {
     case 'darwin': return 'macOS';

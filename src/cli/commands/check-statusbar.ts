@@ -400,13 +400,13 @@ Don't propose statusbar changes yet:
   - tmuxInstalled=false → install tmux first (\`brew install tmux\` on macOS)
   - tmuxServerRunning=false → user needs to run \`tmux\` (or attach to a session)
 
-Re-run \`sis admin check-statusbar\` once tmux is up.
+Re-run \`sis admin check check-statusbar\` once tmux is up.
 
 ## Daemon reminder
 Even with status-left/right perfectly wired, the bar will show literal \`#{E:@sisyphus_left}\` (rendered as empty) until the daemon is running and has populated the option at least once. Always end this flow by checking \`daemonRunning: true\` above; if false, run \`sisyphusd start\` (or \`sisyphusd restart\` if it's stuck).
 
 ## After acting
-Re-run \`sis admin check-statusbar\` to verify the new state. If anything looks wrong, the JSON form (\`sis admin check-statusbar --json\`) is easier to diff against expected values.
+Re-run \`sis admin check check-statusbar\` to verify the new state. If anything looks wrong, the JSON form (\`sis admin check check-statusbar --json\`) is easier to diff against expected values.
 </claude-instructions>
 `);
 }

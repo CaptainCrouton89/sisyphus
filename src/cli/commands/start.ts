@@ -47,8 +47,8 @@ function attachToTmuxSession(sessionName: string): void {
 
 
 /**
- * Registers `<parent> start` (canonical, e.g. `sis session start`) and,
- * when `root` is given, a hidden top-level `sis start` alias.
+ * Registers `<parent> start` (canonical, e.g. `sis session lifecycle start`) and,
+ * when `root` is given, a hidden top-level `sis session lifecycle start` alias.
  */
 export function registerStart(parent: Command, root?: Command): void {
   buildStartCommand(parent, false);
@@ -83,7 +83,7 @@ function buildStartCommand(target: Command, hidden: boolean): void {
         const piped = await readStdin({ force: true });
         if (!piped) {
           exitUsage('empty_stdin', '--stdin set but no input received on stdin', {
-            next: 'pipe content: `cat task.md | sis session start --stdin`',
+            next: 'pipe content: `cat task.md | sis session lifecycle start --stdin`',
           });
         }
         if (taskArg !== undefined && taskArg !== '-') {
@@ -106,7 +106,7 @@ function buildStartCommand(target: Command, hidden: boolean): void {
         const piped = await readStdin({ force: true });
         if (!piped) {
           exitUsage('empty_stdin', '--context-stdin set but no input received on stdin', {
-            next: 'pipe content: `cat ctx.md | sis session start "..." --context-stdin`',
+            next: 'pipe content: `cat ctx.md | sis session lifecycle start "..." --context-stdin`',
           });
         }
         if (opts.context !== undefined) {
@@ -119,7 +119,7 @@ function buildStartCommand(target: Command, hidden: boolean): void {
 
       if (!task) {
         exitUsage('missing_task', 'provide <task> argument, pipe via --stdin, or pass `-` as the task', {
-          next: 'sis session start "your task" — or sis session start - <task.md — or sis session start --stdin <task.md',
+          next: 'sis session lifecycle start "your task" — or sis session lifecycle start - <task.md — or sis session lifecycle start --stdin <task.md',
         });
       }
 
@@ -146,7 +146,7 @@ function buildStartCommand(target: Command, hidden: boolean): void {
       // project, refuse — the dashboard window would get pinned to this cwd but
       // live in a session tagged for the other project, poisoning C-s h, alt+s
       // cycle groups, scratch resolver, and dashboard re-attach. Usually caused
-      // by `cd <subdir> && sis session start` from an agent.
+      // by `cd <subdir> && sis session lifecycle start` from an agent.
       if (process.env['TMUX'] && opts.force !== true) {
         const info = getTmuxSessionInfo();
         const existingHome = getCurrentTmuxSessionHome(info.id);
@@ -155,9 +155,9 @@ function buildStartCommand(target: Command, hidden: boolean): void {
           exitError({
             code: 'cwd_mismatch',
             kind: 'conflict',
-            message: `cwd mismatch with current tmux session. Session "${info.name}" is homed at: ${existingHome}; this invocation's cwd: ${normalizedCwd}. Running \`cd <dir> && sis session start\` from inside a tmux session homed elsewhere breaks dashboard/session linking (C-s h, alt+s cycle, scratch resolver). Usually you want to operate in the parent project, not the cd'd subdir.`,
+            message: `cwd mismatch with current tmux session. Session "${info.name}" is homed at: ${existingHome}; this invocation's cwd: ${normalizedCwd}. Running \`cd <dir> && sis session lifecycle start\` from inside a tmux session homed elsewhere breaks dashboard/session linking (C-s h, alt+s cycle, scratch resolver). Usually you want to operate in the parent project, not the cd'd subdir.`,
             received: { invocationCwd: normalizedCwd, tmuxSession: info.name, tmuxHome: existingHome },
-            next: `Verify with the user: start a session for ${existingHome} or ${normalizedCwd}? To proceed anyway: sis session start --force ...`,
+            next: `Verify with the user: start a session for ${existingHome} or ${normalizedCwd}? To proceed anyway: sis session lifecycle start --force ...`,
           });
         }
       }
@@ -185,7 +185,7 @@ function buildStartCommand(target: Command, hidden: boolean): void {
           console.error(`Tmux session: ${tmuxSessionName}`);
           console.error(`  tmux attach -t ${tmuxSessionName}`);
         }
-        console.error(`Monitor: sis session status ${sessionId}`);
+        console.error(`Monitor: sis session inspect status ${sessionId}`);
         return;
       }
 
@@ -246,6 +246,6 @@ function buildStartCommand(target: Command, hidden: boolean): void {
         attachToTmuxSession(tmuxSession);
       }
 
-      console.error(`Monitor: sis session status ${sessionId}`);
+      console.error(`Monitor: sis session inspect status ${sessionId}`);
     });
 }

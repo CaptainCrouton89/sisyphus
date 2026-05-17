@@ -31,7 +31,7 @@ Exit codes: 0 ok | 3 not_found.`,
           kind: 'not_found',
           message: 'Session not found',
           received: sessionId,
-          next: 'sis session list --all',
+          next: 'sis session inspect list --all',
         });
       }
       const context = buildSessionContext(session, opts.cwd);

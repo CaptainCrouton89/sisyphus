@@ -14,14 +14,14 @@ export function registerContinue(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session continue
-  $ sis session continue --session sess-7f2a --json
+  $ sis session lifecycle continue
+  $ sis session lifecycle continue --session sess-7f2a --json
 
 When to use:
   After \`complete\`, when you want to keep working in the same session.
 
 When NOT to use:
-  Use \`sis session resume\` instead when restarting with new instructions —
+  Use \`sis session lifecycle resume\` instead when restarting with new instructions —
   resume preserves history; continue wipes the roadmap.
 
 Output:

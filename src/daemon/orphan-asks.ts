@@ -268,7 +268,7 @@ export async function resolveOrchestratorOrphanAsks(
       askStore.writeOutput(cwd, sessionId, askId, [{
         id: 'orphan',
         selectedOptionId,
-        freetext: `auto-resolved by ${selectedOptionId === 'resume' ? 'sis session resume' : 'system'}`,
+        freetext: `auto-resolved by ${selectedOptionId === 'resume' ? 'sis session lifecycle resume' : 'system'}`,
       }], completedAt);
       await askStore.updateMeta(cwd, sessionId, askId, { status: 'answered', completedAt });
     } catch (err) {

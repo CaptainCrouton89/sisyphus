@@ -29,7 +29,7 @@ function printNonClaudeMessage(): void {
 
   If you just want the quick reference, run:
     sis --help
-    sis admin doctor
+    sis admin check doctor
 `);
 }
 
@@ -78,8 +78,8 @@ You are guiding a user through the Sisyphus interactive tutorial.
 
 Ask the user if they'd like the interactive walkthrough. If they decline, give this quick summary and stop:
 
-> Sisyphus is a multi-agent orchestrator for Claude Code. Start a session with \`sis session start "task"\`,
-> monitor with \`sis ui dashboard\`, and check health with \`sis admin doctor\`.
+> Sisyphus is a multi-agent orchestrator for Claude Code. Start a session with \`sis session lifecycle start "task"\`,
+> monitor with \`sis ui dashboard\`, and check health with \`sis admin check doctor\`.
 
 ### If they want the tutorial:
 
@@ -298,7 +298,7 @@ function printStep3(): void {
   > typing special characters (accents, symbols). The right Option key
   > becomes your "Meta" key for tmux/sisyphus keybinds.
 
-  After they change it, have them verify by re-running \`sis admin doctor\` — look for "Right Option Key: Esc+".
+  After they change it, have them verify by re-running \`sis admin check doctor\` — look for "Right Option Key: Esc+".
 
 - **rightOptionKeyStatus: not-iterm** — They're not using iTerm2. Explain:
   > Sisyphus keybinds use Option as Meta. In iTerm2 this is configured via
@@ -344,14 +344,14 @@ Two keybinds to remember (both use the RIGHT Option key):
 
 ### 4. Verify keybinds are installed (REQUIRED before step 5)
 
-Run \`sis admin check-keybinds\` and follow the decision tree it emits. The output is
+Run \`sis admin check check-keybinds\` and follow the decision tree it emits. The output is
 structured for you — it tells you the current state and which path to take (Path A
 through Path F). Do NOT skip this and do NOT ask the user to test a keybind until
 both \`M-s\` and \`C-s\` read "sisyphus" in that command's output.
 
 Common paths:
 - **Path A (already wired):** confirm and move on.
-- **Path B (safe auto-install):** run \`sis admin setup-keybind --yes\`.
+- **Path B (safe auto-install):** run \`sis admin install setup-keybind --yes\`.
 - **Path C (would touch user's tmux.conf):** ask the user — persistent (\`--force\`) or
   live-only (no flag, non-TTY auto-declines the conf write).
 - **Path D (binding conflict):** pick alternate keys or wire directly.
@@ -359,7 +359,7 @@ Common paths:
   alternatives.
 - **Path F (tmux not ready):** fix the precondition first.
 
-After acting, re-run \`sis admin check-keybinds\` to confirm success.
+After acting, re-run \`sis admin check check-keybinds\` to confirm success.
 
 ### 5. Test the keybind
 
@@ -373,7 +373,7 @@ If they see \`ß\` or similar, circle back to the Right Option Key setup above.
 
 Confirm:
 - They understand the two-session model (their session vs sisyphus session)
-- \`sis admin doctor\` shows keybinds installed AND Right Option Key: Esc+
+- \`sis admin check doctor\` shows keybinds installed AND Right Option Key: Esc+
 - Right Option + s doesn't produce a special character
 
 Proceed:
@@ -399,12 +399,12 @@ This is the grand finale — a live demo session.
 
 ### 1. Health check
 
-Run \`sis admin doctor\` first. If any checks are failing, help the user fix them before proceeding.
+Run \`sis admin check doctor\` first. If any checks are failing, help the user fix them before proceeding.
 All core checks (tmux, daemon, keybinds) should be ✓.
 
 ### 2. BEFORE launching: Teach navigation
 
-**This is critical.** When \`sis session start\` runs, it auto-opens the dashboard in a new tmux window. The user will suddenly be looking at the dashboard and may feel "stuck". Teach them how to navigate BEFORE launching:
+**This is critical.** When \`sis session lifecycle start\` runs, it auto-opens the dashboard in a new tmux window. The user will suddenly be looking at the dashboard and may feel "stuck". Teach them how to navigate BEFORE launching:
 
 Explain clearly:
 
@@ -452,7 +452,7 @@ Tell the user:
 
 Then launch from the demo directory (sisyphus operates in whichever directory you launch it from, so we \`cd\` in so the \`.sisyphus/\` state lands inside the demo):
 \`\`\`
-cd ${demoPath} && sis session start "Add three improvements to this todo app: (1) add a priority field (high/medium/low) to todos, (2) add a GET /todos/stats endpoint that returns counts of total/done/pending todos, (3) add tests for the new features. Explain your thinking at each step." -c "TUTORIAL DEMO: A user is watching this session to learn how sisyphus works. Be EXTRA VERBOSE — explain your reasoning, narrate what you're doing, and make your planning visible. When spawning agents, give each agent context that this is a tutorial demo and they should explain their work clearly. Keep scope small: 2-3 agents, 1-2 cycles."
+cd ${demoPath} && sis session lifecycle start "Add three improvements to this todo app: (1) add a priority field (high/medium/low) to todos, (2) add a GET /todos/stats endpoint that returns counts of total/done/pending todos, (3) add tests for the new features. Explain your thinking at each step." -c "TUTORIAL DEMO: A user is watching this session to learn how sisyphus works. Be EXTRA VERBOSE — explain your reasoning, narrate what you're doing, and make your planning visible. When spawning agents, give each agent context that this is a tutorial demo and they should explain their work clearly. Keep scope small: 2-3 agents, 1-2 cycles."
 \`\`\`
 
 After launching, tell them:
@@ -465,7 +465,7 @@ Wait for them to confirm they're back, then start live commentary.
 
 **This is the most important part of the demo.** Don't just launch and wait — actively narrate.
 
-Once the user is back, start a polling loop. Every ~45 seconds, run \`sis session status --verbose <session-id>\` and provide SHORT, contextual commentary about what's happening. The \`--verbose\` flag shows agent instructions, full roadmap, cycle logs, and live pane output from the orchestrator and running agents — use this rich data to narrate what's actually happening, not just phase names.
+Once the user is back, start a polling loop. Every ~45 seconds, run \`sis session inspect status --verbose <session-id>\` and provide SHORT, contextual commentary about what's happening. The \`--verbose\` flag shows agent instructions, full roadmap, cycle logs, and live pane output from the orchestrator and running agents — use this rich data to narrate what's actually happening, not just phase names.
 
 **How to narrate each phase:**
 
@@ -589,7 +589,7 @@ This is the most important part. Explain clearly:
 The easiest way is the \`/sisyphus:begin\` slash command inside Claude Code. Just tell Claude
 what you want to build and it'll hand it off to sisyphus with the right context.
 
-Or directly: \`sis session start "your task" -c "any background context"\`
+Or directly: \`sis session lifecycle start "your task" -c "any background context"\`
 
 ### 4. Suggest real tasks for THEIR codebase
 
@@ -644,33 +644,46 @@ thing — answer what they're curious about, using the reference as your source 
 
 function buildCommandTable(root: Command): string {
   const lines: string[] = ['| Command | Purpose |', '|---------|---------|'];
-  for (const cmd of root.commands) {
-    if ((cmd as unknown as { _hidden: boolean })._hidden) continue;
-    if (cmd.name() === 'help') continue;
-    const subs = cmd.commands.filter(c => !(c as unknown as { _hidden: boolean })._hidden && c.name() !== 'help');
+
+  const fmtArgs = (c: Command) =>
+    c.registeredArguments.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
+
+  function walk(cmd: Command, prefix: string): void {
+    if ((cmd as unknown as { _hidden: boolean })._hidden) return;
+    if (cmd.name() === 'help') return;
+
+    const fullPrefix = prefix ? `${prefix} ${cmd.name()}` : cmd.name();
     const hasOwnAction = (cmd as unknown as { _actionHandler?: unknown })._actionHandler != null;
-    const fmtArgs = (c: typeof cmd) =>
-      c.registeredArguments.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
-    if (subs.length === 0) {
-      // flat or argument-only command
+    const visibleSubs = cmd.commands.filter(
+      c => !(c as unknown as { _hidden: boolean })._hidden && c.name() !== 'help'
+    );
+
+    // If the node has its own action handler, emit a row for it
+    if (hasOwnAction) {
       const args = fmtArgs(cmd);
-      const usage = args ? `sis ${cmd.name()} ${args}` : `sis ${cmd.name()}`;
+      const usage = args ? `sis ${fullPrefix} ${args}` : `sis ${fullPrefix}`;
       lines.push(`| \`${usage}\` | ${cmd.description()} |`);
-    } else {
-      // group: if it has its own root action (e.g. `companion`), emit a row for the bare invocation first
-      if (hasOwnAction) {
+    }
+
+    if (visibleSubs.length === 0) {
+      // Leaf with no own action (shouldn't normally happen, but emit a row)
+      if (!hasOwnAction) {
         const args = fmtArgs(cmd);
-        const usage = args ? `sis ${cmd.name()} ${args}` : `sis ${cmd.name()}`;
+        const usage = args ? `sis ${fullPrefix} ${args}` : `sis ${fullPrefix}`;
         lines.push(`| \`${usage}\` | ${cmd.description()} |`);
       }
-      // then one row per subcommand
-      for (const sub of subs) {
-        const args = fmtArgs(sub);
-        const usage = args ? `sis ${cmd.name()} ${sub.name()} ${args}` : `sis ${cmd.name()} ${sub.name()}`;
-        lines.push(`| \`${usage}\` | ${sub.description()} |`);
+    } else {
+      // Recurse into children
+      for (const sub of visibleSubs) {
+        walk(sub, fullPrefix);
       }
     }
   }
+
+  for (const cmd of root.commands) {
+    walk(cmd, '');
+  }
+
   return lines.join('\n');
 }
 
@@ -817,7 +830,7 @@ code that looks right and code that works.
   ┌──────────────────────────────────────────────────────────────────┐
   │                    SESSION LIFECYCLE                             │
   │                                                                  │
-  │  sis session start "task"                                        │
+  │  sis session lifecycle start "task"                              │
   │       │                                                          │
   │       ▼                                                          │
   │  ┌─────────┐     spawn agents     ┌──────────────┐               │
@@ -899,13 +912,13 @@ Sisyphus sessions should be actively monitored. Here's what to watch for:
 
 **When to intervene:**
 - Use \`m\` in the dashboard to message the orchestrator with corrections
-- Use \`sis session kill <id>\` to stop a runaway session
-- Use \`sis session resume <id> "new instructions"\` to restart with different direction
+- Use \`sis session lifecycle kill <id>\` to stop a runaway session
+- Use \`sis session lifecycle resume <id> "new instructions"\` to restart with different direction
 
 **Useful monitoring commands:**
 \`\`\`
-sis session status <id>              # Quick status check
-sis session status --verbose <id>    # Full detail: roadmap, pane output, agent instructions
+sis session inspect status <id>              # Quick status check
+sis session inspect status --verbose <id>    # Full detail: roadmap, pane output, agent instructions
 sis ui dashboard                     # Interactive TUI
 tail -f ~/.sisyphus/daemon.log       # Daemon activity log
 \`\`\`
@@ -972,11 +985,11 @@ Then describe your task. Claude will hand it off with the right context.
 
 **Direct CLI:**
 \`\`\`
-sis session start "task description" -c "background context"
-sis session start "Implement @requirements.md" -n my-feature
+sis session lifecycle start "task description" -c "background context"
+sis session lifecycle start "Implement @requirements.md" -n my-feature
 \`\`\`
 
-**Reference files with @**: \`sis session start "Build @docs/spec.md"\` — the orchestrator
+**Reference files with @**: \`sis session lifecycle start "Build @docs/spec.md"\` — the orchestrator
 will read the referenced file as part of its planning.
 
 **The -c flag** adds background context the orchestrator sees but doesn't act on directly.
@@ -998,7 +1011,7 @@ sisyphusd restart
 **Keybinds not working (special characters appear):**
 iTerm2 → Settings → Profiles → Keys → Right Option Key → Esc+
 
-**Agents stuck:** Check \`sis session status --verbose <id>\` to see pane output. If an
+**Agents stuck:** Check \`sis session inspect status --verbose <id>\` to see pane output. If an
 agent is waiting for input, kill the session and restart with clearer instructions.
 
 **Dashboard not opening:** Run \`sis ui dashboard\` manually. Must be inside tmux.

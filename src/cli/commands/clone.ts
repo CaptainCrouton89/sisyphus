@@ -17,8 +17,8 @@ export function registerClone(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session clone "Refactor billing module separately"
-  $ sis session clone "..." -c "use stripe-v2 API" --strategy --name billing-rework
+  $ sis session recover clone "Refactor billing module separately"
+  $ sis session recover clone "..." -c "use stripe-v2 API" --strategy --name billing-rework
 
 When NOT to use:
   Clone is orchestrator-only — sub-agents must \`sis orch message\` the orchestrator

@@ -73,7 +73,7 @@ function buildDashboardCommand(target: Command, hidden: boolean): void {
 
 /**
  * Registers `<parent> dashboard` (canonical, e.g. `sis ui dashboard`) and,
- * when `root` is given, a hidden top-level `sis dashboard` alias.
+ * when `root` is given, a hidden top-level `sis ui dashboard` alias.
  */
 export function registerDashboard(parent: Command, root?: Command): void {
   buildDashboardCommand(parent, false);

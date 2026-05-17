@@ -166,8 +166,8 @@ async function pushToCloud(sessionId: string, cwd: string): Promise<void> {
   const message = handoff.message;
   const remoteRepoDir = boxRepoPath(repo);
   const baseCmd = message
-    ? `sis session resume ${shellQuote(sessionId)} ${shellQuote(message)}`
-    : `sis session resume ${shellQuote(sessionId)}`;
+    ? `sis session lifecycle resume ${shellQuote(sessionId)} ${shellQuote(message)}`
+    : `sis session lifecycle resume ${shellQuote(sessionId)}`;
   // cd into the repo so sis resolves state.json relative to the correct cwd.
   // shellQuoteHomePath preserves a leading `~/` so the remote shell expands it.
   const resumeCmd = `cd ${shellQuoteHomePath(remoteRepoDir)} && ${baseCmd}`;
@@ -271,7 +271,7 @@ export async function triggerForceHandoff(sessionId: string, cwd: string): Promi
 }
 
 /**
- * Validate + resolve provider at RPC queue time. Mirrors `sis cloud handoff`
+ * Validate + resolve provider at RPC queue time. Mirrors `sis cloud handoff push`
  * CLI behavior: if `explicit` is given, validate it; otherwise auto-pick when
  * exactly one is provisioned. Throws with a useful message otherwise.
  */

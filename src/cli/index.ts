@@ -77,6 +77,7 @@ import { attachNotify } from './commands/notify.js';
 import { attachTmuxSessions } from './commands/tmux-sessions.js';
 import { globalDir } from '../shared/paths.js';
 import { setGlobalFlags } from './global-flags.js';
+import { subcommandRubric, CONCEPTS_BLOCK } from './help-rubric.js';
 
 const program = new Command();
 
@@ -88,8 +89,8 @@ program
       readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf-8'),
     ).version,
   )
-  // Universal flags. Apply at every level — `sis --json session status foo` and
-  // `sis session status --json foo` are both valid. Commander v13 inherits root opts
+  // Universal flags. Apply at every level — `sis --json session inspect status foo` and
+  // `sis session inspect status --json foo` are both valid. Commander v13 inherits root opts
   // into subcommands via `optsWithGlobals()`; the preAction hook below pushes
   // them into module state so deeply nested actions don't need to wire it.
   .option('--json', 'Emit JSON to stdout; suppress ANSI and prose diagnostics')
@@ -111,7 +112,10 @@ program.hook('preAction', (thisCmd, actionCmd) => {
 
 program.configureHelp({
   sortSubcommands: false,
+  subcommandDescription: (cmd) => subcommandRubric(cmd),
 });
+
+program.addHelpText('before', CONCEPTS_BLOCK);
 
 // Root-only ('after', not 'afterAll'): the full exit-code enum + --json
 // envelope is reference material that belongs on `sis -h`. Subcommands carry
@@ -139,26 +143,35 @@ Errors in --json:
 
 // session group
 const session = program.command('session').description('Manage sessions');
-registerStart(session, program);
-registerStatus(session);
-registerList(session);
-registerKill(session);
-registerDelete(session);
-registerResume(session);
-registerContinue(session);
-registerComplete(session);
-registerRollback(session);
-registerReconnect(session);
-registerClone(session);
-registerSessionTask(session);
-registerSessionEffort(session);
-registerSessionDangerous(session);
-registerSessionContext(session);
-registerQuiesce(session);
-registerExport(session);
-registerHistory(session);
+
+const sessLifecycle = session.command('lifecycle').description('Start/stop/advance a session');
+registerStart(sessLifecycle, program);
+registerComplete(sessLifecycle);
+registerContinue(sessLifecycle);
+registerResume(sessLifecycle);
+registerKill(sessLifecycle);
+registerDelete(sessLifecycle);
+
+const sessInspect = session.command('inspect').description('Read session state');
+registerStatus(sessInspect);
+registerList(sessInspect);
+registerHistory(sessInspect);
+registerSessionContext(sessInspect);
+registerExport(sessInspect);
+registerReview(sessInspect);
+
+const sessConfig = session.command('config').description('Change session settings');
+registerSessionTask(sessConfig);
+registerSessionEffort(sessConfig);
+registerSessionDangerous(sessConfig);
+
+const sessRecover = session.command('recover').description('Repair or relocate a session');
+registerRollback(sessRecover);
+registerReconnect(sessRecover);
+registerQuiesce(sessRecover);
+registerClone(sessRecover);
+
 registerScratch(session);
-registerReview(session);
 
 // agent group
 const agent = program.command('agent').description('Manage agents');
@@ -166,10 +179,14 @@ registerSpawn(agent);
 registerSubmit(agent);
 registerReport(agent);
 registerAwait(agent);
-registerAgentKill(agent);
-registerAgentRestart(agent);
-registerAgentTell(agent);
-registerAgentRead(agent);
+
+const agentCtl = agent.command('ctl').description('Agent process control');
+registerAgentKill(agentCtl);
+registerAgentRestart(agentCtl);
+
+const agentIo = agent.command('io').description('Agent message I/O');
+registerAgentTell(agentIo);
+registerAgentRead(agentIo);
 
 // orch group
 const orch = program.command('orch').description('Orchestrator commands');
@@ -193,17 +210,22 @@ registerSegmentUnregister(segment);
 
 // admin group
 const admin = program.command('admin').description('Admin / setup commands');
-registerSetup(admin);
-registerSetupKeybind(admin);
-registerCheckKeybinds(admin);
-registerCheckStatusbar(admin);
-registerHomeInit(admin);
-registerDoctor(admin);
-registerBug(admin);
-registerInit(admin);
-registerUninstall(admin);
-registerConfigureUpload(admin);
-registerUpload(admin);
+
+const adminInstall = admin.command('install').description('Install / uninstall');
+registerSetup(adminInstall);
+registerSetupKeybind(adminInstall);
+registerInit(adminInstall);
+registerUninstall(adminInstall);
+
+const adminCheck = admin.command('check').description('Verify the installation');
+registerDoctor(adminCheck);
+registerCheckKeybinds(adminCheck);
+registerCheckStatusbar(adminCheck);
+
+const adminReport = admin.command('report').description('Diagnostics & telemetry');
+registerBug(adminReport);
+registerUpload(adminReport);
+registerConfigureUpload(adminReport);
 
 // companion group (root action + memory + popup-test + context)
 registerCompanion(program);
@@ -218,21 +240,22 @@ registerCloud(program);
 const diagnostic = program.command('diagnostic', { hidden: true });
 attachNotify(diagnostic);
 attachTmuxSessions(diagnostic);
+registerHomeInit(diagnostic);
 
 program.addHelpText('after', `
 Examples:
-  $ sis session start "Implement auth system"     Start a new session
-  $ sis session start "Build @reqs.md" -n auth    Start with name + requirements
-  $ sis session status                            Check current sessions
-  $ sis ui dashboard                              Open the TUI
-  $ sis admin doctor                              Verify installation
+  $ sis session lifecycle start "Implement auth system"     Start a new session
+  $ sis session lifecycle start "Build @reqs.md" -n auth    Start with name + requirements
+  $ sis session inspect status                              Check current sessions
+  $ sis ui dashboard                                        Open the TUI
+  $ sis admin check doctor                                  Verify installation
 
 Run 'sis ui guide' for a complete usage guide.
 `);
 
 // Propagate --json / --no-color to every (sub)command. Commander v13 won't
 // match unknown options against a parent — without per-command declarations,
-// `sis session status --json` errors with "unknown option" even though `--json` is at
+// `sis session inspect status --json` errors with "unknown option" even though `--json` is at
 // root. Walking the tree once at startup keeps the universal-flag surface
 // honest without forcing every register* function to add them by hand.
 function propagateUniversalFlags(cmd: Command): void {
@@ -257,7 +280,7 @@ const skipWelcome = ['session', 'start', 'dashboard', 'agent', 'orch', 'ask', 'u
 if (!existsSync(globalDir()) && firstArg && !skipWelcome.includes(firstArg)) {
   mkdirSync(globalDir(), { recursive: true });
   console.log('');
-  console.log("  Welcome to Sisyphus. Run 'sis admin setup' to get started.");
+  console.log("  Welcome to Sisyphus. Run 'sis admin install setup' to get started.");
   console.log('');
 }
 

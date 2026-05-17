@@ -41,10 +41,10 @@ export type Request =
   | { type: 'cloud-handoff'; sessionId: string; cwd: string; provider?: string; repo?: string; force?: boolean }
   // Cancel a queued handoff. Rejects if `sentAt` is already set.
   | { type: 'cloud-handoff-cancel'; sessionId: string; cwd: string }
-  // Pause-only quiesce — no cloud push. Used by `sis cloud reclaim` on the box
+  // Pause-only quiesce — no cloud push. Used by `sis cloud handoff pull` on the box
   // to stop the box-side session before rsync-ing state back to local.
   | { type: 'admin-quiesce'; sessionId: string; cwd: string; force?: boolean }
-  // Finalize a reclaim: mark `handoff.reclaimedAt`. Called by `sis cloud reclaim`
+  // Finalize a reclaim: mark `handoff.reclaimedAt`. Called by `sis cloud handoff pull`
   // after the rsync down completes and the local orchestrator is respawned.
   | { type: 'cloud-reclaim-finalize'; sessionId: string; cwd: string };
 

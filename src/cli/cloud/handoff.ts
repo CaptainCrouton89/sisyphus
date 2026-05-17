@@ -44,7 +44,7 @@ export async function cloudHandoff(sessionId: string, opts: HandoffOptions): Pro
 
   if (!opts.wait) {
     if (!opts.force) {
-      console.log(`Tip: run \`sis cloud handoff ${sessionId} --cancel\` to cancel before quiesce.`);
+      console.log(`Tip: run \`sis cloud handoff push ${sessionId} --cancel\` to cancel before quiesce.`);
     }
     return;
   }
@@ -149,12 +149,12 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
 
   console.log(`Reclaiming ${sessionId} from ${provider}:${repo}...`);
 
-  // 2. Tell box-side daemon to quiesce. Box-side `sis session quiesce` calls the
+  // 2. Tell box-side daemon to quiesce. Box-side `sis session recover quiesce` calls the
   //    `admin-quiesce` RPC against the box's local daemon socket. Must `cd`
   //    into the repo first so the CLI uses the right cwd to find state.json.
   const quiesceBase = opts.force
-    ? `sis session quiesce ${shellQuote(sessionId)} --force`
-    : `sis session quiesce ${shellQuote(sessionId)}`;
+    ? `sis session recover quiesce ${shellQuote(sessionId)} --force`
+    : `sis session recover quiesce ${shellQuote(sessionId)}`;
   const quiesceCmd = `cd ${shellQuoteHomePath(remoteRepoDir)} && ${quiesceBase}`;
   console.log(`→ ssh box: ${quiesceCmd}`);
   const quiesceCode = await runOnBoxStreaming(provider, quiesceCmd);
@@ -224,10 +224,10 @@ export async function cloudReclaim(sessionId: string, opts: ReclaimOptions): Pro
   });
   if (!resumeResp.ok) exitError(resumeResp.error);
 
-  // 6. Tear down box-side. `sis session kill` is destructive but fine — the
+  // 6. Tear down box-side. `sis session lifecycle kill` is destructive but fine — the
   //    box state is now mirrored locally; we don't want a stale tmux session
   //    living on. Same `cd` requirement as quiesce above.
-  const killCmd = `cd ${shellQuoteHomePath(remoteRepoDir)} && sis session kill ${shellQuote(sessionId)}`;
+  const killCmd = `cd ${shellQuoteHomePath(remoteRepoDir)} && sis session lifecycle kill ${shellQuote(sessionId)}`;
   console.log(`→ ssh box: ${killCmd}`);
   const killResult = runOnBox(provider, killCmd);
   if (killResult.exitCode !== 0) {

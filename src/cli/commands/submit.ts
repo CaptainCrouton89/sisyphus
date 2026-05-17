@@ -21,7 +21,7 @@ Examples:
   $ cat report.md | sis agent submit --stdin
 
 When NOT to use:
-  Only sub-agents call submit. The orchestrator uses \`sis session complete\`.
+  Only sub-agents call submit. The orchestrator uses \`sis session lifecycle complete\`.
 
 Output:
   Default       "Report submitted successfully" + close-pane notice on stdout.

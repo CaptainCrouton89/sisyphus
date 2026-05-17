@@ -5,10 +5,10 @@ import { exitError } from '../errors.js';
 import { emitJsonOk } from '../output.js';
 
 /**
- * `sis session quiesce <session-id>`
+ * `sis session recover quiesce <session-id>`
  *
  * Stop a session at the next quiesce point (or immediately with --force) and
- * leave it paused — no cloud push. Used by `sis cloud reclaim` on the box to
+ * leave it paused — no cloud push. Used by `sis cloud handoff pull` on the box to
  * halt the box-side session before rsync-ing state back to local.
  */
 export function registerQuiesce(parent: Command): void {
@@ -20,11 +20,11 @@ export function registerQuiesce(parent: Command): void {
       'after',
       `
 Examples:
-  $ sis session quiesce sess-7f2a
-  $ sis session quiesce sess-7f2a --force --json
+  $ sis session recover quiesce sess-7f2a
+  $ sis session recover quiesce sess-7f2a --force --json
 
 When NOT to use:
-  Use \`sis cloud reclaim\` if you want to pull a cloud-running session back
+  Use \`sis cloud handoff pull\` if you want to pull a cloud-running session back
   to local. \`quiesce\` only pauses; it does not transport state.
 
 Output:

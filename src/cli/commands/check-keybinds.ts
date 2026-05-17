@@ -172,7 +172,7 @@ Pick exactly one path. Do NOT proceed past this check until both keys read "sisy
 **Trigger:** No conflicts, no prefix collision, AND (no user tmux.conf OR it already sources sisyphus).
 **Action:** ${safeAutoInstall && !bothSisyphus ? '✓ THIS IS YOUR PATH.' : '(not applicable)'} Run:
 \`\`\`
-sis admin setup-keybind --yes
+sis admin install setup-keybind --yes
 \`\`\`
 This installs the helper scripts in ~/.sisyphus/bin/ and applies the bindings to the live
 tmux server. No user files are clobbered (none to clobber, or already wired).
@@ -182,10 +182,10 @@ tmux server. No user files are clobbered (none to clobber, or already wired).
 **Action:** ${!safeAutoInstall && !anyConflict && !r.prefixCollision && wouldModifyUserConf && !bothSisyphus ? '✓ THIS IS YOUR PATH.' : '(not applicable)'} Ask the user to choose:
 
   1. **Persistent (recommended).** "I'll add one line to ${userConfForCopy} so the bindings survive tmux restarts. The line is marked \`# sisyphus-managed — do not edit\` and is grep-removable later."
-     Run: \`sis admin setup-keybind --yes\`
+     Run: \`sis admin install setup-keybind --yes\`
 
-  2. **Live only, no file changes.** "I'll wire the bindings into your current tmux server without touching any config file. They'll vanish when you restart tmux, and you can re-run \`sis admin setup-keybind\` anytime to make them stick."
-     Run: \`sis admin setup-keybind\` (no --yes; non-TTY auto-declines the conf prompt while still applying live bindings + installing helper scripts)
+  2. **Live only, no file changes.** "I'll wire the bindings into your current tmux server without touching any config file. They'll vanish when you restart tmux, and you can re-run \`sis admin install setup-keybind\` anytime to make them stick."
+     Run: \`sis admin install setup-keybind\` (no --yes; non-TTY auto-declines the conf prompt while still applying live bindings + installing helper scripts)
 
 ### Path D — Conflict on ${DEFAULT_CYCLE_KEY} or ${DEFAULT_PREFIX_KEY}
 **Trigger:** cycleKey or prefixKey is "CONFLICT".
@@ -193,13 +193,13 @@ tmux server. No user files are clobbered (none to clobber, or already wired).
 
   1. **Pick alternate keys.** Re-run with a different cycle key — e.g. \`M-S\`, \`M-w\`, \`M-j\`, \`M-\\\`\`:
      \`\`\`
-     sis admin setup-keybind M-w
+     sis admin install setup-keybind M-w
      \`\`\`
      This still uses C-s for the prefix; if the prefix also conflicts, you'll need to wire
      directly (option 3 below), since setup-keybind only takes a custom cycle key.
 
   2. **Skip keybinds entirely.** The user can drive sisyphus from the CLI: \`sis ui dashboard\`,
-     \`sis session status\`, \`sis session start\`, \`sis session resume\`. Lose tmux quick-actions, keep
+     \`sis session inspect status\`, \`sis session lifecycle start\`, \`sis session lifecycle resume\`. Lose tmux quick-actions, keep
      existing bindings.
 
   3. **Wire commands directly (advanced).** Bypass setup-keybind and bind individual
@@ -224,7 +224,7 @@ tmux server. No user files are clobbered (none to clobber, or already wired).
 
   For (b), wire just the cycle key directly:
   \`\`\`
-  sis admin setup-keybind ${DEFAULT_CYCLE_KEY}
+  sis admin install setup-keybind ${DEFAULT_CYCLE_KEY}
   # then unbind C-s if setup-keybind ended up taking it:
   tmux unbind-key -T root ${DEFAULT_PREFIX_KEY}
   \`\`\`
@@ -236,10 +236,10 @@ tmux server. No user files are clobbered (none to clobber, or already wired).
 - tmuxVersionOk=false → upgrade tmux to 3.2+
 - tmuxServerRunning=false → user needs to run \`tmux\` (or attach to an existing session) before live bindings can be installed or tested
 
-After fixing, re-run \`sis admin check-keybinds\`.
+After fixing, re-run \`sis admin check check-keybinds\`.
 
 ## After acting
-Re-run \`sis admin check-keybinds\` to confirm both keys read "sisyphus", THEN ask the
+Re-run \`sis admin check check-keybinds\` to confirm both keys read "sisyphus", THEN ask the
 user to try the keybind. Don't skip the verification — \`setup-keybind\` can fail silently
 if the tmux server dies between commands.
 </claude-instructions>

@@ -159,7 +159,7 @@ export function registerSetup(program: Command): void {
       } else if (keybindResult.status === 'requires-force' || keybindResult.status === 'conflict') {
         keybindMsg =
           `${keybindResult.message}\n` +
-          `    Run "sis admin check-keybinds" for the full decision tree, then re-run "sis admin setup --force" to proceed.`;
+          `    Run "sis admin check check-keybinds" for the full decision tree, then re-run "sis admin install setup --force" to proceed.`;
         process.exitCode = 1;
       } else {
         keybindMsg = keybindResult.message;

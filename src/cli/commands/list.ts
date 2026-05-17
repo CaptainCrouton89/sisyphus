@@ -70,9 +70,9 @@ export function registerList(program: Command): void {
       'after',
       `
 Examples:
-  $ sis session list
-  $ sis session list --all
-  $ sis session list --json | jq '.data.sessions[] | select(.status=="active")'
+  $ sis session inspect list
+  $ sis session inspect list --all
+  $ sis session inspect list --json | jq '.data.sessions[] | select(.status=="active")'
 
 Output:
   Default       One line per session, columns: name(id) status agents task [cwd] [handoff].
@@ -98,7 +98,7 @@ Exit codes: 0 ok | 60 transient (daemon not ready).`,
       if (sessions.length === 0) {
         if (filtered && totalCount && totalCount > 0) {
           console.log(`No sessions in this project. ${totalCount} session(s) in other projects.`);
-          console.log(`${dim('Run ')}sis session list --all${dim(' to show all.')}`);
+          console.log(`${dim('Run ')}sis session inspect list --all${dim(' to show all.')}`);
         } else {
           console.log('No sessions');
         }
@@ -117,7 +117,7 @@ Exit codes: 0 ok | 60 transient (daemon not ready).`,
 
       if (filtered && totalCount && totalCount > sessions.length) {
         const otherCount = totalCount - sessions.length;
-        console.log(`\n${dim(`${otherCount} more session(s) in other projects. Run `)}sis session list --all${dim(' to show all.')}`);
+        console.log(`\n${dim(`${otherCount} more session(s) in other projects. Run `)}sis session inspect list --all${dim(' to show all.')}`);
       }
     });
 }

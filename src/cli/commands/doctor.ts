@@ -74,7 +74,7 @@ function checkDaemonInstalled(): Check {
       name: 'Daemon plist',
       status: 'fail',
       detail: 'Not installed',
-      fix: 'Run any sis command to auto-install, or: sis session start "test"',
+      fix: 'Run any sis command to auto-install, or: sis session lifecycle start "test"',
     };
   }
   // Linux: check if PID file exists (daemon started manually)
@@ -139,7 +139,7 @@ function checkCycleScript(): Check {
       name: 'Cycle script',
       status: 'fail',
       detail: `Not found at ${path}`,
-      fix: 'sis admin setup-keybind',
+      fix: 'sis admin install setup-keybind',
     };
   }
   try {
@@ -171,7 +171,7 @@ function checkTmuxKeybind(): Check {
       name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
       status: 'fail',
       detail: 'Not bound',
-      fix: 'sis admin setup-keybind',
+      fix: 'sis admin install setup-keybind',
     };
   }
   if (isSisyphusBinding(existing)) {
@@ -181,7 +181,7 @@ function checkTmuxKeybind(): Check {
     name: `Tmux keybind (${DEFAULT_CYCLE_KEY})`,
     status: 'warn',
     detail: `Bound to something else: ${existing}`,
-    fix: 'sis admin setup-keybind M-S  (or another free key)',
+    fix: 'sis admin install setup-keybind M-S  (or another free key)',
   };
 }
 
@@ -236,7 +236,7 @@ function checkSisyphusPlugin(): Check {
     name: 'sisyphus@sisyphus plugin',
     status: 'warn',
     detail: 'Not installed (slash commands /sisyphus:begin, /sisyphus:autopsy, /sisyphus:configure-upload unavailable)',
-    fix: 'sis admin setup',
+    fix: 'sis admin install setup',
   };
 }
 
@@ -251,7 +251,7 @@ function checkTermrender(): Check {
     name: 'termrender',
     status: 'warn',
     detail: 'humanloop renderer not provisioned (plaintext fallback in use)',
-    fix: 'run `sis admin setup`, or install uv: curl -LsSf https://astral.sh/uv/install.sh | sh',
+    fix: 'run `sis admin install setup`, or install uv: curl -LsSf https://astral.sh/uv/install.sh | sh',
   };
 }
 

@@ -138,7 +138,7 @@ function printGettingStarted(
     lines.push(`Tmux keybind: ${keybindResult.message}`, '');
   } else if (keybindResult.status === 'conflict' || keybindResult.status === 'requires-force') {
     lines.push(`Keybind: ${keybindResult.message}`, '');
-    lines.push('Run `sis admin check-keybinds` to see options, then `sis admin setup --force`.', '');
+    lines.push('Run `sis admin check check-keybinds` to see options, then `sis admin install setup --force`.', '');
   } else if (keybindResult.status === 'conf-modification-declined') {
     lines.push(keybindResult.message, '');
   }
@@ -146,7 +146,7 @@ function printGettingStarted(
   if (sisyphusPlugin.installed && sisyphusPlugin.autoInstalled) {
     lines.push(`Sisyphus plugin installed: sisyphus@sisyphus → ${sisyphusPlugin.installPath}`, '');
   } else if (!sisyphusPlugin.installed) {
-    lines.push('Sisyphus plugin: failed to install (run `sis admin setup` to retry; needs `claude` CLI)', '');
+    lines.push('Sisyphus plugin: failed to install (run `sis admin install setup` to retry; needs `claude` CLI)', '');
   }
 
   lines.push(

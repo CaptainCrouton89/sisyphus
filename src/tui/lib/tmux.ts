@@ -124,7 +124,7 @@ export function openCompanionPane(cwd: string): void {
   try {
     template = readFileSync(templatePath, 'utf-8');
   } catch {
-    template = `You are a Sisyphus dashboard companion. Help the user manage multi-agent sessions.\nProject: ${cwd}\nRun \`sis session list\` and \`sis session status\` to see current state.`;
+    template = `You are a Sisyphus dashboard companion. Help the user manage multi-agent sessions.\nProject: ${cwd}\nRun \`sis session inspect list\` and \`sis session inspect status\` to see current state.`;
   }
 
   const rendered = template.replace(/\{\{CWD\}\}/g, cwd);

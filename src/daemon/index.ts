@@ -239,7 +239,7 @@ async function recoverSessions(): Promise<void> {
               }
             }
           } else {
-            // Window gone — pause the session so user can `sis session resume`
+            // Window gone — pause the session so user can `sis session lifecycle resume`
             if (session.status === 'active') {
               await stateModule.updateSessionStatus(cwd, sessionId, 'paused');
               console.log(`[sisyphus] Session ${sessionId} paused: tmux window no longer exists`);

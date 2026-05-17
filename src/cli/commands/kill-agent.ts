@@ -13,8 +13,8 @@ export function registerAgentKill(program: Command): void {
       'after',
       `
 Examples:
-  $ sis agent kill agent-3
-  $ sis agent kill agent-3 --session sess-7f2a --json
+  $ sis agent ctl kill agent-3
+  $ sis agent ctl kill agent-3 --session sess-7f2a --json
 
 Output:
   Default       "Agent <id> killed." on stdout.
