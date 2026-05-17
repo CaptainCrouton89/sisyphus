@@ -257,6 +257,53 @@ export async function orphanRunningAgentAsks(cwd: string, sessionId: string, ses
  * consumers don't trip on an unknown id. `respawn` is auto-respawn, recorded
  * as `dismiss` with explanatory freetext.
  */
+/**
+ * Marks any pending/in-progress agent orphan asks for the given agentId as answered.
+ * Called when the orchestrator spawns a replacement agent (superseded) or when the
+ * agent pane is manually restarted (respawn), so the original "process gone" ask
+ * doesn't linger in the inbox.
+ *
+ * `resolution` maps to the deck's actual option set (`takeover` | `restart` | `dismiss`);
+ * programmatic dispositions use `'dismiss'` with explanatory freetext.
+ */
+export async function resolveAgentOrphanAsks(
+  cwd: string,
+  sessionId: string,
+  agentId: string,
+  resolution: 'respawn' | 'dismiss' | 'superseded',
+): Promise<void> {
+  const asks = askStore.listAsks(cwd, sessionId);
+  const completedAt = new Date().toISOString();
+  const selectedOptionId = 'dismiss';
+  const freetext =
+    resolution === 'respawn'
+      ? 'auto-resolved: agent was restarted'
+      : resolution === 'superseded'
+        ? 'auto-resolved: agent superseded by replacement'
+        : 'auto-resolved by system';
+  await mapWithLimit(asks, ASK_FANOUT_LIMIT, async (askId) => {
+    try {
+      const meta = askStore.readMeta(cwd, sessionId, askId);
+      if (!meta) return;
+      if (meta.askedBy !== ORPHAN_ASKED_BY) return;
+      if (meta.status === 'answered') return;
+      if (meta.orphanTarget?.kind !== 'agent') return;
+      if (meta.orphanTarget.agentId !== agentId) return;
+      askStore.writeOutput(cwd, sessionId, askId, [{
+        id: 'orphan',
+        selectedOptionId,
+        freetext,
+      }], completedAt);
+      await askStore.updateMeta(cwd, sessionId, askId, { status: 'answered', completedAt });
+    } catch (err) {
+      console.warn(
+        `[sisyphus] resolveAgentOrphanAsks: ${sessionId}/${askId} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  });
+}
+
 export async function resolveOrchestratorOrphanAsks(
   cwd: string,
   sessionId: string,

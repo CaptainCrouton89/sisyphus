@@ -144,14 +144,45 @@ export function readMeta(cwd: string, sessionId: string, askId: string): AskMeta
 export async function updateMeta(
   cwd: string, sessionId: string, askId: string, patch: Partial<AskMeta>,
 ): Promise<AskMeta> {
-  return withLock(askId, () => {
+  const next = await withLock(askId, () => {
     const cur = readMeta(cwd, sessionId, askId);
     if (!cur) {
       throw new Error(`updateMeta: askId ${askId} not found`);
     }
-    const next: AskMeta = { ...cur, ...patch };
-    atomicWrite(askMetaPath(cwd, sessionId, askId), JSON.stringify(next, null, 2));
-    return next;
+    const updated: AskMeta = { ...cur, ...patch };
+    atomicWrite(askMetaPath(cwd, sessionId, askId), JSON.stringify(updated, null, 2));
+    return updated;
+  });
+  // Cascade-resolve the linked heartbeat ask when the original is marked answered.
+  if (patch.status === 'answered' && next.heartbeatAskId) {
+    const hbAskId = next.heartbeatAskId;
+    cascadeResolveHeartbeatAsk(cwd, sessionId, hbAskId).catch(err => {
+      console.warn(
+        `[sisyphus] heartbeat cascade-resolve failed for ${hbAskId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    });
+  }
+  return next;
+}
+
+/**
+ * Auto-resolves a heartbeat ask when its linked original ask has been answered.
+ * Called from updateMeta when status transitions to 'answered' and heartbeatAskId is set.
+ */
+async function cascadeResolveHeartbeatAsk(cwd: string, sessionId: string, heartbeatAskId: string): Promise<void> {
+  const hbMeta = readMeta(cwd, sessionId, heartbeatAskId);
+  if (!hbMeta) return;
+  if (hbMeta.status === 'answered') return;
+  if (existsSync(askOutputPath(cwd, sessionId, heartbeatAskId))) return;
+  writeOutput(cwd, sessionId, heartbeatAskId, [{
+    id: 'heartbeat',
+    selectedOptionId: 'ack',
+    freetext: 'auto-resolved: original ask was answered',
+  }]);
+  await updateMeta(cwd, sessionId, heartbeatAskId, {
+    status: 'answered',
+    completedAt: new Date().toISOString(),
   });
 }
 

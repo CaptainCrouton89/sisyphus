@@ -255,4 +255,6 @@ export interface AskMeta {
   orphanTarget?: { kind: 'agent'; agentId: string; paneId?: string } | { kind: 'orchestrator' };
   /** Set on orchestrator mode-transition notify asks; aggregation key for rolling mode-change notifications. */
   modeTransition?: true;
+  /** Set on the original ask when a heartbeat reminder ask has been emitted for it; holds the heartbeat askId for cascade-resolve. */
+  heartbeatAskId?: string;
 }

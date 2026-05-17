@@ -75,6 +75,7 @@ import { registerDeploy } from './commands/deploy.js';
 import { registerCloud } from './commands/cloud.js';
 import { attachNotify } from './commands/notify.js';
 import { attachTmuxSessions } from './commands/tmux-sessions.js';
+import { registerCleanZombies } from './commands/clean-zombies.js';
 import { globalDir } from '../shared/paths.js';
 import { setGlobalFlags } from './global-flags.js';
 import { subcommandRubric, CONCEPTS_BLOCK } from './help-rubric.js';
@@ -226,6 +227,8 @@ const adminReport = admin.command('report').description('Diagnostics & telemetry
 registerBug(adminReport);
 registerUpload(adminReport);
 registerConfigureUpload(adminReport);
+
+registerCleanZombies(admin);
 
 // companion group (root action + memory + popup-test + context)
 registerCompanion(program);

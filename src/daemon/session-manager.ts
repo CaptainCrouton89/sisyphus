@@ -27,7 +27,7 @@ import { emitHistoryEvent, writeSessionSummary, pruneHistory } from './history.j
 import { runSessionUploadAndPersist } from './uploader.js';
 import { isUploadConfigured } from '../shared/upload.js';
 import { getSisyphusVersion } from '../shared/version.js';
-import { markAgentAsksOrphan, orphanRunningAgentAsks, resolveOrchestratorOrphanAsks } from './orphan-asks.js';
+import { markAgentAsksOrphan, orphanRunningAgentAsks, resolveOrchestratorOrphanAsks, resolveAgentOrphanAsks } from './orphan-asks.js';
 import { listOpenAsksFor } from './ask-store.js';
 import { ORCHESTRATOR_ASKED_BY } from '../shared/types.js';
 import { formatDuration } from '../shared/format.js';
@@ -687,9 +687,23 @@ export function onAllAgentsDone(sessionId: string, cwd: string, windowId: string
       // never clears, so a healthy auto-respawned session shows a permanent false
       // ⚠ orphan badge in the dashboard. Done before spawn so pane-monitor ticks
       // during the spawn window don't re-see and re-set it.
+      // Resolve all pending agent orphan asks for non-running agents — they are
+      // superseded by the new orchestrator cycle that is about to spawn fresh agents.
+      const sessionForOrphanResolve = state.getSession(cwd, sessionId);
+      const supersededAgentIds = sessionForOrphanResolve.agents
+        .filter(a => a.status !== 'running')
+        .map(a => a.id);
       await Promise.all([
         state.clearSessionOrphan(cwd, sessionId),
         resolveOrchestratorOrphanAsks(cwd, sessionId, 'respawn'),
+        ...supersededAgentIds.map(agentId =>
+          resolveAgentOrphanAsks(cwd, sessionId, agentId, 'superseded').catch(err => {
+            console.warn(
+              `[sisyphus] resolveAgentOrphanAsks (superseded) failed for ${agentId}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }),
+        ),
       ]);
 
       // Ensure the tmux session and window still exist.

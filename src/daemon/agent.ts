@@ -21,7 +21,7 @@ import { resolveCliBin, resolveNpmBinDir, resolveBannerCmd, buildEnvExports, bui
 import { resolveRequiredPluginDirs, resolveAgentPluginDirs } from './plugins.js';
 import { digestSpinnerVerbs } from '../shared/digest-verbs.js';
 import { emitHistoryEvent } from './history.js';
-import { emitOrphanAsk, markAgentAsksOrphan } from './orphan-asks.js';
+import { emitOrphanAsk, markAgentAsksOrphan, resolveAgentOrphanAsks } from './orphan-asks.js';
 import { capturePanePidLstart } from './orphan-sweep.js';
 import { renderEffortMarkers } from './lib/effort-render.js';
 import {
@@ -461,6 +461,14 @@ export async function restartAgent(
   }
 
   emitHistoryEvent(sessionId, 'agent-restarted', { agentId, restartCount, originalSpawnedAt, previousStatus, claudeSessionId });
+
+  // Resolve any pending orphan asks for this agent now that it has been restarted.
+  resolveAgentOrphanAsks(cwd, sessionId, agentId, 'respawn').catch(err => {
+    console.warn(
+      `[sisyphus] resolveAgentOrphanAsks on restart failed for ${agentId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  });
 }
 
 function nextReportNumber(cwd: string, sessionId: string, agentId: string): string {
