@@ -39,7 +39,7 @@ export function resolveInstalledPlugin(name: string): string | null {
 
 /**
  * Auto-install a plugin if not already present.
- * key format: "name@marketplace" (e.g. "termrender@crouton-kit")
+ * key format: "name@marketplace" (e.g. "humanloop@crouton-kit")
  */
 function ensurePluginInstalled(key: string): string | null {
   const existing = resolveInstalledPlugin(key);

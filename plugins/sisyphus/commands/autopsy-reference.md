@@ -69,7 +69,7 @@ interface Interaction {
   id: string;                    // /^[A-Za-z0-9_-]+$/, ≤64 chars, unique within deck
   title: string;                 // non-empty; ≤4 words is convention, not enforced
   subtitle?: string;             // why this matters
-  body?: string;                 // optional inline termrender markdown (validated via `termrender --check`)
+  body?: string;                 // optional inline directive-flavored markdown (validated via humanloop's checkMarkdown)
   bodyPath?: string;             // mutually exclusive with body; relative to deck file dir; inlined at submit
   options: InteractionOption[];  // 0..N
   allowFreetext?: boolean;       // user may type instead of / alongside option

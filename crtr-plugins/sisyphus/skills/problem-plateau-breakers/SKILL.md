@@ -71,7 +71,7 @@ Increment the turn counter `N` and return to the dialogue loop's turn-deck flow.
 
 ## Body content rules
 
-The deck `body` field uses `##` headings, bullet lists, and bold only — no tables, no code fences, no termrender directives. Violations fail `termrender --check` inside `parseDeck`.
+The deck `body` field uses `##` headings, bullet lists, and bold only — no tables, no code fences, no directive fences (`:::`). Violations fail humanloop's `checkMarkdown` inside `parseDeck`.
 
 ## Sanitize freetext on bail
 

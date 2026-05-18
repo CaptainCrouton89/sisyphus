@@ -53,10 +53,10 @@ When the eight return, write to `$SISYPHUS_SESSION_DIR/context/perspective-synth
 - **Surprises** — which perspective said something nobody else did (potential breakthroughs)
 - **Insights** — name each key finding in a memorable sentence the user can carry forward
 
-Then render in the side pane:
+Then display in the side pane (live-watched, scrollable):
 
 ```bash
-termrender --tmux "$SISYPHUS_SESSION_DIR/context/perspective-synthesis.md"
+printf '{"path":"%s"}' "$SISYPHUS_SESSION_DIR/context/perspective-synthesis.md" | crtr human show >/dev/null
 ```
 
 Bail on non-zero exit with the file path and exit code.
@@ -76,7 +76,7 @@ cat > "$synth_deck" <<EOF
     "id": "problem-perspective-synth",
     "title": "Lens synthesis",
     "subtitle": "After 8 perspective agents",
-    "body": "## In the side pane\n\n- Synthesis rendered via termrender — scroll and react below.\n\n## What I'm hearing\n\n- <one-line convergence>\n- <one-line surprise>",
+    "body": "## In the side pane\n\n- Synthesis displayed via `crtr human show` — scroll and react below.\n\n## What I'm hearing\n\n- <one-line convergence>\n- <one-line surprise>",
     "kind": "decision",
     "options": [
       {"id": "breakthrough",    "label": "Breakthrough — this lens reframes it"},
@@ -108,9 +108,9 @@ All four option ids return to the dialogue loop's turn-deck flow.
 ## Failure handling
 
 - If more than four of eight agents return errors, surface partial results if any returned cleanly, otherwise bail
-- If `termrender --tmux` fails on the synthesis render, bail with file path and exit code
+- If `crtr human show` fails on the synthesis render, bail with file path and exit code
 - If the synthesis deck fails or returns empty, bail with the deck path
 
 ## Body content rules
 
-The deck `body` field uses `##` headings, bullet lists, and bold only — no tables, no code fences, no termrender directives.
+The deck `body` field uses `##` headings, bullet lists, and bold only — no tables, no code fences, no directive fences (`:::`).

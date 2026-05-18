@@ -36,7 +36,7 @@ The user already knows what they asked for — don't recap the goal. Focus on wh
 - **Gaps** — anything deferred, any known limitations. Be honest.
 - **Validation** — brief summary of what was tested. Reference reports if the user wants detail.
 
-Use tables, diagrams, and structured markdown freely — the deck below renders the file via `bodyPath`, so termrender directives are styled in the user's resolution view. Keep it tight but visually clear. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
+Use tables, diagrams, and structured markdown freely — the deck below renders the file via `bodyPath`, so directive-flavored markdown (`:::panel`, `:::columns`, etc.) is styled in the user's resolution view. Keep it tight but visually clear. If the session was straightforward, the summary should be short. Save the detail for when the user asks.
 
 ## Ask for Sign-off via `sis ask`
 

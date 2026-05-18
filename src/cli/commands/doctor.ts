@@ -241,14 +241,16 @@ function checkSisyphusPlugin(): Check {
 }
 
 function checkTermrender(): Check {
-  // termrender is pinned + provisioned by @crouton-kit/humanloop in its own
-  // venv (humanloop ignores $PATH). Report humanloop's managed-renderer
-  // readiness, not a stray PATH copy.
+  // The directive renderer is pinned + provisioned by @crouton-kit/humanloop
+  // in its own venv (humanloop ignores $PATH). Sisyphus never calls the
+  // termrender binary directly — everything routes through humanloop's SDK
+  // (renderMarkdown/checkMarkdown) or its CLI (`hl doc render`, `crtr human
+  // show`). This probe just confirms humanloop's managed binary is ready.
   if (isTermrenderAvailable()) {
-    return { name: 'termrender', status: 'ok', detail: 'managed by @crouton-kit/humanloop' };
+    return { name: 'renderer', status: 'ok', detail: 'humanloop-managed (used via hl doc / crtr human show)' };
   }
   return {
-    name: 'termrender',
+    name: 'renderer',
     status: 'warn',
     detail: 'humanloop renderer not provisioned (plaintext fallback in use)',
     fix: 'run `sis admin install setup`, or install uv: curl -LsSf https://astral.sh/uv/install.sh | sh',

@@ -54,11 +54,12 @@ it('1.5.d: rejects missing bodyPath file', () => {
   assert.throws(() => parseDeck(path), /bodyPath/);
 });
 
-// recipe §1.5.e — body fails termrender --check
-it('1.5.e: rejects body failing termrender --check', () => {
+// recipe §1.5.e — body fails humanloop's checkMarkdown (wraps the directive renderer)
+it('1.5.e: rejects body failing directive check', () => {
   const path = writeDeck('e.json', {
     interactions: [{ ...baseInteraction, body: ':::panel\nhi' }],
   });
+  // humanloop prefixes renderer errors with "termrender: …" — match that source-of-truth string.
   assert.throws(() => parseDeck(path), /termrender/);
 });
 

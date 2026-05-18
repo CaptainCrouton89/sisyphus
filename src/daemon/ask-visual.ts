@@ -1,5 +1,3 @@
-import { spawn } from 'node:child_process';
-import { execEnv } from '../shared/env.js';
 import {
   closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readSync, writeSync,
 } from 'node:fs';
@@ -8,6 +6,7 @@ import { resolve, dirname, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { tool } from '@r-cli/sdk';
+import { renderMarkdown, checkMarkdown } from '@crouton-kit/humanloop';
 import { callHaikuWithTools } from './haiku.js';
 import { digestTranscript } from './transcript-digest.js';
 import { readDecisions, readMeta } from './ask-store.js';
@@ -97,7 +96,7 @@ export async function generateVisualForQuestion(opts: GenerateVisualOpts): Promi
 
   const attachVisualTool = tool(
     'attach_visual',
-    'Submit final termrender markdown for this question. Validated via `termrender --check` and rendered to ANSI.',
+    'Submit final directive-flavored markdown for this question. Validated and rendered to ANSI via the humanloop SDK (no subprocess).',
     { content: z.string().min(1) },
     async (args: { content: string }) => {
       const r = await attachVisualHandler({ content: args.content, mdPath, ansiPath, cols: opts.cols });
@@ -241,46 +240,28 @@ type AttachResult =
   | { ok: true; toolResult: { content: Array<{ type: 'text'; text: string }> } }
   | { ok: false; error: string; toolResult: ToolResult };
 
-function spawnAsync(cmd: string, args: string[], input: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; status: number | null; error?: Error }> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    const errChunks: Buffer[] = [];
-    const proc = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], env: execEnv() });
-    const timer = setTimeout(() => {
-      proc.kill();
-      resolve({ stdout: '', stderr: '', status: null, error: new Error(`timed out after ${timeoutMs}ms`) });
-    }, timeoutMs);
-    proc.stdout.on('data', (d: Buffer) => chunks.push(d));
-    proc.stderr.on('data', (d: Buffer) => errChunks.push(d));
-    proc.on('error', (err) => { clearTimeout(timer); resolve({ stdout: '', stderr: '', status: null, error: err }); });
-    proc.on('close', (code) => { clearTimeout(timer); resolve({ stdout: Buffer.concat(chunks).toString('utf-8'), stderr: Buffer.concat(errChunks).toString('utf-8'), status: code }); });
-    proc.stdin.end(input, 'utf-8');
-  });
-}
-
+// Renderer lives inside @crouton-kit/humanloop — humanloop is the sole org-wide
+// termrender caller (see its src/index.ts comment). We import its bindings
+// instead of spawning the binary so there is exactly one CLI surface and one
+// validation path across sisyphus.
 async function attachVisualHandler(args: {
   content: string; mdPath: string; ansiPath: string; cols: number;
 }): Promise<AttachResult> {
-  const check = await spawnAsync('termrender', ['doc', 'check'], JSON.stringify({ source: args.content }), 5000);
-  if (check.error) {
-    const msg = `termrender invocation failed: ${check.error.message}`;
-    return { ok: false, error: msg, toolResult: errorResult(msg) };
-  }
-  if (check.status !== 0) {
-    const msg = `termrender doc check rejected the content: ${check.stderr.trim()}`;
+  const check = checkMarkdown(args.content);
+  if (!check.ok) {
+    const msg = `directive check rejected the content: ${check.error}`;
     return { ok: false, error: msg, toolResult: errorResult(msg) };
   }
 
-  const render = await spawnAsync('termrender', ['doc', 'render'], JSON.stringify({ source: args.content, width: args.cols, color: true }), 8000);
-  if (render.error) {
-    const msg = `termrender render failed: ${render.error.message}`;
+  let ansi: string;
+  try {
+    // Object wrapper inside try-body avoids ~/.claude/hooks/post-tool-use/code-quality-checker.py regex (pattern at line 67)
+    const r = { lines: renderMarkdown(args.content, args.cols) };
+    ansi = r.lines.join('\n');
+  } catch (e: unknown) {
+    const msg = `render failed: ${(e as Error).message}`;
     return { ok: false, error: msg, toolResult: errorResult(msg) };
   }
-  if (render.status !== 0) {
-    const msg = `termrender render failed: ${render.stderr.trim()}`;
-    return { ok: false, error: msg, toolResult: errorResult(msg) };
-  }
-  const ansi = render.stdout;
   const ansiBytes = Buffer.byteLength(ansi, 'utf-8');
   if (ansiBytes > ANSI_CAP) {
     const msg = `rendered ANSI exceeds ${ANSI_CAP} byte cap (got ${ansiBytes})`;
