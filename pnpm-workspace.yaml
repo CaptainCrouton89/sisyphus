@@ -5,3 +5,6 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+minimumReleaseAgeExclude:
+  - '@crouton-kit/humanloop'
+  - '@crouton-kit/crouter'

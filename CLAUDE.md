@@ -1,9 +1,2 @@
-## Commands
-```bash
-pnpm build        # tsup (outputs dist/)
-pnpm test         # node --import tsx --test src/__tests__/*.test.ts
-pnpm dev          # tsup --watch
-```
-
 ## Constraints
-- `@crouton-kit/humanloop` is NOT on npm — `pnpm install` on a fresh clone will 404. Must be linked via yalc first: `yalc link --no-pure @crouton-kit/humanloop` populates `.yalc/` which `file:.yalc/@crouton-kit/humanloop` resolves against.
+- `@crouton-kit/humanloop` and `@crouton-kit/crouter` are excluded from pnpm's `minimumReleaseAge` filter via `minimumReleaseAgeExclude` in `pnpm-workspace.yaml` (not `.npmrc`) — omitting this silently causes fresh installs to skip newly published versions.
