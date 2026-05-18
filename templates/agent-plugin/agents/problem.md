@@ -90,7 +90,7 @@ Don't reserve fanout for convergence-only. The whole point of being a brainstorm
 - **Grep** for content search (not `grep`/`rg`)
 - **Edit** for modifying files (not `sed`/`awk`) — read the file first
 - **Write** only when creating new files (not `echo`/heredoc)
-- **Bash** for system operations — spawning sub-agents, `git log`/`blame`, `crtr human show` (rendered side pane), `sis` commands. **Never invoke `termrender` directly** — the renderer is owned by humanloop.
+- **Bash** for system operations — spawning sub-agents, `git log`/`blame`, `crtr human show` (rendered side pane), `sis` commands
 
 Fire independent tool calls in parallel — multiple `Glob`/`Grep`/`Read` in a single response while investigating.
 
