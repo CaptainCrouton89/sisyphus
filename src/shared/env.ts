@@ -44,10 +44,17 @@ export function augmentedPath(): string {
 /**
  * Environment variables for child processes that need access to
  * user-installed binaries (tmux, git, claude, etc.).
+ *
+ * Forces a UTF-8 locale when the parent didn't inherit one. Without it, tmux
+ * silently replaces tabs (and other non-ASCII bytes) in format output with
+ * `_`, which breaks any caller that uses `\t` as a field separator — the
+ * launchd-spawned daemon has no LANG/LC_ALL by default.
  */
 export function execEnv(): Record<string, string | undefined> {
-  return {
+  const env: Record<string, string | undefined> = {
     ...process.env,
     PATH: augmentedPath(),
   };
+  if (!env['LC_ALL'] && !env['LANG']) env['LANG'] = 'en_US.UTF-8';
+  return env;
 }
