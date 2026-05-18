@@ -1,0 +1,1 @@
+- Always pass text through `cleanMarkdown()`, `truncate()`, or `wrapText()` before any `stringWidth()` call — these strip wide emoji that Ink's tokenizer measures as 1 but terminals render as 2. Calling `stringWidth()` on raw user/agent text silently under-measures width and corrupts panel borders with phantom blank lines.
