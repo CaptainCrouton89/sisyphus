@@ -384,6 +384,29 @@ export function listAllPanes(): Array<{ sessionName: string; paneId: string }> {
 }
 
 /**
+ * Single-subprocess snapshot of every window across every tmux session, grouped
+ * by session name. Replaces N per-session `tmux list-windows` spawns in the
+ * compositor's render path (one tmux child per session per status-bar render).
+ */
+export function listAllWindowsBySession(): Map<string, Array<{ index: number; id: string; name: string }>> {
+  const output = execSafe('tmux list-windows -a -F "#{session_name}\t#{window_index}\t#{window_id}\t#{window_name}"', undefined, TMUX_TIMEOUT_MS);
+  const map = new Map<string, Array<{ index: number; id: string; name: string }>>();
+  if (!output) return map;
+  for (const line of output.split('\n')) {
+    if (!line) continue;
+    const [sessionName, indexStr, id, ...nameParts] = line.split('\t');
+    if (!sessionName || indexStr == null || !id) continue;
+    const index = parseInt(indexStr, 10);
+    if (!Number.isFinite(index)) continue;
+    const name = nameParts.join('\t');
+    const bucket = map.get(sessionName);
+    if (bucket) bucket.push({ index, id, name });
+    else map.set(sessionName, [{ index, id, name }]);
+  }
+  return map;
+}
+
+/**
  * Sets window/session-level tmux options that Sisyphus depends on.
  * Without these, pane labels won't show and titles may get clobbered.
  */

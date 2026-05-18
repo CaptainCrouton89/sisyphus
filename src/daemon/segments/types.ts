@@ -58,6 +58,11 @@ export interface RenderContext {
   companion: CompanionState;
   config: StatusBarConfig;
   windowsBySession: Map<string, Array<{ index: number; name: string; id: string }>>;
+  // Pane snapshot keyed by window_id. Sourced from pollAllSessions' single
+  // `tmux list-panes -a` so segments can resolve per-window panes without
+  // spawning a tmux child per call (compositor.render is hot — was N spawns
+  // per render before this).
+  panesByWindow: Map<string, Array<{ paneId: string; panePid: string }>>;
   prevBg: string; // bg of the preceding segment (or STATUS_BAR_BG if first) — set by compositor per segment
   currentSession: string; // the session this render pass is for — segments compare against this to bake in active-session highlights without tmux format conditionals
 }

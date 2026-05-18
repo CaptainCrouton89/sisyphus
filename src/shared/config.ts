@@ -43,6 +43,13 @@ export interface Config {
   tmuxSession?: string;
   orchestratorPrompt?: string;
   pollIntervalMs?: number;
+  /**
+   * Run the heavy status-bar work (compositor.render + recomputeDots) only on
+   * every Nth pane-monitor tick. Default 4 → with the default 5s pollIntervalMs
+   * the status bar redraws every ~20s. Lower for fresher dots; higher to cut
+   * tmux subprocess load when you have many sessions.
+   */
+  statusBarRenderTicks?: number;
   autoUpdate?: boolean;
   orchestratorEffort?: EffortLevel;
   agentEffort?: EffortLevel;
@@ -59,6 +66,7 @@ export interface Config {
 const DEFAULT_CONFIG: Config = {
   model: 'claude-opus-4-7[1m]',
   pollIntervalMs: 5000,
+  statusBarRenderTicks: 4,
   orchestratorEffort: 'xhigh',
   agentEffort: 'medium',
   notifications: {

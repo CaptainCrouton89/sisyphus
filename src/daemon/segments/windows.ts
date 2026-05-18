@@ -1,4 +1,3 @@
-import * as tmux from '../tmux.js';
 import { readClaudeState } from '../status-dots.js';
 import type { Segment, RenderContext, SegmentOutput } from './types.js';
 
@@ -28,10 +27,11 @@ export function createWindowsSegment(): Segment {
       const windows = ctx.windowsBySession.get(sessionName);
       if (!windows || windows.length === 0) return { content: '' };
 
-      // Pre-compute pane dots per window
+      // Pre-compute pane dots per window — reuse the per-tick batched pane
+      // snapshot so we don't re-spawn `tmux list-panes` once per window.
       const windowDots = new Map<number, string>();
       for (const win of windows) {
-        const panes = tmux.listWindowPanes(win.id);
+        const panes = ctx.panesByWindow.get(win.id) ?? [];
         let dots = '';
         for (const { paneId } of panes) {
           const state = readClaudeState(paneId);

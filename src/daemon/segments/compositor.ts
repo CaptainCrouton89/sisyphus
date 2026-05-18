@@ -2,10 +2,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as tmux from '../tmux.js';
+import type { PaneInfo } from '../tmux.js';
 import { readClaudeState, getSisyphusPhases } from '../status-dots.js';
 import { loadCompanion } from '../companion.js';
-import { execSafe } from '../../shared/exec.js';
-import { shellQuote } from '../../shared/shell.js';
 import type {
   Segment,
   ExternalSegment,
@@ -39,20 +38,6 @@ const STATE_PRIORITY: Record<ClaudeState, number> = {
   stopped: 2,
   idle: 1,
 };
-
-// ─── Window listing ────────────────────────────────────────────────────────────
-
-function listWindowsForSession(sessionName: string): Array<{ index: number; name: string; id: string }> {
-  const output = execSafe(`tmux list-windows -t ${shellQuote(sessionName)} -F "#{window_index} #{window_id} #{window_name}"`);
-  if (!output) return [];
-  return output.split('\n').filter(Boolean).map(line => {
-    const parts = line.split(' ');
-    const index = parseInt(parts[0]!, 10);
-    const id = parts[1]!;
-    const name = parts.slice(2).join(' ');
-    return { index, id, name };
-  });
-}
 
 // ─── Powerline helpers ─────────────────────────────────────────────────────────
 
@@ -122,6 +107,11 @@ export class Compositor {
   private segments = new Map<string, Segment>();
   private external = new Map<string, ExternalSegment>();
   private config: StatusBarConfig;
+  // Per-session diff cache: skip setSessionOption when the rendered string is
+  // unchanged. With 12 sessions at 5s polling this is the difference between
+  // 24 tmux subprocess spawns per render and 0 on a stable status bar.
+  private lastLeftBySession = new Map<string, string>();
+  private lastRightBySession = new Map<string, string>();
 
   constructor(config: StatusBarConfig) {
     this.config = config;
@@ -145,23 +135,44 @@ export class Compositor {
     this.external.delete(id);
   }
 
-  render(): void {
-    const ctx = this.buildContext();
+  render(panesByWindow?: Map<string, PaneInfo[]>): void {
+    const ctx = this.buildContext(panesByWindow);
 
     // Per-session options only — never touch global tmux options. The user's
     // ~/.tmux.conf wires these up via #{E:@sisyphus_left} / #{E:@sisyphus_right}.
     // Writing globals here would clobber any tmux config edit the user makes.
+    const liveNames = new Set<string>();
     for (const session of ctx.allSessions) {
+      liveNames.add(session.name);
       const sessionCtx = this.buildSessionContext(ctx, session.name);
-      tmux.setSessionOption(session.name, '@sisyphus_left', this.composeLeft(sessionCtx));
-      tmux.setSessionOption(session.name, '@sisyphus_right', this.composeRight(sessionCtx));
+      const left = this.composeLeft(sessionCtx);
+      if (this.lastLeftBySession.get(session.name) !== left) {
+        tmux.setSessionOption(session.name, '@sisyphus_left', left);
+        this.lastLeftBySession.set(session.name, left);
+      }
+      const right = this.composeRight(sessionCtx);
+      if (this.lastRightBySession.get(session.name) !== right) {
+        tmux.setSessionOption(session.name, '@sisyphus_right', right);
+        this.lastRightBySession.set(session.name, right);
+      }
+    }
+    // Evict cache entries for sessions that no longer exist so stale strings
+    // don't suppress writes if a session name is later re-created.
+    for (const name of this.lastLeftBySession.keys()) {
+      if (!liveNames.has(name)) this.lastLeftBySession.delete(name);
+    }
+    for (const name of this.lastRightBySession.keys()) {
+      if (!liveNames.has(name)) this.lastRightBySession.delete(name);
     }
   }
 
-  private buildContext(): RenderContext {
+  private buildContext(panesByWindow?: Map<string, PaneInfo[]>): RenderContext {
     const allPanes = tmux.listAllPanes();
     const allSessionEntries = tmux.listAllSessions();
     const allSessions = allSessionEntries.map(e => ({ name: e.name }));
+    // Reuse the pane snapshot collected by pollAllSessions when available so
+    // segments don't re-spawn a tmux child per window.
+    const panes = panesByWindow ?? tmux.listAllPanesByWindow();
 
     // Per-session Claude state (highest priority wins)
     const sessionStates = new Map<string, ClaudeState>();
@@ -178,11 +189,9 @@ export class Compositor {
     const sessionOrder = getSessionOrder();
     const companion = loadCompanion();
 
-    // Build windows map for all sessions
-    const windowsBySession = new Map<string, Array<{ index: number; name: string; id: string }>>();
-    for (const session of allSessions) {
-      windowsBySession.set(session.name, listWindowsForSession(session.name));
-    }
+    // Single subprocess grabs every window across every session — replaces N
+    // per-session `tmux list-windows` spawns per render.
+    const windowsBySession = tmux.listAllWindowsBySession();
 
     return {
       allSessions,
@@ -193,6 +202,7 @@ export class Compositor {
       companion,
       config: this.config,
       windowsBySession,
+      panesByWindow: panes,
       prevBg: STATUS_BAR_BG,
       currentSession: '', // overwritten per-session in buildSessionContext
     };

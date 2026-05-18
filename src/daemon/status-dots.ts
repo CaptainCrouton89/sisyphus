@@ -174,6 +174,18 @@ export function invalidateDashboardCache(cwd: string): void {
   dashboardWindowCache.delete(cwd);
 }
 
+// ─── Diff cache for @sisyphus_dots writes ────────────────────────────────────
+
+// Per-window cache of the last-rendered dot string so we skip setWindowOption
+// when nothing changed. With 12 sessions and a stable status, this drops the
+// per-tick tmux subprocess count to zero for this code path.
+const lastDotsByWindow = new Map<string, string>();
+
+export function invalidateDotsCache(windowId?: string): void {
+  if (windowId) lastDotsByWindow.delete(windowId);
+  else lastDotsByWindow.clear();
+}
+
 // ─── Main recompute ──────────────────────────────────────────────────────────
 
 export function recomputeDots(panesByWindow?: Map<string, tmux.PaneInfo[]>): void {
@@ -240,7 +252,10 @@ export function recomputeDots(panesByWindow?: Map<string, tmux.PaneInfo[]>): voi
     const dashboardWindowId = getDashboardWindowId(cwd);
     if (dashboardWindowId) {
       const rendered = dots.length > 0 ? ' ' + renderDots(dots) : '';
-      tmux.setWindowOption(dashboardWindowId, '@sisyphus_dots', rendered);
+      if (lastDotsByWindow.get(dashboardWindowId) !== rendered) {
+        tmux.setWindowOption(dashboardWindowId, '@sisyphus_dots', rendered);
+        lastDotsByWindow.set(dashboardWindowId, rendered);
+      }
     }
   }
 }

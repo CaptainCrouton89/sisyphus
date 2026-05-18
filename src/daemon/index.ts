@@ -310,15 +310,27 @@ async function startDaemon(): Promise<void> {
     // Expose compositor for external segment handlers in server.ts
     setCompositor(compositor);
 
-    setDotsCallback(() => {
-      recomputeDots();
+    // Throttle the heavy work (compositor.render writes 2 tmux options per
+    // session per render; recomputeDots writes 1 per dashboard window). At 12
+    // sessions every 5s, the raw cadence saturated the event loop with
+    // synchronous subprocess spawns. writeManifest is local fs — keep frequent.
+    let tickCounter = 0;
+    const renderEvery = Math.max(1, config.statusBarRenderTicks ?? 4);
+    setDotsCallback((panesByWindow) => {
       try { writeManifest(); } catch { /* best-effort */ }
-      try { compositor.render(); } catch { /* best-effort */ }
+      tickCounter += 1;
+      if (tickCounter % renderEvery !== 0) return;
+      recomputeDots(panesByWindow);
+      try { compositor.render(panesByWindow); } catch { /* best-effort */ }
     });
   } else {
-    setDotsCallback(() => {
-      recomputeDots();
+    let tickCounter = 0;
+    const renderEvery = Math.max(1, config.statusBarRenderTicks ?? 4);
+    setDotsCallback((panesByWindow) => {
       try { writeManifest(); } catch { /* best-effort */ }
+      tickCounter += 1;
+      if (tickCounter % renderEvery !== 0) return;
+      recomputeDots(panesByWindow);
     });
   }
 
