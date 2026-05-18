@@ -176,7 +176,7 @@ export function invalidateDashboardCache(cwd: string): void {
 
 // ─── Main recompute ──────────────────────────────────────────────────────────
 
-export function recomputeDots(): void {
+export function recomputeDots(panesByWindow?: Map<string, tmux.PaneInfo[]>): void {
   if (!getTrackedEntries) return;
 
   pruneCompleted();
@@ -217,7 +217,7 @@ export function recomputeDots(): void {
       seenIds.add(sessionId);
       try {
         const session = state.getSession(cwd, sessionId);
-        const livePanes = tmux.listPanes(windowId);
+        const livePanes = panesByWindow?.get(windowId) ?? tmux.listPanes(windowId);
         const livePaneIds = new Set(livePanes.map(p => p.paneId));
         const phase = detectPhase(session, livePaneIds);
         dots.push({ phase, createdAt: session.createdAt });

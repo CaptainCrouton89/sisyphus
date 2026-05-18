@@ -1,4 +1,5 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import type { BigIntStats } from 'node:fs';
 import { join } from 'node:path';
 import { atomicWrite, withLock } from './lib/atomic.js';
 import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, reportsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath, strategyPath } from '../shared/paths.js';
@@ -63,9 +64,7 @@ export function createSession(id: string, task: string, cwd: string, context?: s
   return session;
 }
 
-export function getSession(cwd: string, sessionId: string): Session {
-  const content = readFileSync(statePath(cwd, sessionId), 'utf-8');
-  const session = JSON.parse(content) as Session;
+function normalizeSession(session: Session): void {
   // Normalize fields from pre-existing sessions that may lack newer properties
   if (session.activeMs == null) session.activeMs = 0;
   if (session.userBlockedMs == null) session.userBlockedMs = 0;
@@ -83,7 +82,30 @@ export function getSession(cwd: string, sessionId: string): Session {
     if (cycle.activeMs == null) cycle.activeMs = 0;
     if (cycle.userBlockedMs == null) cycle.userBlockedMs = 0;
   }
-  return session;
+}
+
+// mtime-validated parse cache keyed by absolute statePath. Every writer goes
+// through atomicWrite (writeFileSync tmp + renameSync), which produces a new
+// inode/mtime at the path — so a nanosecond-precision mtime check is
+// self-invalidating with zero writer routing. See plan 01-daemon-cache.
+const sessionCache = new Map<string, { mtimeNs: bigint; session: Session }>();
+
+export function getSession(cwd: string, sessionId: string): Session {
+  const p = statePath(cwd, sessionId);
+  let st: BigIntStats | null;
+  try {
+    st = statSync(p, { bigint: true });
+  } catch {
+    sessionCache.delete(p);
+    st = null;
+  }
+  const hit = sessionCache.get(p);
+  if (st && hit && hit.mtimeNs === st.mtimeNs) return structuredClone(hit.session);
+  // Keep readFileSync here so a genuinely missing file throws exactly as today.
+  const session = JSON.parse(readFileSync(p, 'utf-8')) as Session;
+  normalizeSession(session);
+  if (st) sessionCache.set(p, { mtimeNs: st.mtimeNs, session });
+  return structuredClone(session);
 }
 
 function saveSession(session: Session): void {

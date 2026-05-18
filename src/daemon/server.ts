@@ -376,13 +376,15 @@ async function handleRequest(req: Request): Promise<Response> {
           const sessions = sessionManager.listSessions(req.cwd);
           sessions.forEach(overlayLiveTimers);
           allSessions.push(...sessions.map(s => ({ ...s, cwd: req.cwd } as unknown as Record<string, unknown>)));
-          // Count total across all cwds for the hint
+          // Count total across all cwds for the hint. Use the cheap dir-scan
+          // counter — loading every state.json across every tracked cwd just
+          // to take `.length` was a multi-second cold-cache blocker.
           let totalCount = allSessions.length;
           const seenCwds = new Set<string>([req.cwd]);
           for (const tracking of sessionTrackingMap.values()) {
             if (seenCwds.has(tracking.cwd)) continue;
             seenCwds.add(tracking.cwd);
-            totalCount += sessionManager.listSessions(tracking.cwd).length;
+            totalCount += sessionManager.countSessions(tracking.cwd);
           }
           if (totalCount > allSessions.length) {
             return { ok: true, data: { sessions: allSessions, totalCount, filtered: true } };

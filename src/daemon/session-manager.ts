@@ -544,6 +544,22 @@ export interface SessionListEntry {
   };
 }
 
+/**
+ * Cheap count of session directories without parsing any state. Used by the
+ * `list` IPC handler to compute its other-cwd hint — loading state.json for
+ * every session of every tracked cwd just to take `.length` was a multi-second
+ * cold-cache blocker on the main thread.
+ */
+export function countSessions(cwd: string): number {
+  const dir = sessionsDir(cwd);
+  if (!existsSync(dir)) return 0;
+  let n = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) n++;
+  }
+  return n;
+}
+
 export function listSessions(cwd: string): SessionListEntry[] {
   const dir = sessionsDir(cwd);
   if (!existsSync(dir)) return [];

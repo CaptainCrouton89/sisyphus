@@ -246,7 +246,7 @@ export function getFirstWindowId(sessionTarget: string): string | null {
 }
 
 export function listPanes(windowTarget: string): PaneInfo[] {
-  const output = execSafe(`tmux list-panes -t ${t(windowTarget)} -F "#{pane_id} #{pane_pid}"`);
+  const output = execSafe(`tmux list-panes -t ${t(windowTarget)} -F "#{pane_id} #{pane_pid}"`, undefined, TMUX_TIMEOUT_MS);
   if (!output) return [];
   return output
     .split('\n')
@@ -255,6 +255,27 @@ export function listPanes(windowTarget: string): PaneInfo[] {
       const [paneId, panePid] = line.split(' ');
       return { paneId: paneId!, panePid: panePid! };
     });
+}
+
+/**
+ * Single-subprocess snapshot of every pane across every tmux session, grouped
+ * by window id. Replaces N per-window `listPanes` calls when the caller needs
+ * pane state for many windows in the same tick — the pane monitor uses this
+ * to fan out poll work without spawning a tmux child per session.
+ */
+export function listAllPanesByWindow(): Map<string, PaneInfo[]> {
+  const output = execSafe('tmux list-panes -a -F "#{window_id} #{pane_id} #{pane_pid}"', undefined, TMUX_TIMEOUT_MS);
+  const map = new Map<string, PaneInfo[]>();
+  if (!output) return map;
+  for (const line of output.split('\n')) {
+    if (!line) continue;
+    const [windowId, paneId, panePid] = line.split(' ');
+    if (!windowId || !paneId || !panePid) continue;
+    const bucket = map.get(windowId);
+    if (bucket) bucket.push({ paneId, panePid });
+    else map.set(windowId, [{ paneId, panePid }]);
+  }
+  return map;
 }
 
 export function setPaneTitle(paneTarget: string, title: string): void {

@@ -36,7 +36,8 @@ import { resetAgentCounterFromState } from './agent.js';
 import { orphanOrchestrator } from './orphan-asks.js';
 import { isProcessAlive } from './lib/process.js';
 import { setWindowId, setOrchestratorPaneId, getOrchestratorPaneId } from './orchestrator.js';
-import { listPanes, initSessionMeta, getFirstWindowId, listAllSessions } from './tmux.js';
+import { listPanes, initSessionMeta, getFirstWindowId, listAllSessions, listAllPanesByWindow } from './tmux.js';
+import type { PaneInfo } from './tmux.js';
 import { registerPane } from './pane-registry.js';
 import * as stateModule from './state.js';
 import type { Session } from '../shared/types.js';
@@ -127,6 +128,7 @@ async function recoverOneSession(
   cwd: string,
   tmuxIdSet: Set<string>,
   tmuxNameToId: Map<string, string>,
+  panesByWindow: Map<string, PaneInfo[]>,
 ): Promise<boolean> {
   const stateFile = statePath(cwd, sessionId);
   if (!existsSync(stateFile)) return false;
@@ -187,7 +189,11 @@ async function recoverOneSession(
     }
   }
 
-  const livePanes = windowId ? listPanes(windowId) : [];
+  // Reuse the recovery-wide pane snapshot when possible; fall back to a per-window
+  // tmux call only if the window id wasn't in the batched result. With 14+ sessions
+  // this collapses N sync `tmux list-panes` spawns into a single one for the whole
+  // recovery, keeping the event loop responsive for incoming IPC.
+  const livePanes = windowId ? (panesByWindow.get(windowId) ?? listPanes(windowId)) : [];
   if (livePanes.length === 0) {
     // Window gone — pause the session so user can `sis session lifecycle resume`
     if (session.status === 'active') {
@@ -256,9 +262,12 @@ async function recoverSessions(): Promise<void> {
   const allTmuxSessions = listAllSessions();
   const tmuxIdSet = new Set(allTmuxSessions.map(s => s.sessionId));
   const tmuxNameToId = new Map(allTmuxSessions.map(s => [s.name, s.sessionId]));
+  // One batched snapshot of every pane keyed by window id, replacing N per-session
+  // `tmux list-panes` calls inside recoverOneSession.
+  const panesByWindow = listAllPanesByWindow();
 
   const results = await Promise.all(
-    entries.map(([sessionId, cwd]) => recoverOneSession(sessionId, cwd, tmuxIdSet, tmuxNameToId)),
+    entries.map(([sessionId, cwd]) => recoverOneSession(sessionId, cwd, tmuxIdSet, tmuxNameToId, panesByWindow)),
   );
 
   const recovered = results.filter(Boolean).length;

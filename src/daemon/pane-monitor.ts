@@ -1,5 +1,6 @@
 import * as state from './state.js';
 import * as tmux from './tmux.js';
+import type { PaneInfo } from './tmux.js';
 import { getOrchestratorPaneId, cleanupSessionMaps } from './orchestrator.js';
 import { handleAgentKilled } from './agent.js';
 import { respawningSessions } from './respawn-guard.js';
@@ -22,7 +23,7 @@ function buildFeedbackSignals(history: FeedbackEntry[]): Pick<MoodSignals, 'rece
 }
 
 type RespawnCallback = (sessionId: string, cwd: string, windowId: string) => void;
-type DotsCallback = () => void;
+type DotsCallback = (panesByWindow?: Map<string, PaneInfo[]>) => void;
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
 let onAllAgentsDone: RespawnCallback | null = null;
@@ -224,14 +225,27 @@ async function pollAllSessions(): Promise<void> {
   // Per-poll session cache: populated by pollSession, reused by mood signal loop
   const pollSessionCache = new Map<string, Session>();
 
-  for (const { id: sessionId, cwd, windowId } of trackedSessions.values()) {
-    if (windowId) {
-      await pollSession(sessionId, cwd, windowId, increment, pollSessionCache);
-    }
-  }
+  // Single tmux subprocess snapshots panes for every window. Replaces N per-session
+  // `tmux list-panes` spawns per tick — at 15 sessions that's a 15x cut in subprocess
+  // overhead, which dominates the poll's event-loop block.
+  const panesByWindow = tmux.listAllPanesByWindow();
 
-  // Recompute status dots after polling all sessions
-  try { onDotsUpdate?.(); } catch { /* best-effort */ }
+  // Fan out per-session work in parallel. Each session's mutations are scoped to
+  // its own state file (locked per-path) and its own activeTimers entry, so
+  // concurrency across sessions is safe.
+  await Promise.all(
+    [...trackedSessions.values()]
+      .filter(({ windowId }) => !!windowId)
+      .map(({ id: sessionId, cwd, windowId }) =>
+        pollSession(sessionId, cwd, windowId!, increment, panesByWindow, pollSessionCache)
+          .catch(err => {
+            console.error(`[sisyphus] pollSession error for ${sessionId}:`, err);
+          })
+      )
+  );
+
+  // Recompute status dots after polling all sessions, reusing the same snapshot.
+  try { onDotsUpdate?.(panesByWindow); } catch { /* best-effort */ }
 
   // Companion mood update — errors must never break the monitor loop
   try {
@@ -402,8 +416,11 @@ async function pollSession(
   cwd: string,
   windowId: string,
   increment: number,
+  panesByWindow: Map<string, PaneInfo[]>,
   sessionCache?: Map<string, Session>,
 ): Promise<void> {
+  const panesForWindow = (): PaneInfo[] => panesByWindow.get(windowId) ?? [];
+
   let session;
   try {
     session = state.getSession(cwd, sessionId);
@@ -416,8 +433,7 @@ async function pollSession(
   if (session.status === 'completed') {
     const orchPaneId = getOrchestratorPaneId(sessionId);
     if (orchPaneId) {
-      const livePanes = tmux.listPanes(windowId);
-      const livePaneIds = new Set(livePanes.map(p => p.paneId));
+      const livePaneIds = new Set(panesForWindow().map(p => p.paneId));
       if (!livePaneIds.has(orchPaneId)) {
         cleanupSessionMaps(sessionId);
         untrackSession(sessionId);
@@ -433,7 +449,7 @@ async function pollSession(
 
   if (session.status !== 'active') return;
 
-  const livePanes = tmux.listPanes(windowId);
+  const livePanes = panesForWindow();
   if (livePanes.length === 0) {
     // Skip if session is in yield→respawn transition — the window is temporarily
     // empty between killing the orchestrator pane and spawning a new one.
