@@ -40,8 +40,8 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
-    "@crouton-kit/crouter": "^0.2.4",
-    "@crouton-kit/humanloop": "^0.3.5",
+    "@crouton-kit/crouter": "latest",
+    "@crouton-kit/humanloop": "latest",
     "@r-cli/sdk": "^1.2.0",
     "commander": "^13.1.0",
     "string-width": "^5.1.2",
