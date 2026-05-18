@@ -171,6 +171,11 @@ export function trackSession(sessionId: string, cwd: string, tmuxSessionId: stri
   const existing = trackedSessions.get(sessionId);
   trackedSessions.set(sessionId, { id: sessionId, cwd, tmuxSessionId, tmuxSessionName, windowId: existing ? existing.windowId : null });
 
+  // Prime the state cache + install fs.watch BEFORE the first getSession call.
+  // From this point, hot-path reads (pollSession, mood loop) are Map lookups
+  // instead of statSync+readFileSync per call.
+  state.installStateWatcher(cwd, sessionId);
+
   // Initialize timers immediately so agents that complete before the first poll cycle
   // still accumulate time via flushAgentTimer.
   if (!activeTimers.has(sessionId)) {
@@ -188,7 +193,9 @@ export function updateTrackedWindow(sessionId: string, windowId: string): void {
 }
 
 export function untrackSession(sessionId: string): void {
+  const entry = trackedSessions.get(sessionId);
   trackedSessions.delete(sessionId);
+  if (entry) state.uninstallStateWatcher(entry.cwd, sessionId);
 }
 
 /**

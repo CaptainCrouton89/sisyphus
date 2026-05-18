@@ -1,5 +1,5 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import type { BigIntStats } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, watch as fsWatch, writeFileSync } from 'node:fs';
+import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { atomicWrite, withLock } from './lib/atomic.js';
 import { contextDir, goalPath, initialPromptPath, legacyLogsPath, logsDir, reportsDir, roadmapPath, promptsDir, sessionDir, snapshotDir, snapshotsDir, statePath, strategyPath } from '../shared/paths.js';
@@ -84,32 +84,145 @@ function normalizeSession(session: Session): void {
   }
 }
 
-// mtime-validated parse cache keyed by absolute statePath. Every writer goes
-// through atomicWrite (writeFileSync tmp + renameSync), which produces a new
-// inode/mtime at the path — so a nanosecond-precision mtime check is
-// self-invalidating with zero writer routing. See plan 01-daemon-cache.
-const sessionCache = new Map<string, { mtimeNs: bigint; session: Session }>();
+// Event-driven in-memory cache keyed by absolute statePath. Tracked sessions
+// (registered via installStateWatcher) keep a parsed Session in the Map and an
+// fs.watch watcher that reloads on change. Hot-path readers (pane-monitor,
+// session-manager) are pure Map lookups — no statSync, no readFileSync per call.
+// Untracked sessions fall through to the synchronous read path so on-demand
+// callers (list, prune) still work without registration.
+const sessionCache = new Map<string, Session>();
+const watchers = new Map<string, FSWatcher>();
+const debounceTimers = new Map<string, NodeJS.Timeout>();
+const DEBOUNCE_MS = 25;
+
+function loadFromDisk(p: string): Session {
+  const session = JSON.parse(readFileSync(p, 'utf-8')) as Session;
+  normalizeSession(session);
+  return session;
+}
+
+function reloadIntoCache(p: string): void {
+  if (!sessionCache.has(p)) return; // untracked or just uninstalled — drop
+  try {
+    sessionCache.set(p, loadFromDisk(p));
+  } catch (err) {
+    // Transient: atomicWrite's rename may race a stat/read attempt; the next
+    // watcher event will fire and we'll succeed then. Don't evict — a stale
+    // entry is safer than a missing one for a tracked, live session.
+    console.warn(`[sisyphus] state cache reload failed for ${p}:`, err instanceof Error ? err.message : err);
+  }
+}
+
+function scheduleReload(p: string): void {
+  const existing = debounceTimers.get(p);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    debounceTimers.delete(p);
+    reloadIntoCache(p);
+  }, DEBOUNCE_MS);
+  t.unref?.();
+  debounceTimers.set(p, t);
+}
+
+function installWatcher(p: string): void {
+  if (watchers.has(p)) return;
+  let w: FSWatcher;
+  try {
+    w = fsWatch(p, { persistent: false });
+  } catch (err) {
+    console.warn(`[sisyphus] fs.watch install failed for ${p}:`, err instanceof Error ? err.message : err);
+    return;
+  }
+  w.on('change', (eventType) => {
+    if (eventType === 'rename') {
+      // atomicWrite replaces the path via rename — on macOS the existing watcher
+      // can stop observing the new inode. Close, schedule a reload, and re-arm
+      // once the reload has settled.
+      try { w.close(); } catch { /* best-effort */ }
+      watchers.delete(p);
+      scheduleReload(p);
+      const reinstall = setTimeout(() => {
+        if (sessionCache.has(p)) installWatcher(p);
+      }, DEBOUNCE_MS + 10);
+      reinstall.unref?.();
+    } else {
+      scheduleReload(p);
+    }
+  });
+  w.on('error', (err) => {
+    console.warn(`[sisyphus] fs.watch error for ${p}:`, err instanceof Error ? err.message : err);
+    try { w.close(); } catch { /* best-effort */ }
+    watchers.delete(p);
+  });
+  watchers.set(p, w);
+}
+
+/**
+ * Begin tracking a session's state.json in the in-memory cache. Loads the file
+ * once and installs an fs.watch watcher; subsequent getSession() calls become
+ * pure Map lookups. Idempotent — safe to call repeatedly. Called by
+ * pane-monitor.trackSession on every session registration.
+ *
+ * On macOS, fs.watch can miss subsequent change events when installed in the
+ * same microtask as a renameSync on the same path (atomicWrite's pattern).
+ * We defer the watcher install via setImmediate so kqueue settles on the
+ * post-rename inode — the cache itself is primed synchronously so in-daemon
+ * reads never block on this.
+ */
+export function installStateWatcher(cwd: string, sessionId: string): void {
+  const p = statePath(cwd, sessionId);
+  try {
+    sessionCache.set(p, loadFromDisk(p));
+  } catch (err) {
+    console.warn(`[sisyphus] state cache prime failed for ${p}:`, err instanceof Error ? err.message : err);
+    return;
+  }
+  setImmediate(() => {
+    if (sessionCache.has(p)) installWatcher(p);
+  });
+}
+
+/**
+ * Stop tracking a session — close the watcher, clear any pending debounce, and
+ * drop the cache entry. Called by pane-monitor.untrackSession on cleanup paths
+ * (kill, complete, quiesce, rollback).
+ */
+export function uninstallStateWatcher(cwd: string, sessionId: string): void {
+  const p = statePath(cwd, sessionId);
+  const w = watchers.get(p);
+  if (w) {
+    try { w.close(); } catch { /* best-effort */ }
+    watchers.delete(p);
+  }
+  const t = debounceTimers.get(p);
+  if (t) {
+    clearTimeout(t);
+    debounceTimers.delete(p);
+  }
+  sessionCache.delete(p);
+}
 
 export function getSession(cwd: string, sessionId: string): Session {
   const p = statePath(cwd, sessionId);
-  let st: BigIntStats | null;
-  try {
-    st = statSync(p, { bigint: true });
-  } catch {
-    sessionCache.delete(p);
-    st = null;
-  }
   const hit = sessionCache.get(p);
-  if (st && hit && hit.mtimeNs === st.mtimeNs) return structuredClone(hit.session);
-  // Keep readFileSync here so a genuinely missing file throws exactly as today.
-  const session = JSON.parse(readFileSync(p, 'utf-8')) as Session;
-  normalizeSession(session);
-  if (st) sessionCache.set(p, { mtimeNs: st.mtimeNs, session });
-  return structuredClone(session);
+  if (hit) return structuredClone(hit);
+  // Untracked sessions (pre-trackSession lookups, prune sweeps, etc.) read
+  // directly. Not cached — caching here would silently grow without bound and
+  // skip the watcher path.
+  return loadFromDisk(p);
 }
 
 function saveSession(session: Session): void {
-  atomicWrite(statePath(session.cwd, session.id), JSON.stringify(session, null, 2));
+  const p = statePath(session.cwd, session.id);
+  atomicWrite(p, JSON.stringify(session, null, 2));
+  // Same-tick eager update: fs.watch fires asynchronously after the rename, so
+  // callers issuing getSession immediately after a write would otherwise see
+  // the pre-write value. Only writes for already-tracked sessions update the
+  // cache — pre-tracking writes (createSession) leave it empty until
+  // installStateWatcher primes it.
+  if (sessionCache.has(p)) {
+    sessionCache.set(p, structuredClone(session));
+  }
 }
 
 /**
