@@ -11,14 +11,12 @@ import {
   notify,
 } from './state.js';
 import type { TreeNode } from './types/tree.js';
-import type { Agent, Session } from '../shared/types.js';
+import type { Agent } from '../shared/types.js';
 import type { Response } from '../shared/protocol.js';
 import { sessionDir, goalPath, roadmapPath, strategyPath, reportsDir } from '../shared/paths.js';
 import type { Request } from '../shared/protocol.js';
 import { findParentIndex } from './lib/tree.js';
 import { badgeGalleryLeft, badgeGalleryRight, closeBadgeGallery, companionOverlayNextPage, companionOverlayShowHelp, companionOverlayDismissHelp, getCompanionPage, badgeListScrollUp, badgeListScrollDown } from './panels/overlays.js';
-import { enterResolutionMode } from './panels/mounted-humanloop.js';
-import { askIdFromDir } from '../shared/inbox-types.js';
 import { KEYMAP, MENU_FOR_MODE } from '../shared/keymap.js';
 import type { MenuItem } from '../shared/keymap.js';
 
@@ -1011,8 +1009,10 @@ function getActiveDetailScroll(state: AppState) {
 }
 
 // ── handleResolutionKey ───────────────────────────────────────────────────────
-// Layered-key precedence (load-bearing — see src/tui/CLAUDE.md):
-// 1. esc always wins (even mid comment-buffer)
+// Layered-key precedence (load-bearing):
+// 1. esc steps back one level *inside* the deck (comment mode → card,
+//    card → overview) while the deck has somewhere to go; only an esc at the
+//    deck's top level (overview, no comment input) tears resolution mode down.
 // 2. Shift+J/K queue walk, gated by canAcceptHostKeys
 // 3. space/R visual gen/toggle, gated by canAcceptHostKeys
 // 4. fall-through to humanloop
@@ -1021,8 +1021,15 @@ function handleResolutionKey(input: string, key: Key, state: AppState, actions: 
   const handle = state.resolutionHandle;
   if (!handle) return;
 
-  // 1. esc → exit resolution mode (always wins)
+  // 1. esc → step back inside the deck, or unmount if already at the top.
+  //    Partial answers are persisted to progress.json on every change, so
+  //    unmounting never loses them (re-entry resumes via tryResume).
   if (key.escape) {
+    if (!handle.atDeckTop()) {
+      handle.handleKey(input, key);
+      requestRender();
+      return;
+    }
     handle.unmount();
     return;
   }
@@ -1050,6 +1057,70 @@ function handleResolutionKey(input: string, key: Key, state: AppState, actions: 
   }
 
   // 5. Fall-through to humanloop
+  handle.handleKey(input, key);
+  requestRender();
+}
+
+// ── handleInlineDeckKey ───────────────────────────────────────────────────────
+// Same layered precedence as handleResolutionKey, but bound to state.inlineDeck.
+// Esc unmounts and moves the tree cursor off needs-you-virtual (to the section
+// header above it, else first session, else nodes[0]); stabilizeCursor resolves
+// the index on the next render.
+
+function handleInlineDeckKey(input: string, key: Key, state: AppState, actions: InputActions): void {
+  const handle = state.inlineDeck;
+  if (!handle) return;
+
+  // 1. esc → step back inside the deck (comment mode → card → overview); only
+  //    an esc at the deck's top level unmounts and moves the tree cursor off
+  //    needs-you-virtual. Partial answers persist to progress.json regardless.
+  if (key.escape) {
+    if (!handle.atDeckTop()) {
+      handle.handleKey(input, key);
+      requestRender();
+      return;
+    }
+    handle.unmount();
+    const nodes = actions.getNodes();
+    const i = nodes.findIndex((n) => n.id === 'needs-you-virtual');
+    const prev = i > 0 ? nodes[i - 1] : (nodes.find((n) => n.type === 'session') ?? nodes[0]);
+    state.cursorNodeId = prev?.id ?? null;
+    state.focusPane = 'tree';
+    requestRender();
+    return;
+  }
+
+  // 2. Shift+Tab → step focus back to the tree (reverse of Tab/→ in). Deck
+  //    stays mounted so partial progress survives; Tab/→ re-engages it.
+  if (key.tab && key.shift) {
+    state.focusPane = 'tree';
+    requestRender();
+    return;
+  }
+
+  // 3. Shift+J / Shift+K → queue walk (gated)
+  if (input === 'J' && handle.canAcceptHostKeys()) {
+    handle.advanceQueue(+1);
+    return;
+  }
+  if (input === 'K' && handle.canAcceptHostKeys()) {
+    handle.advanceQueue(-1);
+    return;
+  }
+
+  // 4. space → toggle visual / fire generation (gated)
+  if (input === ' ' && handle.canAcceptHostKeys()) {
+    handle.spaceVisualToggle();
+    return;
+  }
+
+  // 5. R → force regenerate visual (gated)
+  if (input === 'R' && handle.canAcceptHostKeys()) {
+    handle.regenerateVisual();
+    return;
+  }
+
+  // 6. Fall-through to humanloop
   handle.handleKey(input, key);
   requestRender();
 }
@@ -1181,6 +1252,13 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (key.rightArrow || input === 'l') {
     const node = nodes[state.cursorIndex];
     if (!node) return;
+    // Inline inbox deck: → / l focuses the detail pane so the deck takes keys
+    // (mirrors Tab; needs-you-virtual is non-expandable so → is otherwise a no-op).
+    if (node.type === 'needs-you-virtual' && state.focusPane === 'tree') {
+      state.focusPane = 'detail';
+      requestRender();
+      return;
+    }
     // When stacked detail active and cursor is on an already-expanded session in tree focus,
     // toggle between gsr and cycle-log detail mode instead of moving into child.
     if (
@@ -1232,26 +1310,7 @@ function handleNavigateKey(input: string, key: Key, state: AppState, actions: In
   if (key.return) {
     const node = nodes[state.cursorIndex];
     if (!node) return;
-    if (node.type === 'needs-you-virtual') {
-      const firstItem = state.aggregateInbox[0];
-      if (firstItem) {
-        enterResolutionMode(state, askIdFromDir(firstItem.dir), actions.send, async ({ sessionId, agentId, paneId }) => {
-          const res = await actions.send({ type: 'status', sessionId });
-          const sess = res.ok ? (res.data?.session as Session | undefined) : undefined;
-          if (!sess) { notify(state, 'Session not found'); return; }
-          if (paneId && actions.paneExists(paneId)) {
-            if (sess.tmuxSessionName) actions.switchToSession(sess.tmuxSessionName);
-            if (sess.tmuxWindowId) actions.selectWindow(sess.tmuxWindowId);
-            actions.selectPane(paneId);
-            return;
-          }
-          if (sess.tmuxSessionName) actions.switchToSession(sess.tmuxSessionName);
-          notify(state, `Pane ${paneId ? paneId : '?'} is gone — agent ${agentId} cannot be taken over.`);
-        });
-      } else {
-        notify(state, 'No pending asks');
-      }
-    } else if (node.expandable && !node.expanded) {
+    if (node.expandable && !node.expanded) {
       state.expanded.add(node.id);
       expandSessionLatestCycle(state, node);
       requestRender();
@@ -1538,6 +1597,17 @@ export function handleKeypress(input: string, key: Key, state: AppState, actions
   // Resolution mode intercepts all keys (before mode checks — esc always exits)
   if (state.resolutionActive) {
     handleResolutionKey(input, key, state, actions);
+    return;
+  }
+  // Inline inbox deck owns the keystream only when the detail pane is focused
+  // (Tab/→ into it). While focus is on the tree, j/k pass through so the cursor
+  // can move past needs-you-virtual without the deck trapping navigation.
+  if (
+    state.inlineDeck &&
+    state.focusPane === 'detail' &&
+    actions.getCursorNode()?.type === 'needs-you-virtual'
+  ) {
+    handleInlineDeckKey(input, key, state, actions);
     return;
   }
   if (state.mode === 'search') {

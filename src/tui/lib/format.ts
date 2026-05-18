@@ -137,6 +137,31 @@ export function agentTypeColor(agentType: string | undefined): string | undefine
   return undefined;
 }
 
+// Inbox kind → text-presentation icon / ANSI color. Shared by the
+// cross-session inbox list and the inline inbox deck header.
+export const KIND_ICON: Record<string, string> = {
+  notify: '✉',
+  validation: '✓',
+  decision: '◆',
+  context: '✎',
+  error: '⚠',
+};
+export const KIND_COLOR: Record<string, string> = {
+  notify: 'gray',
+  validation: 'cyan',
+  decision: 'cyan',
+  context: 'cyan',
+  error: 'red',
+};
+
+export function kindIcon(kind: string | undefined): string {
+  return kind && kind in KIND_ICON ? KIND_ICON[kind]! : '·';
+}
+
+export function kindColor(kind: string | undefined): string {
+  return kind && kind in KIND_COLOR ? KIND_COLOR[kind]! : 'cyan';
+}
+
 export function divider(width: number, char: string = '─'): string {
   return char.repeat(Math.max(0, width));
 }

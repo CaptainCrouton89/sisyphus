@@ -1,16 +1,16 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, watchFile, unwatchFile } from 'node:fs';
 import { mountPanel, type Deck } from '@crouton-kit/humanloop';
 import type { InteractionResponse, MountedPanel } from '@crouton-kit/humanloop';
 import { readDecisions, readProgress, readMeta, updateMeta, writeOutput } from '../../daemon/ask-store.js';
-import { askProgressPath } from '../../shared/paths.js';
+import { askDecisionsPath, askProgressPath } from '../../shared/paths.js';
 import type { AppState } from '../state.js';
-import { requestRender } from '../state.js';
+import { requestRender, notify } from '../state.js';
 import type { InboxItem } from '../../shared/inbox-types.js';
 import { sessionIdFromDir, cwdFromDir, askIdFromDir } from '../../shared/inbox-types.js';
 import type { Request, Response } from '../../shared/protocol.js';
 import { rawSend } from '../../shared/client.js';
 import type { Key } from '../terminal.js';
-import type { AskMeta } from '../../shared/types.js';
+import type { AskMeta, Session } from '../../shared/types.js';
 
 // ── Orphan dispatch ───────────────────────────────────────────────────────────
 
@@ -50,6 +50,37 @@ export async function dispatchOrphanResolution(
   }
 }
 
+// ── Orphan takeover wiring ────────────────────────────────────────────────────
+
+export interface OrphanTakeoverOps {
+  send: (req: Request) => Promise<Response>;
+  paneExists: typeof import('../lib/tmux.js').paneExists;
+  switchToSession: typeof import('../lib/tmux.js').switchToSession;
+  selectWindow: typeof import('../lib/tmux.js').selectWindow;
+  selectPane: typeof import('../lib/tmux.js').selectPane;
+}
+
+/**
+ * Build the orphan-takeover callback shared by full-screen resolution mode and
+ * the inline inbox deck. Resolves the target session, switches tmux to its
+ * pane/window, and notifies on failure.
+ */
+export function makeOrphanTakeover(state: AppState, ops: OrphanTakeoverOps): OrphanTakeoverFn {
+  return async ({ sessionId, agentId, paneId }) => {
+    const res = await ops.send({ type: 'status', sessionId });
+    const sess = res.ok ? (res.data?.session as Session | undefined) : undefined;
+    if (!sess) { notify(state, 'Session not found'); return; }
+    if (paneId && ops.paneExists(paneId)) {
+      if (sess.tmuxSessionName) ops.switchToSession(sess.tmuxSessionName);
+      if (sess.tmuxWindowId) ops.selectWindow(sess.tmuxWindowId);
+      ops.selectPane(paneId);
+      return;
+    }
+    if (sess.tmuxSessionName) ops.switchToSession(sess.tmuxSessionName);
+    notify(state, `Pane ${paneId ? paneId : '?'} is gone — agent ${agentId} cannot be taken over.`);
+  };
+}
+
 // ── Visual entry ──────────────────────────────────────────────────────────────
 
 export interface VisualEntry {
@@ -67,6 +98,9 @@ export interface MountedResolutionHandle {
   handleResize(cols: number, rows: number): void;
   unmount(): void;
   canAcceptHostKeys(): boolean;
+  /** True when the deck is at its top level (overview, no comment input) and
+   *  Esc should tear it down rather than step back inside it. */
+  atDeckTop(): boolean;
   advanceQueue(delta: number): void;
   spaceVisualToggle(): void;
   regenerateVisual(): void;
@@ -76,6 +110,8 @@ export interface MountedResolutionHandle {
     queueLength: number;
     sessionName: string | undefined;
     askTitle: string | undefined;
+    askedBy: string | undefined;
+    subtitle: string | undefined;
     blockedSince: string;
     kind: string | undefined;
   };
@@ -233,9 +269,50 @@ export function mountResolutionPanel(
       panel.loadDeck(nextDeck, {
         progressPath: askProgressPath(nextCoords.cwd, nextCoords.sessionId, nextCoords.askId),
       });
+      setDeckWatch(nextCoords, nextDeck);
       requestRender();
     })();
   };
+
+  // ── Live deck reload ──────────────────────────────────────────────────────
+  // An agent may rewrite the current item's decisions file in-flight (sisyphus
+  // writeDecisions). Watch only the *current* item's file; on a real change
+  // reload the panel in place — loadDeck re-resumes answers by surviving id.
+  // Re-pointed on every navigation so a stale item is never watched. The host
+  // never writes the decisions file, so there is no feedback loop; a
+  // structurally-identical rewrite is ignored so a touch never disrupts the
+  // human, and a partial/corrupt read is skipped and retried next tick.
+  let watchedDeckPath: string | null = null;
+  let lastWatchedDeckJson = '';
+
+  const onWatchedDeckChange = (): void => {
+    const nextDeck = buildDeck(currentIndex);
+    if (!nextDeck) return;
+    const nextJson = JSON.stringify(nextDeck);
+    if (nextJson === lastWatchedDeckJson) return;
+    lastWatchedDeckJson = nextJson;
+    currentDeck = nextDeck;
+    const { cwd: rcwd, sessionId: rsid, askId: raid } = itemCoords(item());
+    const progress = readProgress(rcwd, rsid, raid);
+    answeredCount = progress?.responses.length ?? 0;
+    state.visuals.clear();
+    panel.loadDeck(nextDeck, { progressPath: askProgressPath(rcwd, rsid, raid) });
+    requestRender();
+  };
+
+  function setDeckWatch(
+    coords: { cwd: string; sessionId: string; askId: string },
+    baselineDeck: Deck,
+  ): void {
+    const p = askDecisionsPath(coords.cwd, coords.sessionId, coords.askId);
+    lastWatchedDeckJson = JSON.stringify(baselineDeck);
+    if (p === watchedDeckPath) return;
+    if (watchedDeckPath !== null) {
+      try { unwatchFile(watchedDeckPath, onWatchedDeckChange); } catch { /* best-effort */ }
+    }
+    watchedDeckPath = p;
+    watchFile(p, { interval: 500 }, onWatchedDeckChange);
+  }
 
   const panel: MountedPanel = mountPanel({
     deck: initialDeck,
@@ -264,6 +341,8 @@ export function mountResolutionPanel(
     },
   });
 
+  setDeckWatch({ cwd: initCwd, sessionId: initSessionId, askId: initAskId }, initialDeck);
+
   return {
     handleKey(input: string, key: Key) {
       // Key from sisyphus is a structural superset of humanloop Key — no cast needed
@@ -280,12 +359,20 @@ export function mountResolutionPanel(
     },
 
     unmount() {
+      if (watchedDeckPath !== null) {
+        try { unwatchFile(watchedDeckPath, onWatchedDeckChange); } catch { /* best-effort */ }
+        watchedDeckPath = null;
+      }
       panel.unmount();
       opts.onUnmount();
     },
 
     canAcceptHostKeys() {
       return panel.canAcceptHostKeys();
+    },
+
+    atDeckTop() {
+      return panel.atDeckTop();
     },
 
     advanceQueue(delta: number) {
@@ -302,6 +389,7 @@ export function mountResolutionPanel(
       panel.loadDeck(nextDeck, {
         progressPath: askProgressPath(advCwd, advSid, advAid),
       });
+      setDeckWatch({ cwd: advCwd, sessionId: advSid, askId: advAid }, nextDeck);
       requestRender();
     },
 
@@ -338,7 +426,9 @@ export function mountResolutionPanel(
         currentIndex,
         queueLength: queue.length,
         sessionName: itWithName.sessionName ?? it.source?.sessionName,
-        askTitle: askTitle ? askTitle.slice(0, 32) : undefined,
+        askTitle: askTitle ?? undefined,
+        askedBy: it.source?.askedBy,
+        subtitle: it.subtitle,
         blockedSince: it.blockedSince,
         kind: it.kind,
       };

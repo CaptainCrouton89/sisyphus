@@ -41,7 +41,7 @@ import { renderTreePanel } from './panels/tree.js';
 import { renderDetailRows, renderDigestRows, type DetailContext } from './panels/detail.js';
 import { renderStackedDetailRows } from './panels/stacked-detail.js';
 import { renderStatusLine } from './panels/bottom.js';
-import { renderCrossSessionInboxRows } from './panels/cross-session-inbox.js';
+import { renderInboxDeckRows } from './panels/inbox-deck.js';
 import { renderSubmenuOverlay, renderHelpOverlay, renderCompanionOverlay, renderCompanionDebugOverlay } from './panels/overlays.js';
 import { KEYMAP, MENU_FOR_MODE } from '../shared/keymap.js';
 import { companionPath } from '../shared/paths.js';
@@ -85,6 +85,8 @@ let cachedContextFileContent: string | null = null;
 let prevFrame: string[] = [];
 // Tracks last known resolution state so render() can reset prevFrame on transition
 let prevResolutionActive = false;
+// Tracks whether the cursor was on needs-you-virtual last render, so leaving it unmounts the inline deck
+let prevCursorOnNeedsYou = false;
 
 // ── Panel dirty tracking ─────────────────────────────────────────────────────
 // Tracks the inputs that affect each panel. When only the scroll offset changes,
@@ -107,6 +109,13 @@ let cachedTreeRows: string[] = [];
 
 let cachedLogSessionId: string | null = null;
 let cachedLogFiles: Map<string, { mtime: number; cycle: number; content: string }> = new Map();
+
+// ── Deferred detail-read pass tracking ───────────────────────────────────────
+// Module-level so the stale-pass guard and selection tracker survive across
+// poll() invocations. `scheduleDetailReads` itself is nested in startApp.
+
+let detailPassToken = 0;
+let lastPolledDetailSessionId: string | null | undefined = undefined;
 
 // ── Resolution frame renderer (3e) ───────────────────────────────────────────
 
@@ -296,13 +305,6 @@ export function startApp(state: AppState, cleanup: () => void): void {
   async function poll(): Promise<void> {
     try {
       let selectedSession: Session | null = null;
-      let planContent = '';
-      let strategyContent = '';
-      let goalContent = '';
-      let completionSummaryContent = '';
-      let logsContent = '';
-      let logsCycles: CycleLog[] = [];
-      let digestData: StatusDigest | null = null;
       let paneAlive = true;
       let contextFiles: string[] = [];
 
@@ -346,84 +348,9 @@ export function startApp(state: AppState, cleanup: () => void): void {
           paneAlive = cached?.windowAlive ?? false;
         }
 
-        try {
-          const pp = roadmapPath(state.cwd, state.selectedSessionId);
-          if (existsSync(pp)) {
-            planContent = readFileSync(pp, 'utf-8');
-          }
-        } catch {
-          // roadmap.md may not exist yet
-        }
-
-        try {
-          const gp = goalPath(state.cwd, state.selectedSessionId);
-          if (existsSync(gp)) {
-            goalContent = readFileSync(gp, 'utf-8');
-          }
-        } catch {
-          // goal.md may not exist yet
-        }
-
-        try {
-          const sp = strategyPath(state.cwd, state.selectedSessionId);
-          if (existsSync(sp)) {
-            strategyContent = readFileSync(sp, 'utf-8');
-          }
-        } catch {
-          // strategy.md may not exist yet
-        }
-
-        try {
-          const cp = join(contextDir(state.cwd, state.selectedSessionId), 'completion-summary.md');
-          if (existsSync(cp)) {
-            completionSummaryContent = readFileSync(cp, 'utf-8');
-          }
-        } catch {
-          // completion-summary.md may not exist (only written on done)
-        }
-
-        try {
-          const ld = logsDir(state.cwd, state.selectedSessionId);
-          if (existsSync(ld)) {
-            // Reset cache when session changes
-            if (state.selectedSessionId !== cachedLogSessionId) {
-              cachedLogFiles = new Map();
-              cachedLogSessionId = state.selectedSessionId;
-            }
-
-            const files = readdirSync(ld)
-              .filter((f) => f.startsWith('cycle-'))
-              .sort();
-
-            // Remove cache entries for deleted files
-            const fileSet = new Set(files);
-            for (const key of cachedLogFiles.keys()) {
-              if (!fileSet.has(key)) cachedLogFiles.delete(key);
-            }
-
-            // Only re-read files whose mtime changed
-            for (const f of files) {
-              const filePath = join(ld, f);
-              const mtime = statSync(filePath).mtimeMs;
-              const cached = cachedLogFiles.get(f);
-              if (!cached || cached.mtime !== mtime) {
-                const match = f.match(/cycle-(\d+)\.md$/);
-                const cycle = match ? parseInt(match[1]!, 10) : 0;
-                const content = readFileSync(filePath, 'utf-8');
-                cachedLogFiles.set(f, { mtime, cycle, content });
-              }
-            }
-
-            logsCycles = files.map((f) => {
-              const entry = cachedLogFiles.get(f)!;
-              return { cycle: entry.cycle, content: entry.content };
-            });
-            logsContent = logsCycles.map((c) => c.content).join('\n');
-          }
-        } catch {
-          // logs may not exist yet
-        }
-
+        // contextFiles feeds the tree (cacheKey + buildTree). Deferring it would
+        // flicker the tree on every selection change, so it stays synchronous
+        // and on the first-paint path. (Plan decision 1.)
         try {
           const cd = contextDir(state.cwd, state.selectedSessionId);
           if (existsSync(cd)) {
@@ -449,56 +376,187 @@ export function startApp(state: AppState, cleanup: () => void): void {
         } catch {
           // context dir may not exist yet
         }
-
-        try {
-          const dp = digestPath(state.cwd, state.selectedSessionId);
-          if (existsSync(dp)) {
-            const raw = JSON.parse(readFileSync(dp, 'utf-8'));
-            if (
-              raw &&
-              typeof raw.recentWork === 'string' &&
-              typeof raw.currentActivity === 'string' &&
-              typeof raw.whatsNext === 'string' &&
-              Array.isArray(raw.unusualEvents)
-            ) {
-              digestData = raw as StatusDigest;
-            }
-          }
-        } catch {
-          // digest.json may not exist or be malformed
-        }
-      }
-
-      // Resolve report files in poll (not render) to avoid sync disk reads on keypress
-      state.cachedReportBlocks.clear();
-      if (selectedSession) {
-        for (const agent of selectedSession.agents) {
-          state.cachedReportBlocks.set(agent.id, resolveReports(agent.reports));
-        }
       }
 
       } // end !state.resolutionActive
 
       state.sessions = sessions;
       state.selectedSession = selectedSession;
-      state.planContent = planContent;
-      state.strategyContent = strategyContent;
-      state.goalContent = goalContent;
-      state.completionSummaryContent = completionSummaryContent;
-      state.logsContent = logsContent;
-      state.logsCycles = logsCycles;
-      state.digestData = digestData;
       state.paneAlive = paneAlive;
       state.contextFiles = contextFiles;
       state.error = null;
 
-      requestRender();
+      // Selection-change reset: drop the previous session's detail/digest/logs
+      // content so the first paint shows the new session's tree with empty
+      // detail panels (the deferred pass fills them one tick later). Steady-state
+      // ticks leave the content intact to avoid empty→full flicker every poll.
+      const detailSelectionChanged = state.selectedSessionId !== lastPolledDetailSessionId;
+      lastPolledDetailSessionId = state.selectedSessionId;
+      if (detailSelectionChanged) {
+        state.planContent = '';
+        state.strategyContent = '';
+        state.goalContent = '';
+        state.completionSummaryContent = '';
+        state.logsContent = '';
+        state.logsCycles = [];
+        state.digestData = null;
+        state.cachedReportBlocks.clear();
+      }
+
+      requestRender(); // first paint — tree-critical data only
+
+      // Defer the per-file detail/digest/logs reads to a post-paint
+      // setImmediate so first paint isn't blocked on file I/O. The token +
+      // captured-session guard discards a superseded pass. Not scheduled on the
+      // error path (plan decision 5).
+      const myToken = ++detailPassToken;
+      const mySession = state.selectedSessionId;
+      setImmediate(() => scheduleDetailReads(myToken, mySession));
     } catch (err) {
       const wasError = state.error !== null;
       state.error = (err as Error).message;
       if (!wasError) prevFrame = []; // force full redraw on error transition
       requestRender();
     }
+  }
+
+  // Deferred detail-read pass. Runs after first paint; reads the same files
+  // synchronously into locals, then commits in one atomic event-loop tick.
+  // Guarded at entry and again immediately before commit — two checks suffice
+  // because the body has no interleave point. (Plan decisions 2-4.)
+  function scheduleDetailReads(myToken: number, mySession: string | null): void {
+    if (myToken !== detailPassToken || state.selectedSessionId !== mySession || state.resolutionActive) return;
+
+    let planContent = '';
+    let strategyContent = '';
+    let goalContent = '';
+    let completionSummaryContent = '';
+    let logsContent = '';
+    let logsCycles: CycleLog[] = [];
+    let digestData: StatusDigest | null = null;
+
+    if (mySession) {
+      try {
+        const pp = roadmapPath(state.cwd, mySession);
+        if (existsSync(pp)) {
+          planContent = readFileSync(pp, 'utf-8');
+        }
+      } catch {
+        // roadmap.md may not exist yet
+      }
+
+      try {
+        const gp = goalPath(state.cwd, mySession);
+        if (existsSync(gp)) {
+          goalContent = readFileSync(gp, 'utf-8');
+        }
+      } catch {
+        // goal.md may not exist yet
+      }
+
+      try {
+        const sp = strategyPath(state.cwd, mySession);
+        if (existsSync(sp)) {
+          strategyContent = readFileSync(sp, 'utf-8');
+        }
+      } catch {
+        // strategy.md may not exist yet
+      }
+
+      try {
+        const cp = join(contextDir(state.cwd, mySession), 'completion-summary.md');
+        if (existsSync(cp)) {
+          completionSummaryContent = readFileSync(cp, 'utf-8');
+        }
+      } catch {
+        // completion-summary.md may not exist (only written on done)
+      }
+
+      try {
+        const ld = logsDir(state.cwd, mySession);
+        if (existsSync(ld)) {
+          // Reset cache when session changes
+          if (mySession !== cachedLogSessionId) {
+            cachedLogFiles = new Map();
+            cachedLogSessionId = mySession;
+          }
+
+          const files = readdirSync(ld)
+            .filter((f) => f.startsWith('cycle-'))
+            .sort();
+
+          // Remove cache entries for deleted files
+          const fileSet = new Set(files);
+          for (const key of cachedLogFiles.keys()) {
+            if (!fileSet.has(key)) cachedLogFiles.delete(key);
+          }
+
+          // Only re-read files whose mtime changed
+          for (const f of files) {
+            const filePath = join(ld, f);
+            const mtime = statSync(filePath).mtimeMs;
+            const cached = cachedLogFiles.get(f);
+            if (!cached || cached.mtime !== mtime) {
+              const match = f.match(/cycle-(\d+)\.md$/);
+              const cycle = match ? parseInt(match[1]!, 10) : 0;
+              const content = readFileSync(filePath, 'utf-8');
+              cachedLogFiles.set(f, { mtime, cycle, content });
+            }
+          }
+
+          logsCycles = files.map((f) => {
+            const entry = cachedLogFiles.get(f)!;
+            return { cycle: entry.cycle, content: entry.content };
+          });
+          logsContent = logsCycles.map((c) => c.content).join('\n');
+        }
+      } catch {
+        // logs may not exist yet
+      }
+
+      try {
+        const dp = digestPath(state.cwd, mySession);
+        if (existsSync(dp)) {
+          const raw = JSON.parse(readFileSync(dp, 'utf-8'));
+          if (
+            raw &&
+            typeof raw.recentWork === 'string' &&
+            typeof raw.currentActivity === 'string' &&
+            typeof raw.whatsNext === 'string' &&
+            Array.isArray(raw.unusualEvents)
+          ) {
+            digestData = raw as StatusDigest;
+          }
+        }
+      } catch {
+        // digest.json may not exist or be malformed
+      }
+    }
+
+    // Re-check the same guard before commit. The body above was fully
+    // synchronous, so no interleave point exists between the two checks.
+    if (myToken !== detailPassToken || state.selectedSessionId !== mySession || state.resolutionActive) return;
+
+    state.planContent = planContent;
+    state.strategyContent = strategyContent;
+    state.goalContent = goalContent;
+    state.completionSummaryContent = completionSummaryContent;
+    state.logsContent = logsContent;
+    state.logsCycles = logsCycles;
+    state.digestData = digestData;
+
+    // Resolve report files here (not render) to avoid sync disk reads on
+    // keypress. selectedSession was committed synchronously in poll()'s
+    // first-paint section; the token + mySession guard guarantees it matches.
+    state.cachedReportBlocks.clear();
+    const sel = state.selectedSession;
+    if (sel) {
+      for (const agent of sel.agents) {
+        state.cachedReportBlocks.set(agent.id, resolveReports(agent.reports));
+      }
+    }
+
+    requestRender();
   }
 
   // ── Render function ──────────────────────────────────────────────────────────
@@ -584,6 +642,11 @@ export function startApp(state: AppState, cleanup: () => void): void {
     // Track cursor node identity
     const cursorNode = nodes[state.cursorIndex];
     if (cursorNode) state.cursorNodeId = cursorNode.id;
+
+    // Cursor leaving needs-you-virtual unmounts the inline inbox deck
+    const onNeedsYou = cursorNode?.type === 'needs-you-virtual';
+    if (prevCursorOnNeedsYou && !onNeedsYou && state.inlineDeck) state.inlineDeck.unmount();
+    prevCursorOnNeedsYou = onNeedsYou;
 
     // Derive selectedSessionId from cursor
     // section and needs-you-virtual nodes have sessionId === '' — treat as null
@@ -729,7 +792,7 @@ export function startApp(state: AppState, cleanup: () => void): void {
 
     let detailRows: string[];
     if (cursorNode?.type === 'needs-you-virtual') {
-      detailRows = renderCrossSessionInboxRows(detailRect, state);
+      detailRows = renderInboxDeckRows(detailRect, state);
     } else if (state.useStackedDetail) {
       detailRows = renderStackedDetailRows(detailRect, state, detailCtx);
     } else {

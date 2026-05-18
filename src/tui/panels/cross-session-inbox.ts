@@ -1,24 +1,9 @@
 import { buildPanelRows, buildEmptyPanelRows, type Rect } from '../render.js';
 import type { AppState } from '../state.js';
 import {
-  seg, singleLine, formatTimeAgo, truncate, type DetailLine,
+  seg, singleLine, formatTimeAgo, truncate, kindIcon, kindColor, type DetailLine,
 } from '../lib/format.js';
 import { coerceKind, type InboxItem, sessionIdFromDir, askIdFromDir } from '../../shared/inbox-types.js';
-
-const KIND_ICON: Record<string, string> = {
-  notify: '✉',
-  validation: '✓',
-  decision: '◆',
-  context: '✎',
-  error: '⚠',
-};
-const KIND_COLOR: Record<string, string> = {
-  notify: 'gray',
-  validation: 'cyan',
-  decision: 'cyan',
-  context: 'cyan',
-  error: 'red',
-};
 
 function buildInboxLines(items: (InboxItem & { sessionName?: string })[], width: number): DetailLine[] {
   const lines: DetailLine[] = [];
@@ -31,8 +16,8 @@ function buildInboxLines(items: (InboxItem & { sessionName?: string })[], width:
   const contentWidth = width - 4;
   for (const item of items) {
     const kindKey = coerceKind(item.kind);
-    const icon = kindKey in KIND_ICON ? KIND_ICON[kindKey]! : '·';
-    const iconColor = kindKey in KIND_COLOR ? KIND_COLOR[kindKey]! : 'cyan';
+    const icon = kindIcon(kindKey);
+    const iconColor = kindColor(kindKey);
     const sessionId = sessionIdFromDir(item.dir);
     const source = item.sessionName ? item.sessionName : sessionId.slice(0, 8);
     const askId = askIdFromDir(item.dir);

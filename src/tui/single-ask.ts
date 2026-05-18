@@ -1,7 +1,7 @@
 import { existsSync, watchFile, unwatchFile } from 'node:fs';
 import { mountPanel, type Deck, type InteractionResponse, type MountedPanel } from '@crouton-kit/humanloop';
 import { readDecisions, readMeta, updateMeta, writeOutput } from '../daemon/ask-store.js';
-import { askOutputPath, askProgressPath } from '../shared/paths.js';
+import { askDecisionsPath, askOutputPath, askProgressPath } from '../shared/paths.js';
 import { setupTerminal, startKeypressListener, onResize, writeToStdout, type Key } from './terminal.js';
 import { flushFrame } from './render.js';
 
@@ -39,6 +39,11 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
   let stopKeypress: (() => void) | null = null;
   let stopResize: (() => void) | null = null;
   const outputPath = askOutputPath(cwd, sessionId, askId);
+  const decisionsPath = askDecisionsPath(cwd, sessionId, askId);
+  // Baseline for the deck-reload watcher: an agent may rewrite the decisions
+  // file in-flight (sisyphus's writeDecisions); reload the panel in place so
+  // this pane reflects the new questions without a respawn.
+  let lastDeckJson = JSON.stringify(deck);
 
   const exit = (code: number): void => {
     if (exiting) return;
@@ -47,6 +52,7 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
     try { stopResize?.(); } catch { /* best-effort */ }
     try { panel?.unmount(); } catch { /* best-effort */ }
     try { unwatchFile(outputPath, onExternalChange); } catch { /* best-effort */ }
+    try { unwatchFile(decisionsPath, onDeckChange); } catch { /* best-effort */ }
     cleanupTerminal();
     process.exit(code);
   };
@@ -61,6 +67,22 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
     if (exiting) return;
     if (!existsSync(outputPath)) return;
     exit(0);
+  };
+
+  // Live deck reload: re-read decisions on change; loadDeck preserves answers
+  // for surviving interaction ids (re-resumes from progress.json by id). A
+  // structurally-identical rewrite is ignored so a touch never disrupts the
+  // human. readDecisions returns null on a partial/corrupt read — skip and
+  // wait for the next watch tick (atomicWrite makes whole-file reads the norm).
+  const onDeckChange = (): void => {
+    if (exiting || !panel) return;
+    const next = readDecisions(cwd, sessionId, askId);
+    if (!next) return;
+    const nextJson = JSON.stringify(next);
+    if (nextJson === lastDeckJson) return;
+    lastDeckJson = nextJson;
+    panel.loadDeck(next as Deck, { progressPath: askProgressPath(cwd, sessionId, askId) });
+    flushHost(panel.render());
   };
 
   let lastResponses: InteractionResponse[] = [];
@@ -121,6 +143,7 @@ export async function runSingleAsk(opts: RunSingleAskOpts): Promise<void> {
   });
 
   watchFile(outputPath, { interval: 250 }, onExternalChange);
+  watchFile(decisionsPath, { interval: 500 }, onDeckChange);
 
   // Race guard: dashboard may have answered between our initial readMeta and
   // mount completion. If response.json is already on disk, exit immediately.

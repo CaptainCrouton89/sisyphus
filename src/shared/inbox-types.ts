@@ -20,13 +20,11 @@ export function sessionIdFromDir(dir: string): string {
 
 /**
  * Derive cwd from an InboxItem's dir path.
- * Four dirname calls climb from <askId> → ask → context → <sessionId> → sessions → .sisyphus → cwd
+ * dir structure: <cwd>/.sisyphus/sessions/<sessionId>/context/ask/<askId>
+ * Six dirname calls climb from <askId> → ask → context → <sessionId> → sessions → .sisyphus → cwd
  */
 export function cwdFromDir(dir: string): string {
-  // dir/<askId> → sessions/<sessionId>/context/ask
-  // dirname x4: sessions/<sessionId>/context/ask → sessions/<sessionId>/context → sessions/<sessionId> → sessions → .sisyphus
-  // dirname x5: .sisyphus → cwd
-  return dirname(dirname(dirname(dirname(dirname(dir)))));
+  return dirname(dirname(dirname(dirname(dirname(dirname(dir))))));
 }
 
 /**

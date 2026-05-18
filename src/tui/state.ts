@@ -243,6 +243,7 @@ export interface AppState {
   // Resolution mode (3e)
   resolutionActive: boolean;
   resolutionHandle: import('./panels/mounted-humanloop.js').MountedResolutionHandle | null;
+  inlineDeck: import('./panels/mounted-humanloop.js').MountedResolutionHandle | null;
   visuals: Map<string, import('./panels/mounted-humanloop.js').VisualEntry>;
 
   // Config
@@ -321,6 +322,7 @@ export function createAppState(cwd: string): AppState {
     flowExpanded: false,
     resolutionActive: false,
     resolutionHandle: null,
+    inlineDeck: null,
     visuals: new Map(),
     cwd,
   };
